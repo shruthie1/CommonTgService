@@ -58,7 +58,7 @@ export class BufferClientService {
         const updatedData = { ...user }
         delete updatedData['_id'];
         console.log({ ...updatedData })
-        const existingUser = await this.bufferClientModel.findOneAndUpdate({ mobile }, { updatedData }, { new: true, upsert: true }).exec();
+        const existingUser = await this.bufferClientModel.findOneAndUpdate({ mobile }, { $set: updatedData }, { new: true, upsert: true }).exec();
         if (!existingUser) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
