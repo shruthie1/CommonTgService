@@ -16,7 +16,8 @@ export declare class BufferClientService {
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
     findOne(mobile: string): Promise<BufferClient>;
-    update(mobile: string, user: UpdateBufferClientDto): Promise<BufferClient>;
+    update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
+    createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient>;
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;
     executeQuery(query: any): Promise<BufferClient[]>;
