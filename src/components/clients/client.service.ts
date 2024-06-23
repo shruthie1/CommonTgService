@@ -89,6 +89,7 @@ export class ClientService {
     async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
         await fetchWithTimeout(`${ppplbot()}&text=Received New Client Request for - ${clientId}`);
         console.log(setupClientQueryDto);
+        await this.telegramService.disconnectAll();
         try {
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile
