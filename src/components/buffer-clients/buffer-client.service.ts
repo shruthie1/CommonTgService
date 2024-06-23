@@ -55,14 +55,14 @@ export class BufferClientService {
 
         return updatedUser;
     }
-
-
+    
     async createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient> {
-        let updatedUser = await this.update(mobile, createOrUpdateUserDto as UpdateBufferClientDto);
-        if (!updatedUser) {
-            updatedUser = await this.create(createOrUpdateUserDto as CreateBufferClientDto);
+        let existingUser = await this.findOne(mobile);
+        if (existingUser) {
+            return this.update(existingUser.mobile, createOrUpdateUserDto as UpdateBufferClientDto);
+        } else {
+            return this.create(createOrUpdateUserDto as CreateBufferClientDto);
         }
-        return updatedUser;
     }
 
     async remove(mobile: string): Promise<void> {
