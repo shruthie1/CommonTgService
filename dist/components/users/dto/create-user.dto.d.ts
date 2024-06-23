@@ -13,6 +13,8 @@ export declare class CreateUserDto {
     date: string;
     tgId: string;
     lastUpdated: string;
+    twoFA: boolean;
+    password: boolean;
     movieCount: number;
     photoCount: number;
     videoCount: number;

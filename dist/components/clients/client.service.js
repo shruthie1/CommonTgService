@@ -111,18 +111,18 @@ let ClientService = class ClientService {
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             if (setupClientQueryDto.archiveOld) {
                 const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
-                await this.bufferClientService.update(existingClientMobile, {
+                const updatedBufferClient = await this.bufferClientService.update(existingClientMobile, {
                     mobile: existingClientMobile,
                     createdDate: today,
                     availableDate,
                     session: existingClientUser.session,
                     tgId: existingClientUser.tgId,
                 });
-                console.log("client Archived");
-                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=client Archived`);
+                console.log("client Archived: ", updatedBufferClient);
+                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archived`);
             }
             else {
-                console.log("client Archive Skipped");
+                console.log("Client Archive Skipped");
             }
             const query = { availableDate: { $lte: today } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];

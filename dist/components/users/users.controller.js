@@ -18,6 +18,7 @@ const users_service_1 = require("./users.service");
 const user_schema_1 = require("./schemas/user.schema");
 const swagger_1 = require("@nestjs/swagger");
 const search_user_dto_1 = require("./dto/search-user.dto");
+const update_user_dto_1 = require("./dto/update-user.dto");
 let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
@@ -90,7 +91,7 @@ __decorate([
     __param(0, (0, common_1.Param)('tgId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, update_user_dto_1.UpdateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
 __decorate([

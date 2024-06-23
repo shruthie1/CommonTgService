@@ -19,6 +19,7 @@ const client_service_1 = require("./client.service");
 const create_client_dto_1 = require("./dto/create-client.dto");
 const search_client_dto_1 = require("./dto/search-client.dto");
 const setup_client_dto_1 = require("./dto/setup-client.dto");
+const update_client_dto_1 = require("./dto/update-client.dto");
 let ClientController = class ClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -100,7 +101,7 @@ __decorate([
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, update_client_dto_1.UpdateClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "update", null);
 __decorate([

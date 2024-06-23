@@ -71,6 +71,14 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastUpdated", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'TwoFA status', example: 0 }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "twoFA", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'password', example: 0 }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "password", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of movies', example: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "movieCount", void 0);
