@@ -4,6 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
+  "main": "index",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
