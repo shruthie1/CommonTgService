@@ -6,18 +6,26 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AppModule = void 0;
+exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.ConfigurationModule = exports.TelegramModule = exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
 const users_module_1 = require("./components/users/users.module");
+Object.defineProperty(exports, "UsersModule", { enumerable: true, get: function () { return users_module_1.UsersModule; } });
 const user_data_module_1 = require("./components/user-data/user-data.module");
+Object.defineProperty(exports, "UserDataModule", { enumerable: true, get: function () { return user_data_module_1.UserDataModule; } });
 const client_module_1 = require("./components/clients/client.module");
+Object.defineProperty(exports, "ClientModule", { enumerable: true, get: function () { return client_module_1.ClientModule; } });
 const Telegram_module_1 = require("./components/Telegram/Telegram.module");
+Object.defineProperty(exports, "TelegramModule", { enumerable: true, get: function () { return Telegram_module_1.TelegramModule; } });
 const buffer_client_module_1 = require("./components/buffer-clients/buffer-client.module");
+Object.defineProperty(exports, "BufferClientModule", { enumerable: true, get: function () { return buffer_client_module_1.BufferClientModule; } });
 const activechannels_module_1 = require("./components/activechannels/activechannels.module");
+Object.defineProperty(exports, "ActiveChannelsModule", { enumerable: true, get: function () { return activechannels_module_1.ActiveChannelsModule; } });
 const configuration_module_1 = require("./components/confguration/configuration.module");
+Object.defineProperty(exports, "ConfigurationModule", { enumerable: true, get: function () { return configuration_module_1.ConfigurationModule; } });
 const archived_client_module_1 = require("./components/archived-clients/archived-client.module");
+Object.defineProperty(exports, "ArchivedClientModule", { enumerable: true, get: function () { return archived_client_module_1.ArchivedClientModule; } });
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
