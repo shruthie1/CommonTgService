@@ -17,14 +17,6 @@ export class BufferClientController {
     return this.clientService.create(createClientDto);
   }
 
-  @Get('update')
-  @ApiOperation({ summary: 'Get all user data' })
-  //@apiresponse({ status: 200, description: 'Return all user data.' })
-  //@apiresponse({ status: 403, description: 'Forbidden.' })
-  async updateDocs(): Promise<any> {
-    return this.clientService.updatedocs();
-  }
-
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
   async search(@Query() query: SearchBufferClientDto): Promise<BufferClient[]> {
