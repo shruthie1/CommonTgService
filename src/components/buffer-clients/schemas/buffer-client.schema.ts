@@ -1,8 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
+export type BufferClientDocument = BufferClient & Document;
 @Schema({ collection: 'bufferClients', versionKey: false, autoIndex: true })  // Specify the collection name here
-export class BufferClient extends Document {
+export class BufferClient {
   @Prop({ required: true, unique: true })
   tgId: string;
 

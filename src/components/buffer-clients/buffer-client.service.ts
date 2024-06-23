@@ -2,7 +2,7 @@ import { BadRequestException, HttpException, Inject, Injectable, InternalServerE
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
-import { BufferClient } from './schemas/buffer-client.schema';
+import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
@@ -13,7 +13,7 @@ import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 
 @Injectable()
 export class BufferClientService {
-    constructor(@InjectModel('bufferClientModule') private bufferClientModel: Model<BufferClient>,
+    constructor(@InjectModel('bufferClientModule') private bufferClientModel: Model<BufferClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
         @Inject(forwardRef(() => UsersService))
@@ -39,20 +39,6 @@ export class BufferClientService {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
         return user;
-    }
-
-    async updatedocs() {
-        console.log("here")
-        const clients = await this.findAll();
-        console.log(clients.length)
-        for (const client of clients) {
-            const data: any = { ...client }
-            await this.telegramService.createClient(client.mobile)
-            const channelinfo = await this.telegramService.getChannelInfo(client.mobile, true)
-            // console.log(data)
-            // console.log(data.number);
-            await this.bufferClientModel.findByIdAndUpdate(client._id, { channels: channelinfo.ids.length, createdDate: (new Date(Date.now())).toISOString().split('T')[0] })
-        }
     }
 
     async update(mobile: string, user: UpdateBufferClientDto): Promise<BufferClient> {
@@ -178,7 +164,7 @@ export class BufferClientService {
                     await this.remove(document.mobile);
                 } else {
                     const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                    await this.bufferClientModel.findByIdAndUpdate(document._id, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
+                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile)
                 }
