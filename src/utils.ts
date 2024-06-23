@@ -10,7 +10,7 @@ export function contains(str, arr) {
     return false;
   }))
 };
-export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 3) {
+export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 0) {
   const timeout = options?.timeout || 15000;
 
   const source = axios.CancelToken.source();
@@ -33,7 +33,8 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       if (retryCount < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
       } else {
-        console.error(`All ${maxRetries + 1} retries failed for ${resource}`);
+        console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+        console.log(error)
         return undefined;
       }
     }
