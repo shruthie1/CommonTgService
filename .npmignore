@@ -5,3 +5,7 @@ test
 .github
 *.md
 *.log
+.gitignore
+tsconfig.json
+tsconfig.build.json
+.prettierrc
