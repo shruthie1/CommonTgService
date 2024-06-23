@@ -17,4 +17,5 @@ async function bootstrap() {
     await app.init();
     await app.listen(3000);
 }
+bootstrap();
 //# sourceMappingURL=main.js.map
