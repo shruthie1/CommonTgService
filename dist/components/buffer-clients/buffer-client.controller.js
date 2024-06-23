@@ -18,7 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const buffer_client_service_1 = require("./buffer-client.service");
 const create_buffer_client_dto_1 = require("./dto/create-buffer-client.dto");
 const search_buffer__client_dto_1 = require("./dto/search-buffer- client.dto");
-const update_client_dto_1 = require("../clients/dto/update-client.dto");
+const update_buffer_client_dto_1 = require("./dto/update-buffer-client.dto");
 let BufferClientController = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -48,6 +48,9 @@ let BufferClientController = class BufferClientController {
     }
     async update(mobile, updateClientDto) {
         return this.clientService.update(mobile, updateClientDto);
+    }
+    async createdOrupdate(mobile, updateClientDto) {
+        return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async remove(mobile) {
         return this.clientService.remove(mobile);
@@ -124,9 +127,18 @@ __decorate([
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_client_dto_1.UpdateClientDto]),
+    __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "update", null);
+__decorate([
+    (0, common_1.Put)(':mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "createdOrupdate", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
