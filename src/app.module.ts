@@ -29,3 +29,13 @@ import { ArchivedClientModule } from './components/archived-clients/archived-cli
   ],
 })
 export class AppModule { }
+export {
+  TelegramModule,
+  ConfigurationModule,
+  ActiveChannelsModule,
+  ClientModule,
+  UserDataModule,
+  UsersModule,
+  BufferClientModule,
+  ArchivedClientModule
+}
