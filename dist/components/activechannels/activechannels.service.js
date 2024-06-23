@@ -33,7 +33,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         return channel;
     }
     async update(channelId, updateActiveChannelDto) {
-        const updatedChannel = await this.activeChannelModel.findOneAndUpdate({ channelId }, updateActiveChannelDto, { new: true, upsert: true }).exec();
+        const updatedChannel = await this.activeChannelModel.findOneAndUpdate({ channelId }, { $set: updateActiveChannelDto }, { new: true, upsert: true }).exec();
         return updatedChannel;
     }
     async remove(channelId) {
