@@ -1,6 +1,6 @@
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
-import { BufferClient } from './schemas/buffer-client.schema';
+import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
@@ -12,11 +12,10 @@ export declare class BufferClientService {
     private usersService;
     private activeChannelsService;
     private clientService;
-    constructor(bufferClientModel: Model<BufferClient>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService);
+    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService);
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
     findOne(mobile: string): Promise<BufferClient>;
-    updatedocs(): Promise<void>;
     update(mobile: string, user: UpdateBufferClientDto): Promise<BufferClient>;
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;

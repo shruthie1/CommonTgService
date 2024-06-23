@@ -44,17 +44,6 @@ let BufferClientService = class BufferClientService {
         }
         return user;
     }
-    async updatedocs() {
-        console.log("here");
-        const clients = await this.findAll();
-        console.log(clients.length);
-        for (const client of clients) {
-            const data = { ...client };
-            await this.telegramService.createClient(client.mobile);
-            const channelinfo = await this.telegramService.getChannelInfo(client.mobile, true);
-            await this.bufferClientModel.findByIdAndUpdate(client._id, { channels: channelinfo.ids.length, createdDate: (new Date(Date.now())).toISOString().split('T')[0] });
-        }
-    }
     async update(mobile, user) {
         const updatedData = { ...user };
         delete updatedData['_id'];
@@ -176,7 +165,7 @@ let BufferClientService = class BufferClientService {
                 }
                 else {
                     const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                    await this.bufferClientModel.findByIdAndUpdate(document._id, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] });
+                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] });
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile);
                 }

@@ -26,9 +26,6 @@ let BufferClientController = class BufferClientController {
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
     }
-    async updateDocs() {
-        return this.clientService.updatedocs();
-    }
     async search(query) {
         return this.clientService.search(query);
     }
@@ -73,13 +70,6 @@ __decorate([
     __metadata("design:paramtypes", [create_buffer_client_dto_1.CreateBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "create", null);
-__decorate([
-    (0, common_1.Get)('update'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], BufferClientController.prototype, "updateDocs", null);
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
