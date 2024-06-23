@@ -9,6 +9,7 @@ import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import { parseError } from '../../utils';
 import { ClientService } from '../clients/client.service';
+import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 
 @Injectable()
 export class BufferClientService {
@@ -54,7 +55,7 @@ export class BufferClientService {
         }
     }
 
-    async update(mobile: string, user: Partial<BufferClient>): Promise<BufferClient> {
+    async update(mobile: string, user: UpdateBufferClientDto): Promise<BufferClient> {
         const updatedData = { ...user }
         delete updatedData['_id'];
         console.log({ ...updatedData })

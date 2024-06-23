@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
+import { UpdateUserDataDto } from './dto/update-user-data.dto';
 
 @Injectable()
 export class UserDataService {
@@ -25,7 +26,7 @@ export class UserDataService {
         return user;
     }
 
-    async update(chatId: string, updateUserDataDto: Partial<UserData>): Promise<UserData> {
+    async update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
         delete updateUserDataDto['_id']
         const updatedUser = await this.userDataModel.findOneAndUpdate({chatId}, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {

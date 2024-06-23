@@ -3,6 +3,7 @@ import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { SearchUserDto } from './dto/search-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @ApiTags('Telegram Users') // Tag to categorize all endpoints in this controller
 @Controller('user')
@@ -38,7 +39,7 @@ export class UsersController {
   @Patch(':tgId')
   @ApiOperation({ summary: 'Update a user by tgId' })
   @ApiParam({ name: 'tgId', description: 'The Telegram ID of the user', type: String })
-  async update(@Param('tgId') tgId: string, @Body() updateUserDto: Partial<User>) {
+  async update(@Param('tgId') tgId: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(tgId, updateUserDto);
   }
 

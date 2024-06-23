@@ -4,6 +4,7 @@ import { Client } from '../clients/schemas/client.schema';
 import { ArchivedClientService } from './archived-client.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { SearchClientDto } from '../clients/dto/search-client.dto';
+import { UpdateClientDto } from '../clients/dto/update-client.dto';
 
 @ApiTags('Archived Clients')
 @Controller('ArchivedClients')
@@ -45,7 +46,7 @@ export class ArchivedClientController {
   @ApiOperation({ summary: 'Update user data by ID' })
   //@apiresponse({ status: 200, description: 'The user data has been successfully updated.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async update(@Param('mobile') mobile: string, @Body() updateClientDto: Partial<Client>): Promise<Client> {
+  async update(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateClientDto): Promise<Client> {
     return this.archivedclientService.update(mobile, updateClientDto);
   }
 

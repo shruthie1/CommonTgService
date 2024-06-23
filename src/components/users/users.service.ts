@@ -6,6 +6,7 @@ import { User } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
 import { fetchWithTimeout, ppplbot } from '../../utils';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -42,7 +43,7 @@ export class UsersService {
     return user;
   }
 
-  async update(tgId: string, user: Partial<User>): Promise<User> {
+  async update(tgId: string, user: UpdateUserDto): Promise<User> {
     delete user['_id']
     const existingUser = await this.userModel.findOneAndUpdate({ tgId }, { $set: user }, { new: true, upsert: true }).exec();
     if (!existingUser) {

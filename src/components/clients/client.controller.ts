@@ -5,6 +5,7 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './schemas/client.schema';
 import { SearchClientDto } from './dto/search-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 @ApiTags('Clients')
 @Controller('client')
@@ -55,7 +56,7 @@ export class ClientController {
   @ApiOperation({ summary: 'Update user data by ID' })
   //@apiresponse({ status: 200, description: 'The user data has been successfully updated.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async update(@Param('clientId') clientId: string, @Body() updateClientDto: Partial<Client>): Promise<Client> {
+  async update(@Param('clientId') clientId: string, @Body() updateClientDto: UpdateClientDto): Promise<Client> {
     return this.clientService.update(clientId, updateClientDto);
   }
 

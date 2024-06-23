@@ -4,6 +4,7 @@ import { BufferClientService } from './buffer-client.service';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { BufferClient } from './schemas/buffer-client.schema';
+import { UpdateClientDto } from '../clients/dto/update-client.dto';
 
 @ApiTags('Buffer Clients')
 @Controller('bufferclients')
@@ -68,7 +69,7 @@ export class BufferClientController {
 
   @Patch(':mobile')
   @ApiOperation({ summary: 'Update user data by ID' })
-  async update(@Param('mobile') mobile: string, @Body() updateClientDto: Partial<BufferClient>): Promise<BufferClient> {
+  async update(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateClientDto): Promise<BufferClient> {
     return this.clientService.update(mobile, updateClientDto);
   }
 

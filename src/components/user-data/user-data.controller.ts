@@ -4,6 +4,7 @@ import { UserDataService } from './user-data.service';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UserData } from './schemas/user-data.schema';
 import { SearchDto } from './dto/search-user-data.dto';
+import { UpdateUserDataDto } from './dto/update-user-data.dto';
 
 @ApiTags('UserData of TG clients')
 @Controller('userData')
@@ -46,7 +47,7 @@ export class UserDataController {
   @ApiOperation({ summary: 'Update user data by ID' })
   //@apiresponse({ status: 200, description: 'The user data has been successfully updated.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async update(@Param('chatId') chatId: string, @Body() updateUserDataDto: Partial<UserData>): Promise<UserData> {
+  async update(@Param('chatId') chatId: string, @Body() updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
     return this.userDataService.update(chatId, updateUserDataDto);
   }
 

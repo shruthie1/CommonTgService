@@ -10,6 +10,7 @@ import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot } from '../../utils';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 @Injectable()
 export class ClientService {
@@ -58,7 +59,7 @@ export class ClientService {
         }
     }
 
-    async update(clientId: string, updateClientDto: Partial<Client>): Promise<Client> {
+    async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto['_id']
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         this.clientsMap.set(clientId, updatedUser);
@@ -107,17 +108,17 @@ export class ClientService {
             const today = (new Date(Date.now())).toISOString().split('T')[0]
             if (setupClientQueryDto.archiveOld) {
                 const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-                await this.bufferClientService.update(existingClientMobile, {
+                const updatedBufferClient = await this.bufferClientService.update(existingClientMobile, {
                     mobile: existingClientMobile,
                     createdDate: today,
                     availableDate,
                     session: existingClientUser.session,
                     tgId: existingClientUser.tgId,
                 })
-                console.log("client Archived")
-                await fetchWithTimeout(`${ppplbot()}&text=client Archived`);
+                console.log("client Archived: ", updatedBufferClient)
+                await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
             } else {
-                console.log("client Archive Skipped")
+                console.log("Client Archive Skipped")
             }
 
             const query = { availableDate: { $lte: today } }

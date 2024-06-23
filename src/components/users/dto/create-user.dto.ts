@@ -43,6 +43,12 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Timestamp of last update', example: '2024-06-13' })
   lastUpdated: string;
 
+  @ApiProperty({ description: 'TwoFA status', example: 0 })
+  twoFA: boolean;
+
+  @ApiProperty({ description: 'password', example: 0 })
+  password: boolean;
+
   @ApiProperty({ description: 'Number of movies', example: 0 })
   movieCount: number;
 

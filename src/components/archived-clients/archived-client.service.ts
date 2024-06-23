@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { Client, ClientDocument } from '../clients/schemas/client.schema';
+import { UpdateClientDto } from '../clients/dto/update-client.dto';
 
 @Injectable()
 export class ArchivedClientService {
@@ -24,7 +25,7 @@ export class ArchivedClientService {
         return user;
     }
 
-    async update(mobile: string, updateClientDto: Partial<Client>): Promise<Client> {
+    async update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto["_id"]
         console.log({...updateClientDto});
         const updatedUser = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
