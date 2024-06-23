@@ -15,7 +15,7 @@ let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
 __decorate([
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "tgId", void 0);
 __decorate([
