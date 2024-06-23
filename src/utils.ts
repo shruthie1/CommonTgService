@@ -1,23 +1,23 @@
-import  axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 export function contains(str, arr) {
   return (arr.some(element => {
-      if (str?.includes(element)) {
-          return true;
-      }
-      return false;
+    if (str?.includes(element)) {
+      return true;
+    }
+    return false;
   }))
 };
-export async function fetchWithTimeout(resource, options : any= {}, maxRetries = 3) {
+export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 3) {
   const timeout = options?.timeout || 15000;
 
   const source = axios.CancelToken.source();
   const id = setTimeout(() => source.cancel(), timeout);
   for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
     try {
-      const response = await axios({
+      const response = await axios.request({
         ...options,
         url: resource,
         cancelToken: source.token
@@ -29,7 +29,7 @@ export async function fetchWithTimeout(resource, options : any= {}, maxRetries =
       parseError(error)
       if (axios.isCancel(error)) {
         console.log('Request canceled:', error.message, resource);
-      } 
+      }
       if (retryCount < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
       } else {
