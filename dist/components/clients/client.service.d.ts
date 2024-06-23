@@ -6,6 +6,7 @@ import { SetupClientQueryDto } from './dto/setup-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
+import { UpdateClientDto } from './dto/update-client.dto';
 export declare class ClientService {
     private clientModel;
     private telegramService;
@@ -17,7 +18,7 @@ export declare class ClientService {
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findOne(clientId: string): Promise<Client>;
-    update(clientId: string, updateClientDto: Partial<Client>): Promise<Client>;
+    update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;

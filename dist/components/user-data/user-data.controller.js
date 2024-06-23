@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const user_data_service_1 = require("./user-data.service");
 const create_user_data_dto_1 = require("./dto/create-user-data.dto");
 const search_user_data_dto_1 = require("./dto/search-user-data.dto");
+const update_user_data_dto_1 = require("./dto/update-user-data.dto");
 let UserDataController = class UserDataController {
     constructor(userDataService) {
         this.userDataService = userDataService;
@@ -87,7 +88,7 @@ __decorate([
     __param(0, (0, common_1.Param)('chatId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, update_user_data_dto_1.UpdateUserDataDto]),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "update", null);
 __decorate([

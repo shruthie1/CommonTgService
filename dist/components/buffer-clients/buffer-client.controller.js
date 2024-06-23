@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const buffer_client_service_1 = require("./buffer-client.service");
 const create_buffer_client_dto_1 = require("./dto/create-buffer-client.dto");
 const search_buffer__client_dto_1 = require("./dto/search-buffer- client.dto");
+const update_client_dto_1 = require("../clients/dto/update-client.dto");
 let BufferClientController = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -133,7 +134,7 @@ __decorate([
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, update_client_dto_1.UpdateClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "update", null);
 __decorate([
