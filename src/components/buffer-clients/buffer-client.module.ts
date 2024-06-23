@@ -7,13 +7,16 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { ActiveChannelsModule } from '../activechannels/activechannels.module';
 import { UsersModule } from '../users/users.module';
 import { ClientModule } from '../clients/client.module';
+import { initModule } from '../../init.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: 'bufferClientModule', schema: BufferClientSchema, collection: 'bufferClients' }]),
-  forwardRef(() => TelegramModule),
-  forwardRef(() => UsersModule),
-  forwardRef(() => ActiveChannelsModule),
-  forwardRef(() => ClientModule)],
+  imports: [
+    initModule,
+    MongooseModule.forFeature([{ name: 'bufferClientModule', schema: BufferClientSchema, collection: 'bufferClients' }]),
+    forwardRef(() => TelegramModule),
+    forwardRef(() => UsersModule),
+    forwardRef(() => ActiveChannelsModule),
+    forwardRef(() => ClientModule)],
   controllers: [BufferClientController],
   providers: [BufferClientService],
   exports: [BufferClientService]

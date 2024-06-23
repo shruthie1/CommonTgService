@@ -3,9 +3,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { UserData, UserDataSchema } from './schemas/user-data.schema';
 import { UserDataService } from './user-data.service';
 import { UserDataController } from './user-data.controller';
+import { initModule } from '../../init.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema }])],
+  imports: [
+    initModule,
+    MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema }])],
   controllers: [UserDataController],
   providers: [UserDataService],
 })

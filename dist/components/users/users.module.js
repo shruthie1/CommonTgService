@@ -14,12 +14,15 @@ const users_controller_1 = require("./users.controller");
 const user_schema_1 = require("./schemas/user.schema");
 const Telegram_module_1 = require("../Telegram/Telegram.module");
 const client_module_1 = require("../clients/client.module");
+const init_module_1 = require("../../init.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
 exports.UsersModule = UsersModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: user_schema_1.UserSchema, collection: 'users' }]),
+        imports: [
+            init_module_1.initModule,
+            mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: user_schema_1.UserSchema, collection: 'users' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule)
         ],

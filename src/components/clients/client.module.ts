@@ -7,9 +7,12 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
 import { ArchivedClientModule } from '../archived-clients/archived-client.module';
+import { initModule } from '../../init.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
+  imports: [
+    initModule,
+    MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
     forwardRef(()=>TelegramModule),
     forwardRef(()=>BufferClientModule),
     forwardRef(()=>UsersModule),

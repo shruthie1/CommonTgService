@@ -12,12 +12,15 @@ const mongoose_1 = require("@nestjs/mongoose");
 const client_schema_1 = require("../clients/schemas/client.schema");
 const archived_client_service_1 = require("./archived-client.service");
 const archived_client_controller_1 = require("./archived-client.controller");
+const init_module_1 = require("../../init.module");
 let ArchivedClientModule = class ArchivedClientModule {
 };
 exports.ArchivedClientModule = ArchivedClientModule;
 exports.ArchivedClientModule = ArchivedClientModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
+        imports: [
+            init_module_1.initModule,
+            mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
         ],
         controllers: [archived_client_controller_1.ArchivedClientController],
         providers: [archived_client_service_1.ArchivedClientService],

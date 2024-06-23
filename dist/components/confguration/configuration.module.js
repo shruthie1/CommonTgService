@@ -12,14 +12,18 @@ const mongoose_1 = require("@nestjs/mongoose");
 const configuration_controller_1 = require("./configuration.controller");
 const configuration_service_1 = require("./configuration.service");
 const configuration_schema_1 = require("./configuration.schema");
+const init_module_1 = require("../../init.module");
 let ConfigurationModule = class ConfigurationModule {
 };
 exports.ConfigurationModule = ConfigurationModule;
 exports.ConfigurationModule = ConfigurationModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{
+        imports: [
+            init_module_1.initModule,
+            mongoose_1.MongooseModule.forFeature([{
                     name: 'configurationModule', collection: 'configuration', schema: configuration_schema_1.ConfigurationSchema
-                }])],
+                }])
+        ],
         controllers: [configuration_controller_1.ConfigurationController],
         providers: [configuration_service_1.ConfigurationService],
     })

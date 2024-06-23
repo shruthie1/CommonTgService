@@ -12,12 +12,14 @@ const mongoose_1 = require("@nestjs/mongoose");
 const activechannels_service_1 = require("./activechannels.service");
 const activechannels_controller_1 = require("./activechannels.controller");
 const active_channel_schema_1 = require("./schemas/active-channel.schema");
+const init_module_1 = require("../../init.module");
 let ActiveChannelsModule = class ActiveChannelsModule {
 };
 exports.ActiveChannelsModule = ActiveChannelsModule;
 exports.ActiveChannelsModule = ActiveChannelsModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            init_module_1.initModule,
             mongoose_1.MongooseModule.forFeature([{ name: active_channel_schema_1.ActiveChannel.name, schema: active_channel_schema_1.ActiveChannelSchema }]),
         ],
         controllers: [activechannels_controller_1.ActiveChannelsController],

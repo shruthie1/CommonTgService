@@ -6,24 +6,25 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UserDataModule = void 0;
+exports.initModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
-const user_data_schema_1 = require("./schemas/user-data.schema");
-const user_data_service_1 = require("./user-data.service");
-const user_data_controller_1 = require("./user-data.controller");
-const init_module_1 = require("../../init.module");
-let UserDataModule = class UserDataModule {
+let initModule = class initModule {
 };
-exports.UserDataModule = UserDataModule;
-exports.UserDataModule = UserDataModule = __decorate([
+exports.initModule = initModule;
+exports.initModule = initModule = __decorate([
+    (0, common_1.Global)(),
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
-            mongoose_1.MongooseModule.forFeature([{ name: user_data_schema_1.UserData.name, schema: user_data_schema_1.UserDataSchema }])
+            config_1.ConfigModule.forRoot(),
+            mongoose_1.MongooseModule.forRootAsync({
+                useFactory: async () => ({
+                    uri: process.env.mongouri,
+                }),
+            }),
         ],
-        controllers: [user_data_controller_1.UserDataController],
-        providers: [user_data_service_1.UserDataService],
+        exports: [config_1.ConfigModule, mongoose_1.MongooseModule],
     })
-], UserDataModule);
-//# sourceMappingURL=user-data.module.js.map
+], initModule);
+//# sourceMappingURL=init.module.js.map

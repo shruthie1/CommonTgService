@@ -16,16 +16,20 @@ const Telegram_module_1 = require("../Telegram/Telegram.module");
 const activechannels_module_1 = require("../activechannels/activechannels.module");
 const users_module_1 = require("../users/users.module");
 const client_module_1 = require("../clients/client.module");
+const init_module_1 = require("../../init.module");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
 exports.BufferClientModule = BufferClientModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ name: 'bufferClientModule', schema: buffer_client_schema_1.BufferClientSchema, collection: 'bufferClients' }]),
+        imports: [
+            init_module_1.initModule,
+            mongoose_1.MongooseModule.forFeature([{ name: 'bufferClientModule', schema: buffer_client_schema_1.BufferClientSchema, collection: 'bufferClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => activechannels_module_1.ActiveChannelsModule),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule)],
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule)
+        ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
         exports: [buffer_client_service_1.BufferClientService]

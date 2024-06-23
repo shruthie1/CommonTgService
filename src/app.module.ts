@@ -9,15 +9,11 @@ import { BufferClientModule } from './components/buffer-clients/buffer-client.mo
 import { ActiveChannelsModule } from './components/activechannels/activechannels.module';
 import { ConfigurationModule } from './components/confguration/configuration.module';
 import { ArchivedClientModule } from './components/archived-clients/archived-client.module';
+import { initModule } from './init.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
-    MongooseModule.forRootAsync({
-      useFactory: async () => ({
-        uri: process.env.mongouri,
-      }),
-    }),
+    initModule,
     TelegramModule,
     ConfigurationModule,
     ActiveChannelsModule,

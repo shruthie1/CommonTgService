@@ -16,12 +16,15 @@ const Telegram_module_1 = require("../Telegram/Telegram.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
 const users_module_1 = require("../users/users.module");
 const archived_client_module_1 = require("../archived-clients/archived-client.module");
+const init_module_1 = require("../../init.module");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
 exports.ClientModule = ClientModule = __decorate([
     (0, common_1.Module)({
-        imports: [mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
+        imports: [
+            init_module_1.initModule,
+            mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
