@@ -1,6 +1,6 @@
 import { Controller, Get, Body, Param, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { ConfigurationService } from './configuration.service';
+import { ConfigurationService } from './init.service';
 
 @ApiTags('Configuration')
 @Controller('Configuration')

@@ -7,7 +7,7 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
 import { ArchivedClientModule } from '../archived-clients/archived-client.module';
-import { initModule } from '../../init.module';
+import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [

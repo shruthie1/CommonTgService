@@ -7,7 +7,7 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { ActiveChannelsModule } from '../activechannels/activechannels.module';
 import { UsersModule } from '../users/users.module';
 import { ClientModule } from '../clients/client.module';
-import { initModule } from '../../init.module';
+import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
