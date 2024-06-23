@@ -25,6 +25,7 @@ Object.defineProperty(exports, "ConfigurationModule", { enumerable: true, get: f
 const archived_client_module_1 = require("./components/archived-clients/archived-client.module");
 Object.defineProperty(exports, "ArchivedClientModule", { enumerable: true, get: function () { return archived_client_module_1.ArchivedClientModule; } });
 const init_module_1 = require("./init.module");
+
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
