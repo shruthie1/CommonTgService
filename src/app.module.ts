@@ -27,15 +27,15 @@ import { ArchivedClientModule } from './components/archived-clients/archived-cli
     BufferClientModule,
     ArchivedClientModule
   ],
+  exports:[
+    TelegramModule,
+    ConfigurationModule,
+    ActiveChannelsModule,
+    ClientModule,
+    UserDataModule,
+    UsersModule,
+    BufferClientModule,
+    ArchivedClientModule
+  ]
 })
 export class AppModule { }
-export {
-  TelegramModule,
-  ConfigurationModule,
-  ActiveChannelsModule,
-  ClientModule,
-  UserDataModule,
-  UsersModule,
-  BufferClientModule,
-  ArchivedClientModule
-}
