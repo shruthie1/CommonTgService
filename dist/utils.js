@@ -19,13 +19,13 @@ function contains(str, arr) {
     }));
 }
 ;
-async function fetchWithTimeout(resource, options = {}, maxRetries = 3) {
+async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetries = 3) {
     const timeout = options?.timeout || 15000;
     const source = axios_1.default.CancelToken.source();
     const id = setTimeout(() => source.cancel(), timeout);
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
         try {
-            const response = await (0, axios_1.default)({
+            const response = await axios_1.default.request({
                 ...options,
                 url: resource,
                 cancelToken: source.token
@@ -34,12 +34,10 @@ async function fetchWithTimeout(resource, options = {}, maxRetries = 3) {
             return response;
         }
         catch (error) {
+            console.log("error at URL: ", resource);
+            parseError(error);
             if (axios_1.default.isCancel(error)) {
                 console.log('Request canceled:', error.message, resource);
-            }
-            else {
-                console.log("URL: ", resource);
-                parseError(error);
             }
             if (retryCount < maxRetries) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
