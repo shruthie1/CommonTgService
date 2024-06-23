@@ -41,15 +41,28 @@ export class BufferClientService {
         return user;
     }
 
-    async update(mobile: string, user: UpdateBufferClientDto): Promise<BufferClient> {
-        const updatedData = { ...user }
-        delete updatedData['_id'];
-        console.log({ ...updatedData })
-        const existingUser = await this.bufferClientModel.findOneAndUpdate({ mobile: updatedData.mobile }, { $set: updatedData }, { new: true, returnDocument: "after", upsert: true }).exec();
-        if (!existingUser) {
-            throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
+
+    async update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
+        const updatedUser = await this.bufferClientModel.findOneAndUpdate(
+            { mobile },
+            { $set: updateClientDto },
+            { new: true }
+        ).exec();
+
+        if (!updatedUser) {
+            throw new NotFoundException(`User with mobile ${mobile} not found`);
         }
-        return existingUser;
+
+        return updatedUser;
+    }
+
+
+    async createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient> {
+        let updatedUser = await this.update(mobile, createOrUpdateUserDto as UpdateBufferClientDto);
+        if (!updatedUser) {
+            updatedUser = await this.create(createOrUpdateUserDto as CreateBufferClientDto);
+        }
+        return updatedUser;
     }
 
     async remove(mobile: string): Promise<void> {

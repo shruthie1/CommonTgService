@@ -11,6 +11,7 @@ import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 
 @Injectable()
 export class ClientService {
@@ -109,13 +110,14 @@ export class ClientService {
             const today = (new Date(Date.now())).toISOString().split('T')[0]
             if (setupClientQueryDto.archiveOld) {
                 const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-                const updatedBufferClient = await this.bufferClientService.update(existingClientMobile, {
+                const bufferClientDto: UpdateBufferClientDto = {
                     mobile: existingClientMobile,
                     createdDate: today,
                     availableDate,
                     session: existingClientUser.session,
                     tgId: existingClientUser.tgId,
-                })
+                }
+                const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto)
                 console.log("client Archived: ", updatedBufferClient)
                 await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
             } else {
