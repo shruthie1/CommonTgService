@@ -52,11 +52,13 @@ let BufferClientService = class BufferClientService {
         return updatedUser;
     }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
-        let updatedUser = await this.update(mobile, createOrUpdateUserDto);
-        if (!updatedUser) {
-            updatedUser = await this.create(createOrUpdateUserDto);
+        let existingUser = await this.findOne(mobile);
+        if (existingUser) {
+            return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
-        return updatedUser;
+        else {
+            return this.create(createOrUpdateUserDto);
+        }
     }
     async remove(mobile) {
         const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
