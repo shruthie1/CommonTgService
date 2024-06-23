@@ -4,7 +4,7 @@ import { Document } from 'mongoose';
 export type BufferClientDocument = BufferClient & Document;
 @Schema({ collection: 'bufferClients', versionKey: false, autoIndex: true })  // Specify the collection name here
 export class BufferClient {
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true})
   tgId: string;
 
   @Prop({ required: true, unique: true })
