@@ -12,7 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const activechannels_service_1 = require("./activechannels.service");
 const activechannels_controller_1 = require("./activechannels.controller");
 const active_channel_schema_1 = require("./schemas/active-channel.schema");
-const init_module_1 = require("../../init.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let ActiveChannelsModule = class ActiveChannelsModule {
 };
 exports.ActiveChannelsModule = ActiveChannelsModule;

@@ -19,6 +19,10 @@ const mongoose_2 = require("mongoose");
 let ConfigurationService = class ConfigurationService {
     constructor(configurationModel) {
         this.configurationModel = configurationModel;
+        this.setEnv();
+    }
+    async OnModuleInit() {
+        console.log("Config Module Inited");
     }
     async findOne() {
         const user = await this.configurationModel.findOne({}).exec();
@@ -26,6 +30,16 @@ let ConfigurationService = class ConfigurationService {
             throw new common_1.NotFoundException(`configurationModel not found`);
         }
         return user;
+    }
+    async setEnv() {
+        console.log("Setting Envs");
+        const configuration = await this.configurationModel.findOne({}, { _id: 0 });
+        const data = { ...configuration };
+        for (const key in data) {
+            console.log('setting', key);
+            process.env[key] = data[key];
+        }
+        console.log("finished setting env");
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
@@ -42,4 +56,4 @@ exports.ConfigurationService = ConfigurationService = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('configurationModule')),
     __metadata("design:paramtypes", [mongoose_2.Model])
 ], ConfigurationService);
-//# sourceMappingURL=configuration.service.js.map
+//# sourceMappingURL=init.service.js.map

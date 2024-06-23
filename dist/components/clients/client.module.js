@@ -16,7 +16,7 @@ const Telegram_module_1 = require("../Telegram/Telegram.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
 const users_module_1 = require("../users/users.module");
 const archived_client_module_1 = require("../archived-clients/archived-client.module");
-const init_module_1 = require("../../init.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;

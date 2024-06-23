@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigurationController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
-const configuration_service_1 = require("./configuration.service");
+const init_service_1 = require("./init.service");
 let ConfigurationController = class ConfigurationController {
     constructor(configurationService) {
         this.configurationService = configurationService;
@@ -47,6 +47,6 @@ __decorate([
 exports.ConfigurationController = ConfigurationController = __decorate([
     (0, swagger_1.ApiTags)('Configuration'),
     (0, common_1.Controller)('Configuration'),
-    __metadata("design:paramtypes", [configuration_service_1.ConfigurationService])
+    __metadata("design:paramtypes", [init_service_1.ConfigurationService])
 ], ConfigurationController);
-//# sourceMappingURL=configuration.controller.js.map
+//# sourceMappingURL=init.controller.js.map

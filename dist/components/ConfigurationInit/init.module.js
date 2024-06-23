@@ -10,6 +10,9 @@ exports.initModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const mongoose_1 = require("@nestjs/mongoose");
+const init_service_1 = require("./init.service");
+const configuration_schema_1 = require("./configuration.schema");
+const init_controller_1 = require("./init.controller");
 let initModule = class initModule {
 };
 exports.initModule = initModule;
@@ -19,11 +22,16 @@ exports.initModule = initModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot(),
             mongoose_1.MongooseModule.forRootAsync({
-                useFactory: async () => ({
+                useFactory: () => ({
                     uri: process.env.mongouri,
                 }),
             }),
+            mongoose_1.MongooseModule.forFeature([{
+                    name: 'configurationModule', collection: 'configuration', schema: configuration_schema_1.ConfigurationSchema
+                }])
         ],
+        providers: [init_service_1.ConfigurationService],
+        controllers: [init_controller_1.ConfigurationController],
         exports: [config_1.ConfigModule, mongoose_1.MongooseModule],
     })
 ], initModule);

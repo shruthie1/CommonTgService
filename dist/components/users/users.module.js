@@ -14,7 +14,7 @@ const users_controller_1 = require("./users.controller");
 const user_schema_1 = require("./schemas/user.schema");
 const Telegram_module_1 = require("../Telegram/Telegram.module");
 const client_module_1 = require("../clients/client.module");
-const init_module_1 = require("../../init.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;

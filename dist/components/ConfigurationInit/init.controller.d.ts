@@ -1,4 +1,4 @@
-import { ConfigurationService } from './configuration.service';
+import { ConfigurationService } from './init.service';
 export declare class ConfigurationController {
     private readonly configurationService;
     constructor(configurationService: ConfigurationService);

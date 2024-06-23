@@ -12,7 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const client_schema_1 = require("../clients/schemas/client.schema");
 const archived_client_service_1 = require("./archived-client.service");
 const archived_client_controller_1 = require("./archived-client.controller");
-const init_module_1 = require("../../init.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let ArchivedClientModule = class ArchivedClientModule {
 };
 exports.ArchivedClientModule = ArchivedClientModule;
