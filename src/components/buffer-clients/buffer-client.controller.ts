@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam } from '@nestjs/swagger';
 import { BufferClientService } from './buffer-client.service';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { BufferClient } from './schemas/buffer-client.schema';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
+import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 
 @ApiTags('Buffer Clients')
 @Controller('bufferclients')
@@ -61,8 +62,14 @@ export class BufferClientController {
 
   @Patch(':mobile')
   @ApiOperation({ summary: 'Update user data by ID' })
-  async update(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateClientDto): Promise<BufferClient> {
+  async update(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
     return this.clientService.update(mobile, updateClientDto);
+  }
+
+  @Put(':mobile')
+  @ApiOperation({ summary: 'Update user data by ID' })
+  async createdOrupdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
+    return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
   @Delete(':mobile')

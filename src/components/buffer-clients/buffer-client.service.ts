@@ -46,7 +46,7 @@ export class BufferClientService {
         const updatedUser = await this.bufferClientModel.findOneAndUpdate(
             { mobile },
             { $set: updateClientDto },
-            { new: true }
+            { new: true, upsert: true, returnDocument: 'after' }
         ).exec();
 
         if (!updatedUser) {
@@ -55,12 +55,14 @@ export class BufferClientService {
 
         return updatedUser;
     }
-    
+
     async createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient> {
-        let existingUser = await this.findOne(mobile);
+        const existingUser = await this.bufferClientModel.findOne({ mobile }).exec();
         if (existingUser) {
+            console.log("Updating")
             return this.update(existingUser.mobile, createOrUpdateUserDto as UpdateBufferClientDto);
         } else {
+            console.log("creating")
             return this.create(createOrUpdateUserDto as CreateBufferClientDto);
         }
     }
