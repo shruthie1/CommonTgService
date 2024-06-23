@@ -11,8 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BufferClientSchema = exports.BufferClient = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
-const mongoose_2 = require("mongoose");
-let BufferClient = class BufferClient extends mongoose_2.Document {
+let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
 __decorate([
