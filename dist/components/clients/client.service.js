@@ -119,9 +119,11 @@ let ClientService = class ClientService {
                     const bufferClientDto = {
                         mobile: existingClientMobile,
                         createdDate: today,
+                        updatedDate: today,
                         availableDate,
                         session: existingClientUser.session,
                         tgId: existingClientUser.tgId,
+                        channels: 100
                     };
                     const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
                     await this.archivedClientService.update(existingClient.mobile, existingClient);
