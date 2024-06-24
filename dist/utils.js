@@ -19,7 +19,7 @@ function contains(str, arr) {
     }));
 }
 ;
-async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetries = 3) {
+async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetries = 0) {
     const timeout = options?.timeout || 15000;
     const source = axios_1.default.CancelToken.source();
     const id = setTimeout(() => source.cancel(), timeout);
@@ -43,7 +43,8 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
             else {
-                console.error(`All ${maxRetries + 1} retries failed for ${resource}`);
+                console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+                console.log(error);
                 return undefined;
             }
         }
