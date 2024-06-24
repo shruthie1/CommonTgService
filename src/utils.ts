@@ -24,7 +24,7 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
         ...options,
         url: resource,
         httpsAgent: new https.Agent({ keepAlive: true }),
-        headers: { 'Content-Type': 'application/xml' },
+        headers: { 'Content-Type': 'application/json' },
         cancelToken: source.token
       });
       clearTimeout(id);
