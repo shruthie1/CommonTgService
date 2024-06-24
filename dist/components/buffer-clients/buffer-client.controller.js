@@ -30,7 +30,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.search(query);
     }
     async checkbufferClients() {
-        this.clientService.cClients();
+        this.clientService.checkBufferClients();
         return "initiated Checking";
     }
     async addNewUserstoBufferClients(body) {
