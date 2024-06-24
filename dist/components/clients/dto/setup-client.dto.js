@@ -28,11 +28,9 @@ __decorate([
     __metadata("design:type", Number)
 ], SetupClientQueryDto.prototype, "days", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: Boolean
-    }),
+    (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Boolean),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
@@ -43,11 +41,9 @@ __decorate([
     __metadata("design:type", String)
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: Boolean
-    }),
+    (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Boolean),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);
