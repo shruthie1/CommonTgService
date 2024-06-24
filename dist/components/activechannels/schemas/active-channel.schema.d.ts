@@ -1,5 +1,6 @@
 import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
+export type ActiveChannelDocument = ActiveChannel & Document;
 export declare class ActiveChannel extends Document {
     channelId: string;
     broadcast: boolean;
