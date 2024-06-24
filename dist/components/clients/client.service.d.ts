@@ -22,7 +22,8 @@ export declare class ClientService {
     remove(clientId: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;
-    updateClient(session: string, mobile: string, userName: string, clientId: string): Promise<void>;
+    updateClientSession(session: string, mobile: string, userName: string, clientId: string): Promise<void>;
+    updateClient(clientId: string): Promise<void>;
     generateNewSession(phoneNumber: any): Promise<void>;
     executeQuery(query: any): Promise<any>;
 }
