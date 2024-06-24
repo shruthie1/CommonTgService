@@ -31,7 +31,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by twoFA status', type: Boolean }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "twoFA", void 0);
@@ -73,9 +72,8 @@ __decorate([
 ], SearchUserDto.prototype, "personalChats", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by demo given status', type: Boolean }),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === '1' || value === true),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "demoGiven", void 0);
