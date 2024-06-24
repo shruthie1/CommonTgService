@@ -1,3 +1,4 @@
+import { AppModule } from './app.module';
 import { TelegramService } from './components/Telegram/Telegram.service';
 import { TelegramModule } from "./components/Telegram/Telegram.module";
 import { ActiveChannelsModule } from "./components/activechannels/activechannels.module";
@@ -13,4 +14,4 @@ import { ClientService } from './components/clients/client.service';
 import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, fetchNumbersFromString, ppplbot, sleep } from './utils';
-export { TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot };
+export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot };
