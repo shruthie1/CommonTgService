@@ -4,6 +4,7 @@ exports.ppplbot = void 0;
 exports.sleep = sleep;
 exports.contains = contains;
 exports.fetchWithTimeout = fetchWithTimeout;
+exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
 const axios_1 = require("axios");
@@ -49,6 +50,15 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             }
         }
     }
+}
+function toBoolean(value) {
+    if (typeof value === 'string') {
+        return value.toLowerCase() === 'true';
+    }
+    if (typeof value === 'number') {
+        return value === 1;
+    }
+    return value;
 }
 function fetchNumbersFromString(inputString) {
     const regex = /\d+/g;
