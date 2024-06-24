@@ -157,11 +157,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                 }
                 catch (error) {
-                    console.log(mobile, " - Failed - ", error);
+                    console.log(mobile, " - Failed!");
+                    (0, utils_1.parseError)(error);
                 }
             }
             catch (error) {
-                console.log("Channels ERR: ", error);
+                console.log("Channels ERR: ", error.errorMessage);
                 if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
                     const activeChannel = await this.activeChannelsService.search({ username: channel.replace('@', '') });
                     await this.activeChannelsService.remove(activeChannel[0]?.channelId);

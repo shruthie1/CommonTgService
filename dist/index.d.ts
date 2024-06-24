@@ -12,4 +12,5 @@ import { BufferClientService } from './components/buffer-clients/buffer-client.s
 import { ClientService } from './components/clients/client.service';
 import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
-export { TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService };
+import { fetchWithTimeout } from './utils';
+export { TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, fetchWithTimeout };
