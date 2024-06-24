@@ -23,6 +23,7 @@ const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
 const archived_client_service_1 = require("../archived-clients/archived-client.service");
 const utils_1 = require("../../utils");
+const path_1 = require("path");
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService) {
@@ -68,10 +69,11 @@ let ClientService = class ClientService {
     async update(clientId, updateClientDto) {
         delete updateClientDto['_id'];
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
-        this.clientsMap.set(clientId, updatedUser);
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        this.clientsMap.set(clientId, updatedUser);
+        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         return updatedUser;
     }
     async remove(clientId) {
@@ -166,7 +168,7 @@ let ClientService = class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
                     if (archivedClient) {
-                        await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
+                        await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
                     }
                     else {
                         await this.generateNewSession(newBufferClient.mobile);
@@ -186,7 +188,7 @@ let ClientService = class ClientService {
             console.log("Profile Setup Recently tried");
         }
     }
-    async updateClient(session, mobile, userName, clientId) {
+    async updateClientSession(session, mobile, userName, clientId) {
         console.log("Updating Client session");
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, userName, mainAccount: userName });
@@ -199,9 +201,26 @@ let ClientService = class ClientService {
         await this.telegramService.disconnectAll();
         await (0, utils_1.fetchWithTimeout)(newClient.deployKey);
         setTimeout(async () => {
-            await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/forward/updateclient/${clientId}`);
+            await this.updateClient(clientId);
         }, 10000);
-        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
+    }
+    async updateClient(clientId) {
+        const client = await this.findOne(clientId);
+        const telegramClient = await this.telegramService.createClient(client.mobile);
+        await (0, Helpers_1.sleep)(2000);
+        await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+        await (0, Helpers_1.sleep)(3000);
+        await telegramClient.deleteProfilePhotos();
+        await (0, Helpers_1.sleep)(3000);
+        await telegramClient.updatePrivacy();
+        await (0, Helpers_1.sleep)(3000);
+        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp1.jpg'));
+        await (0, Helpers_1.sleep)(3000);
+        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp2.jpg'));
+        await (0, Helpers_1.sleep)(3000);
+        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp3.jpg'));
+        await (0, Helpers_1.sleep)(2000);
+        await this.telegramService.deleteClient(client.mobile);
     }
     async generateNewSession(phoneNumber) {
         try {
