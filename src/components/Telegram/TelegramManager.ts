@@ -152,16 +152,20 @@ class TelegramManager {
         };
     }
 
-    async getEntity(entity: Api.TypeEntityLike){
+    async getEntity(entity: Api.TypeEntityLike) {
         return await this.client?.getEntity(entity)
     }
 
-    async joinChannel(entity:Api.TypeEntityLike){
+    async joinChannel(entity: Api.TypeEntityLike) {
         return await this.client?.invoke(
             new Api.channels.JoinChannel({
                 channel: await this.client?.getEntity(entity)
             })
         );
+    }
+
+    connected() {
+        return this.client.connected;
     }
 
     async removeOtherAuths(): Promise<void> {

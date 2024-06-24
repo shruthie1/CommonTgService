@@ -171,7 +171,6 @@ export class ClientService {
                     const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
                     await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate })
                 }
-
             } catch (error) {
                 parseError(error);
             }
