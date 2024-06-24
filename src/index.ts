@@ -1,3 +1,4 @@
+import { AppModule } from './app.module';
 import { TelegramService } from './components/Telegram/Telegram.service';
 import { TelegramModule } from "./components/Telegram/Telegram.module";
 import { ActiveChannelsModule } from "./components/activechannels/activechannels.module";
@@ -15,6 +16,7 @@ import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, fetchNumbersFromString, ppplbot, sleep } from './utils';
 
 export {
+    AppModule,
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,
