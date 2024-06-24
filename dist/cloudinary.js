@@ -2,14 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CloudinaryService = void 0;
 console.log("in Cloudinary");
-const cloudinary_1 = require("cloudinary");
-const path_1 = require("path");
-const fs_1 = require("fs");
+const cloudinary = require("cloudinary");
+const path = require("path");
+const fs = require("fs");
 const utils_1 = require("./utils");
 class CloudinaryService {
     constructor() {
         this.resources = new Map();
-        cloudinary_1.default.v2.config({
+        cloudinary.v2.config({
             cloud_name: process.env.CL_NAME,
             api_key: process.env.CL_APIKEY,
             api_secret: process.env.CL_APISECRET
@@ -34,7 +34,7 @@ class CloudinaryService {
         const cloudinaryFileId = "index_nbzca5.js";
         const localFilePath = "./src/test.js";
         try {
-            const result = await cloudinary_1.default.v2.uploader.upload(localFilePath, {
+            const result = await cloudinary.v2.uploader.upload(localFilePath, {
                 resource_type: 'auto',
                 overwrite: true,
                 invalidate: true,
@@ -48,7 +48,7 @@ class CloudinaryService {
     }
     async findAndSaveResources(folderName, type) {
         try {
-            const { resources } = await cloudinary_1.default.v2.api.resources({ resource_type: type, type: 'upload', prefix: folderName, max_results: 500 });
+            const { resources } = await cloudinary.v2.api.resources({ resource_type: type, type: 'upload', prefix: folderName, max_results: 500 });
             resources.forEach(async (resource) => {
                 try {
                     this.resources.set(resource.public_id.split('/')[1].split('_')[0], resource.url);
@@ -66,7 +66,7 @@ class CloudinaryService {
     }
     async createFolder(folderName) {
         try {
-            const result = await cloudinary_1.default.v2.api.create_folder(folderName);
+            const result = await cloudinary.v2.api.create_folder(folderName);
             return result;
         }
         catch (error) {
@@ -77,7 +77,7 @@ class CloudinaryService {
     async uploadFilesToFolder(folderName) {
         const uploadPromises = Array.from(this.resources.entries()).map(async ([key, url]) => {
             try {
-                const result = await cloudinary_1.default.v2.uploader.upload_large(url, {
+                const result = await cloudinary.v2.uploader.upload_large(url, {
                     folder: folderName,
                     resource_type: 'auto',
                     public_id: key,
@@ -129,18 +129,18 @@ class CloudinaryService {
 exports.CloudinaryService = CloudinaryService;
 async function saveFile(url, name) {
     const extension = url.substring(url.lastIndexOf('.') + 1, url.length);
-    const mypath = path_1.default.resolve(__dirname, `../${name}.${extension}`);
+    const mypath = path.resolve(__dirname, `../${name}.${extension}`);
     (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2)
         .then(res => {
         if (res?.statusText === 'OK') {
             try {
-                if (!fs_1.default.existsSync(mypath)) {
-                    fs_1.default.writeFileSync(mypath, res.data, 'binary');
+                if (!fs.existsSync(mypath)) {
+                    fs.writeFileSync(mypath, res.data, 'binary');
                     console.log(`${name}.${extension} Saved!!`);
                 }
                 else {
-                    fs_1.default.unlinkSync(mypath);
-                    fs_1.default.writeFileSync(mypath, res.data, 'binary');
+                    fs.unlinkSync(mypath);
+                    fs.writeFileSync(mypath, res.data, 'binary');
                     console.log(`${name}.${extension} Replaced!!`);
                 }
             }

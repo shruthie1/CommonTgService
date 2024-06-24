@@ -1,4 +1,4 @@
-import cloudinary from 'cloudinary';
+import * as cloudinary from 'cloudinary';
 export declare class CloudinaryService {
     static instance: any;
     resources: Map<any, any>;
