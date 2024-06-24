@@ -8,6 +8,7 @@ exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
 const axios_1 = require("axios");
+const https_1 = require("https");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -21,7 +22,7 @@ function contains(str, arr) {
 }
 ;
 async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetries = 0) {
-    const timeout = options?.timeout || 15000;
+    const timeout = options?.timeout || 30000;
     const source = axios_1.default.CancelToken.source();
     const id = setTimeout(() => source.cancel(), timeout);
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
@@ -29,6 +30,8 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             const response = await axios_1.default.request({
                 ...options,
                 url: resource,
+                httpsAgent: new https_1.default.Agent({ keepAlive: true }),
+                headers: { 'Content-Type': 'application/xml' },
                 cancelToken: source.token
             });
             clearTimeout(id);
@@ -45,7 +48,6 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             }
             else {
                 console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-                console.log(error);
                 return undefined;
             }
         }
