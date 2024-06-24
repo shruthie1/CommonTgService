@@ -55,7 +55,7 @@ export class TelegramController {
     async joinChannels(@Param('mobile') mobile: string, @Body('channels') channels: string) {
         await this.connectToTelegram(mobile);
         this.telegramService.joinChannels(mobile, channels);
-        return 'Channels joined successfully';
+        return 'Joining Channels';
     }
 
     @Get('removeauths/:mobile')

@@ -94,6 +94,7 @@ export class BufferClientService {
     }
 
     async joinchannelForBufferClients() {
+        console.log("Joining Channels")
         await this.telegramService.disconnectAll();
         await sleep(2000);
         const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4)
@@ -114,6 +115,7 @@ export class BufferClientService {
             }
         }
     }
+    
     async setAsBufferClient(
         mobile: string,
         availableDate: string = (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0]

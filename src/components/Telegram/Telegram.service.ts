@@ -172,6 +172,7 @@ export class TelegramService {
         }
         return 'Channels joined successfully';
     }
+    
     async removeOtherAuths(mobile: string) {
         const telegramClient = TelegramService.clientsMap.get(mobile)
         await telegramClient.removeOtherAuths();
