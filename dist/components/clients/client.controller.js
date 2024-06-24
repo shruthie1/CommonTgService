@@ -37,7 +37,8 @@ let ClientController = class ClientController {
         return this.clientService.findOne(clientId);
     }
     async setupClient(clientId, setupClientQueryDto) {
-        return this.clientService.setupClient(clientId, setupClientQueryDto);
+        this.clientService.setupClient(clientId, setupClientQueryDto);
+        return `Started Client Seup for ${clientId}`;
     }
     async update(clientId, updateClientDto) {
         return this.clientService.update(clientId, updateClientDto);

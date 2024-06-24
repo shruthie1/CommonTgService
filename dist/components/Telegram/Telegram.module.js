@@ -12,6 +12,7 @@ const Telegram_controller_1 = require("./Telegram.controller");
 const users_module_1 = require("../users/users.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
 const Telegram_service_1 = require("./Telegram.service");
+const activechannels_module_1 = require("../activechannels/activechannels.module");
 let TelegramModule = class TelegramModule {
 };
 exports.TelegramModule = TelegramModule;
@@ -19,7 +20,8 @@ exports.TelegramModule = TelegramModule = __decorate([
     (0, common_1.Module)({
         imports: [
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
-            buffer_client_module_1.BufferClientModule
+            buffer_client_module_1.BufferClientModule,
+            (0, common_1.forwardRef)(() => activechannels_module_1.ActiveChannelsModule)
         ],
         controllers: [Telegram_controller_1.TelegramController],
         providers: [Telegram_service_1.TelegramService],

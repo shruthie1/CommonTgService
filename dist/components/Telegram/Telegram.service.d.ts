@@ -1,11 +1,14 @@
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
+import { Api } from 'telegram';
+import { ActiveChannelsService } from '../activechannels/activechannels.service';
 export declare class TelegramService {
     private usersService;
     private bufferClientService;
+    private activeChannelsService;
     private static clientsMap;
-    constructor(usersService: UsersService, bufferClientService: BufferClientService);
+    constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService);
     getActiveClientSetup(): {
         mobile: string;
         clientId: string;
@@ -19,9 +22,9 @@ export declare class TelegramService {
     deleteClient(number: string): Promise<boolean>;
     disconnectAll(): Promise<void>;
     createClient(mobile: string, autoDisconnect?: boolean, handler?: boolean): Promise<TelegramManager>;
-    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
+    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
     getChatId(mobile: string, username: string): Promise<any>;
-    joinChannels(mobile: string, channels: string): Promise<string>;
+    joinChannels(mobile: string, str: string): Promise<string>;
     removeOtherAuths(mobile: string): Promise<string>;
     getSelfMsgsInfo(mobile: string): Promise<{
         photoCount: number;
@@ -35,7 +38,7 @@ export declare class TelegramService {
         ids: string[];
     }>;
     getAuths(mobile: string): Promise<any>;
-    getMe(mobile: string): Promise<import("telegram").Api.User>;
+    getMe(mobile: string): Promise<Api.User>;
     set2Fa(mobile: string): Promise<string>;
     updatePrivacyforDeletedAccount(mobile: string): Promise<void>;
     deleteProfilePhotos(mobile: string): Promise<void>;
