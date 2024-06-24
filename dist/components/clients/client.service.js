@@ -23,7 +23,7 @@ const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
 const archived_client_service_1 = require("../archived-clients/archived-client.service");
 const utils_1 = require("../../utils");
-const path_1 = require("path");
+const path = require("path");
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService) {
@@ -215,11 +215,11 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.updatePrivacy();
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp1.jpg'));
+            await telegramClient.updateProfilePic(path.join(__dirname, '../dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(__dirname, '../dp2.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(__dirname, '../dp3.jpg'));
             await (0, Helpers_1.sleep)(2000);
             await this.telegramService.deleteClient(client.mobile);
         }
