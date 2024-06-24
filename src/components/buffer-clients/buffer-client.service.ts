@@ -94,7 +94,7 @@ export class BufferClientService {
     }
 
     async joinchannelForBufferClients() {
-        console.log("Joining Channels")
+        console.log("Joining Channel")
         await this.telegramService.disconnectAll();
         await sleep(2000);
         const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4)

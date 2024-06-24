@@ -12,6 +12,7 @@ import { BufferClientService } from './components/buffer-clients/buffer-client.s
 import { ClientService } from './components/clients/client.service';
 import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
+import { fetchWithTimeout } from './utils';
 
 export {
     TelegramModule,
@@ -27,5 +28,6 @@ export {
     UserDataService,
     UsersService,
     BufferClientService,
-    ArchivedClientService
+    ArchivedClientService,
+    fetchWithTimeout
 }

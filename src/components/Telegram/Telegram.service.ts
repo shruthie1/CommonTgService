@@ -121,7 +121,7 @@ export class TelegramService {
             const channel = channels[i].trim();
             console.log(mobile, "Trying: ", channel);
             try {
-                const chatEntity =  <Api.Channel>await telegramClient.getEntity(channel);
+                const chatEntity = <Api.Channel>await telegramClient.getEntity(channel);
                 const joinResult = await telegramClient.joinChannel(chatEntity);
                 console.log(mobile, " - Joined channel Success - ", channel);
                 try {
@@ -150,10 +150,11 @@ export class TelegramService {
                         console.log("Removed Channel- ", channel);
                     }
                 } catch (error) {
-                    console.log(mobile, " - Failed - ", error);
+                    console.log(mobile, " - Failed!")
+                    parseError(error)
                 }
             } catch (error) {
-                console.log("Channels ERR: ", error);
+                console.log("Channels ERR: ", error.errorMessage);
                 if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
                     const activeChannel = await this.activeChannelsService.search({ username: channel.replace('@', '') })
                     await this.activeChannelsService.remove(activeChannel[0]?.channelId);
@@ -172,7 +173,7 @@ export class TelegramService {
         }
         return 'Channels joined successfully';
     }
-    
+
     async removeOtherAuths(mobile: string) {
         const telegramClient = TelegramService.clientsMap.get(mobile)
         await telegramClient.removeOtherAuths();

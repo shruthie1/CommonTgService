@@ -131,6 +131,10 @@ export function parseError(
     status = err.status || 'UNKNOWN';
     message = err.message;
     error = err.name || err.code || 'Error';
+  } else if (err.errorMessage) {
+    status = err.status || 'UNKNOWN';
+    message = err.errorMessage;
+    error = err.name || err.code || 'Error';
   }
 
   const msg = `${prefix ? `${prefix} ::` : ""} ${extractMessage(message)} `
