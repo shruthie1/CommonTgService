@@ -98,38 +98,43 @@ export class ClientService {
                 const archiveOld = toBoolean(setupClientQueryDto.archiveOld);
                 const existingClient = await this.findOne(clientId);
                 const existingClientMobile = existingClient.mobile
-                const today = (new Date(Date.now())).toISOString().split('T')[0]
-                if (toBoolean(setupClientQueryDto.formalities)) {
-                    console.log("Started Formalities")
-                    await this.telegramService.updateUsername(existingClientMobile, '');
-                    await sleep(2000)
-                    await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
-                    await sleep(2000)
-                    await this.telegramService.deleteProfilePhotos(existingClientMobile)
-                    console.log("Formalities finished")
-                    await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
-                } else {
-                    console.log("Formalities skipped")
-                }
-                if (archiveOld) {
-                    const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
+                const today = (new Date(Date.now())).toISOString().split('T')[0];
+                const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
+                try {
                     await this.telegramService.createClient(existingClientMobile, false, true)
-                    const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-                    const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
-                        mobile: existingClientMobile,
-                        createdDate: today,
-                        updatedDate: today,
-                        availableDate,
-                        session: existingClientUser.session,
-                        tgId: existingClientUser.tgId,
-                        channels: 100
+                    if (toBoolean(setupClientQueryDto.formalities)) {
+                        console.log("Started Formalities")
+                        await this.telegramService.updateUsername(existingClientMobile, '');
+                        await sleep(2000)
+                        await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
+                        await sleep(2000)
+                        await this.telegramService.deleteProfilePhotos(existingClientMobile)
+                        console.log("Formalities finished")
+                        await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
+                    } else {
+                        console.log("Formalities skipped")
                     }
-                    const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
-                    await this.archivedClientService.update(existingClient.mobile, existingClient);
-                    console.log("client Archived: ", updatedBufferClient)
-                    await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
-                } else {
-                    console.log("Client Archive Skipped")
+                    if (archiveOld) {
+                        const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
+                        const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
+                            mobile: existingClientMobile,
+                            createdDate: today,
+                            updatedDate: today,
+                            availableDate,
+                            session: existingClientUser.session,
+                            tgId: existingClientUser.tgId,
+                            channels: 100
+                        }
+                        const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
+                        await this.archivedClientService.update(existingClient.mobile, existingClient);
+                        console.log("client Archived: ", updatedBufferClient)
+                        await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
+                    } else {
+                        console.log("Client Archive Skipped")
+                    }
+                } catch (error) {
+                    console.log("Cannot Archive Old Client");
+                    parseError(error)
                 }
 
                 const query = { availableDate: { $lte: today } }
