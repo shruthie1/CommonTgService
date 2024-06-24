@@ -41,6 +41,16 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
   }
 }
 
+export function toBoolean(value: string | number | boolean): boolean {
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  return value
+}
+
 export function fetchNumbersFromString(inputString) {
   const regex = /\d+/g;
   const matches = inputString.match(regex);
