@@ -8,7 +8,7 @@ exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
 const axios_1 = require("axios");
-const https_1 = require("https");
+const https = require("https");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -30,7 +30,7 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             const response = await axios_1.default.request({
                 ...options,
                 url: resource,
-                httpsAgent: new https_1.default.Agent({ keepAlive: true }),
+                httpsAgent: new https.Agent({ keepAlive: true }),
                 headers: { 'Content-Type': 'application/json' },
                 cancelToken: source.token
             });
