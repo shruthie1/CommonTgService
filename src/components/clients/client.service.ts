@@ -12,6 +12,7 @@ import { ArchivedClientService } from '../archived-clients/archived-client.servi
 import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolean } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
+import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
@@ -113,12 +114,14 @@ export class ClientService {
                         console.log("Formalities skipped")
                     }
                     const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-                    const bufferClientDto: UpdateBufferClientDto = {
+                    const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
                         mobile: existingClientMobile,
                         createdDate: today,
+                        updatedDate: today,
                         availableDate,
                         session: existingClientUser.session,
                         tgId: existingClientUser.tgId,
+                        channels: 100
                     }
                     const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
                     await this.archivedClientService.update(existingClient.mobile, existingClient);
