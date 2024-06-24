@@ -45,7 +45,7 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             }
             else {
                 console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-                console.log(error);
+                // console.log(error);
                 return undefined;
             }
         }
