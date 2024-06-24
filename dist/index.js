@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = void 0;
+exports.fetchWithTimeout = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = void 0;
 const Telegram_service_1 = require("./components/Telegram/Telegram.service");
 Object.defineProperty(exports, "TelegramService", { enumerable: true, get: function () { return Telegram_service_1.TelegramService; } });
 const Telegram_module_1 = require("./components/Telegram/Telegram.module");
@@ -29,4 +29,6 @@ const user_data_service_1 = require("./components/user-data/user-data.service");
 Object.defineProperty(exports, "UserDataService", { enumerable: true, get: function () { return user_data_service_1.UserDataService; } });
 const users_service_1 = require("./components/users/users.service");
 Object.defineProperty(exports, "UsersService", { enumerable: true, get: function () { return users_service_1.UsersService; } });
+const utils_1 = require("./utils");
+Object.defineProperty(exports, "fetchWithTimeout", { enumerable: true, get: function () { return utils_1.fetchWithTimeout; } });
 //# sourceMappingURL=index.js.map

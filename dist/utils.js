@@ -140,6 +140,11 @@ function parseError(err, prefix = 'TgCms') {
         message = err.message;
         error = err.name || err.code || 'Error';
     }
+    else if (err.errorMessage) {
+        status = err.status || 'UNKNOWN';
+        message = err.errorMessage;
+        error = err.name || err.code || 'Error';
+    }
     const msg = `${prefix ? `${prefix} ::` : ""} ${extractMessage(message)} `;
     const resp = { status, message: msg, error };
     console.log(resp);
