@@ -13,7 +13,7 @@ import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolea
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
-import path from 'path';
+import * as path from 'path';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
