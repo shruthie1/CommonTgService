@@ -4,6 +4,7 @@ const core_1 = require("@nestjs/core");
 const mongoose_1 = require("mongoose");
 const app_module_1 = require("./app.module");
 const swagger_1 = require("@nestjs/swagger");
+const common_1 = require("@nestjs/common");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const config = new swagger_1.DocumentBuilder()
@@ -14,6 +15,9 @@ async function bootstrap() {
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('api', app, document);
     mongoose_1.default.set('debug', true);
+    app.useGlobalPipes(new common_1.ValidationPipe({
+        transform: true,
+    }));
     await app.init();
     await app.listen(3000);
 }
