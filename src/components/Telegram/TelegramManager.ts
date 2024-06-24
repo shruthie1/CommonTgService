@@ -152,66 +152,16 @@ class TelegramManager {
         };
     }
 
-    async joinChannels(str: string): Promise<void> {
-        const channels = str.split('|');
-        console.log(this.phoneNumber, " - channelsLen - ", channels.length);
-        for (let i = 0; i < channels.length; i++) {
-            const channel = channels[i].trim();
-            console.log(this.phoneNumber, "Trying: ", channel);
-            try {
-                const joinResult = await this.client?.invoke(
-                    new Api.channels.JoinChannel({
-                        channel: await this.client?.getEntity(channel)
-                    })
-                );
-                console.log(this.phoneNumber, " - Joined channel Success - ", channel);
-                try {
-                    const chatEntity = <Api.Channel>await this.client?.getEntity(channel);
-                    const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
-                    const entity = {
-                        title,
-                        id: id.toString(),
-                        username,
-                        megagroup,
-                        participantsCount,
-                        broadcast
-                    };
-                    if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
-                        entity['canSendMsgs'] = true;
-                        try {
-                            await this.activeChannelsService.update(entity.id.toString(), entity)
-                            console.log("updated ActiveChannels");
-                        } catch (error) {
-                            console.log(parseError(error));
-                            console.log("Failed to update ActiveChannels");
-                        }
-                    } else {
-                        await this.activeChannelsService.remove(entity.id.toString());
-                        // await db.removeOnefromActiveChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
-                        // await db.removeOnefromChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
-                        console.log("Removed Channel- ", channel);
-                    }
-                } catch (error) {
-                    console.log(this.phoneNumber, " - Failed - ", error);
-                }
-            } catch (error) {
-                console.log("Channels ERR: ", error);
-                if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
-                    const activeChannel = await this.activeChannelsService.search({ username: channel.replace('@', '') })
-                    await this.activeChannelsService.remove(activeChannel[0]?.channelId);
-                    // await db.removeOnefromChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
-                    console.log("Removed Channel- ", channel);
-                }
-            }
-            console.log(this.phoneNumber, " - On waiting period");
-            await new Promise(resolve => setTimeout(resolve, 3 * 60 * 1000));
-            console.log(this.phoneNumber, " - Will Try next");
-        }
-        console.log(this.phoneNumber, " - finished joining channels");
-        if (this.client) {
-            await this.client.disconnect();
-            // await deleteClient(this.phoneNumber);
-        }
+    async getEntity(entity: Api.TypeEntityLike){
+        return await this.client?.getEntity(entity)
+    }
+
+    async joinChannel(entity:Api.TypeEntityLike){
+        return await this.client?.invoke(
+            new Api.channels.JoinChannel({
+                channel: await this.client?.getEntity(entity)
+            })
+        );
     }
 
     async removeOtherAuths(): Promise<void> {

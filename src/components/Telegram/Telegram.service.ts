@@ -4,6 +4,8 @@ import { contains, parseError, sleep } from "../../utils";
 import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
+import { Api } from 'telegram';
+import { ActiveChannelsService } from '../activechannels/activechannels.service';
 
 @Injectable()
 export class TelegramService {
@@ -11,7 +13,9 @@ export class TelegramService {
     constructor(
         @Inject(forwardRef(() => UsersService))
         private usersService: UsersService,
-        private bufferClientService: BufferClientService
+        private bufferClientService: BufferClientService,
+        @Inject(forwardRef(() => ActiveChannelsService))
+        private activeChannelsService: ActiveChannelsService,
     ) { }
 
 
@@ -109,9 +113,63 @@ export class TelegramService {
         return await telegramClient.getchatId(username);
     }
 
-    async joinChannels(mobile: string, channels: string) {
+    async joinChannels(mobile: string, str: string) {
         const telegramClient = TelegramService.clientsMap.get(mobile)
-        telegramClient.joinChannels(channels);
+        const channels = str.split('|');
+        console.log(mobile, " - channelsLen - ", channels.length);
+        for (let i = 0; i < channels.length; i++) {
+            const channel = channels[i].trim();
+            console.log(mobile, "Trying: ", channel);
+            try {
+                const chatEntity =  <Api.Channel>await telegramClient.getEntity(channel);
+                const joinResult = await telegramClient.joinChannel(chatEntity);
+                console.log(mobile, " - Joined channel Success - ", channel);
+                try {
+                    const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
+                    const entity = {
+                        title,
+                        id: id.toString(),
+                        username,
+                        megagroup,
+                        participantsCount,
+                        broadcast
+                    };
+                    if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
+                        entity['canSendMsgs'] = true;
+                        try {
+                            await this.activeChannelsService.update(entity.id.toString(), entity)
+                            console.log("updated ActiveChannels");
+                        } catch (error) {
+                            console.log(parseError(error));
+                            console.log("Failed to update ActiveChannels");
+                        }
+                    } else {
+                        await this.activeChannelsService.remove(entity.id.toString());
+                        // await db.removeOnefromActiveChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
+                        // await db.removeOnefromChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
+                        console.log("Removed Channel- ", channel);
+                    }
+                } catch (error) {
+                    console.log(mobile, " - Failed - ", error);
+                }
+            } catch (error) {
+                console.log("Channels ERR: ", error);
+                if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
+                    const activeChannel = await this.activeChannelsService.search({ username: channel.replace('@', '') })
+                    await this.activeChannelsService.remove(activeChannel[0]?.channelId);
+                    // await db.removeOnefromChannel({ username: channel.startsWith("@") ? channel : `@${channel}` });
+                    console.log("Removed Channel- ", channel);
+                }
+            }
+            console.log(mobile, " - On waiting period");
+            await new Promise(resolve => setTimeout(resolve, 3 * 60 * 1000));
+            console.log(mobile, " - Will Try next");
+        }
+        console.log(mobile, " - finished joining channels");
+        if (telegramClient) {
+            await telegramClient.disconnect();
+            // await deleteClient(this.phoneNumber);
+        }
         return 'Channels joined successfully';
     }
     async removeOtherAuths(mobile: string) {

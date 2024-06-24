@@ -49,7 +49,8 @@ export class ClientController {
   //@apiresponse({ status: 200, description: 'Return the user data.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
   async setupClient(@Param('clientId') clientId: string, @Query() setupClientQueryDto: SetupClientQueryDto) {
-    return this.clientService.setupClient(clientId, setupClientQueryDto);
+    this.clientService.setupClient(clientId, setupClientQueryDto);
+    return `Started Client Seup for ${clientId}`
   }
 
   @Patch(':clientId')
@@ -67,13 +68,13 @@ export class ClientController {
   async remove(@Param('clientId') clientId: string): Promise<Client> {
     return this.clientService.remove(clientId);
   }
-  
+
   @Post('query')
   @ApiOperation({ summary: 'Execute a custom MongoDB query' })
   //@apiresponse({ status: 200, description: 'Query executed successfully.' })
   //@apiresponse({ status: 400, description: 'Invalid query.' })
   //@apiresponse({ status: 500, description: 'Internal server error.' })
-  @ApiBody({type: Object})
+  @ApiBody({ type: Object })
   async executeQuery(@Body() query: object): Promise<any> {
     try {
       return await this.clientService.executeQuery(query);
