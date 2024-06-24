@@ -4,7 +4,7 @@
   "description": "",
   "author": "",
   "private": true,
-  "main": "dist/app.module",
+  "main": "dist/index",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",

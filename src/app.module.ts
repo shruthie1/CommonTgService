@@ -32,12 +32,3 @@ import { initModule } from './components/ConfigurationInit/init.module';
   ]
 })
 export class AppModule { }
-export {
-  TelegramModule,
-  ActiveChannelsModule,
-  ClientModule,
-  UserDataModule,
-  UsersModule,
-  BufferClientModule,
-  ArchivedClientModule
-}
