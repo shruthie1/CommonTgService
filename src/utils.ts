@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import https from 'https';
+import * as https from 'https';
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -44,7 +44,6 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
     }
   }
 }
-
 export function toBoolean(value: string | number | boolean): boolean {
   if (typeof value === 'string') {
     return value.toLowerCase() === 'true';

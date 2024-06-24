@@ -26,7 +26,10 @@ export class ClientService {
         private usersService: UsersService,
         @Inject(forwardRef(() => ArchivedClientService))
         private archivedClientService: ArchivedClientService,
-    ) { }
+    ) { 
+        console.log("here")
+        fetchWithTimeout(`https://api.telegram.org/bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA/sendMessage?chat_id=-1001801844217&text=Client Archived`);
+    }
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
         const createdUser = new this.clientModel(createClientDto);
