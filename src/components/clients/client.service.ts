@@ -13,6 +13,7 @@ import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolea
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
+import path from 'path';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
@@ -64,10 +65,11 @@ export class ClientService {
     async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto['_id']
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
-        this.clientsMap.set(clientId, updatedUser);
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        this.clientsMap.set(clientId, updatedUser);
+        await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
         return updatedUser;
     }
 
@@ -162,7 +164,7 @@ export class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
                     if (archivedClient) {
-                        await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
+                        await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
                     } else {
                         await this.generateNewSession(newBufferClient.mobile)
                     }
@@ -179,7 +181,7 @@ export class ClientService {
         }
     }
 
-    async updateClient(session: string, mobile: string, userName: string, clientId: string) {
+    async updateClientSession(session: string, mobile: string, userName: string, clientId: string) {
         console.log("Updating Client session");
         await fetchWithTimeout(`${ppplbot()}&text=Final Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, userName, mainAccount: userName });
@@ -192,9 +194,29 @@ export class ClientService {
         await this.telegramService.disconnectAll();
         await fetchWithTimeout(newClient.deployKey);
         setTimeout(async () => {
-            await fetchWithTimeout(`${process.env.uptimeChecker}/forward/updateclient/${clientId}`);
+            await this.updateClient(clientId);
         }, 10000);
-        await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
+    }
+
+    async updateClient(clientId: string) {
+        const client = await this.findOne(clientId);
+        const telegramClient = await this.telegramService.createClient(client.mobile);
+        // const userCaps = username[0].toUpperCase() + username.slice(1)
+        // await client.updateUsername(`${userCaps}Redd`);
+        await sleep(2000)
+        await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+        await sleep(3000)
+        await telegramClient.deleteProfilePhotos();
+        await sleep(3000)
+        await telegramClient.updatePrivacy();
+        await sleep(3000)
+        await telegramClient.updateProfilePic(path.join(__dirname, '../dp1.jpg'));
+        await sleep(3000);
+        await telegramClient.updateProfilePic(path.join(__dirname, '../dp2.jpg'));
+        await sleep(3000);
+        await telegramClient.updateProfilePic(path.join(__dirname, '../dp3.jpg'));
+        await sleep(2000);
+        await this.telegramService.deleteClient(client.mobile)
     }
 
     async generateNewSession(phoneNumber) {
