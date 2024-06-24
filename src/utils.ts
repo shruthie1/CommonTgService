@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
+import https from 'https';
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -10,8 +11,10 @@ export function contains(str, arr) {
     return false;
   }))
 };
+
+
 export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 0) {
-  const timeout = options?.timeout || 15000;
+  const timeout = options?.timeout || 30000;
 
   const source = axios.CancelToken.source();
   const id = setTimeout(() => source.cancel(), timeout);
@@ -20,6 +23,8 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       const response = await axios.request({
         ...options,
         url: resource,
+        httpsAgent: new https.Agent({ keepAlive: true }),
+        headers: { 'Content-Type': 'application/xml' },
         cancelToken: source.token
       });
       clearTimeout(id);
@@ -34,7 +39,6 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
         await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
       } else {
         console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-        console.log(error)
         return undefined;
       }
     }

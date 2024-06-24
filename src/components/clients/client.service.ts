@@ -99,20 +99,21 @@ export class ClientService {
                 const existingClient = await this.findOne(clientId);
                 const existingClientMobile = existingClient.mobile
                 const today = (new Date(Date.now())).toISOString().split('T')[0]
+                if (toBoolean(setupClientQueryDto.formalities)) {
+                    console.log("Started Formalities")
+                    await this.telegramService.updateUsername(existingClientMobile, '');
+                    await sleep(2000)
+                    await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
+                    await sleep(2000)
+                    await this.telegramService.deleteProfilePhotos(existingClientMobile)
+                    console.log("Formalities finished")
+                    await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
+                } else {
+                    console.log("Formalities skipped")
+                }
                 if (archiveOld) {
                     const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
                     await this.telegramService.createClient(existingClientMobile, false, true)
-                    if (toBoolean(setupClientQueryDto.formalities)) {
-                        await this.telegramService.updateUsername(existingClientMobile, '');
-                        await sleep(2000)
-                        await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
-                        await sleep(2000)
-                        await this.telegramService.deleteProfilePhotos(existingClientMobile)
-                        console.log("Formalities finished")
-                        await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
-                    } else {
-                        console.log("Formalities skipped")
-                    }
                     const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
                     const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
                         mobile: existingClientMobile,
