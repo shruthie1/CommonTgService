@@ -22,28 +22,40 @@ class SetupClientQueryDto {
 }
 exports.SetupClientQueryDto = SetupClientQueryDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({
+        type: Number,
+        default: 3
+    }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SetupClientQueryDto.prototype, "days", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({
+        type: Boolean,
+        default: true
+    }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({
+        type: String
+    }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({
+        type: Boolean,
+        default: true
+    }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);
