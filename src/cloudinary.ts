@@ -1,7 +1,7 @@
 console.log("in Cloudinary");
-import cloudinary from 'cloudinary';
-import path from 'path';
-import fs from 'fs';
+import * as cloudinary from 'cloudinary';
+import * as path from 'path';
+import * as fs from 'fs';
 import { fetchWithTimeout } from './utils';
 
 export class CloudinaryService {
