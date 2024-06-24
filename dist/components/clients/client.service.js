@@ -206,21 +206,26 @@ let ClientService = class ClientService {
     }
     async updateClient(clientId) {
         const client = await this.findOne(clientId);
-        const telegramClient = await this.telegramService.createClient(client.mobile);
-        await (0, Helpers_1.sleep)(2000);
-        await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
-        await (0, Helpers_1.sleep)(3000);
-        await telegramClient.deleteProfilePhotos();
-        await (0, Helpers_1.sleep)(3000);
-        await telegramClient.updatePrivacy();
-        await (0, Helpers_1.sleep)(3000);
-        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp1.jpg'));
-        await (0, Helpers_1.sleep)(3000);
-        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp2.jpg'));
-        await (0, Helpers_1.sleep)(3000);
-        await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp3.jpg'));
-        await (0, Helpers_1.sleep)(2000);
-        await this.telegramService.deleteClient(client.mobile);
+        try {
+            const telegramClient = await this.telegramService.createClient(client.mobile);
+            await (0, Helpers_1.sleep)(2000);
+            await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+            await (0, Helpers_1.sleep)(3000);
+            await telegramClient.deleteProfilePhotos();
+            await (0, Helpers_1.sleep)(3000);
+            await telegramClient.updatePrivacy();
+            await (0, Helpers_1.sleep)(3000);
+            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp1.jpg'));
+            await (0, Helpers_1.sleep)(3000);
+            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp2.jpg'));
+            await (0, Helpers_1.sleep)(3000);
+            await telegramClient.updateProfilePic(path_1.default.join(__dirname, '../dp3.jpg'));
+            await (0, Helpers_1.sleep)(2000);
+            await this.telegramService.deleteClient(client.mobile);
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error);
+        }
     }
     async generateNewSession(phoneNumber) {
         try {
