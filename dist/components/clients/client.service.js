@@ -133,31 +133,38 @@ let ClientService = class ClientService {
                 }
                 const query = { availableDate: { $lte: today } };
                 const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
-                if (newBufferClient) {
-                    this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId });
-                    await this.telegramService.createClient(newBufferClient.mobile, false, true);
-                    const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-                    const userCaps = username[0].toUpperCase() + username.slice(1);
-                    const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, `${userCaps}_Redd`);
-                    if (archiveOld) {
-                        await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
+                try {
+                    if (newBufferClient) {
+                        this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId });
+                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
+                        const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
+                        const userCaps = username[0].toUpperCase() + username.slice(1);
+                        const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, `${userCaps}_Redd`);
+                        if (archiveOld) {
+                            await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
+                        }
+                        console.log("client updated");
                     }
-                    console.log("client updated");
+                    else {
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Buffer Clients not available`);
+                        console.log("Buffer Clients not available");
+                    }
+                    await this.bufferClientService.remove(newBufferClient.mobile);
+                    const newClientMe = await this.telegramService.getMe(newBufferClient.mobile);
+                    await this.telegramService.deleteClient(existingClientMobile);
+                    const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
+                    if (archivedClient) {
+                        await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
+                    }
+                    else {
+                        await this.generateNewSession(newBufferClient.mobile);
+                    }
                 }
-                else {
-                    await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Buffer Clients not available`);
-                    console.log("Buffer Clients not available");
+                catch (error) {
+                    console.log("Removing buffer as error");
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
                 }
-                const newClientMe = await this.telegramService.getMe(newBufferClient.mobile);
-                await this.telegramService.deleteClient(existingClientMobile);
-                const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
-                if (archivedClient) {
-                    await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
-                }
-                else {
-                    await this.generateNewSession(newBufferClient.mobile);
-                }
-                await this.bufferClientService.remove(newBufferClient.mobile);
             }
             catch (error) {
                 (0, utils_1.parseError)(error);
