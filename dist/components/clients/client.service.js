@@ -90,6 +90,7 @@ let ClientService = class ClientService {
         return this.clientModel.find(filter).exec();
     }
     async setupClient(clientId, setupClientQueryDto) {
+        console.log(`Received New Client Request for - ${clientId}`);
         if (Date.now() > (settingupClient + 240000)) {
             await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Received New Client Request for - ${clientId}`);
             console.log(setupClientQueryDto);
