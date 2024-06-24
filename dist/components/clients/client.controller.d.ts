@@ -11,7 +11,7 @@ export declare class ClientController {
     search(query: SearchClientDto): Promise<Client[]>;
     findAll(): Promise<Client[]>;
     findOne(clientId: string): Promise<Client>;
-    setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;
+    setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<string>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     executeQuery(query: object): Promise<any>;

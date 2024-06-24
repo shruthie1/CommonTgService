@@ -92,6 +92,7 @@ let ClientService = class ClientService {
     async setupClient(clientId, setupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`);
         if (Date.now() > (settingupClient + 240000)) {
+            settingupClient = Date.now();
             await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Received New Client Request for - ${clientId}`);
             console.log(setupClientQueryDto);
             await this.telegramService.disconnectAll();

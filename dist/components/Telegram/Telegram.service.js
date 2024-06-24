@@ -20,10 +20,12 @@ const utils_1 = require("../../utils");
 const TelegramManager_1 = require("./TelegramManager");
 const common_1 = require("@nestjs/common");
 const cloudinary_1 = require("../../cloudinary");
+const activechannels_service_1 = require("../activechannels/activechannels.service");
 let TelegramService = TelegramService_1 = class TelegramService {
-    constructor(usersService, bufferClientService) {
+    constructor(usersService, bufferClientService, activeChannelsService) {
         this.usersService = usersService;
         this.bufferClientService = bufferClientService;
+        this.activeChannelsService = activeChannelsService;
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
@@ -117,9 +119,63 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         return await telegramClient.getchatId(username);
     }
-    async joinChannels(mobile, channels) {
+    async joinChannels(mobile, str) {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
-        telegramClient.joinChannels(channels);
+        const channels = str.split('|');
+        console.log(mobile, " - channelsLen - ", channels.length);
+        for (let i = 0; i < channels.length; i++) {
+            const channel = channels[i].trim();
+            console.log(mobile, "Trying: ", channel);
+            try {
+                const chatEntity = await telegramClient.getEntity(channel);
+                const joinResult = await telegramClient.joinChannel(chatEntity);
+                console.log(mobile, " - Joined channel Success - ", channel);
+                try {
+                    const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
+                    const entity = {
+                        title,
+                        id: id.toString(),
+                        username,
+                        megagroup,
+                        participantsCount,
+                        broadcast
+                    };
+                    if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
+                        entity['canSendMsgs'] = true;
+                        try {
+                            await this.activeChannelsService.update(entity.id.toString(), entity);
+                            console.log("updated ActiveChannels");
+                        }
+                        catch (error) {
+                            console.log((0, utils_1.parseError)(error));
+                            console.log("Failed to update ActiveChannels");
+                        }
+                    }
+                    else {
+                        await this.activeChannelsService.remove(entity.id.toString());
+                        console.log("Removed Channel- ", channel);
+                    }
+                }
+                catch (error) {
+                    console.log(mobile, " - Failed - ", error);
+                }
+            }
+            catch (error) {
+                console.log("Channels ERR: ", error);
+                if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
+                    const activeChannel = await this.activeChannelsService.search({ username: channel.replace('@', '') });
+                    await this.activeChannelsService.remove(activeChannel[0]?.channelId);
+                    console.log("Removed Channel- ", channel);
+                }
+            }
+            console.log(mobile, " - On waiting period");
+            await new Promise(resolve => setTimeout(resolve, 3 * 60 * 1000));
+            console.log(mobile, " - Will Try next");
+        }
+        console.log(mobile, " - finished joining channels");
+        if (telegramClient) {
+            await telegramClient.disconnect();
+        }
         return 'Channels joined successfully';
     }
     async removeOtherAuths(mobile) {
@@ -220,7 +276,9 @@ TelegramService.clientsMap = new Map();
 exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => activechannels_service_1.ActiveChannelsService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
-        buffer_client_service_1.BufferClientService])
+        buffer_client_service_1.BufferClientService,
+        activechannels_service_1.ActiveChannelsService])
 ], TelegramService);
 //# sourceMappingURL=Telegram.service.js.map

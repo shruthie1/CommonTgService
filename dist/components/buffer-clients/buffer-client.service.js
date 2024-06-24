@@ -102,7 +102,7 @@ let BufferClientService = class BufferClientService {
                 for (const channel of result) {
                     resp = resp + (channel?.username?.startsWith("@") ? channel.username : `@${channel.username}`) + "|";
                 }
-                client.joinChannels(resp);
+                this.telegramService.joinChannels(document.mobile, resp);
             }
             catch (error) {
                 console.log(error);
