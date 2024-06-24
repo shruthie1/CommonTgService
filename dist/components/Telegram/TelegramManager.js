@@ -145,6 +145,9 @@ class TelegramManager {
             channel: await this.client?.getEntity(entity)
         }));
     }
+    connected() {
+        return this.client.connected;
+    }
     async removeOtherAuths() {
         if (!this.client)
             throw new Error('Client is not initialized');
