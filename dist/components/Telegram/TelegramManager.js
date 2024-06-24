@@ -423,7 +423,7 @@ class TelegramManager {
                 file: new uploads_1.CustomFile('pic.jpg', fs.statSync(image).size, image),
                 workers: 1,
             });
-            console.log("file uploaded- ", file);
+            console.log("file uploaded");
             await this.client.invoke(new tl_1.Api.photos.UploadProfilePhoto({
                 file: file,
             }));
@@ -519,7 +519,7 @@ class TelegramManager {
             const result = await this.client.invoke(new tl_1.Api.photos.GetUserPhotos({
                 userId: "me"
             }));
-            console.log(result);
+            console.log(`Profile Pics found: ${result.photos.length}`);
             if (result && result.photos?.length > 0) {
                 const res = await this.client.invoke(new tl_1.Api.photos.DeletePhotos({
                     id: result.photos
