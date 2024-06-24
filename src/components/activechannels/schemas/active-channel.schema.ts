@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 
+export type ActiveChannelDocument = ActiveChannel & Document;
 @Schema({ collection: 'activeChannels', versionKey: false, autoIndex: true })  // Specify the collection name here
 export class ActiveChannel extends Document {
   @Prop({ required: true, unique: true })

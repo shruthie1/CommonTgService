@@ -11,8 +11,8 @@ import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolean } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
+import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
@@ -93,87 +93,87 @@ export class ClientService {
         if (Date.now() > (settingupClient + 240000)) {
             await fetchWithTimeout(`${ppplbot()}&text=Received New Client Request for - ${clientId}`);
             console.log(setupClientQueryDto);
-            // await this.telegramService.disconnectAll();
-            // try {
-            //     const archiveOld = toBoolean(setupClientQueryDto.archiveOld);
-            //     const existingClient = await this.findOne(clientId);
-            //     const existingClientMobile = existingClient.mobile
-            //     const today = (new Date(Date.now())).toISOString().split('T')[0];
-            //     const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
-            //     try {
-            //         if (existingClientUser) {
-            //             await this.telegramService.createClient(existingClientMobile, false, true)
-            //             if (toBoolean(setupClientQueryDto.formalities)) {
-            //                 console.log("Started Formalities")
-            //                 await this.telegramService.updateUsername(existingClientMobile, '');
-            //                 await sleep(2000)
-            //                 await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
-            //                 await sleep(2000)
-            //                 await this.telegramService.deleteProfilePhotos(existingClientMobile)
-            //                 console.log("Formalities finished")
-            //                 await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
-            //             } else {
-            //                 console.log("Formalities skipped")
-            //             }
-            //             if (archiveOld) {
-            //                 const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-            //                 const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
-            //                     mobile: existingClientMobile,
-            //                     createdDate: today,
-            //                     updatedDate: today,
-            //                     availableDate,
-            //                     session: existingClientUser.session,
-            //                     tgId: existingClientUser.tgId,
-            //                     channels: 100
-            //                 }
-            //                 const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
-            //                 await this.archivedClientService.update(existingClient.mobile, existingClient);
-            //                 console.log("client Archived: ", updatedBufferClient)
-            //                 await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
-            //             } else {
-            //                 console.log("Client Archive Skipped")
-            //             }
-            //         }
-            //     } catch (error) {
-            //         console.log("Cannot Archive Old Client");
-            //         parseError(error)
-            //     }
+            await this.telegramService.disconnectAll();
+            try {
+                const archiveOld = toBoolean(setupClientQueryDto.archiveOld);
+                const existingClient = await this.findOne(clientId);
+                const existingClientMobile = existingClient.mobile
+                const today = (new Date(Date.now())).toISOString().split('T')[0];
+                const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
+                try {
+                    if (existingClientUser) {
+                        await this.telegramService.createClient(existingClientMobile, false, true)
+                        if (toBoolean(setupClientQueryDto.formalities)) {
+                            console.log("Started Formalities")
+                            await this.telegramService.updateUsername(existingClientMobile, '');
+                            await sleep(2000)
+                            await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
+                            await sleep(2000)
+                            await this.telegramService.deleteProfilePhotos(existingClientMobile)
+                            console.log("Formalities finished")
+                            await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
+                        } else {
+                            console.log("Formalities skipped")
+                        }
+                        if (archiveOld) {
+                            const availableDate = (new Date(Date.now() + (setupClientQueryDto.days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
+                            const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
+                                mobile: existingClientMobile,
+                                createdDate: today,
+                                updatedDate: today,
+                                availableDate,
+                                session: existingClientUser.session,
+                                tgId: existingClientUser.tgId,
+                                channels: 100
+                            }
+                            const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
+                            await this.archivedClientService.update(existingClient.mobile, existingClient);
+                            console.log("client Archived: ", updatedBufferClient)
+                            await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
+                        } else {
+                            console.log("Client Archive Skipped")
+                        }
+                    }
+                } catch (error) {
+                    console.log("Cannot Archive Old Client");
+                    parseError(error)
+                }
 
-            //     const query = { availableDate: { $lte: today } }
-            //     const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
-            //     try {
-            //         if (newBufferClient) {
-            //             this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId })
-            //             await this.telegramService.createClient(newBufferClient.mobile, false, true);
-            //             const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-            //             const userCaps = username[0].toUpperCase() + username.slice(1);
-            //             const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, `${userCaps}_Redd`);
-            //             if (archiveOld) {
-            //                 await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
-            //             }
-            //             console.log("client updated");
-            //         } else {
-            //             await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
-            //             console.log("Buffer Clients not available")
-            //         }
-            //         await this.bufferClientService.remove(newBufferClient.mobile);
-            //         const newClientMe = await this.telegramService.getMe(newBufferClient.mobile)
-            //         await this.telegramService.deleteClient(existingClientMobile);
-            //         const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
-            //         if (archivedClient) {
-            //             await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
-            //         } else {
-            //             await this.generateNewSession(newBufferClient.mobile)
-            //         }
-            //     } catch (error) {
-            //         console.log("Removing buffer as error")
-            //         const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-            //         await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate })
-            //     }
+                const query = { availableDate: { $lte: today } }
+                const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
+                try {
+                    if (newBufferClient) {
+                        this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId })
+                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
+                        const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
+                        const userCaps = username[0].toUpperCase() + username.slice(1);
+                        const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, `${userCaps}_Redd`);
+                        if (archiveOld) {
+                            await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
+                        }
+                        console.log("client updated");
+                    } else {
+                        await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
+                        console.log("Buffer Clients not available")
+                    }
+                    await this.bufferClientService.remove(newBufferClient.mobile);
+                    const newClientMe = await this.telegramService.getMe(newBufferClient.mobile)
+                    await this.telegramService.deleteClient(existingClientMobile);
+                    const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
+                    if (archivedClient) {
+                        await this.updateClient(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
+                    } else {
+                        await this.generateNewSession(newBufferClient.mobile)
+                    }
+                } catch (error) {
+                    console.log("Removing buffer as error")
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate })
+                }
 
-            // } catch (error) {
-            //     parseError(error);
-            // }
+            } catch (error) {
+                parseError(error);
+            }
         } else {
             console.log("Profile Setup Recently tried");
         }

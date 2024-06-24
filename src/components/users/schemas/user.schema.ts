@@ -2,14 +2,16 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 
+export type UserDocument = User & Document;
+
 @Schema({ collection: 'users', versionKey: false, autoIndex: true })
-export class User extends mongoose.Document {
+export class User {
   @ApiProperty()
-  @Prop()
+  @Prop({required: true, unique: true})
   mobile: string;
 
   @ApiProperty()
-  @Prop()
+  @Prop({required: true, unique: true})
   session: string;
 
   @ApiProperty()
@@ -53,7 +55,7 @@ export class User extends mongoose.Document {
   date: string;
 
   @ApiProperty()
-  @Prop()
+  @Prop({required: true, unique: true})
   tgId: string;
 
   @ApiProperty()
@@ -80,7 +82,7 @@ export class User extends mongoose.Document {
   @Prop()
   username: string | null;
 
-  @Prop({ required: false , type: Boolean})
+  @Prop({ required: false, type: Boolean })
   twoFA: boolean = false
 
   @Prop({ required: false })

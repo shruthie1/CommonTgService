@@ -6,7 +6,7 @@ export class SetupClientQueryDto {
     @ApiPropertyOptional({
         type: Number,
         default: 3
-      })
+    })
     @IsOptional()
     @Type(() => Number)
     @IsNumber()
@@ -17,23 +17,25 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
+    @Transform(({ value }) => value === 'true' || value === true)
     @Type(() => Boolean)
     @IsBoolean()
     archiveOld?: boolean = true;
 
     @ApiPropertyOptional({
-        type:String
+        type: String
     })
     @IsOptional()
     @IsString()
     mobile?: string;
 
     @ApiPropertyOptional({
-        type: Boolean,
         default: true
     })
     @IsOptional()
-    @Type(() => Boolean)
+    @Transform(({ value }) => {
+        console.log(value)
+        return value === 'true' || value === true})
     @IsBoolean()
     formalities?: boolean = true;
 }

@@ -5,7 +5,7 @@ import { Document } from 'mongoose';
 export type ClientDocument = Client & Document;
 
 @Schema({ collection: 'clients', versionKey: false, autoIndex: true })
-export class Client extends Document{
+export class Client{
     @ApiProperty({ example: 'paid_giirl_shruthiee', description: 'Channel link of the user' })
     @Prop({ required: true })
     channelLink: string;

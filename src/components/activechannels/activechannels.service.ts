@@ -1,15 +1,15 @@
 // src/activechannels/activechannels.service.ts
-import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
-import { ActiveChannel } from './schemas/active-channel.schema';
+import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
 @Injectable()
 export class ActiveChannelsService {
   constructor(
-    @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannel>,
-  ) { }
+    @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
+  ) { console.log(ActiveChannel.name)}
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
     const createdChannel = new this.activeChannelModel(createActiveChannelDto);
