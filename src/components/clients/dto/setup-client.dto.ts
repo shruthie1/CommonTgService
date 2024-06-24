@@ -3,25 +3,37 @@ import { Transform, TransformFnParams, Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
 
 export class SetupClientQueryDto {
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({
+        type: Number,
+        default: 3
+      })
     @IsOptional()
+    @Type(() => Number)
     @IsNumber()
     days?: number = 0;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({
+        type: Boolean,
+        default: true
+    })
     @IsOptional()
-    @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+    @Type(() => Boolean)
     @IsBoolean()
     archiveOld?: boolean = true;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({
+        type:String
+    })
     @IsOptional()
     @IsString()
     mobile?: string;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({
+        type: Boolean,
+        default: true
+    })
     @IsOptional()
-    @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+    @Type(() => Boolean)
     @IsBoolean()
     formalities?: boolean = true;
 }
