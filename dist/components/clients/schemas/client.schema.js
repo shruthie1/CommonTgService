@@ -12,8 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientSchema = exports.Client = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const swagger_1 = require("@nestjs/swagger");
-const mongoose_2 = require("mongoose");
-let Client = class Client extends mongoose_2.Document {
+let Client = class Client {
 };
 exports.Client = Client;
 __decorate([

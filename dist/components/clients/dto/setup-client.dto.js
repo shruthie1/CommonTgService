@@ -37,6 +37,7 @@ __decorate([
         default: true
     }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
@@ -51,11 +52,13 @@ __decorate([
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        type: Boolean,
         default: true
     }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Boolean),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        console.log(value);
+        return value === 'true' || value === true;
+    }),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);

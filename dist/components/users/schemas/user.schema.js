@@ -13,9 +13,8 @@ exports.UserSchema = exports.User = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const swagger_1 = require("@nestjs/swagger");
-let User = class User extends mongoose_2.default.Document {
+let User = class User {
     constructor() {
-        super(...arguments);
         this.twoFA = false;
         this.password = null;
     }
@@ -23,12 +22,12 @@ let User = class User extends mongoose_2.default.Document {
 exports.User = User;
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "session", void 0);
 __decorate([
@@ -83,7 +82,7 @@ __decorate([
 ], User.prototype, "date", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "tgId", void 0);
 __decorate([
