@@ -243,7 +243,7 @@ export class TelegramService {
             await telegramClient.updateProfilePic('./dp3.jpg');
             await sleep(1000);
             await telegramClient.disconnect();
-            return '2Fa set successfully'
+            return 'Profile pic set successfully'
         } catch (error) {
             const errorDetails = parseError(error)
             throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
