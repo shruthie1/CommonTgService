@@ -81,7 +81,9 @@ export class TelegramService {
                         }, 180000)
                     } else {
                         setInterval(async () => {
-                            await client.connect();
+                            if (!client.connected) {
+                                await client.connect();
+                            }
                         }, 20000);
                     }
                     return telegramManager;
