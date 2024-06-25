@@ -10,6 +10,8 @@ import { ActiveChannelsModule } from './components/activechannels/activechannels
 import { ArchivedClientModule } from './components/archived-clients/archived-client.module';
 import { initModule } from './components/ConfigurationInit/init.module';
 import { ChannelsModule } from './components/channels/channels.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { ChannelsModule } from './components/channels/channels.module';
     ArchivedClientModule,
     ChannelsModule
   ],
+  controllers:[AppController],
+  providers:[AppService],
   exports:[
     TelegramModule,
     ActiveChannelsModule,

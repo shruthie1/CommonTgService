@@ -204,8 +204,6 @@ export class ClientService {
         try {
             await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
-            // const userCaps = username[0].toUpperCase() + username.slice(1)
-            // await client.updateUsername(`${userCaps}Redd`);
             await sleep(2000)
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             await sleep(3000)
@@ -213,11 +211,12 @@ export class ClientService {
             await sleep(3000)
             await telegramClient.updatePrivacy();
             await sleep(3000)
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp1.jpg'));
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await sleep(3000);
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
             await sleep(3000);
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await sleep(2000);
             await this.telegramService.deleteClient(client.mobile)
         } catch (error) {

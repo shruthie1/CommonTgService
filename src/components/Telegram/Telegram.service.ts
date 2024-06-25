@@ -6,6 +6,7 @@ import { BadRequestException, HttpException, Inject, Injectable, forwardRef } fr
 import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import * as path from 'path';
 
 @Injectable()
 export class TelegramService {
@@ -251,12 +252,12 @@ export class TelegramService {
         const telegramClient = TelegramService.clientsMap.get(mobile)
         try {
             await CloudinaryService.getInstance(name);
-            await sleep(2000);
-            await telegramClient.updateProfilePic('./dp1.jpg');
-            await sleep(1000);
-            await telegramClient.updateProfilePic('./dp2.jpg');
-            await sleep(1000);
-            await telegramClient.updateProfilePic('./dp3.jpg');
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+            await sleep(3000);
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+            await sleep(3000);
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await sleep(1000);
             await telegramClient.disconnect();
             return 'Profile pic set successfully'
