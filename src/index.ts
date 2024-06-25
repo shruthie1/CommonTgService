@@ -1,3 +1,5 @@
+import { ChannelsService } from './components/channels/channels.service';
+import { ChannelsModule } from './components/channels/channels.module';
 import { AppModule } from './app.module';
 import { TelegramService } from './components/Telegram/Telegram.service';
 import { TelegramModule } from "./components/Telegram/Telegram.module";
@@ -31,6 +33,8 @@ export {
     UsersService,
     BufferClientService,
     ArchivedClientService,
+    ChannelsModule,
+    ChannelsService,
     fetchWithTimeout,
     sleep,
     parseError,

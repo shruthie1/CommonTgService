@@ -9,6 +9,7 @@ import { BufferClientModule } from './components/buffer-clients/buffer-client.mo
 import { ActiveChannelsModule } from './components/activechannels/activechannels.module';
 import { ArchivedClientModule } from './components/archived-clients/archived-client.module';
 import { initModule } from './components/ConfigurationInit/init.module';
+import { ChannelsModule } from './components/channels/channels.module';
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { initModule } from './components/ConfigurationInit/init.module';
     UserDataModule,
     UsersModule,
     BufferClientModule,
-    ArchivedClientModule
+    ArchivedClientModule,
+    ChannelsModule
   ],
   exports:[
     TelegramModule,
@@ -28,7 +30,8 @@ import { initModule } from './components/ConfigurationInit/init.module';
     UserDataModule,
     UsersModule,
     BufferClientModule,
-    ArchivedClientModule
+    ArchivedClientModule,
+    ChannelsModule
   ]
 })
 export class AppModule { }
