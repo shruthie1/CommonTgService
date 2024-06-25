@@ -207,7 +207,7 @@ let ClientService = class ClientService {
     async updateClient(clientId) {
         const client = await this.findOne(clientId);
         try {
-            const telegramClient = await this.telegramService.createClient(client.mobile);
+            const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             await (0, Helpers_1.sleep)(3000);
