@@ -3,12 +3,14 @@ import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
 import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import { ChannelsService } from '../channels/channels.service';
 export declare class TelegramService {
     private usersService;
     private bufferClientService;
     private activeChannelsService;
+    private channelsService;
     private static clientsMap;
-    constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService);
+    constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     getActiveClientSetup(): {
         mobile: string;
         clientId: string;
