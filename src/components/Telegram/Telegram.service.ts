@@ -257,10 +257,10 @@ export class TelegramService {
         mobile: string, name: string,
     ) {
         const telegramClient = TelegramService.clientsMap.get(mobile)
+        await telegramClient.deleteProfilePhotos();
         try {
             await CloudinaryService.getInstance(name);
-            await telegramClient.deleteProfilePhotos();
-            await sleep(5000);
+            await sleep(2000);
             const rootPath = process.cwd();
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await sleep(3000);
