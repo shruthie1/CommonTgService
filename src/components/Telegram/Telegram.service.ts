@@ -7,6 +7,7 @@ import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import * as path from 'path';
+import { ChannelsService } from '../channels/channels.service';
 
 @Injectable()
 export class TelegramService {
@@ -17,6 +18,8 @@ export class TelegramService {
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => ActiveChannelsService))
         private activeChannelsService: ActiveChannelsService,
+        @Inject(forwardRef(() => ChannelsService))
+        private channelsService: ChannelsService,
     ) { }
 
 
@@ -121,76 +124,77 @@ export class TelegramService {
         const channels = str.split('|');
         console.log("Started Joining- ", mobile, " - channelsLen - ", channels.length);
 
-        const joinChannelWithDelay = (index: number) => {
-            if (index >= channels.length) {
-                console.log(mobile, " - finished joining channels");
-                if (telegramClient) {
-                    telegramClient.disconnect();
-                    console.log("Join channel stopped : ", mobile);
-                }
-                return;
-            }
+        const joinChannelWithDelay = async (index: number) => {
+            try {
 
-            if (!telegramClient.connected()) {
-                this.deleteClient(mobile);
-                return;
-            }
 
-            const channel = channels[index].trim();
-            console.log(mobile, "Trying: ", channel);
-
-            telegramClient.getEntity(channel)
-                .then((chatEntity: Api.Channel) => {
-                    return telegramClient.joinChannel(chatEntity)
-                        .then(() => {
-                            console.log(mobile, " - Joined channel Success - ", channel);
-                            const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
-                            const entity = {
-                                title,
-                                id: id.toString(),
-                                username,
-                                megagroup,
-                                participantsCount,
-                                broadcast
-                            };
-
-                            if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
-                                entity['canSendMsgs'] = true;
-                                return this.activeChannelsService.update(entity.id.toString(), entity)
-                                    .then(() => {
-                                        console.log("updated ActiveChannels");
-                                    })
-                                    .catch(error => {
-                                        console.log(parseError(error));
-                                        console.log("Failed to update ActiveChannels");
-                                    });
-                            } else {
-                                return this.activeChannelsService.remove(entity.id.toString())
-                                    .then(() => {
-                                        console.log("Removed Channel- ", channel);
-                                    });
-                            }
-                        });
-                })
-                .catch(error => {
-                    console.log("Channels ERR: ", error.errorMessage);
-                    if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
-                        this.activeChannelsService.search({ username: channel.replace('@', '') })
-                            .then(activeChannel => {
-                                return this.activeChannelsService.remove(activeChannel[0]?.channelId)
-                                    .then(() => {
-                                        console.log("Removed Channel- ", channel);
-                                    });
-                            });
+                if (index >= channels.length) {
+                    console.log(mobile, " - finished joining channels");
+                    if (telegramClient) {
+                        telegramClient.disconnect();
+                        console.log("Join channel stopped : ", mobile);
                     }
-                })
-                .finally(() => {
+                    return;
+                }
+
+                if (!telegramClient.connected()) {
+                    this.deleteClient(mobile);
+                    return;
+                }
+
+                const channel = channels[index].trim();
+                console.log(mobile, "Trying: ", channel);
+                const chatEntity = <Api.Channel>await telegramClient.getEntity(channel);
+                try {
+                    await telegramClient.joinChannel(chatEntity);
+                    console.log(mobile, " - Joined channel Success - ", channel);
+                    const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
+                    const entity = {
+                        title,
+                        id: id.toString(),
+                        username,
+                        megagroup,
+                        participantsCount,
+                        broadcast
+                    };
+
+                    if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
+                        entity['canSendMsgs'] = true;
+                        try {
+                            await this.activeChannelsService.update(entity.id.toString(), entity);
+                            console.log("updated ActiveChannels");
+                        } catch (error) {
+                            console.log(parseError(error));
+                            console.log("Failed to update ActiveChannels");
+                        }
+                    } else {
+                        await this.activeChannelsService.remove(entity.id.toString());
+                        console.log("Removed Channel- ", channel);
+                    }
+                } catch (error) {
+                    console.log("Channels ERR: ", error.errorMessage);
+                    if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+                        try {
+                            await this.channelsService.remove(chatEntity.id.toString())
+                            await this.activeChannelsService.remove(chatEntity.id.toString());
+                            console.log("Removed Channel- ", channel);
+                        } catch (searchError) {
+                            console.log("Failed to search/remove channel: ", searchError);
+                        }
+                    }
+                } finally {
                     console.log(mobile, " - On waiting period");
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         console.log(mobile, " - Will Try next now");
-                        process.nextTick(() => joinChannelWithDelay(index + 1));
+                        await joinChannelWithDelay(index + 1);
                     }, 3 * 60 * 1000);
-                });
+                }
+            } catch (error) {
+                setTimeout(async () => {
+                    console.log(mobile, " - Will Try next now");
+                    await joinChannelWithDelay(index + 1);
+                }, 10000);
+            }
         };
 
         joinChannelWithDelay(0);
