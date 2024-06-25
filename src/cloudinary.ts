@@ -137,7 +137,8 @@ export class CloudinaryService {
 
 async function saveFile(url: string, name: string) {
     const extension = url.substring(url.lastIndexOf('.') + 1);
-    const mypath = path.resolve(__dirname, `../${name}.${extension}`);
+    const rootPath = process.cwd()
+    const mypath = path.join(rootPath, `${name}.${extension}`);
     console.log(mypath);
     fetchWithTimeout(url, { responseType: 'arraybuffer' }, 2)
         .then(res => {
