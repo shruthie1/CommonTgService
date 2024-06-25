@@ -174,7 +174,7 @@ export class BufferClientService {
         for (const document of clients) {
             console.log(document)
             try {
-                const cli = await this.telegramService.createClient(document.mobile);
+                const cli = await this.telegramService.createClient(document.mobile, true, false);
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);

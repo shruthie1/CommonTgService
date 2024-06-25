@@ -201,7 +201,7 @@ export class ClientService {
     async updateClient(clientId: string) {
         const client = await this.findOne(clientId);
         try {
-            const telegramClient = await this.telegramService.createClient(client.mobile);
+            const telegramClient = await this.telegramService.createClient(client.mobile,true, false);
             // const userCaps = username[0].toUpperCase() + username.slice(1)
             // await client.updateUsername(`${userCaps}Redd`);
             await sleep(2000)
