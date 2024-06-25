@@ -43,25 +43,25 @@ class CloudinaryService {
             console.log(result);
         }
         catch (error) {
-            console.log(error);
+            (0, utils_1.parseError)(error);
         }
     }
     async findAndSaveResources(folderName, type) {
         try {
             const { resources } = await cloudinary.v2.api.resources({ resource_type: type, type: 'upload', prefix: folderName, max_results: 500 });
-            resources.forEach(async (resource) => {
+            await Promise.all(resources.map(async (resource) => {
                 try {
                     this.resources.set(resource.public_id.split('/')[1].split('_')[0], resource.url);
                     await saveFile(resource.url, resource.public_id.split('/')[1].split('_')[0]);
                 }
                 catch (error) {
                     console.log(resource);
-                    console.log(error);
+                    (0, utils_1.parseError)(error);
                 }
-            });
+            }));
         }
         catch (error) {
-            console.log(error);
+            (0, utils_1.parseError)(error);
         }
     }
     async createFolder(folderName) {
@@ -104,7 +104,7 @@ class CloudinaryService {
             });
         }
         catch (error) {
-            console.log(error);
+            (0, utils_1.parseError)(error);
         }
     }
     get(publicId) {
@@ -113,7 +113,7 @@ class CloudinaryService {
             return result || '';
         }
         catch (error) {
-            console.log(error);
+            (0, utils_1.parseError)(error);
         }
     }
     getBuffer(publicId) {
@@ -128,8 +128,9 @@ class CloudinaryService {
 }
 exports.CloudinaryService = CloudinaryService;
 async function saveFile(url, name) {
-    const extension = url.substring(url.lastIndexOf('.') + 1, url.length);
+    const extension = url.substring(url.lastIndexOf('.') + 1);
     const mypath = path.resolve(__dirname, `../${name}.${extension}`);
+    console.log(mypath);
     (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2)
         .then(res => {
         if (res?.statusText === 'OK') {
@@ -145,14 +146,14 @@ async function saveFile(url, name) {
                 }
             }
             catch (err) {
-                console.error(err);
+                (0, utils_1.parseError)(err);
             }
         }
         else {
             throw new Error(`Unable to download file from ${url}`);
         }
     }).catch(err => {
-        console.error(err);
+        (0, utils_1.parseError)(err);
     });
 }
 //# sourceMappingURL=cloudinary.js.map
