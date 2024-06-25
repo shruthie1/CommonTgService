@@ -250,6 +250,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         try {
             await cloudinary_1.CloudinaryService.getInstance(name);
+            await (0, utils_1.sleep)(5000);
             const rootPath = process.cwd();
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, utils_1.sleep)(3000);

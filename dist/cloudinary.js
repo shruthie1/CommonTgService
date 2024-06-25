@@ -128,33 +128,29 @@ class CloudinaryService {
 }
 exports.CloudinaryService = CloudinaryService;
 async function saveFile(url, name) {
-    const extension = url.substring(url.lastIndexOf('.') + 1);
-    const rootPath = process.cwd();
-    const mypath = path.join(rootPath, `${name}.${extension}`);
-    console.log(mypath);
-    (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2)
-        .then(res => {
+    try {
+        const extension = url.substring(url.lastIndexOf('.') + 1);
+        const rootPath = process.cwd();
+        const mypath = path.join(rootPath, `${name}.${extension}`);
+        console.log(mypath);
+        const res = await (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
         if (res?.statusText === 'OK') {
-            try {
-                if (!fs.existsSync(mypath)) {
-                    fs.writeFileSync(mypath, res.data, 'binary');
-                    console.log(`${name}.${extension} Saved!!`);
-                }
-                else {
-                    fs.unlinkSync(mypath);
-                    fs.writeFileSync(mypath, res.data, 'binary');
-                    console.log(`${name}.${extension} Replaced!!`);
-                }
+            if (!fs.existsSync(mypath)) {
+                fs.writeFileSync(mypath, res.data, 'binary');
+                console.log(`${name}.${extension} Saved!!`);
             }
-            catch (err) {
-                (0, utils_1.parseError)(err);
+            else {
+                fs.unlinkSync(mypath);
+                fs.writeFileSync(mypath, res.data, 'binary');
+                console.log(`${name}.${extension} Replaced!!`);
             }
         }
         else {
             throw new Error(`Unable to download file from ${url}`);
         }
-    }).catch(err => {
+    }
+    catch (err) {
         (0, utils_1.parseError)(err);
-    });
+    }
 }
 //# sourceMappingURL=cloudinary.js.map
