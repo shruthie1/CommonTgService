@@ -26,29 +26,49 @@ export class ActiveChannel extends Document {
   @Prop({ required: true })
   title: string;
 
-  @Prop({ required: false , default: null})
+  @Prop({ required: false, default: null })
   username: string;
 
   @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
-  wordRestriction: number;
+  wordRestriction: number = 0;
 
   @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
-  dMRestriction: number;
+  dMRestriction: number = 0;
 
-  @Prop({ type: [String], default: [] })
-  availableMsgs: string[];
+  @Prop({ type: [String], default: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"] })
+  availableMsgs: string[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
 
-  @Prop({ type: [String], default: [] })
-  reactions: string[];
+  @Prop({
+    type: [String], default: [
+      '❤', '🔥', '👏', '🥰', '😁', '🤔',
+      '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+      '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+      '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+      '🤣', '💔', '🏆', '😭', '😴', '👍',
+      '🌚', '⚡', '🍌', '😐', '💋', '👻',
+      '👀', '🙈', '🤝', '🤗', '🆒',
+      '🗿', '🙉', '🙊', '🤷', '👎'
+    ]
+  })
+  reactions: string[] = [
+    '❤', '🔥', '👏', '🥰', '😁', '🤔',
+    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+    '🤣', '💔', '🏆', '😭', '😴', '👍',
+    '🌚', '⚡', '🍌', '😐', '💋', '👻',
+    '👀', '🙈', '🤝', '🤗', '🆒',
+    '🗿', '🙉', '🙊', '🤷', '👎'
+  ];
 
   @Prop({ default: false })
-  banned: boolean;
+  banned: boolean = false;
 
   @Prop({ default: true })
   megagroup: boolean;
 
   @Prop({ default: false })
-  reactRestricted: boolean;
+  reactRestricted: boolean = false;
 }
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);
