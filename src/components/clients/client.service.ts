@@ -14,6 +14,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import * as path from 'path';
+import { CloudinaryService } from 'src/cloudinary';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
@@ -201,7 +202,8 @@ export class ClientService {
     async updateClient(clientId: string) {
         const client = await this.findOne(clientId);
         try {
-            const telegramClient = await this.telegramService.createClient(client.mobile,true, false);
+            await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+            const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             // const userCaps = username[0].toUpperCase() + username.slice(1)
             // await client.updateUsername(`${userCaps}Redd`);
             await sleep(2000)
