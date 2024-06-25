@@ -136,31 +136,29 @@ export class CloudinaryService {
 }
 
 async function saveFile(url: string, name: string) {
-    const extension = url.substring(url.lastIndexOf('.') + 1);
-    const rootPath = process.cwd()
-    const mypath = path.join(rootPath, `${name}.${extension}`);
-    console.log(mypath);
-    fetchWithTimeout(url, { responseType: 'arraybuffer' }, 2)
-        .then(res => {
-            if (res?.statusText === 'OK') {
-                try {
-                    if (!fs.existsSync(mypath)) {
-                        fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
-                        console.log(`${name}.${extension} Saved!!`);
-                    } else {
-                        fs.unlinkSync(mypath);
-                        fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
-                        console.log(`${name}.${extension} Replaced!!`);
-                    }
-                } catch (err) {
-                    parseError(err)
-                }
+    try {
+        const extension = url.substring(url.lastIndexOf('.') + 1);
+        const rootPath = process.cwd();
+        const mypath = path.join(rootPath, `${name}.${extension}`);
+        console.log(mypath);
+
+        const res = await fetchWithTimeout(url, { responseType: 'arraybuffer' }, 2);
+
+        if (res?.statusText === 'OK') {
+            if (!fs.existsSync(mypath)) {
+                fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
+                console.log(`${name}.${extension} Saved!!`);
             } else {
-                throw new Error(`Unable to download file from ${url}`);
+                fs.unlinkSync(mypath);
+                fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
+                console.log(`${name}.${extension} Replaced!!`);
             }
-        }).catch(err => {
-            parseError(err)
-        });
+        } else {
+            throw new Error(`Unable to download file from ${url}`);
+        }
+    } catch (err) {
+        parseError(err);
+    }
 }
 
 
