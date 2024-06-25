@@ -239,7 +239,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             await telegramClient.updateProfilePic('./dp3.jpg');
             await (0, utils_1.sleep)(1000);
             await telegramClient.disconnect();
-            return '2Fa set successfully';
+            return 'Profile pic set successfully';
         }
         catch (error) {
             const errorDetails = (0, utils_1.parseError)(error);
