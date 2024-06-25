@@ -168,6 +168,7 @@ export class TelegramService {
                             console.log("Failed to update ActiveChannels");
                         }
                     } else {
+                        await this.channelsService.remove(chatEntity.id.toString())
                         await this.activeChannelsService.remove(entity.id.toString());
                         console.log("Removed Channel- ", channel);
                     }
