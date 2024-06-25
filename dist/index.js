@@ -1,6 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ChannelsService = exports.ChannelsModule = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+const channels_service_1 = require("./components/channels/channels.service");
+Object.defineProperty(exports, "ChannelsService", { enumerable: true, get: function () { return channels_service_1.ChannelsService; } });
+const channels_module_1 = require("./components/channels/channels.module");
+Object.defineProperty(exports, "ChannelsModule", { enumerable: true, get: function () { return channels_module_1.ChannelsModule; } });
 const app_module_1 = require("./app.module");
 Object.defineProperty(exports, "AppModule", { enumerable: true, get: function () { return app_module_1.AppModule; } });
 const Telegram_service_1 = require("./components/Telegram/Telegram.service");
