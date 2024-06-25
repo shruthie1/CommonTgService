@@ -68,6 +68,7 @@ class TelegramManager {
         const me = <Api.User>await this.client.getMe();
         console.log("Connected Client : ", me.phone);
         if (handler && this.client) {
+            console.log("Adding event Handler")
             this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
         }
         return this.client
