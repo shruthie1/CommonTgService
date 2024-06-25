@@ -248,10 +248,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async setProfilePic(mobile, name) {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        await telegramClient.deleteProfilePhotos();
         try {
             await cloudinary_1.CloudinaryService.getInstance(name);
-            await telegramClient.deleteProfilePhotos();
-            await (0, utils_1.sleep)(5000);
+            await (0, utils_1.sleep)(2000);
             const rootPath = process.cwd();
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, utils_1.sleep)(3000);
