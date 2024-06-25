@@ -217,11 +217,12 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.updatePrivacy();
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp1.jpg'));
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(__dirname, '../dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(2000);
             await this.telegramService.deleteClient(client.mobile);
         }

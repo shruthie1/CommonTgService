@@ -17,6 +17,8 @@ const activechannels_module_1 = require("./components/activechannels/activechann
 const archived_client_module_1 = require("./components/archived-clients/archived-client.module");
 const init_module_1 = require("./components/ConfigurationInit/init.module");
 const channels_module_1 = require("./components/channels/channels.module");
+const app_controller_1 = require("./app.controller");
+const app_service_1 = require("./app.service");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -33,6 +35,8 @@ exports.AppModule = AppModule = __decorate([
             archived_client_module_1.ArchivedClientModule,
             channels_module_1.ChannelsModule
         ],
+        controllers: [app_controller_1.AppController],
+        providers: [app_service_1.AppService],
         exports: [
             Telegram_module_1.TelegramModule,
             activechannels_module_1.ActiveChannelsModule,
