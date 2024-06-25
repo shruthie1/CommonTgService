@@ -22,11 +22,13 @@ const common_1 = require("@nestjs/common");
 const cloudinary_1 = require("../../cloudinary");
 const activechannels_service_1 = require("../activechannels/activechannels.service");
 const path = require("path");
+const channels_service_1 = require("../channels/channels.service");
 let TelegramService = TelegramService_1 = class TelegramService {
-    constructor(usersService, bufferClientService, activeChannelsService) {
+    constructor(usersService, bufferClientService, activeChannelsService, channelsService) {
         this.usersService = usersService;
         this.bufferClientService = bufferClientService;
         this.activeChannelsService = activeChannelsService;
+        this.channelsService = channelsService;
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
@@ -86,7 +88,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                     else {
                         setInterval(async () => {
-                            await client.connect();
+                            if (!client.connected) {
+                                await client.connect();
+                            }
                         }, 20000);
                     }
                     return telegramManager;
@@ -124,25 +128,25 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         const channels = str.split('|');
         console.log("Started Joining- ", mobile, " - channelsLen - ", channels.length);
-        const joinChannelWithDelay = (index) => {
-            if (index >= channels.length) {
-                console.log(mobile, " - finished joining channels");
-                if (telegramClient) {
-                    telegramClient.disconnect();
-                    console.log("Join channel stopped : ", mobile);
+        const joinChannelWithDelay = async (index) => {
+            try {
+                if (index >= channels.length) {
+                    console.log(mobile, " - finished joining channels");
+                    if (telegramClient) {
+                        telegramClient.disconnect();
+                        console.log("Join channel stopped : ", mobile);
+                    }
+                    return;
                 }
-                return;
-            }
-            if (!telegramClient.connected()) {
-                this.deleteClient(mobile);
-                return;
-            }
-            const channel = channels[index].trim();
-            console.log(mobile, "Trying: ", channel);
-            telegramClient.getEntity(channel)
-                .then((chatEntity) => {
-                return telegramClient.joinChannel(chatEntity)
-                    .then(() => {
+                if (!telegramClient.connected()) {
+                    this.deleteClient(mobile);
+                    return;
+                }
+                const channel = channels[index].trim();
+                console.log(mobile, "Trying: ", channel);
+                const chatEntity = await telegramClient.getEntity(channel);
+                try {
+                    await telegramClient.joinChannel(chatEntity);
                     console.log(mobile, " - Joined channel Success - ", channel);
                     const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
                     const entity = {
@@ -155,42 +159,47 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     };
                     if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
                         entity['canSendMsgs'] = true;
-                        return this.activeChannelsService.update(entity.id.toString(), entity)
-                            .then(() => {
+                        try {
+                            await this.activeChannelsService.update(entity.id.toString(), entity);
                             console.log("updated ActiveChannels");
-                        })
-                            .catch(error => {
+                        }
+                        catch (error) {
                             console.log((0, utils_1.parseError)(error));
                             console.log("Failed to update ActiveChannels");
-                        });
+                        }
                     }
                     else {
-                        return this.activeChannelsService.remove(entity.id.toString())
-                            .then(() => {
-                            console.log("Removed Channel- ", channel);
-                        });
+                        await this.activeChannelsService.remove(entity.id.toString());
+                        console.log("Removed Channel- ", channel);
                     }
-                });
-            })
-                .catch(error => {
-                console.log("Channels ERR: ", error.errorMessage);
-                if (error.toString().includes("No user has") || error.toString().includes("USERNAME_INVALID")) {
-                    this.activeChannelsService.search({ username: channel.replace('@', '') })
-                        .then(activeChannel => {
-                        return this.activeChannelsService.remove(activeChannel[0]?.channelId)
-                            .then(() => {
-                            console.log("Removed Channel- ", channel);
-                        });
-                    });
                 }
-            })
-                .finally(() => {
-                console.log(mobile, " - On waiting period");
-                setTimeout(() => {
+                catch (error) {
+                    console.log("Channels ERR: ", error.errorMessage);
+                    if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+                        try {
+                            await this.channelsService.remove(chatEntity.id.toString());
+                            await this.activeChannelsService.remove(chatEntity.id.toString());
+                            console.log("Removed Channel- ", channel);
+                        }
+                        catch (searchError) {
+                            console.log("Failed to search/remove channel: ", searchError);
+                        }
+                    }
+                }
+                finally {
+                    console.log(mobile, " - On waiting period");
+                    setTimeout(async () => {
+                        console.log(mobile, " - Will Try next now");
+                        await joinChannelWithDelay(index + 1);
+                    }, 3 * 60 * 1000);
+                }
+            }
+            catch (error) {
+                setTimeout(async () => {
                     console.log(mobile, " - Will Try next now");
-                    process.nextTick(() => joinChannelWithDelay(index + 1));
-                }, 3 * 60 * 1000);
-            });
+                    await joinChannelWithDelay(index + 1);
+                }, 10000);
+            }
         };
         joinChannelWithDelay(0);
         return 'Channels joining in progress';
@@ -294,8 +303,10 @@ exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => activechannels_service_1.ActiveChannelsService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         buffer_client_service_1.BufferClientService,
-        activechannels_service_1.ActiveChannelsService])
+        activechannels_service_1.ActiveChannelsService,
+        channels_service_1.ChannelsService])
 ], TelegramService);
 //# sourceMappingURL=Telegram.service.js.map
