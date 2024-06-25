@@ -77,11 +77,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     if (autoDisconnect) {
                         setTimeout(async () => {
                             if (client.connected || TelegramService_1.clientsMap.get(mobile)) {
-                                console.log("SELF destroy client");
+                                console.log("SELF destroy client : ", mobile);
                                 await telegramManager.disconnect();
                             }
                             else {
-                                console.log("Client Already Disconnected");
+                                console.log("Client Already Disconnected : ", mobile);
                             }
                             TelegramService_1.clientsMap.delete(mobile);
                         }, 180000);
