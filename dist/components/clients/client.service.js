@@ -24,6 +24,7 @@ const users_service_1 = require("../users/users.service");
 const archived_client_service_1 = require("../archived-clients/archived-client.service");
 const utils_1 = require("../../utils");
 const path = require("path");
+const cloudinary_1 = require("../../cloudinary");
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService) {
@@ -207,6 +208,7 @@ let ClientService = class ClientService {
     async updateClient(clientId) {
         const client = await this.findOne(clientId);
         try {
+            await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
