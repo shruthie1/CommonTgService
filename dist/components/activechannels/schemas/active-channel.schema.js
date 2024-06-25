@@ -14,6 +14,24 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const mongoose = require("mongoose");
 let ActiveChannel = class ActiveChannel extends mongoose_2.Document {
+    constructor() {
+        super(...arguments);
+        this.wordRestriction = 0;
+        this.dMRestriction = 0;
+        this.availableMsgs = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+        this.reactions = [
+            '❤', '🔥', '👏', '🥰', '😁', '🤔',
+            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+            '🤣', '💔', '🏆', '😭', '😴', '👍',
+            '🌚', '⚡', '🍌', '😐', '💋', '👻',
+            '👀', '🙈', '🤝', '🤗', '🆒',
+            '🗿', '🙉', '🙊', '🤷', '👎'
+        ];
+        this.banned = false;
+        this.reactRestricted = false;
+    }
 };
 exports.ActiveChannel = ActiveChannel;
 __decorate([
@@ -57,11 +75,22 @@ __decorate([
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "dMRestriction", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: [String], default: [] }),
+    (0, mongoose_1.Prop)({ type: [String], default: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"] }),
     __metadata("design:type", Array)
 ], ActiveChannel.prototype, "availableMsgs", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: [String], default: [] }),
+    (0, mongoose_1.Prop)({
+        type: [String], default: [
+            '❤', '🔥', '👏', '🥰', '😁', '🤔',
+            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+            '🤣', '💔', '🏆', '😭', '😴', '👍',
+            '🌚', '⚡', '🍌', '😐', '💋', '👻',
+            '👀', '🙈', '🤝', '🤗', '🆒',
+            '🗿', '🙉', '🙊', '🤷', '👎'
+        ]
+    }),
     __metadata("design:type", Array)
 ], ActiveChannel.prototype, "reactions", void 0);
 __decorate([
