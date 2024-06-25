@@ -10,3 +10,5 @@ export declare function parseError(err: any, prefix?: string): {
     error: string;
 };
 export declare const ppplbot: () => string;
+export declare const defaultReactions: string[];
+export declare const defaultMessages: string[];

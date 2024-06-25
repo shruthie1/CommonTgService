@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ppplbot = void 0;
+exports.defaultMessages = exports.defaultReactions = exports.ppplbot = void 0;
 exports.sleep = sleep;
 exports.contains = contains;
 exports.fetchWithTimeout = fetchWithTimeout;
@@ -162,4 +162,15 @@ const ppplbot = () => {
     return `https://api.telegram.org/${token}/sendMessage?chat_id=-1001801844217`;
 };
 exports.ppplbot = ppplbot;
+exports.defaultReactions = [
+    '❤', '🔥', '👏', '🥰', '😁', '🤔',
+    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+    '🤣', '💔', '🏆', '😭', '😴', '👍',
+    '🌚', '⚡', '🍌', '😐', '💋', '👻',
+    '👀', '🙈', '🤝', '🤗', '🆒',
+    '🗿', '🙉', '🙊', '🤷', '👎'
+];
+exports.defaultMessages = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
 //# sourceMappingURL=utils.js.map
