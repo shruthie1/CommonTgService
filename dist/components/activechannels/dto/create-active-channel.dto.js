@@ -12,6 +12,23 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateActiveChannelDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class CreateActiveChannelDto {
+    constructor() {
+        this.reactRestricted = false;
+        this.wordRestriction = 0;
+        this.dMRestriction = 0;
+        this.availableMsgs = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+        this.reactions = [
+            '❤', '🔥', '👏', '🥰', '😁', '🤔',
+            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+            '🤣', '💔', '🏆', '😭', '😴', '👍',
+            '🌚', '⚡', '🍌', '😐', '💋', '👻',
+            '👀', '🙈', '🤝', '🤗', '🆒',
+            '🗿', '🙉', '🙊', '🤷', '👎'
+        ];
+        this.banned = false;
+    }
 }
 exports.CreateActiveChannelDto = CreateActiveChannelDto;
 __decorate([
@@ -59,11 +76,22 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateActiveChannelDto.prototype, "dMRestriction", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ type: [String], default: [] }),
+    (0, swagger_1.ApiProperty)({ type: [String], default: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ type: [String], default: [] }),
+    (0, swagger_1.ApiProperty)({
+        type: [String], default: [
+            '❤', '🔥', '👏', '🥰', '😁', '🤔',
+            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+            '🤣', '💔', '🏆', '😭', '😴', '👍',
+            '🌚', '⚡', '🍌', '😐', '💋', '👻',
+            '👀', '🙈', '🤝', '🤗', '🆒',
+            '🗿', '🙉', '🙊', '🤷', '👎'
+        ]
+    }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "reactions", void 0);
 __decorate([
