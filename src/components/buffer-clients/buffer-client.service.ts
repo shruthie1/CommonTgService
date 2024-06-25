@@ -98,9 +98,10 @@ export class BufferClientService {
         await this.telegramService.disconnectAll();
         await sleep(2000);
         const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4)
-        for (const document of clients) {
+        clients.map(async (document) => {
             try {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
+                console.log("Started Joining for : ", document.mobile)
                 const channels = await client.channelInfo(true);
                 console.log("Existing Channels Length : ", channels.ids.length);
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
@@ -114,7 +115,7 @@ export class BufferClientService {
             } catch (error) {
                 console.log(error)
             }
-        }
+        })
     }
 
     async setAsBufferClient(
