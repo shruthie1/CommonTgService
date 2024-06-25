@@ -21,6 +21,7 @@ const TelegramManager_1 = require("./TelegramManager");
 const common_1 = require("@nestjs/common");
 const cloudinary_1 = require("../../cloudinary");
 const activechannels_service_1 = require("../activechannels/activechannels.service");
+const path = require("path");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, bufferClientService, activeChannelsService) {
         this.usersService = usersService;
@@ -239,12 +240,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         try {
             await cloudinary_1.CloudinaryService.getInstance(name);
-            await (0, utils_1.sleep)(2000);
-            await telegramClient.updateProfilePic('./dp1.jpg');
-            await (0, utils_1.sleep)(1000);
-            await telegramClient.updateProfilePic('./dp2.jpg');
-            await (0, utils_1.sleep)(1000);
-            await telegramClient.updateProfilePic('./dp3.jpg');
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+            await (0, utils_1.sleep)(3000);
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+            await (0, utils_1.sleep)(3000);
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, utils_1.sleep)(1000);
             await telegramClient.disconnect();
             return 'Profile pic set successfully';
