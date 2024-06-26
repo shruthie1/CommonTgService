@@ -7,7 +7,6 @@ declare class TelegramManager {
     private phoneNumber;
     private client;
     private channelArray;
-    private activeChannelsService;
     private static activeClientSetup;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
