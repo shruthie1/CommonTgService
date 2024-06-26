@@ -108,7 +108,7 @@ let BufferClientService = class BufferClientService {
                 this.telegramService.joinChannels(document.mobile, resp);
             }
             catch (error) {
-                console.log(error);
+                (0, utils_1.parseError)(error);
             }
         });
     }
