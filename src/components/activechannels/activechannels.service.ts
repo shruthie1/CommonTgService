@@ -26,6 +26,7 @@ export class ActiveChannelsService {
   }
 
   async update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel> {
+    delete updateActiveChannelDto["_id"]
     const updatedChannel = await this.activeChannelModel.findOneAndUpdate(
       { channelId },
       { $set: updateActiveChannelDto },
