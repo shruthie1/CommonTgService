@@ -30,14 +30,15 @@ class TelegramManager {
         return TelegramManager.activeClientSetup;
     }
 
-    public static setActiveClientSetup(data: { mobile: string, clientId: string }| undefined) {
+    public static setActiveClientSetup(data: { mobile: string, clientId: string } | undefined) {
         TelegramManager.activeClientSetup = data;
     }
 
     async disconnect(): Promise<void> {
         if (this.client) {
-            await this.client.disconnect();
+            console.log("Destroying Client: ", this.phoneNumber)
             await this.client.destroy();
+            // await this.client.disconnect();
         }
         this.session.delete();
     }

@@ -93,8 +93,8 @@ export class BufferClientService {
         }
     }
 
-    async joinchannelForBufferClients() {
-        console.log("Joining Channel")
+    async joinchannelForBufferClients(): Promise<string> {
+        console.log("Joining Channel Started")
         await this.telegramService.disconnectAll();
         await sleep(2000);
         const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4)
@@ -116,6 +116,8 @@ export class BufferClientService {
                 parseError(error)
             }
         })
+        console.log("Joining Channel Triggered Succesfully")
+        return "Initiated Joining channels"
     }
 
     async setAsBufferClient(
