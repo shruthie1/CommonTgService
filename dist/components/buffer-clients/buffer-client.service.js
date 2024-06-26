@@ -91,7 +91,7 @@ let BufferClientService = class BufferClientService {
         console.log("Joining Channel Started");
         await this.telegramService.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
-        const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(1);
+        const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
         clients.map(async (document) => {
             try {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
@@ -102,10 +102,7 @@ let BufferClientService = class BufferClientService {
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 console.log("DbChannelsLen: ", result.length);
                 let resp = '';
-                for (const channel of result) {
-                    resp = resp + (channel?.username?.startsWith("@") ? channel.username : `@${channel.username}`) + "|";
-                }
-                this.telegramService.joinChannels(document.mobile, resp);
+                this.telegramService.joinChannels(document.mobile, result);
             }
             catch (error) {
                 (0, utils_1.parseError)(error);

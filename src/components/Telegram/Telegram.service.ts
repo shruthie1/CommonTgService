@@ -169,7 +169,7 @@ export class TelegramService {
                     console.log("Removed Channel- ", channel);
                 }
             } catch (error) {
-                parseError(error, `${chatEntity} - Channels ERR: `);
+                parseError(error, `${chatEntity.username} - Channels ERR: `);
                 await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
             }
         };
