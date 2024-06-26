@@ -10,8 +10,6 @@ exports.AppService = void 0;
 const common_1 = require("@nestjs/common");
 let AppService = class AppService {
     getHello() {
-        const rootPath = process.cwd();
-        console.log(rootPath);
         return 'Hello World!';
     }
 };

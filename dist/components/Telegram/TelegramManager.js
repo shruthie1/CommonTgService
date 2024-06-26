@@ -106,7 +106,7 @@ class TelegramManager {
         let canSendFalseCount = 0;
         let totalCount = 0;
         this.channelArray.length = 0;
-        console.log(chats.total);
+        console.log("TotalChats:", chats.total);
         chats.forEach(async (chat) => {
             if (chat.isChannel || chat.isGroup) {
                 try {
