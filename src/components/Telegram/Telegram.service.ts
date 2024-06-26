@@ -171,7 +171,7 @@ export class TelegramService {
                         console.log("Removed Channel- ", channel);
                     }
                 } catch (error) {
-                    parseError(error, "Channels ERR: ")
+                    parseError(error, `${chatEntity.megagroup} - Channels ERR: `)
                     if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
                         try {
                             await this.channelsService.remove(chatEntity.id.toString())

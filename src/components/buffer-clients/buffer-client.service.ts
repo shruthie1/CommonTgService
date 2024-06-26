@@ -113,7 +113,7 @@ export class BufferClientService {
                 }
                 this.telegramService.joinChannels(document.mobile, resp);
             } catch (error) {
-                console.log(error)
+                parseError(error)
             }
         })
     }
