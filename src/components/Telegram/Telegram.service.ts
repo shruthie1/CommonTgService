@@ -135,34 +135,22 @@ export class TelegramService {
                 }
                 return;
             }
-
-            if (!telegramClient.connected()) {
-                await this.createClient(mobile,false,false);
-                //this.deleteClient(mobile);
-                //return;
-            }
-
+            await this.createClient(mobile, false, false);
+            console.log(mobile, " - Will Try next now");
             const channel = channels[index].trim();
             console.log(mobile, "Trying: ", channel);
             try {
                 const chatEntity = <Api.Channel>await telegramClient.getEntity(channel);
                 await tryJoiningChannel(telegramClient, chatEntity, channel, mobile);
-
-                console.log(mobile, " - On waiting period");
-                await this.deleteClient(mobile);
-                setTimeout(async () => {
-                    await this.createClient(mobile, false, false);
-                    console.log(mobile, " - Will Try next now");
-                    await joinChannelWithDelay(index + 1);
-                }, 3 * 60 * 1000);
             } catch (error) {
                 parseError(error, "Outer Err: ");
                 await this.removeChannels(error, undefined, channel);
-                setTimeout(async () => {
-                    console.log(mobile, " - Will Try next now");
-                    await joinChannelWithDelay(index + 1);
-                }, 10000);
             }
+            console.log(mobile, " - On waiting period");
+                await this.deleteClient(mobile)
+            setTimeout(async () => {
+                    joinChannelWithDelay(index + 1);
+                }, 3 * 60 * 1000);
         };
 
         const tryJoiningChannel = async (telegramClient: TelegramManager, chatEntity: Api.Channel, channel: string, mobile: string) => {
