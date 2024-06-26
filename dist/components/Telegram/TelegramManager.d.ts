@@ -16,7 +16,7 @@ declare class TelegramManager {
     static setActiveClientSetup(data: {
         mobile: string;
         clientId: string;
-    }): void;
+    } | undefined): void;
     disconnect(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;

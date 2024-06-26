@@ -179,10 +179,12 @@ let ClientService = class ClientService {
                     console.log("Removing buffer as error");
                     const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
                     await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+                    this.telegramService.setActiveClientSetup(undefined);
                 }
             }
             catch (error) {
                 (0, utils_1.parseError)(error);
+                this.telegramService.setActiveClientSetup(undefined);
             }
         }
         else {
@@ -190,6 +192,7 @@ let ClientService = class ClientService {
         }
     }
     async updateClientSession(session, mobile, userName, clientId) {
+        this.telegramService.setActiveClientSetup(undefined);
         console.log("Updating Client session");
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, userName, mainAccount: userName });
