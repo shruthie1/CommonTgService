@@ -20,7 +20,6 @@ const active_channel_schema_1 = require("./schemas/active-channel.schema");
 let ActiveChannelsService = class ActiveChannelsService {
     constructor(activeChannelModel) {
         this.activeChannelModel = activeChannelModel;
-        console.log(active_channel_schema_1.ActiveChannel.name);
     }
     async create(createActiveChannelDto) {
         const createdChannel = new this.activeChannelModel(createActiveChannelDto);
