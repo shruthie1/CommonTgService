@@ -42,11 +42,19 @@ class TelegramManager {
         const me = await this.client.getMe();
         return me;
     }
+    async errorHandler(error) {
+        if (error.message && error.message == 'TIMEOUT') {
+        }
+        else {
+            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+        }
+    }
     async createClient(handler = true) {
         this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
-        this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+        this.client.setLogLevel(Logger_1.LogLevel.WARN);
+        this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
         console.log("Connected Client : ", me.phone);

@@ -20,6 +20,7 @@ declare class TelegramManager {
     disconnect(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
+    errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean): Promise<TelegramClient>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(): Promise<TotalList<Dialog>>;
