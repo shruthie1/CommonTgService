@@ -9,7 +9,7 @@ import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.s
 export class ActiveChannelsService {
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
-  ) { console.log(ActiveChannel.name)}
+  ) { }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
     const createdChannel = new this.activeChannelModel(createActiveChannelDto);
