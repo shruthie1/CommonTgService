@@ -84,9 +84,11 @@ export class TelegramService {
                         }, 180000)
                     } else {
                         setInterval(async () => {
-                            if (!client.connected) {
-                                await client.connect();
-                            }
+                            console.log("destroying loop :", mobile)
+                            client._destroyed = true
+                           // if (!client.connected) {
+                               // await client.connect();
+                            //}
                         }, 20000);
                     }
                     return telegramManager;
