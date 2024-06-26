@@ -7,17 +7,12 @@ const tl_1 = require("telegram/tl");
 const axios_1 = require("axios");
 const fs = require("fs");
 const uploads_1 = require("telegram/client/uploads");
-const mongoose_1 = require("mongoose");
-const activechannels_service_1 = require("../activechannels/activechannels.service");
-const active_channel_schema_1 = require("../activechannels/schemas/active-channel.schema");
 const utils_1 = require("../../utils");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
 const IMap_1 = require("../../IMap/IMap");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
-        console.log(sessionString);
-        this.activeChannelsService = new activechannels_service_1.ActiveChannelsService(mongoose_1.default.model(active_channel_schema_1.ActiveChannel.name, active_channel_schema_1.ActiveChannelSchema));
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
