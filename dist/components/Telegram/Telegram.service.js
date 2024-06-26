@@ -175,7 +175,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                 }
                 catch (error) {
-                    console.log("Channels ERR: ", error.errorMessage);
+                    (0, utils_1.parseError)(error, "Channels ERR: ");
                     if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
                         try {
                             await this.channelsService.remove(chatEntity.id.toString());
@@ -198,6 +198,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 }
             }
             catch (error) {
+                (0, utils_1.parseError)(error, "Outer Err: ");
                 setTimeout(async () => {
                     console.log(mobile, " - Will Try next now");
                     await joinChannelWithDelay(index + 1);
