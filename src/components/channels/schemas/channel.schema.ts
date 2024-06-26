@@ -4,7 +4,7 @@ import * as mongoose from 'mongoose';
 
 export type ChannelDocument = Channel & Document;
 @Schema({ collection: 'channels', versionKey: false, autoIndex: true })  // Specify the collection name here
-export class Channel extends Document {
+export class Channel {
   @Prop({ required: true, unique: true })
   channelId: string;
 
@@ -28,6 +28,9 @@ export class Channel extends Document {
 
   @Prop({ required: false, default: null })
   username: string;
+  
+  @Prop({ required: true, default: false })
+  private: boolean;
 }
 
 export const ChannelSchema = SchemaFactory.createForClass(Channel);

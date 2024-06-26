@@ -59,4 +59,11 @@ export class CreateChannelDto {
     required: false,
   })
   username?: string;
+
+  @ApiProperty({
+    description: 'Whether the channel is private',
+    example: false,
+    required: false,
+  })
+  private: boolean = false;
 }

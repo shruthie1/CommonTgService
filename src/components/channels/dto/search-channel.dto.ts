@@ -14,6 +14,12 @@ export class SearchChannelDto {
   title?: string;
 
   @ApiPropertyOptional({
+    description: 'privacy of the channel',
+    example: false,
+  })
+  private?: string;
+
+  @ApiPropertyOptional({
     description: 'Username of the channel',
     example: 'ayesha_channel',
   })
