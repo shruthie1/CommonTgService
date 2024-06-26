@@ -84,8 +84,8 @@ export class TelegramService {
                         }, 180000)
                     } else {
                         setInterval(async () => {
-                            console.log("destroying loop :", mobile)
-                            client._destroyed = true
+                            //console.log("destroying loop :", mobile)
+                            //client._destroyed = true
                            // if (!client.connected) {
                                // await client.connect();
                             //}
@@ -137,8 +137,9 @@ export class TelegramService {
             }
 
             if (!telegramClient.connected()) {
-                this.deleteClient(mobile);
-                return;
+                await this.createClient(mobile,false,false);
+                //this.deleteClient(mobile);
+                //return;
             }
 
             const channel = channels[index].trim();
