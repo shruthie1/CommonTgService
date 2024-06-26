@@ -28,6 +28,7 @@ class TelegramManager {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber);
             await this.client.destroy();
+            this.client._destroyed = true;
         }
         this.session.delete();
     }
