@@ -11,9 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelSchema = exports.Channel = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
-const mongoose_2 = require("mongoose");
 const mongoose = require("mongoose");
-let Channel = class Channel extends mongoose_2.Document {
+let Channel = class Channel {
 };
 exports.Channel = Channel;
 __decorate([
@@ -48,6 +47,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Channel.prototype, "username", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "private", void 0);
 exports.Channel = Channel = __decorate([
     (0, mongoose_1.Schema)({ collection: 'channels', versionKey: false, autoIndex: true })
 ], Channel);
