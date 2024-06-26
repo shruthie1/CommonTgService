@@ -7,7 +7,7 @@ import { defaultMessages, defaultReactions } from '../../../utils';
 export type ActiveChannelDocument = ActiveChannel & Document;
 
 @Schema({ collection: 'activeChannels', versionKey: false, autoIndex: true })
-export class ActiveChannel extends Document {
+export class ActiveChannel {
   @ApiProperty({ required: true })
   @Prop({ required: true, unique: true })
   channelId: string;
@@ -65,6 +65,10 @@ export class ActiveChannel extends Document {
   @ApiProperty({ default: true })
   @Prop({ default: true })
   megagroup: boolean;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  private: boolean;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
