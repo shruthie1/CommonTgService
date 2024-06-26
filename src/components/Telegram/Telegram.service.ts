@@ -126,8 +126,6 @@ export class TelegramService {
 
         const joinChannelWithDelay = async (index: number) => {
             try {
-
-
                 if (index >= channels.length) {
                     console.log(mobile, " - finished joining channels");
                     if (telegramClient) {
@@ -185,7 +183,9 @@ export class TelegramService {
                     }
                 } finally {
                     console.log(mobile, " - On waiting period");
+                    await this.deleteClient(mobile);
                     setTimeout(async () => {
+                        await this.createClient(mobile, false, false)
                         console.log(mobile, " - Will Try next now");
                         await joinChannelWithDelay(index + 1);
                     }, 3 * 60 * 1000);
