@@ -145,48 +145,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
             console.log(mobile, "Trying: ", channel);
             try {
                 const chatEntity = await telegramClient.getEntity(channel);
-                const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
-                try {
-                    await telegramClient.joinChannel(chatEntity);
-                    console.log(mobile, " - Joined channel Success - ", channel);
-                    const entity = {
-                        title,
-                        id: id.toString(),
-                        username,
-                        megagroup,
-                        participantsCount,
-                        broadcast
-                    };
-                    if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
-                        entity['canSendMsgs'] = true;
-                        try {
-                            await this.activeChannelsService.update(entity.id, entity);
-                            console.log("updated ActiveChannels");
-                        }
-                        catch (error) {
-                            console.log((0, utils_1.parseError)(error));
-                            console.log("Failed to update ActiveChannels");
-                        }
-                    }
-                    else {
-                        await this.channelsService.remove(entity.id);
-                        await this.activeChannelsService.remove(entity.id);
-                        console.log("Removed Channel- ", channel);
-                    }
-                }
-                catch (error) {
-                    (0, utils_1.parseError)(error, `${chatEntity.megagroup} - Channels ERR: `);
-                    await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
-                }
-                finally {
-                    console.log(mobile, " - On waiting period");
-                    await this.deleteClient(mobile);
-                    setTimeout(async () => {
-                        await this.createClient(mobile, false, false);
-                        console.log(mobile, " - Will Try next now");
-                        await joinChannelWithDelay(index + 1);
-                    }, 3 * 60 * 1000);
-                }
+                await tryJoiningChannel(telegramClient, chatEntity, channel, mobile);
+                console.log(mobile, " - On waiting period");
+                await this.deleteClient(mobile);
+                setTimeout(async () => {
+                    await this.createClient(mobile, false, false);
+                    console.log(mobile, " - Will Try next now");
+                    await joinChannelWithDelay(index + 1);
+                }, 3 * 60 * 1000);
             }
             catch (error) {
                 (0, utils_1.parseError)(error, "Outer Err: ");
@@ -195,6 +161,41 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     console.log(mobile, " - Will Try next now");
                     await joinChannelWithDelay(index + 1);
                 }, 10000);
+            }
+        };
+        const tryJoiningChannel = async (telegramClient, chatEntity, channel, mobile) => {
+            const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
+            try {
+                await telegramClient.joinChannel(chatEntity);
+                console.log(mobile, " - Joined channel Success - ", channel);
+                const entity = {
+                    title,
+                    id: id.toString(),
+                    username,
+                    megagroup,
+                    participantsCount,
+                    broadcast
+                };
+                if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
+                    entity['canSendMsgs'] = true;
+                    try {
+                        await this.activeChannelsService.update(entity.id, entity);
+                        console.log("updated ActiveChannels");
+                    }
+                    catch (error) {
+                        console.log((0, utils_1.parseError)(error));
+                        console.log("Failed to update ActiveChannels");
+                    }
+                }
+                else {
+                    await this.channelsService.remove(entity.id);
+                    await this.activeChannelsService.remove(entity.id);
+                    console.log("Removed Channel- ", channel);
+                }
+            }
+            catch (error) {
+                (0, utils_1.parseError)(error, `${chatEntity.megagroup} - Channels ERR: `);
+                await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
             }
         };
         joinChannelWithDelay(0);
