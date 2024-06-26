@@ -55,11 +55,20 @@ class TelegramManager {
         return me
     }
 
+    async  errorHandler(error) {
+    if (error.message && error.message == 'TIMEOUT') {
+        //Do nothing, as this error does not make sense to appear while keeping the client disconnected
+    } else {
+        console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+        // Handle other types of errors
+    }}
+
     async createClient(handler = true): Promise<TelegramClient> {
         this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
-        this.client.setLogLevel(LogLevel.ERROR);
+        this.client.setLogLevel(LogLevel.WARN);
+        this.client._errorHandler = this.errorHandler
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
         console.log("Connected Client : ", me.phone);
