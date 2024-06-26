@@ -30,7 +30,7 @@ class TelegramManager {
         return TelegramManager.activeClientSetup;
     }
 
-    public static setActiveClientSetup(data: { mobile: string, clientId: string }) {
+    public static setActiveClientSetup(data: { mobile: string, clientId: string }| undefined) {
         TelegramManager.activeClientSetup = data;
     }
 

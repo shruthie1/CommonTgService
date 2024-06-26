@@ -27,7 +27,7 @@ export class TelegramService {
         return TelegramManager.getActiveClientSetup();
     }
 
-    public setActiveClientSetup(data: { mobile: string, clientId: string }) {
+    public setActiveClientSetup(data: { mobile: string, clientId: string }| undefined) {
         TelegramManager.setActiveClientSetup(data);
     }
 
