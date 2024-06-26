@@ -200,7 +200,6 @@ export class TelegramService {
         };
 
         joinChannelWithDelay(0);
-
         return 'Channels joining in progress';
     }
 
