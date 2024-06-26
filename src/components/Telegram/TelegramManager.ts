@@ -67,7 +67,7 @@ class TelegramManager {
         this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
-        this.client.setLogLevel(LogLevel.WARN);
+        this.client.setLogLevel(LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
