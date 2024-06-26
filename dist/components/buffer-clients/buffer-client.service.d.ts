@@ -21,7 +21,7 @@ export declare class BufferClientService {
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;
     executeQuery(query: any): Promise<BufferClient[]>;
-    joinchannelForBufferClients(): Promise<void>;
+    joinchannelForBufferClients(): Promise<string>;
     setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[]): Promise<void>;

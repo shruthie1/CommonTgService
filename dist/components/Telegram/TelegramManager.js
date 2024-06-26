@@ -26,7 +26,7 @@ class TelegramManager {
     }
     async disconnect() {
         if (this.client) {
-            await this.client.disconnect();
+            console.log("Destroying Client: ", this.phoneNumber);
             await this.client.destroy();
         }
         this.session.delete();

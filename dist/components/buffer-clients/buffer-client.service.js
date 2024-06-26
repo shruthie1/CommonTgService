@@ -88,7 +88,7 @@ let BufferClientService = class BufferClientService {
         }
     }
     async joinchannelForBufferClients() {
-        console.log("Joining Channel");
+        console.log("Joining Channel Started");
         await this.telegramService.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
@@ -111,6 +111,8 @@ let BufferClientService = class BufferClientService {
                 (0, utils_1.parseError)(error);
             }
         });
+        console.log("Joining Channel Triggered Succesfully");
+        return "Initiated Joining channels";
     }
     async setAsBufferClient(mobile, availableDate = (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0]) {
         const user = (await this.usersService.search({ mobile }))[0];
