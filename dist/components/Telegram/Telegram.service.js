@@ -169,7 +169,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 }
             }
             catch (error) {
-                (0, utils_1.parseError)(error, `${chatEntity} - Channels ERR: `);
+                (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
                 await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
             }
         };
