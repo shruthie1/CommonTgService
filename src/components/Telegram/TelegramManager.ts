@@ -5,9 +5,6 @@ import { Api } from 'telegram/tl';
 import axios from 'axios';
 import * as fs from 'fs';
 import { CustomFile } from 'telegram/client/uploads';
-import mongoose from 'mongoose';
-import { ActiveChannelsService } from '../activechannels/activechannels.service';
-import { ActiveChannel, ActiveChannelSchema } from '../activechannels/schemas/active-channel.schema';
 import { contains, parseError } from '../../utils';
 import { TotalList, sleep } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
@@ -19,12 +16,9 @@ class TelegramManager {
     private phoneNumber: string;
     private client: TelegramClient | null;
     private channelArray: string[];
-    private activeChannelsService: ActiveChannelsService;
     private static activeClientSetup: { mobile: string, clientId: string };
 
     constructor(sessionString: string, phoneNumber: string) {
-        console.log(sessionString);
-        this.activeChannelsService = new ActiveChannelsService(mongoose.model(ActiveChannel.name, ActiveChannelSchema))
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
