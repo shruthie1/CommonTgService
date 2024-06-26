@@ -88,8 +88,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                     else {
                         setInterval(async () => {
-                            console.log("destroying loop :", mobile);
-                            client._destroyed = true;
                         }, 20000);
                     }
                     return telegramManager;
@@ -137,8 +135,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 return;
             }
             if (!telegramClient.connected()) {
-                this.deleteClient(mobile);
-                return;
+                await this.createClient(mobile, false, false);
             }
             const channel = channels[index].trim();
             console.log(mobile, "Trying: ", channel);
