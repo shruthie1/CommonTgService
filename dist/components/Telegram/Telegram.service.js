@@ -189,7 +189,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 }
                 finally {
                     console.log(mobile, " - On waiting period");
+                    await this.deleteClient(mobile);
                     setTimeout(async () => {
+                        await this.createClient(mobile, false, false);
                         console.log(mobile, " - Will Try next now");
                         await joinChannelWithDelay(index + 1);
                     }, 3 * 60 * 1000);
