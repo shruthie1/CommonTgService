@@ -27,6 +27,7 @@ export declare class TelegramService {
     getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
     getChatId(mobile: string, username: string): Promise<any>;
     joinChannels(mobile: string, str: string): Promise<string>;
+    removeChannels(error: any, channelId: string, username: string): Promise<void>;
     removeOtherAuths(mobile: string): Promise<string>;
     getSelfMsgsInfo(mobile: string): Promise<{
         photoCount: number;
