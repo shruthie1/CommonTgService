@@ -18,7 +18,7 @@ export declare class TelegramService {
     setActiveClientSetup(data: {
         mobile: string;
         clientId: string;
-    }): void;
+    } | undefined): void;
     getClient(number: string): TelegramManager;
     hasClient(number: string): boolean;
     deleteClient(number: string): Promise<boolean>;
