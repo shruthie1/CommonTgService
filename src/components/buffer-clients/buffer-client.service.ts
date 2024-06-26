@@ -108,10 +108,7 @@ export class BufferClientService {
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 console.log("DbChannelsLen: ", result.length);
                 let resp = '';
-                for (const channel of result) {
-                    resp = resp + (channel?.username?.startsWith("@") ? channel.username : `@${channel.username}`) + "|";
-                }
-                this.telegramService.joinChannels(document.mobile, resp);
+                this.telegramService.joinChannels(document.mobile, result);
             } catch (error) {
                 parseError(error)
             }

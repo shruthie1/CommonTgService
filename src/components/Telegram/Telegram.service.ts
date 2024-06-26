@@ -8,6 +8,7 @@ import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
+import { Channel } from '../channels/schemas/channel.schema';
 
 @Injectable()
 export class TelegramService {
@@ -121,30 +122,27 @@ export class TelegramService {
         return await telegramClient.getchatId(username);
     }
 
-    async joinChannels(mobile: string, str: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile);
-        const channels = str.split('|');
+    async joinChannels(mobile: string, channels: Channel[]) {
         console.log("Started Joining- ", mobile, " - channelsLen - ", channels.length);
 
         const joinChannelWithDelay = async (index: number) => {
+            const telegramClient = await this.createClient(mobile, false, false)
             if (index >= channels.length) {
                 console.log(mobile, " - finished joining channels");
-                if (telegramClient) {
-                    telegramClient.disconnect();
-                    console.log("Join channel stopped : ", mobile);
-                }
+                await this.deleteClient(mobile);
+                console.log("Join channel stopped : ", mobile);
                 return;
             }
-            await this.createClient(mobile, false, false);
+
             console.log(mobile, " - Will Try next now");
-            const channel = channels[index].trim();
-            console.log(mobile, "Trying: ", channel);
+            const channel = channels[index]
+            const username  = channel.username;
+            console.log(mobile, "Trying: ", username);
             try {
-                const chatEntity = <Api.Channel>await telegramClient.getEntity(channel);
-                await tryJoiningChannel(telegramClient, chatEntity, channel, mobile);
+                await tryJoiningChannel(telegramClient, channel, username, mobile);
             } catch (error) {
                 parseError(error, "Outer Err: ");
-                await this.removeChannels(error, undefined, channel);
+                await this.removeChannels(error, channel.channelId, channel.username);
             }
             console.log(mobile, " - On waiting period");
                 await this.deleteClient(mobile)
@@ -153,36 +151,25 @@ export class TelegramService {
                 }, 3 * 60 * 1000);
         };
 
-        const tryJoiningChannel = async (telegramClient: TelegramManager, chatEntity: Api.Channel, channel: string, mobile: string) => {
-            const { title, id, broadcast, defaultBannedRights, participantsCount, megagroup, username } = chatEntity;
+        const tryJoiningChannel = async (telegramClient: TelegramManager, chatEntity: Channel, channel: string, mobile: string) => {
             try {
-                await telegramClient.joinChannel(chatEntity);
-                console.log(mobile, " - Joined channel Success - ", channel);
-                const entity = {
-                    title,
-                    id: id.toString(),
-                    username,
-                    megagroup,
-                    participantsCount,
-                    broadcast
-                };
-
-                if (!chatEntity.broadcast && !defaultBannedRights?.sendMessages) {
-                    entity['canSendMsgs'] = true;
+                await telegramClient.joinChannel(chatEntity.username);
+                console.log(mobile, " - Joined channel Success - ", chatEntity.username);
+                if (chatEntity.canSendMsgs) {
                     try {
-                        await this.activeChannelsService.update(entity.id, entity);
+                        await this.activeChannelsService.update(chatEntity.id, chatEntity);
                         console.log("updated ActiveChannels");
                     } catch (error) {
                         console.log(parseError(error));
                         console.log("Failed to update ActiveChannels");
                     }
                 } else {
-                    await this.channelsService.remove(entity.id);
-                    await this.activeChannelsService.remove(entity.id);
+                    await this.channelsService.remove(chatEntity.id);
+                    await this.activeChannelsService.remove(chatEntity.id);
                     console.log("Removed Channel- ", channel);
                 }
             } catch (error) {
-                parseError(error, `${chatEntity.megagroup} - Channels ERR: `);
+                parseError(error, `${chatEntity} - Channels ERR: `);
                 await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
             }
         };
