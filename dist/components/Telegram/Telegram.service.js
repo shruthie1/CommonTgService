@@ -268,6 +268,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             await cloudinary_1.CloudinaryService.getInstance(name);
             await (0, utils_1.sleep)(2000);
             const rootPath = process.cwd();
+            console.log("checking path", rootPath);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, utils_1.sleep)(3000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
