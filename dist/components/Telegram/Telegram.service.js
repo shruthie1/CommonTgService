@@ -88,9 +88,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                     else {
                         setInterval(async () => {
-                            if (!client.connected) {
-                                await client.connect();
-                            }
+                            console.log("destroying loop :", mobile);
+                            client._destroyed = true;
                         }, 20000);
                     }
                     return telegramManager;
