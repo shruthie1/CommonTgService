@@ -68,7 +68,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler
+        //this.client._errorHandler = this.errorHandler
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
         console.log("Connected Client : ", me.phone);
