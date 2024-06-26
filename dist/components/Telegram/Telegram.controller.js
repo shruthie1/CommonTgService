@@ -37,7 +37,6 @@ let TelegramController = class TelegramController {
     }
     async joinChannels(mobile, channels) {
         await this.connectToTelegram(mobile);
-        this.telegramService.joinChannels(mobile, channels);
         return 'Joining Channels';
     }
     async removeOtherAuths(mobile) {

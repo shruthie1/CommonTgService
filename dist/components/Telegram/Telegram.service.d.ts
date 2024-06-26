@@ -4,6 +4,7 @@ import TelegramManager from "./TelegramManager";
 import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import { ChannelsService } from '../channels/channels.service';
+import { Channel } from '../channels/schemas/channel.schema';
 export declare class TelegramService {
     private usersService;
     private bufferClientService;
@@ -26,7 +27,7 @@ export declare class TelegramService {
     createClient(mobile: string, autoDisconnect?: boolean, handler?: boolean): Promise<TelegramManager>;
     getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
     getChatId(mobile: string, username: string): Promise<any>;
-    joinChannels(mobile: string, str: string): Promise<string>;
+    joinChannels(mobile: string, channels: Channel[]): Promise<string>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
     removeOtherAuths(mobile: string): Promise<string>;
     getSelfMsgsInfo(mobile: string): Promise<{
