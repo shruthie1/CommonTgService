@@ -54,7 +54,7 @@ export class TelegramController {
     //@apiresponse({ status: 400, description: 'Bad request' })
     async joinChannels(@Param('mobile') mobile: string, @Body('channels') channels: string) {
         await this.connectToTelegram(mobile);
-        this.telegramService.joinChannels(mobile, channels);
+        // this.telegramService.joinChannels(mobile, channels);
         return 'Joining Channels';
     }
 
