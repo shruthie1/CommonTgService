@@ -1,3 +1,4 @@
+import { Channel } from './../channels/schemas/channel.schema';
 import { BadRequestException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -13,6 +14,8 @@ import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 
 @Injectable()
 export class BufferClientService {
+    private joinChannelMap: Map<string, Channel[]> = new Map();
+    private joinChannelIntervalId: NodeJS.Timeout;
     constructor(@InjectModel('bufferClientModule') private bufferClientModel: Model<BufferClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
@@ -93,11 +96,18 @@ export class BufferClientService {
         }
     }
 
+    removeFromBufferMap(key: string) {
+        this.joinChannelMap.delete(key)
+    }
+    clearBufferMap() {
+        this.joinChannelMap.clear()
+    }
+
     async joinchannelForBufferClients(): Promise<string> {
         console.log("Joining Channel Started")
         await this.telegramService.disconnectAll();
         await sleep(2000);
-        const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4)
+        const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
         clients.map(async (document) => {
             try {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
@@ -106,15 +116,52 @@ export class BufferClientService {
                 console.log("Existing Channels Length : ", channels.ids.length);
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
-                console.log("DbChannelsLen: ", result.length);
-                let resp = '';
-                this.telegramService.joinChannels(document.mobile, result);
+                this.joinChannelMap.set(document.mobile, result);
+                // console.log("DbChannelsLen: ", result.length);
+                // let resp = '';
+                // this.telegramService.joinChannels(document.mobile, result);
+                this.joinChannelQueue();
             } catch (error) {
                 parseError(error)
             }
         })
         console.log("Joining Channel Triggered Succesfully")
         return "Initiated Joining channels"
+    }
+
+    async joinChannelQueue() {
+        this.joinChannelIntervalId = setInterval(async () => {
+            console.log("In JOIN CHANNEL interval");
+
+            const keys = Array.from(this.joinChannelMap.keys());
+            const promises = keys.map(async key => {
+                const channels = this.joinChannelMap.get(key);
+                if (channels && channels.length > 0) {
+                    const channel = channels.shift();
+                    this.joinChannelMap.set(key, channels);
+
+                    try {
+                        const telegramClient = await this.telegramService.createClient(key);
+                        console.log(key, " Trying to join :", channel.username);
+                        await this.telegramService.tryJoiningChannel(telegramClient, channel);
+                    } catch (error) {
+                        parseError(error, "Outer Err: ");
+                    }
+                } else {
+                    this.joinChannelMap.delete(key);
+                }
+            });
+
+            await Promise.all(promises);
+
+        }, 3 * 60 * 1000);
+    }
+
+    clearJoinChannelInterval() {
+        if (this.joinChannelIntervalId) {
+            clearInterval(this.joinChannelIntervalId);
+            this.joinChannelIntervalId = null;
+        }
     }
 
     async setAsBufferClient(

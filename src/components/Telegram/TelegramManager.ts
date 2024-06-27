@@ -13,7 +13,7 @@ import { MailReader } from '../../IMap/IMap';
 
 class TelegramManager {
     private session: StringSession;
-    private phoneNumber: string;
+    public phoneNumber: string;
     private client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { mobile: string, clientId: string };
@@ -38,7 +38,7 @@ class TelegramManager {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber)
             await this.client.destroy();
-            this.client._destroyed =true
+            this.client._destroyed = true
             await this.client.disconnect();
         }
         this.session.delete();
@@ -55,13 +55,14 @@ class TelegramManager {
         return me
     }
 
-    async  errorHandler(error) {
-    if (error.message && error.message == 'TIMEOUT') {
-        //Do nothing, as this error does not make sense to appear while keeping the client disconnected
-    } else {
-        console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
-        // Handle other types of errors
-    }}
+    async errorHandler(error) {
+        if (error.message && error.message == 'TIMEOUT') {
+            //Do nothing, as this error does not make sense to appear while keeping the client disconnected
+        } else {
+            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+            // Handle other types of errors
+        }
+    }
 
     async createClient(handler = true): Promise<TelegramClient> {
         this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
