@@ -171,6 +171,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
             catch (error) {
                 (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
+                if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
+                    clearTimeout(this.joinChannelTimeoutId);
+                }
                 await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             }
         };
