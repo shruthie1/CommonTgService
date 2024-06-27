@@ -134,10 +134,10 @@ class TelegramManager {
         let totalCount = 0;
         this.channelArray.length = 0;
         console.log("TotalChats:", chats.total);
-        chats.forEach(async (chat) => {
+        for (const chat of chats) {
             if (chat.isChannel || chat.isGroup) {
                 try {
-                    const chatEntity = <Api.Channel>await chat.entity.toJSON();
+                    const chatEntity = <Api.Channel>chat.entity.toJSON();
                     const { broadcast, defaultBannedRights } = chatEntity;
                     totalCount++;
                     if (!broadcast && !defaultBannedRights?.sendMessages) {
@@ -150,7 +150,7 @@ class TelegramManager {
                     console.log(parseError(error));
                 }
             }
-        });
+        };
         return {
             chatsArrayLength: totalCount,
             canSendTrueCount,
@@ -174,11 +174,11 @@ class TelegramManager {
     connected() {
         return this.client.connected;
     }
-    
+
     async connect() {
         return await this.client.connect();
     }
-    
+
 
     async removeOtherAuths(): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');
