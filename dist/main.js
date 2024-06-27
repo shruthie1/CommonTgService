@@ -18,6 +18,33 @@ async function bootstrap() {
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
     }));
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    });
+    process.on('uncaughtException', (reason, promise) => {
+        console.error(promise, reason);
+    });
+    let isShuttingDown = false;
+    const shutdown = async (signal) => {
+        if (isShuttingDown)
+            return;
+        isShuttingDown = true;
+        console.log(`${signal} received`);
+        await app.close();
+        process.exit(0);
+    };
+    process.on('exit', async () => {
+        console.log('Application closed');
+    });
+    process.on('SIGINT', async () => {
+        await shutdown('SIGINT');
+    });
+    process.on('SIGTERM', async () => {
+        await shutdown('SIGTERM');
+    });
+    process.on('SIGQUIT', async () => {
+        await shutdown('SIGQUIT');
+    });
     await app.init();
     await app.listen(3000);
 }
