@@ -12,6 +12,8 @@ export declare class BufferClientService {
     private usersService;
     private activeChannelsService;
     private clientService;
+    private joinChannelMap;
+    private joinChannelIntervalId;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService);
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
@@ -21,7 +23,11 @@ export declare class BufferClientService {
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;
     executeQuery(query: any): Promise<BufferClient[]>;
+    removeFromBufferMap(key: string): void;
+    clearBufferMap(): void;
     joinchannelForBufferClients(): Promise<string>;
+    joinChannelQueue(): Promise<void>;
+    clearJoinChannelInterval(): void;
     setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[]): Promise<void>;

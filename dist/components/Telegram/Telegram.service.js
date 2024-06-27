@@ -51,7 +51,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async disconnectAll() {
         const data = TelegramService_1.clientsMap.entries();
         console.log("Disconnecting All Clients");
-        clearTimeout(this.joinChannelTimeoutId);
         for (const [phoneNumber, client] of data) {
             try {
                 await client?.disconnect();
@@ -63,6 +62,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 console.log(`Failed to Disconnect : ${phoneNumber}`);
             }
         }
+        this.bufferClientService.clearBufferMap();
+        this.bufferClientService.clearJoinChannelInterval();
     }
     async createClient(mobile, autoDisconnect = true, handler = true) {
         const user = (await this.usersService.search({ mobile }))[0];
@@ -122,56 +123,27 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         return await telegramClient.getchatId(username);
     }
-    async joinChannels(mobile, channels) {
-        console.log("Started Joining- ", mobile, " - channelsLen - ", channels.length);
-        const joinChannelWithDelay = async (index) => {
-            const telegramClient = await this.createClient(mobile, false, false);
-            if (index >= channels.length) {
-                console.log(mobile, " - finished joining channels");
-                await this.deleteClient(mobile);
-                console.log("Join channel stopped : ", mobile);
-                return;
+    async tryJoiningChannel(telegramClient, chatEntity) {
+        try {
+            await telegramClient.joinChannel(chatEntity.username);
+            console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
+            if (chatEntity.canSendMsgs) {
             }
-            console.log(mobile, " - Will Try next now");
-            const channel = channels[index];
-            const username = channel.username;
-            console.log(mobile, "Trying: ", username);
-            try {
-                await tryJoiningChannel(telegramClient, channel, username, mobile);
+            else {
+                await this.channelsService.remove(chatEntity.channelId);
+                await this.activeChannelsService.remove(chatEntity.channelId);
+                console.log("Removed Channel- ", chatEntity.username);
             }
-            catch (error) {
-                (0, utils_1.parseError)(error, "Outer Err: ");
-                await this.removeChannels(error, channel.channelId, channel.username);
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
+            if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
+                this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber);
             }
-            console.log(mobile, " - On waiting period");
-            await this.deleteClient(mobile);
-            this.joinChannelTimeoutId = setTimeout(async () => {
-                joinChannelWithDelay(index + 1);
-            }, 3 * 60 * 1000);
-        };
-        const tryJoiningChannel = async (telegramClient, chatEntity, channel, mobile) => {
-            try {
-                await telegramClient.joinChannel(chatEntity.username);
-                console.log(mobile, " - Joined channel Success - ", chatEntity.username);
-                if (chatEntity.canSendMsgs) {
-                }
-                else {
-                    await this.channelsService.remove(chatEntity.channelId);
-                    await this.activeChannelsService.remove(chatEntity.channelId);
-                    console.log("Removed Channel- ", channel);
-                }
-            }
-            catch (error) {
-                (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
-                if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
-                    clearTimeout(this.joinChannelTimeoutId);
-                }
-                await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
-            }
-        };
-        joinChannelWithDelay(0);
-        return 'Channels joining in progress';
+            await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
+        }
     }
+    ;
     async removeChannels(error, channelId, username) {
         if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
             try {

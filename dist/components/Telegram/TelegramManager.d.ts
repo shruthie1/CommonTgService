@@ -4,7 +4,7 @@ import { TotalList } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
 declare class TelegramManager {
     private session;
-    private phoneNumber;
+    phoneNumber: string;
     private client;
     private channelArray;
     private static activeClientSetup;
