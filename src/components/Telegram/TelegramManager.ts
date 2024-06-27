@@ -11,6 +11,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
 import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
+import { IterDialogsParams } from 'telegram/client/dialogs';
 
 class TelegramManager {
     private session: StringSession;
@@ -85,8 +86,8 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs(): Promise<TotalList<Dialog>> {
-        const chats = await this.client.getDialogs({ limit: 500 });
+    async getDialogs(params:IterDialogsParams): Promise<TotalList<Dialog>> {
+        const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats
     }
@@ -102,7 +103,7 @@ class TelegramManager {
         return resp;
     }
 
-    async getSelfMSgsInfo(): Promise<{ photoCount: number; videoCount: number; movieCount: number }> {
+    async getSelfMSgsInfo(): Promise<{ photoCount: number; videoCount: number; movieCount: number, total: number }> {
         if (!this.client) throw new Error('Client is not initialized');
         const self = <Api.User>await this.client.getMe();
         const selfChatId = self.id;
@@ -124,7 +125,7 @@ class TelegramManager {
             }
         }
 
-        return { photoCount, videoCount, movieCount };
+        return { photoCount, videoCount, movieCount, total: messageHistory.total };
     }
 
     async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[] }> {
