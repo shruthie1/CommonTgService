@@ -212,7 +212,6 @@ let BufferClientService = class BufferClientService {
             }
         }
         for (const document of clients) {
-            console.log(document);
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 await this.telegramService.updateUsername(document.mobile, '');

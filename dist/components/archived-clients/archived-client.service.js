@@ -60,10 +60,9 @@ let ArchivedClientService = class ArchivedClientService {
         await this.telegramService.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const clients = await this.findAll();
-        for (const document of clients) {
-            console.log(document);
+        clients.map(async (document) => {
             try {
-                const cli = await this.telegramService.createClient(document.mobile, true, false);
+                await this.telegramService.createClient(document.mobile, true, false);
                 await this.telegramService.updateUsername(document.mobile, '');
                 await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                 await this.telegramService.deleteClient(document.mobile);
@@ -74,7 +73,8 @@ let ArchivedClientService = class ArchivedClientService {
                 this.remove(document.mobile);
                 await this.telegramService.deleteClient(document.mobile);
             }
-        }
+        });
+        return "Triggered ArchiveClients check";
     }
     async executeQuery(query) {
         try {
