@@ -147,7 +147,7 @@ class TelegramManager {
                         canSendFalseCount++;
                     }
                 } catch (error) {
-                    console.log(parseError(error));
+                    parseError(error);
                 }
             }
         };
