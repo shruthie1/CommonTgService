@@ -24,6 +24,7 @@ exports.UserDataModule = UserDataModule = __decorate([
         ],
         controllers: [user_data_controller_1.UserDataController],
         providers: [user_data_service_1.UserDataService],
+        exports: [user_data_service_1.UserDataService]
     })
 ], UserDataModule);
 //# sourceMappingURL=user-data.module.js.map
