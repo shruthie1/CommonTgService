@@ -14,7 +14,7 @@ export function contains(str, arr) {
 
 
 export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 0) {
-  const timeout = options?.timeout || 30000;
+  const timeout = options?.timeout || 50000;
 
   const source = axios.CancelToken.source();
   const id = setTimeout(() => source.cancel(), timeout);
