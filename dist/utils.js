@@ -21,11 +21,14 @@ function contains(str, arr) {
     }));
 }
 ;
-async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetries = 0) {
-    const timeout = options?.timeout || 30000;
-    const source = axios_1.default.CancelToken.source();
-    const id = setTimeout(() => source.cancel(), timeout);
+async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
+    options["timeout"] = options['timeout'] || 50000;
+    options["method"] = options['method'] || 'GET';
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+        const source = axios_1.default.CancelToken.source();
+        const id = setTimeout(() => {
+            source.cancel(`Request timed out after ${options.timeout}ms`);
+        }, options.timeout);
         try {
             const response = await axios_1.default.request({
                 ...options,
@@ -38,12 +41,14 @@ async function fetchWithTimeout(resource, options = { method: 'GET' }, maxRetrie
             return response;
         }
         catch (error) {
-            console.log("error at URL: ", resource);
+            clearTimeout(id);
+            console.log("Error at URL: ", resource);
             parseError(error);
             if (axios_1.default.isCancel(error)) {
                 console.log('Request canceled:', error.message, resource);
             }
             if (retryCount < maxRetries) {
+                console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
             else {
