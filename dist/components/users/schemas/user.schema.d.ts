@@ -5,7 +5,7 @@ export declare class User {
     session: string;
     firstName: string;
     lastName: string | null;
-    userName: string | null;
+    username: string | null;
     channels: number;
     personalChats: number;
     demoGiven: boolean;
@@ -19,7 +19,6 @@ export declare class User {
     photoCount: number;
     videoCount: number;
     gender: string | null;
-    username: string | null;
     twoFA: boolean;
     password: string;
     otherPhotoCount: number;

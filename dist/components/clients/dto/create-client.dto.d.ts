@@ -7,7 +7,7 @@ export declare class CreateClientDto {
     readonly password: string;
     readonly repl: string;
     readonly session: string;
-    readonly userName: string;
+    readonly username: string;
     readonly clientId: string;
     readonly deployKey: string;
     readonly mainAccount: string;

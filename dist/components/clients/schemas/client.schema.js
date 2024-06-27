@@ -59,7 +59,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username of the user' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
-], Client.prototype, "userName", void 0);
+], Client.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID of the user' }),
     (0, mongoose_1.Prop)({ required: true }),
