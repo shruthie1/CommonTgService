@@ -154,14 +154,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 await telegramClient.joinChannel(chatEntity.username);
                 console.log(mobile, " - Joined channel Success - ", chatEntity.username);
                 if (chatEntity.canSendMsgs) {
-                    try {
-                        await this.activeChannelsService.update(chatEntity.channelId, chatEntity);
-                        console.log("updated ActiveChannels");
-                    }
-                    catch (error) {
-                        console.log((0, utils_1.parseError)(error));
-                        console.log("Failed to update ActiveChannels");
-                    }
                 }
                 else {
                     await this.channelsService.remove(chatEntity.channelId);
