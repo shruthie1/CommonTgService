@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import * as https from 'https';
+import { timeout } from 'rxjs';
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -13,12 +14,16 @@ export function contains(str, arr) {
 };
 
 
-export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = { method: 'GET' }, maxRetries = 0) {
-  const timeout = options?.timeout || 50000;
+async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = {}, maxRetries = 0) {
+  options["timeout"] = options['timeout'] || 50000;
+  options["method"] = options['method'] || 'GET';
 
-  const source = axios.CancelToken.source();
-  const id = setTimeout(() => source.cancel(), timeout);
   for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+    const source = axios.CancelToken.source();
+    const id = setTimeout(() => {
+      source.cancel(`Request timed out after ${options.timeout}ms`);
+    }, options.timeout);
+
     try {
       const response = await axios.request({
         ...options,
@@ -30,13 +35,15 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       clearTimeout(id);
       return response;
     } catch (error) {
-      console.log("error at URL: ", resource);
-      parseError(error)
+      clearTimeout(id);
+      console.log("Error at URL: ", resource);
+      parseError(error);
       if (axios.isCancel(error)) {
         console.log('Request canceled:', error.message, resource);
       }
       if (retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 1 second delay
+        console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds delay
       } else {
         console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
         return undefined;
@@ -44,6 +51,7 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
     }
   }
 }
+
 export function toBoolean(value: string | number | boolean): boolean {
   if (typeof value === 'string') {
     return value.toLowerCase() === 'true';
