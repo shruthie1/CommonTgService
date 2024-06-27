@@ -131,7 +131,7 @@ class TelegramManager {
                     }
                 }
                 catch (error) {
-                    console.log((0, utils_1.parseError)(error));
+                    (0, utils_1.parseError)(error);
                 }
             }
         }
