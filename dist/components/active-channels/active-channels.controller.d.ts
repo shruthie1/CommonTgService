@@ -1,4 +1,4 @@
-import { ActiveChannelsService } from './activechannels.service';
+import { ActiveChannelsService } from './active-channels.service';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel } from './schemas/active-channel.schema';

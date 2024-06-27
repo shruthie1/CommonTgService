@@ -46,7 +46,7 @@ __decorate([
 ], ConfigurationController.prototype, "update", null);
 exports.ConfigurationController = ConfigurationController = __decorate([
     (0, swagger_1.ApiTags)('Configuration'),
-    (0, common_1.Controller)('Configuration'),
+    (0, common_1.Controller)('configuration'),
     __metadata("design:paramtypes", [init_service_1.ConfigurationService])
 ], ConfigurationController);
 //# sourceMappingURL=init.controller.js.map
