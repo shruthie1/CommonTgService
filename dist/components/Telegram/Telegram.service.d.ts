@@ -36,6 +36,7 @@ export declare class TelegramService implements OnModuleDestroy {
         photoCount: number;
         videoCount: number;
         movieCount: number;
+        total: number;
     }>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
         chatsArrayLength: number;
