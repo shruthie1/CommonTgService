@@ -119,6 +119,7 @@ export class BufferClientService {
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 this.joinChannelMap.set(document.mobile, result);
+                await this.telegramService.deleteClient(document.mobile);
                 // console.log("DbChannelsLen: ", result.length);
                 // let resp = '';
                 // this.telegramService.joinChannels(document.mobile, result);
