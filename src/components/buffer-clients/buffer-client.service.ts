@@ -176,6 +176,8 @@ export class BufferClientService {
             console.log(document)
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
+                //Comment below line after 1-2 days
+                await this.telegramService.updateUsername(document.mobile,'');
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);
@@ -191,6 +193,7 @@ export class BufferClientService {
             } catch (error) {
                 console.log(document.mobile, " :  false");
                 badIds.push(document.mobile);
+                this.remove(document.mobile)
                 await this.telegramService.deleteClient(document.mobile)
             }
         }

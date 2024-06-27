@@ -12,7 +12,8 @@ import { Channel } from '../channels/schemas/channel.schema';
 
 @Injectable()
 export class TelegramService {
-    private static clientsMap: Map<string, TelegramManager> = new Map()
+    private static clientsMap: Map<string, TelegramManager> = new Map();
+    private joinChannelTimeoutId: NodeJS.Timeout;
     constructor(
         @Inject(forwardRef(() => UsersService))
         private usersService: UsersService,
@@ -50,6 +51,7 @@ export class TelegramService {
     async disconnectAll() {
         const data = TelegramService.clientsMap.entries();
         console.log("Disconnecting All Clients");
+        clearTimeout(this.joinChannelTimeoutId);
         for (const [phoneNumber, client] of data) {
             try {
                 await client?.disconnect();
@@ -87,8 +89,8 @@ export class TelegramService {
                         setInterval(async () => {
                             //console.log("destroying loop :", mobile)
                             //client._destroyed = true
-                           // if (!client.connected) {
-                               // await client.connect();
+                            // if (!client.connected) {
+                            // await client.connect();
                             //}
                         }, 20000);
                     }
@@ -136,7 +138,7 @@ export class TelegramService {
 
             console.log(mobile, " - Will Try next now");
             const channel = channels[index]
-            const username  = channel.username;
+            const username = channel.username;
             console.log(mobile, "Trying: ", username);
             try {
                 await tryJoiningChannel(telegramClient, channel, username, mobile);
@@ -145,10 +147,10 @@ export class TelegramService {
                 await this.removeChannels(error, channel.channelId, channel.username);
             }
             console.log(mobile, " - On waiting period");
-                await this.deleteClient(mobile)
-            setTimeout(async () => {
-                    joinChannelWithDelay(index + 1);
-                }, 3 * 60 * 1000);
+            await this.deleteClient(mobile)
+            this.joinChannelTimeoutId = setTimeout(async () => {
+                joinChannelWithDelay(index + 1);
+            }, 3 * 60 * 1000);
         };
 
         const tryJoiningChannel = async (telegramClient: TelegramManager, chatEntity: Channel, channel: string, mobile: string) => {
