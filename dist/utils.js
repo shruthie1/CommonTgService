@@ -20,7 +20,7 @@ function contains(str, arr) {
     }));
 }
 ;
-async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
+async function fetchWithTimeout(resource, options = {}, maxRetries = 1) {
     options.timeout = options.timeout || 50000;
     options.method = options.method || 'GET';
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
@@ -44,7 +44,7 @@ async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
             parseError(error);
             if (axios_1.default.isCancel(error)) {
                 console.log('Request canceled:', error.message, resource);
-                break;
+                return undefined;
             }
             if (retryCount < maxRetries) {
                 console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
