@@ -366,7 +366,7 @@ class TelegramManager {
                 }
             }
         });
-        return latest;
+        return (new Date(latest)).toISOString().split('T')[0];
     }
     async getContacts() {
         const exportedContacts = await this.client.invoke(new tl_1.Api.contacts.GetContacts({
