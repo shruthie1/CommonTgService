@@ -1,9 +1,10 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, OnModuleDestroy, Inject } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MongooseModule} from '@nestjs/mongoose';
+import { MongooseModule, getConnectionToken} from '@nestjs/mongoose';
 import { ConfigurationService } from './init.service';
 import { ConfigurationSchema } from './configuration.schema';
 import { ConfigurationController } from './init.controller';
+import { Connection } from 'mongoose';
 
 @Global()
 @Module({
@@ -22,4 +23,16 @@ import { ConfigurationController } from './init.controller';
   controllers:[ConfigurationController],
   exports: [ConfigModule, MongooseModule],
 })
-export class initModule {}
+export class initModule implements OnModuleDestroy {
+  constructor(@Inject(getConnectionToken()) private readonly connection: Connection) {}
+
+  onModuleDestroy() {
+    console.log("Init Module Destroying")
+    this.closeConnection();
+  }
+
+  private closeConnection() {
+    console.log("Closing mongoose connection")
+    this.connection.close(true)
+  }
+}
