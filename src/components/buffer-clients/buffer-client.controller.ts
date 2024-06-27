@@ -24,15 +24,21 @@ export class BufferClientController {
     return this.clientService.search(query);
   }
 
+  @Get('joinChannelsForBufferClients')
+  @ApiOperation({ summary: 'Join Channels for BufferClients' })
+  async joinChannelsforBufferClients(): Promise<string> {
+    return this.clientService.joinchannelForBufferClients();
+  }
+
   @Get('checkBufferClients')
-  @ApiOperation({ summary: 'checkBufferClients' })
+  @ApiOperation({ summary: 'Check Buffer Clients' })
   async checkbufferClients(): Promise<string> {
     this.clientService.checkBufferClients();
     return "initiated Checking"
   }
 
   @Post('addNewUserstoBufferClients')
-  @ApiOperation({ summary: 'checkBufferClients' })
+  @ApiOperation({ summary: 'Add New Users to Buffer Clients' })
   @ApiBody({ type: Object })
   async addNewUserstoBufferClients(@Body() body: { goodIds: string[], badIds: string[] }): Promise<string> {
     this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds);
@@ -49,9 +55,9 @@ export class BufferClientController {
   @ApiOperation({ summary: 'Set as Buffer Client' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
   async setAsBufferClient(
-      @Param('mobile') mobile: string,
+    @Param('mobile') mobile: string,
   ) {
-      return await this.clientService.setAsBufferClient(mobile);
+    return await this.clientService.setAsBufferClient(mobile);
   }
 
   @Get(':mobile')

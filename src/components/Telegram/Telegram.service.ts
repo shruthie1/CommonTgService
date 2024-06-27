@@ -4,7 +4,7 @@ import { contains, parseError, sleep } from "../../utils";
 import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
-import { Api } from 'telegram';
+import { Api, TelegramClient } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
@@ -159,7 +159,8 @@ export class TelegramService {
     //     joinChannelWithDelay(0);
     //     return 'Channels joining in progress';
     // }
-    async tryJoiningChannel(telegramClient: TelegramManager, chatEntity: Channel) {
+    async tryJoiningChannel(mobile: string, chatEntity: Channel) {
+        const telegramClient = TelegramService.clientsMap.get(mobile)
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -177,9 +178,11 @@ export class TelegramService {
                 console.log("Removed Channel- ", chatEntity.username);
             }
         } catch (error) {
-            parseError(error, `${chatEntity.username} - Channels ERR: `);
+            parseError(error, `${mobile} @${chatEntity.username} Channels ERR: `);
             if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber)
+                const channels = await this.getChannelInfo(mobile);
+                this.bufferClientService.update(mobile, { channels: channels.canSendTrueCount });
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
         }

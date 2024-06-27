@@ -100,6 +100,7 @@ export class BufferClientService {
         this.joinChannelMap.delete(key)
     }
     clearBufferMap() {
+        console.log("BufferMap cleared")
         this.joinChannelMap.clear()
     }
 
@@ -120,40 +121,39 @@ export class BufferClientService {
                 // console.log("DbChannelsLen: ", result.length);
                 // let resp = '';
                 // this.telegramService.joinChannels(document.mobile, result);
-                this.joinChannelQueue();
             } catch (error) {
                 parseError(error)
             }
         })
+        this.joinChannelQueue();
         console.log("Joining Channel Triggered Succesfully")
         return "Initiated Joining channels"
     }
 
     async joinChannelQueue() {
         this.joinChannelIntervalId = setInterval(async () => {
-            console.log("In JOIN CHANNEL interval");
+            console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
 
             const keys = Array.from(this.joinChannelMap.keys());
-            const promises = keys.map(async key => {
-                const channels = this.joinChannelMap.get(key);
+            const promises = keys.map(async mobile => {
+                const channels = this.joinChannelMap.get(mobile);
                 if (channels && channels.length > 0) {
                     const channel = channels.shift();
-                    this.joinChannelMap.set(key, channels);
-
+                    console.log(mobile, " Pending Channels :", channels.length)
+                    this.joinChannelMap.set(mobile, channels);
                     try {
-                        const telegramClient = await this.telegramService.createClient(key);
-                        console.log(key, " Trying to join :", channel.username);
-                        await this.telegramService.tryJoiningChannel(telegramClient, channel);
+                        await this.telegramService.createClient(mobile);
+                        console.log(mobile, " Trying to join :", channel.username);
+                        await this.telegramService.tryJoiningChannel(mobile, channel);
                     } catch (error) {
                         parseError(error, "Outer Err: ");
                     }
+                    await this.telegramService.deleteClient(mobile);
                 } else {
-                    this.joinChannelMap.delete(key);
+                    this.joinChannelMap.delete(mobile);
                 }
             });
-
             await Promise.all(promises);
-
         }, 3 * 60 * 1000);
     }
 

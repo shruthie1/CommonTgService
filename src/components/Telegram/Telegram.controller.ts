@@ -23,6 +23,25 @@ export class TelegramController {
         return 'Client connected successfully';
     }
 
+    @Get('disconnect/:mobile')
+    @ApiOperation({ summary: 'Create and connect a new Telegram client' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 201, description: 'Client connected successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async disconnect(@Param('mobile') mobile: string): Promise<boolean> {
+        return await this.telegramService.deleteClient(mobile);
+    }
+
+    @Get('disconnectAll')
+    @ApiOperation({ summary: 'Create and connect a new Telegram client' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 201, description: 'Client connected successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async disconnectAll(): Promise<string> {
+        await this.telegramService.disconnectAll();
+        return 'Clients disconnected successfully';
+    }
+
     @Get('messages/:mobile')
     @ApiOperation({ summary: 'Get messages from Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
