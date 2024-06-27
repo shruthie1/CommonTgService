@@ -114,6 +114,7 @@ export class BufferClientService {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
                 console.log("Started Joining for : ", document.mobile)
                 const channels = await client.channelInfo(true);
+                await this.update(document.mobile, { channels: channels.canSendTrueCount });
                 console.log("Existing Channels Length : ", channels.ids.length);
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
