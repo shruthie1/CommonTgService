@@ -9,7 +9,7 @@ export declare class CreateUserDto {
     demoGiven: boolean;
     msgs: number;
     totalChats: number;
-    lastActive: number;
+    lastActive: string;
     date: string;
     tgId: string;
     lastUpdated: string;

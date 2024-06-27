@@ -55,8 +55,8 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "totalChats", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last active', example: 1718260523 }),
-    __metadata("design:type", Number)
+    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last active', example: '2024-06-03' }),
+    __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastActive", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03' }),
