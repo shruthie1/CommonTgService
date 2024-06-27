@@ -1,4 +1,5 @@
 import { TelegramClient } from 'telegram';
+import { NewMessageEvent } from 'telegram/events';
 import { Api } from 'telegram/tl';
 import { TotalList } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
@@ -43,9 +44,18 @@ declare class TelegramManager {
     removeOtherAuths(): Promise<void>;
     getAuths(): Promise<any>;
     getAllChats(): Promise<any[]>;
-    handleEvents(event: any): Promise<void>;
+    getCallLog(): Promise<{
+        chatCallCounts: any[];
+        outgoing: number;
+        incoming: number;
+        video: number;
+        totalCalls: number;
+    }>;
+    handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
+    getLastActiveTime(): Promise<number>;
+    getContacts(): Promise<Api.contacts.TypeContacts>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;
