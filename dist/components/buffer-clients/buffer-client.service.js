@@ -194,7 +194,7 @@ let BufferClientService = class BufferClientService {
         this.addNewUserstoBufferClients(badIds, goodIds);
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: { $exists: false } }, { lastActive: 1 }, badIds.length + 3);
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false }, { lastActive: 1 }, badIds.length + 3);
         console.log("documents : ", documents.length);
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
