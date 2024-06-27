@@ -12,5 +12,5 @@ export declare class UserDataController {
     findOne(chatId: string): Promise<UserData>;
     update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
     remove(chatId: string): Promise<UserData>;
-    executeQuery(query: any): Promise<any>;
+    executeQuery(requestBody: any): Promise<any>;
 }

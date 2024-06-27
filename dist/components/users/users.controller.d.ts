@@ -11,5 +11,5 @@ export declare class UsersController {
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<User>;
     remove(tgId: string): Promise<void>;
-    executeQuery(query: any): Promise<any>;
+    executeQuery(requestBody: any): Promise<any>;
 }

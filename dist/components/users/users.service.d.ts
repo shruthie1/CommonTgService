@@ -15,5 +15,5 @@ export declare class UsersService {
     update(tgId: string, user: UpdateUserDto): Promise<User>;
     delete(tgId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
-    executeQuery(query: any, sort?: any, limit?: number): Promise<User[]>;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<User[]>;
 }

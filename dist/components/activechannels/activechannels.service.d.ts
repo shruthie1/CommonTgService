@@ -15,5 +15,5 @@ export declare class ActiveChannelsService {
     getRandomReaction(channelId: string): Promise<string>;
     removeReaction(channelId: string, reaction: string): Promise<ActiveChannel>;
     getActiveChannels(limit?: number, skip?: number, keywords?: any[], notIds?: any[]): Promise<ActiveChannel[]>;
-    executeQuery(query: any, sort?: any, limit?: number): Promise<ActiveChannel[]>;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]>;
 }

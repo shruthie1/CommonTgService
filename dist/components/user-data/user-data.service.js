@@ -58,12 +58,22 @@ let UserDataService = class UserDataService {
         console.log(filter);
         return this.userDataModel.find(filter).exec();
     }
-    async executeQuery(query) {
+    async executeQuery(query, sort, limit, skip) {
         try {
             if (!query) {
                 throw new common_1.BadRequestException('Query is invalid.');
             }
-            return await this.userDataModel.find(query).exec();
+            const queryExec = this.userDataModel.find(query);
+            if (sort) {
+                queryExec.sort(sort);
+            }
+            if (limit) {
+                queryExec.limit(limit);
+            }
+            if (skip) {
+                queryExec.skip(skip);
+            }
+            return await queryExec.exec();
         }
         catch (error) {
             throw new common_1.InternalServerErrorException(error.message);

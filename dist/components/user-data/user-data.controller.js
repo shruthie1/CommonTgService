@@ -41,9 +41,10 @@ let UserDataController = class UserDataController {
     async remove(chatId) {
         return this.userDataService.remove(chatId);
     }
-    async executeQuery(query) {
+    async executeQuery(requestBody) {
         try {
-            return await this.userDataService.executeQuery(query);
+            const { query, sort, limit, skip } = requestBody;
+            return await this.userDataService.executeQuery(query, sort, limit, skip);
         }
         catch (error) {
             throw error;
