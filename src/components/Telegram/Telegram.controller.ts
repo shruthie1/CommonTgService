@@ -34,7 +34,6 @@ export class TelegramController {
 
     @Get('disconnectAll')
     @ApiOperation({ summary: 'Create and connect a new Telegram client' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     //@apiresponse({ status: 201, description: 'Client connected successfully' })
     //@apiresponse({ status: 400, description: 'Bad request' })
     async disconnectAll(): Promise<string> {
