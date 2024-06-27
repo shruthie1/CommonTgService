@@ -11,5 +11,6 @@ import { initModule } from '../ConfigurationInit/init.module';
     MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema }])],
   controllers: [UserDataController],
   providers: [UserDataService],
+  exports:[UserDataService]
 })
 export class UserDataModule {}
