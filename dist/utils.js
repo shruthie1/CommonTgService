@@ -8,7 +8,6 @@ exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
 const axios_1 = require("axios");
-const https = require("https");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -22,8 +21,8 @@ function contains(str, arr) {
 }
 ;
 async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
-    options["timeout"] = options['timeout'] || 50000;
-    options["method"] = options['method'] || 'GET';
+    options.timeout = options.timeout || 50000;
+    options.method = options.method || 'GET';
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
         const source = axios_1.default.CancelToken.source();
         const id = setTimeout(() => {
@@ -33,7 +32,6 @@ async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
             const response = await axios_1.default.request({
                 ...options,
                 url: resource,
-                httpsAgent: new https.Agent({ keepAlive: true }),
                 headers: { 'Content-Type': 'application/json' },
                 cancelToken: source.token
             });
@@ -46,6 +44,7 @@ async function fetchWithTimeout(resource, options = {}, maxRetries = 0) {
             parseError(error);
             if (axios_1.default.isCancel(error)) {
                 console.log('Request canceled:', error.message, resource);
+                break;
             }
             if (retryCount < maxRetries) {
                 console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
