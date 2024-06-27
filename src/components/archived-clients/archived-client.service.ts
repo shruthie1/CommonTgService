@@ -6,12 +6,15 @@ import { Client, ClientDocument } from '../clients/schemas/client.schema';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
+import { ClientService } from '../clients/client.service';
 
 @Injectable()
 export class ArchivedClientService {
     constructor(@InjectModel('ArchivedArchivedClientsModule') private archivedclientModel: Model<ClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
+        @Inject(forwardRef(() => ClientService))
+        private clientService: ClientService,
     ) { }
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
@@ -56,18 +59,26 @@ export class ArchivedClientService {
     async checkArchivedClients() {
         await this.telegramService.disconnectAll()
         await sleep(2000);
-        const clients = await this.findAll();
-        clients.map(async (document) => {
-            try {
-                await this.telegramService.createClient(document.mobile, true, false);
-                await this.telegramService.updateUsername(document.mobile, '');
-                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
-                await this.telegramService.deleteClient(document.mobile)
-                await sleep(2000);
-            } catch (error) {
-                console.log(document.mobile, " :  false");
-                this.remove(document.mobile)
-                await this.telegramService.deleteClient(document.mobile)
+        const archivedClients = await this.findAll();
+
+        const clients = await this.clientService.findAll();
+        const clientIds = clients.map(client => client.mobile);
+
+        archivedClients.map(async (document) => {
+            if (!clientIds.includes(document.mobile)) {
+                try {
+                    await this.telegramService.createClient(document.mobile, true, false);
+                    await this.telegramService.updateUsername(document.mobile, '');
+                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                    await this.telegramService.deleteClient(document.mobile)
+                    await sleep(2000);
+                } catch (error) {
+                    console.log(document.mobile, " :  false");
+                    this.remove(document.mobile)
+                    await this.telegramService.deleteClient(document.mobile)
+                }
+            } else {
+                console.log("Number is a Active Client")
             }
         })
 
