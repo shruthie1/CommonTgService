@@ -35,8 +35,17 @@ export class TelegramService implements OnModuleDestroy {
         TelegramManager.setActiveClientSetup(data);
     }
 
-    public getClient(number: string) {
-        return TelegramService.clientsMap.get(number);
+    public async getClient(number: string) {
+        const client = TelegramService.clientsMap.get(number);
+        try {
+            if (client && client.connected()) {
+                await client.connect()
+                return client
+            }
+        } catch (error) {
+            console.log(error)
+        }
+        return undefined;
     }
 
     public hasClient(number: string) {
@@ -44,7 +53,7 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async deleteClient(number: string) {
-        const cli = this.getClient(number);
+        const cli = await this.getClient(number);
         await cli?.disconnect();
         console.log("Disconnected : ", number)
         return TelegramService.clientsMap.delete(number);
@@ -73,7 +82,7 @@ export class TelegramService implements OnModuleDestroy {
         if (!user) {
             throw new BadRequestException('user not found');
         }
-        if (!TelegramService.clientsMap.has(mobile)) {
+        if (!this.hasClient(mobile)) {
             const telegramManager = new TelegramManager(user.session, user.mobile);
             try {
                 const client = await telegramManager.createClient(handler);
@@ -81,7 +90,7 @@ export class TelegramService implements OnModuleDestroy {
                     TelegramService.clientsMap.set(mobile, telegramManager);
                     if (autoDisconnect) {
                         setTimeout(async () => {
-                            if (client.connected || TelegramService.clientsMap.get(mobile)) {
+                            if (client.connected || await this.getClient(mobile)) {
                                 console.log("SELF destroy client : ", mobile);
                                 await telegramManager.disconnect();
                             } else {
@@ -114,17 +123,17 @@ export class TelegramService implements OnModuleDestroy {
                 throw new BadRequestException(errorDetails.message)
             }
         } else {
-            return TelegramService.clientsMap.get(mobile)
+            return await this.getClient(mobile)
         }
     }
 
     async getMessages(mobile: string, username: string, limit: number = 8) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return telegramClient.getMessages(username, limit);
     }
 
     async getChatId(mobile: string, username: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return await telegramClient.getchatId(username);
     }
 
@@ -163,7 +172,7 @@ export class TelegramService implements OnModuleDestroy {
     //     return 'Channels joining in progress';
     // }
     async tryJoiningChannel(mobile: string, chatEntity: Channel) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -212,34 +221,34 @@ export class TelegramService implements OnModuleDestroy {
 
 
     async removeOtherAuths(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         await telegramClient.removeOtherAuths();
         return 'Authorizations removed successfully';
     }
 
     //@apiresponse({ status: 400, description: 'Bad request' })
     async getSelfMsgsInfo(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return await telegramClient.getSelfMSgsInfo();
     }
 
     async getChannelInfo(mobile: string, sendIds: boolean = false) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return await telegramClient.channelInfo(sendIds);
     }
 
     async getAuths(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return await telegramClient.getAuths();
     }
 
     async getMe(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         return await telegramClient.getMe();
     }
 
     async set2Fa(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         try {
             await telegramClient.set2fa();
             await telegramClient.disconnect();
@@ -251,19 +260,19 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async updatePrivacyforDeletedAccount(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.updatePrivacyforDeletedAccount()
     }
 
     async deleteProfilePhotos(mobile: string) {
-        const telegramClient = TelegramService.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.deleteProfilePhotos()
     }
 
     async setProfilePic(
         mobile: string, name: string,
     ) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         await telegramClient.deleteProfilePhotos();
         try {
             await CloudinaryService.getInstance(name);
@@ -287,7 +296,7 @@ export class TelegramService implements OnModuleDestroy {
     async updatePrivacy(
         mobile: string,
     ) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         try {
             await telegramClient.updatePrivacy()
             return "Privacy updated successfully";
@@ -300,7 +309,7 @@ export class TelegramService implements OnModuleDestroy {
     async updateUsername(
         mobile: string, username: string,
     ) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         try {
             return await telegramClient.updateUsername(username)
         } catch (error) {
@@ -314,7 +323,7 @@ export class TelegramService implements OnModuleDestroy {
         firstName: string,
         about?: string,
     ) {
-        const telegramClient = TelegramService.clientsMap.get(mobile)
+        const telegramClient = await this.getClient(mobile)
         try {
             await telegramClient.updateProfile(firstName, about)
             return "Username updated successfully";
