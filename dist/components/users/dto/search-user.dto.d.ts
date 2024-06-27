@@ -11,7 +11,7 @@ export declare class SearchUserDto {
     demoGiven?: boolean;
     msgs?: number;
     totalChats?: number;
-    lastActive?: number;
+    lastActive?: string;
     date?: string;
     lastUpdated?: string;
     movieCount?: number;

@@ -93,7 +93,7 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by last active timestamp' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
+    __metadata("design:type", String)
 ], SearchUserDto.prototype, "lastActive", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by date' }),
