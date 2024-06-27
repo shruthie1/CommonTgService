@@ -69,8 +69,8 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs() {
-        const chats = await this.client.getDialogs({ limit: 500 });
+    async getDialogs(params) {
+        const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats;
     }
@@ -106,7 +106,7 @@ class TelegramManager {
                 movieCount++;
             }
         }
-        return { photoCount, videoCount, movieCount };
+        return { photoCount, videoCount, movieCount, total: messageHistory.total };
     }
     async channelInfo(sendIds = false) {
         if (!this.client)

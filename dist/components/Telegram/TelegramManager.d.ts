@@ -3,6 +3,7 @@ import { NewMessageEvent } from 'telegram/events';
 import { Api } from 'telegram/tl';
 import { TotalList } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
+import { IterDialogsParams } from 'telegram/client/dialogs';
 declare class TelegramManager {
     private session;
     phoneNumber: string;
@@ -24,12 +25,13 @@ declare class TelegramManager {
     errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean): Promise<TelegramClient>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(): Promise<TotalList<Dialog>>;
+    getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;
         videoCount: number;
         movieCount: number;
+        total: number;
     }>;
     channelInfo(sendIds?: boolean): Promise<{
         chatsArrayLength: number;
