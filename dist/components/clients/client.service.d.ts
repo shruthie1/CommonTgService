@@ -17,6 +17,7 @@ export declare class ClientService {
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
+    refreshMap(): Promise<void>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;

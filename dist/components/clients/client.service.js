@@ -53,6 +53,9 @@ let ClientService = class ClientService {
             return Array.from(this.clientsMap.values());
         }
     }
+    async refreshMap() {
+        this.clientsMap.clear();
+    }
     async findOne(clientId) {
         const client = this.clientsMap.get(clientId);
         if (client) {
