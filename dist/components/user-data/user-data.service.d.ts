@@ -7,9 +7,9 @@ export declare class UserDataService {
     constructor(userDataModel: Model<UserDataDocument>);
     create(createUserDataDto: CreateUserDataDto): Promise<UserData>;
     findAll(): Promise<UserData[]>;
-    findOne(chatId: string): Promise<UserData>;
-    update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
-    remove(chatId: string): Promise<UserData>;
+    findOne(profile: string, chatId: string): Promise<UserData>;
+    update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
+    remove(profile: string, chatId: string): Promise<UserData>;
     search(filter: any): Promise<UserData[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]>;
 }

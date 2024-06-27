@@ -32,14 +32,14 @@ let UserDataController = class UserDataController {
     async findAll() {
         return this.userDataService.findAll();
     }
-    async findOne(chatId) {
-        return this.userDataService.findOne(chatId);
+    async findOne(profile, chatId) {
+        return this.userDataService.findOne(profile, chatId);
     }
-    async update(chatId, updateUserDataDto) {
-        return this.userDataService.update(chatId, updateUserDataDto);
+    async update(profile, chatId, updateUserDataDto) {
+        return this.userDataService.update(profile, chatId, updateUserDataDto);
     }
-    async remove(chatId) {
-        return this.userDataService.remove(chatId);
+    async remove(profile, chatId) {
+        return this.userDataService.remove(profile, chatId);
     }
     async executeQuery(requestBody) {
         try {
@@ -76,28 +76,31 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "findAll", null);
 __decorate([
-    (0, common_1.Get)(':chatId'),
+    (0, common_1.Get)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    __param(0, (0, common_1.Param)('chatId')),
+    __param(0, (0, common_1.Param)('profile')),
+    __param(1, (0, common_1.Param)('chatId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Patch)(':chatId'),
+    (0, common_1.Patch)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    __param(0, (0, common_1.Param)('chatId')),
-    __param(1, (0, common_1.Body)()),
+    __param(0, (0, common_1.Param)('profile')),
+    __param(1, (0, common_1.Param)('chatId')),
+    __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_user_data_dto_1.UpdateUserDataDto]),
+    __metadata("design:paramtypes", [String, String, update_user_data_dto_1.UpdateUserDataDto]),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "update", null);
 __decorate([
-    (0, common_1.Delete)(':chatId'),
+    (0, common_1.Delete)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    __param(0, (0, common_1.Param)('chatId')),
+    __param(0, (0, common_1.Param)('profile')),
+    __param(1, (0, common_1.Param)('chatId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "remove", null);
 __decorate([
