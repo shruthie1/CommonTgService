@@ -13,7 +13,6 @@ export class SetupClientQueryDto {
     days?: number = 0;
 
     @ApiPropertyOptional({
-        type: Boolean,
         default: true
     })
     @IsOptional()
@@ -33,9 +32,7 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
-    @Transform(({ value }) => {
-        console.log(value)
-        return value === 'true' || value === true})
+    @Transform(({ value }) => { return value === 'true' || value === true })
     @IsBoolean()
     formalities?: boolean = true;
 }
