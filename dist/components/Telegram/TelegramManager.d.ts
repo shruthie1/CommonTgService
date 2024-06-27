@@ -44,7 +44,7 @@ declare class TelegramManager {
     getAllChats(): Promise<any[]>;
     handleEvents(event: any): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
-    updateProfile(firstName: any, about: any): Promise<void>;
+    updateProfile(firstName: string, about: string): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;

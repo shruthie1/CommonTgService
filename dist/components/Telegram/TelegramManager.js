@@ -267,12 +267,17 @@ class TelegramManager {
         }
     }
     async updateProfile(firstName, about) {
+        const data = {
+            lastName: "",
+        };
+        if (firstName !== undefined) {
+            data["firstName"] = firstName;
+        }
+        if (about !== undefined) {
+            data["about"] = firstName;
+        }
         try {
-            const result = await this.client.invoke(new tl_1.Api.account.UpdateProfile({
-                firstName: firstName,
-                lastName: "",
-                about: about,
-            }));
+            const result = await this.client.invoke(new tl_1.Api.account.UpdateProfile(data));
             console.log("Updated NAme: ", firstName);
         }
         catch (error) {
