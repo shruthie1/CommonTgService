@@ -11,6 +11,7 @@ export declare class TelegramService {
     private activeChannelsService;
     private channelsService;
     private static clientsMap;
+    private joinChannelTimeoutId;
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     getActiveClientSetup(): {
         mobile: string;

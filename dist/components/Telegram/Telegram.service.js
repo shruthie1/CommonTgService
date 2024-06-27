@@ -51,6 +51,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async disconnectAll() {
         const data = TelegramService_1.clientsMap.entries();
         console.log("Disconnecting All Clients");
+        clearTimeout(this.joinChannelTimeoutId);
         for (const [phoneNumber, client] of data) {
             try {
                 await client?.disconnect();
@@ -144,7 +145,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
             console.log(mobile, " - On waiting period");
             await this.deleteClient(mobile);
-            setTimeout(async () => {
+            this.joinChannelTimeoutId = setTimeout(async () => {
                 joinChannelWithDelay(index + 1);
             }, 3 * 60 * 1000);
         };
