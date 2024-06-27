@@ -67,7 +67,7 @@ export class SearchUserDto {
   @ApiPropertyOptional({ description: 'Filter by last active timestamp' })
   @IsOptional()
   @IsNumber()
-  lastActive?: number;
+  lastActive?: string;
 
   @ApiPropertyOptional({ description: 'Filter by date' })
   @IsOptional()

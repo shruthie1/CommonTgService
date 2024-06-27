@@ -31,8 +31,8 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Total number of chats', example: 195 })
   totalChats: number;
 
-  @ApiProperty({ description: 'Timestamp of last active', example: 1718260523 })
-  lastActive: number;
+  @ApiProperty({ description: 'Timestamp of last active', example: '2024-06-03' })
+  lastActive: string;
 
   @ApiProperty({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03' })
   date: string;
