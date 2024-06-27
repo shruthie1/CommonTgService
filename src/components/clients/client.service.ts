@@ -104,8 +104,9 @@ export class ClientService {
                 const existingClientMobile = existingClient.mobile
                 const today = (new Date(Date.now())).toISOString().split('T')[0];
                 const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
-                try {
-                    if (existingClientUser) {
+                let isArchived = false;
+                if (existingClientUser) {
+                    try {
                         await this.telegramService.createClient(existingClientMobile, false, true)
                         if (toBoolean(setupClientQueryDto.formalities)) {
                             console.log("Started Formalities")
@@ -132,15 +133,17 @@ export class ClientService {
                             }
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingClientMobile, bufferClientDto);
                             await this.archivedClientService.update(existingClient.mobile, existingClient);
+                            isArchived = true;
                             console.log("client Archived: ", updatedBufferClient)
                             await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
                         } else {
                             console.log("Client Archive Skipped")
                         }
+                    } catch (error) {
+                        console.log("Cannot Archive Old Client");
+                        parseError(error)
+                        isArchived = false
                     }
-                } catch (error) {
-                    console.log("Cannot Archive Old Client");
-                    parseError(error)
                 }
 
                 const query = { availableDate: { $lte: today } }
@@ -152,7 +155,7 @@ export class ClientService {
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, `${userCaps}_Redd`);
-                        if (archiveOld) {
+                        if (isArchived) {
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
                         }
                         console.log("client updated");
