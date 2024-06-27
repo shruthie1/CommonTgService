@@ -177,7 +177,7 @@ export class BufferClientService {
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 //Comment below line after 1-2 days
-                await this.telegramService.updateUsername(document.mobile,'');
+                await this.telegramService.updateUsername(document.mobile, '');
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);
@@ -202,7 +202,7 @@ export class BufferClientService {
     }
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: { $exists: false } }, { lastActive: 1 }, badIds.length + 3);
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false }, { lastActive: 1 }, badIds.length + 3);
         console.log("documents : ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
