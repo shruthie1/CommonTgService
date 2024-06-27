@@ -22,7 +22,7 @@ export declare class TelegramService implements OnModuleDestroy {
         mobile: string;
         clientId: string;
     } | undefined): void;
-    getClient(number: string): TelegramManager;
+    getClient(number: string): Promise<TelegramManager>;
     hasClient(number: string): boolean;
     deleteClient(number: string): Promise<boolean>;
     disconnectAll(): Promise<void>;

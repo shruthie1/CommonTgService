@@ -39,14 +39,24 @@ let TelegramService = TelegramService_1 = class TelegramService {
     setActiveClientSetup(data) {
         TelegramManager_1.default.setActiveClientSetup(data);
     }
-    getClient(number) {
-        return TelegramService_1.clientsMap.get(number);
+    async getClient(number) {
+        const client = TelegramService_1.clientsMap.get(number);
+        try {
+            if (client && client.connected()) {
+                await client.connect();
+                return client;
+            }
+        }
+        catch (error) {
+            console.log(error);
+        }
+        return undefined;
     }
     hasClient(number) {
         return TelegramService_1.clientsMap.has(number);
     }
     async deleteClient(number) {
-        const cli = this.getClient(number);
+        const cli = await this.getClient(number);
         await cli?.disconnect();
         console.log("Disconnected : ", number);
         return TelegramService_1.clientsMap.delete(number);
@@ -73,7 +83,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         if (!user) {
             throw new common_1.BadRequestException('user not found');
         }
-        if (!TelegramService_1.clientsMap.has(mobile)) {
+        if (!this.hasClient(mobile)) {
             const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
             try {
                 const client = await telegramManager.createClient(handler);
@@ -81,7 +91,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     TelegramService_1.clientsMap.set(mobile, telegramManager);
                     if (autoDisconnect) {
                         setTimeout(async () => {
-                            if (client.connected || TelegramService_1.clientsMap.get(mobile)) {
+                            if (client.connected || await this.getClient(mobile)) {
                                 console.log("SELF destroy client : ", mobile);
                                 await telegramManager.disconnect();
                             }
@@ -115,19 +125,19 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         else {
-            return TelegramService_1.clientsMap.get(mobile);
+            return await this.getClient(mobile);
         }
     }
     async getMessages(mobile, username, limit = 8) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return telegramClient.getMessages(username, limit);
     }
     async getChatId(mobile, username) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return await telegramClient.getchatId(username);
     }
     async tryJoiningChannel(mobile, chatEntity) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -171,28 +181,28 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async removeOtherAuths(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.removeOtherAuths();
         return 'Authorizations removed successfully';
     }
     async getSelfMsgsInfo(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return await telegramClient.getSelfMSgsInfo();
     }
     async getChannelInfo(mobile, sendIds = false) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return await telegramClient.channelInfo(sendIds);
     }
     async getAuths(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return await telegramClient.getAuths();
     }
     async getMe(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         return await telegramClient.getMe();
     }
     async set2Fa(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         try {
             await telegramClient.set2fa();
             await telegramClient.disconnect();
@@ -204,15 +214,15 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async updatePrivacyforDeletedAccount(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.updatePrivacyforDeletedAccount();
     }
     async deleteProfilePhotos(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
     }
     async setProfilePic(mobile, name) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
         try {
             await cloudinary_1.CloudinaryService.getInstance(name);
@@ -234,7 +244,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async updatePrivacy(mobile) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         try {
             await telegramClient.updatePrivacy();
             return "Privacy updated successfully";
@@ -245,7 +255,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async updateUsername(mobile, username) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         try {
             return await telegramClient.updateUsername(username);
         }
@@ -255,7 +265,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async updateNameandBio(mobile, firstName, about) {
-        const telegramClient = TelegramService_1.clientsMap.get(mobile);
+        const telegramClient = await this.getClient(mobile);
         try {
             await telegramClient.updateProfile(firstName, about);
             return "Username updated successfully";
