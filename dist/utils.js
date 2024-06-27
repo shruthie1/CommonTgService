@@ -151,7 +151,7 @@ function parseError(err, prefix = 'TgCms') {
     }
     const msg = `${prefix ? `${prefix} ::` : ""} ${extractMessage(message)} `;
     const resp = { status, message: msg, error };
-    console.log(resp);
+    console.log(resp.error == 'RPCError' ? resp.message : resp);
     return resp;
 }
 let botCount = 0;

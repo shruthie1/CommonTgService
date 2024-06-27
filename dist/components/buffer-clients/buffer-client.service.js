@@ -92,6 +92,7 @@ let BufferClientService = class BufferClientService {
         this.joinChannelMap.delete(key);
     }
     clearBufferMap() {
+        console.log("BufferMap cleared");
         this.joinChannelMap.clear();
     }
     async joinchannelForBufferClients() {
@@ -108,35 +109,37 @@ let BufferClientService = class BufferClientService {
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 this.joinChannelMap.set(document.mobile, result);
-                this.joinChannelQueue();
             }
             catch (error) {
                 (0, utils_1.parseError)(error);
             }
         });
+        this.joinChannelQueue();
         console.log("Joining Channel Triggered Succesfully");
         return "Initiated Joining channels";
     }
     async joinChannelQueue() {
         this.joinChannelIntervalId = setInterval(async () => {
-            console.log("In JOIN CHANNEL interval");
+            console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
             const keys = Array.from(this.joinChannelMap.keys());
-            const promises = keys.map(async (key) => {
-                const channels = this.joinChannelMap.get(key);
+            const promises = keys.map(async (mobile) => {
+                const channels = this.joinChannelMap.get(mobile);
                 if (channels && channels.length > 0) {
                     const channel = channels.shift();
-                    this.joinChannelMap.set(key, channels);
+                    console.log(mobile, " Pending Channels :", channels.length);
+                    this.joinChannelMap.set(mobile, channels);
                     try {
-                        const telegramClient = await this.telegramService.createClient(key);
-                        console.log(key, " Trying to join :", channel.username);
-                        await this.telegramService.tryJoiningChannel(telegramClient, channel);
+                        await this.telegramService.createClient(mobile);
+                        console.log(mobile, " Trying to join :", channel.username);
+                        await this.telegramService.tryJoiningChannel(mobile, channel);
                     }
                     catch (error) {
                         (0, utils_1.parseError)(error, "Outer Err: ");
                     }
+                    await this.telegramService.deleteClient(mobile);
                 }
                 else {
-                    this.joinChannelMap.delete(key);
+                    this.joinChannelMap.delete(mobile);
                 }
             });
             await Promise.all(promises);

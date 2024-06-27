@@ -29,6 +29,9 @@ let BufferClientController = class BufferClientController {
     async search(query) {
         return this.clientService.search(query);
     }
+    async joinChannelsforBufferClients() {
+        return this.clientService.joinchannelForBufferClients();
+    }
     async checkbufferClients() {
         this.clientService.checkBufferClients();
         return "initiated Checking";
@@ -82,15 +85,22 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "search", null);
 __decorate([
+    (0, common_1.Get)('joinChannelsForBufferClients'),
+    (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "joinChannelsforBufferClients", null);
+__decorate([
     (0, common_1.Get)('checkBufferClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'checkBufferClients' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Check Buffer Clients' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'checkBufferClients' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Buffer Clients' }),
     (0, swagger_1.ApiBody)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
