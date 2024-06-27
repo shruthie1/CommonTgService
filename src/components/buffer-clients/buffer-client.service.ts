@@ -128,7 +128,7 @@ export class BufferClientService {
             }
         })
         this.joinChannelQueue();
-        console.log("Joining Channel Triggered Succesfully")
+        console.log("Joining Channel Triggered Succesfully for ", clients.length);
         return "Initiated Joining channels"
     }
 
