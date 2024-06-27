@@ -9,6 +9,7 @@ export declare class ArchivedClientController {
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
     findAll(): Promise<Client[]>;
+    checkArchivedClients(): Promise<string>;
     findOne(mobile: string): Promise<Client>;
     update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(mobile: string): Promise<Client>;

@@ -32,6 +32,9 @@ let ArchivedClientController = class ArchivedClientController {
     async findAll() {
         return this.archivedclientService.findAll();
     }
+    async checkArchivedClients() {
+        return this.archivedclientService.checkArchivedClients();
+    }
     async findOne(mobile) {
         return this.archivedclientService.findOne(mobile);
     }
@@ -74,6 +77,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('checkArchivedClients'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "checkArchivedClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),

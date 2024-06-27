@@ -13,6 +13,6 @@ export declare class ArchivedClientService {
     update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(mobile: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;
-    checkArchivedClients(): Promise<void>;
+    checkArchivedClients(): Promise<string>;
     executeQuery(query: any): Promise<any>;
 }
