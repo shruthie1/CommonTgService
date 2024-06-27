@@ -30,6 +30,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
     }
+    async onModuleDestroy() {
+        await this.disconnectAll();
+    }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
     }

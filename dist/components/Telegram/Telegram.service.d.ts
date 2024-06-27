@@ -1,17 +1,19 @@
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
+import { OnModuleDestroy } from '@nestjs/common';
 import { Api } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
-export declare class TelegramService {
+export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private bufferClientService;
     private activeChannelsService;
     private channelsService;
     private static clientsMap;
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
+    onModuleDestroy(): Promise<void>;
     getActiveClientSetup(): {
         mobile: string;
         clientId: string;
