@@ -165,18 +165,23 @@ export function parseError(
   console.log(resp.error == 'RPCError' ? resp.message : resp);
   return resp
 }
+let botCount = 0;
 
-let botCount = 0
-export const ppplbot = () => {
-  let token;
-  if (botCount % 2 == 1) {
-    token = `bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY`
-  } else {
-    token = `bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA`
+export function ppplbot (chatId?: string, botToken?: string) {
+  let token = botToken;
+
+  if (!token) {
+    if (botCount % 2 === 1) {
+      token = 'bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY';
+    } else {
+      token = 'bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA';
+    }
+    botCount++;
   }
-
-  return `https://api.telegram.org/${token}/sendMessage?chat_id=-1001801844217`
-}
+  const targetChatId = chatId || '-1001801844217'; // Replace with actual chat ID
+  const apiUrl = `https://api.telegram.org/${token}/sendMessage?chat_id=${targetChatId}`;
+  return apiUrl;
+};
 
 export const defaultReactions = [
   '❤', '🔥', '👏', '🥰', '😁', '🤔',
