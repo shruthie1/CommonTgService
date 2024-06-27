@@ -416,7 +416,7 @@ class TelegramManager {
                 }
             }
         })
-        return latest
+        return (new Date(latest)).toISOString().split('T')[0];
     }
 
     async getContacts() {
