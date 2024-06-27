@@ -164,7 +164,6 @@ export class ClientService {
                         await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
                         console.log("Buffer Clients not available")
                     }
-                    await this.bufferClientService.remove(newBufferClient.mobile);
                     const newClientMe = await this.telegramService.getMe(newBufferClient.mobile)
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
@@ -193,6 +192,7 @@ export class ClientService {
         console.log("Updating Client session");
         await fetchWithTimeout(`${ppplbot()}&text=Final Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, userName, mainAccount: userName });
+        await this.bufferClientService.remove(mobile);
         if (fetchNumbersFromString(clientId) == '2') {
             const client2 = clientId.replace("1", "2")
             await this.update(client2, { mainAccount: userName });
