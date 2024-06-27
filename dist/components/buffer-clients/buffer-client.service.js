@@ -168,6 +168,7 @@ let BufferClientService = class BufferClientService {
             console.log(document);
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
+                await this.telegramService.updateUsername(document.mobile, '');
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);
@@ -185,6 +186,7 @@ let BufferClientService = class BufferClientService {
             catch (error) {
                 console.log(document.mobile, " :  false");
                 badIds.push(document.mobile);
+                this.remove(document.mobile);
                 await this.telegramService.deleteClient(document.mobile);
             }
         }
