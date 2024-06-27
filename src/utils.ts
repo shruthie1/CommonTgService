@@ -14,7 +14,7 @@ export function contains(str, arr) {
 };
 
 
-export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = {}, maxRetries = 0) {
+export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = {}, maxRetries = 1) {
   options.timeout = options.timeout || 50000;
   options.method = options.method || 'GET';
 
