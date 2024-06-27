@@ -106,7 +106,6 @@ __decorate([
 __decorate([
     (0, common_1.Get)('disconnectAll'),
     (0, swagger_1.ApiOperation)({ summary: 'Create and connect a new Telegram client' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
