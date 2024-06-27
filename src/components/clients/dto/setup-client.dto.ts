@@ -16,8 +16,10 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
-    @Transform(({ value }) => value === 'true' || value === true)
-    @Type(() => Boolean)
+    @Transform(({ value }) => {
+        console.log("archiveOld: ", value)
+        return value === 'true' || value === true
+    }) @Type(() => Boolean)
     @IsBoolean()
     archiveOld?: boolean = true;
 
@@ -32,7 +34,10 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
-    @Transform(({ value }) => { return value === 'true' || value === true })
+    @Transform(({ value }) => {
+        console.log("formalities: ", value)
+        return value === 'true' || value === true
+    })
     @IsBoolean()
     formalities?: boolean = true;
 }
