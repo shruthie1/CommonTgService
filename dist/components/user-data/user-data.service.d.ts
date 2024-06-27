@@ -11,5 +11,5 @@ export declare class UserDataService {
     update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
     remove(chatId: string): Promise<UserData>;
     search(filter: any): Promise<UserData[]>;
-    executeQuery(query: any): Promise<any>;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]>;
 }

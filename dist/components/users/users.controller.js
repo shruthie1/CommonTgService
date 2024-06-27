@@ -42,9 +42,10 @@ let UsersController = class UsersController {
     async remove(tgId) {
         return this.usersService.delete(tgId);
     }
-    async executeQuery(query) {
+    async executeQuery(requestBody) {
+        const { query, sort, limit, skip } = requestBody;
         try {
-            return await this.usersService.executeQuery(query);
+            return await this.usersService.executeQuery(query, sort, limit, skip);
         }
         catch (error) {
             throw error;
