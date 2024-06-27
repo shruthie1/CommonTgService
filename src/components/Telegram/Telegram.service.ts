@@ -2,7 +2,7 @@ import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import { contains, parseError, sleep } from "../../utils";
 import TelegramManager from "./TelegramManager";
-import { BadRequestException, HttpException, Inject, Injectable, forwardRef } from '@nestjs/common';
+import { BadRequestException, HttpException, Inject, Injectable, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
 import { Api, TelegramClient } from 'telegram';
 import { ActiveChannelsService } from '../activechannels/activechannels.service';
@@ -11,7 +11,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 
 @Injectable()
-export class TelegramService {
+export class TelegramService implements OnModuleDestroy {
     private static clientsMap: Map<string, TelegramManager> = new Map();
     constructor(
         @Inject(forwardRef(() => UsersService))
@@ -23,6 +23,9 @@ export class TelegramService {
         private channelsService: ChannelsService,
     ) { }
 
+    async onModuleDestroy() {
+        await this.disconnectAll();
+    }
 
     public getActiveClientSetup() {
         return TelegramManager.getActiveClientSetup();
