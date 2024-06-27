@@ -9,6 +9,7 @@ export declare class UserDataService {
     findAll(): Promise<UserData[]>;
     findOne(profile: string, chatId: string): Promise<UserData>;
     update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
+    updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
     remove(profile: string, chatId: string): Promise<UserData>;
     search(filter: any): Promise<UserData[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]>;

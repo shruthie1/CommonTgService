@@ -32,6 +32,9 @@ let UserDataController = class UserDataController {
     async findAll() {
         return this.userDataService.findAll();
     }
+    async updateAll(chatId, updateUserDataDto) {
+        return this.userDataService.updateAll(chatId, updateUserDataDto);
+    }
     async findOne(profile, chatId) {
         return this.userDataService.findOne(profile, chatId);
     }
@@ -75,6 +78,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Patch)('updateAll/:chatId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    __param(0, (0, common_1.Param)('chatId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_user_data_dto_1.UpdateUserDataDto]),
+    __metadata("design:returntype", Promise)
+], UserDataController.prototype, "updateAll", null);
 __decorate([
     (0, common_1.Get)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
