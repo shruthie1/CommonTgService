@@ -48,6 +48,9 @@ export class UserData {
     secondShow: boolean;
 
     @Prop({ required: true })
+    fullShow: boolean;
+
+    @Prop({ required: true })
     profile: string;
 }
 
