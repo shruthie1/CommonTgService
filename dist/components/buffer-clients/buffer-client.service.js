@@ -105,8 +105,8 @@ let BufferClientService = class BufferClientService {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
                 console.log("Started Joining for : ", document.mobile);
                 const channels = await client.channelInfo(true);
-                await this.update(document.mobile, { channels: channels.canSendTrueCount });
-                console.log("Existing Channels Length : ", channels.ids.length);
+                await this.update(document.mobile, { channels: channels.chatsArrayLength });
+                console.log("Existing Channels Length : ", channels.chatsArrayLength);
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 this.joinChannelMap.set(document.mobile, result);
@@ -172,7 +172,7 @@ let BufferClientService = class BufferClientService {
                 await telegramClient.updateProfile("Deleted Account", "Deleted Account");
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.deleteProfilePhotos();
-                const channels = await this.telegramService.getChannelInfo(mobile, true);
+                const channels = await this.telegramService.getChannelInfo(mobile);
                 await this.telegramService.deleteClient(mobile);
                 const bufferClient = {
                     tgId: user.tgId,
@@ -180,7 +180,7 @@ let BufferClientService = class BufferClientService {
                     mobile: user.mobile,
                     createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                     availableDate,
-                    channels: channels.ids.length,
+                    channels: channels.chatsArrayLength,
                     updatedDate: (new Date(Date.now())).toISOString().split('T')[0]
                 };
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
@@ -218,7 +218,7 @@ let BufferClientService = class BufferClientService {
                 }
                 else {
                     const channelinfo = await this.telegramService.getChannelInfo(document.mobile);
-                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.canSendTrueCount, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] });
+                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.chatsArrayLength, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] });
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile);
                 }
@@ -265,7 +265,7 @@ let BufferClientService = class BufferClientService {
                             mobile: document.mobile,
                             createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
-                            channels: channels.ids.length,
+                            channels: channels.chatsArrayLength,
                             updatedDate: (new Date(Date.now())).toISOString().split('T')[0],
                         };
                         await this.create(bufferClient);
