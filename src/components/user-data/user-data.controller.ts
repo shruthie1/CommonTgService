@@ -35,6 +35,16 @@ export class UserDataController {
     return this.userDataService.findAll();
   }
 
+  
+  @Patch('updateAll/:chatId')
+  @ApiOperation({ summary: 'Update user data by ID' })
+  //@apiresponse({ status: 200, description: 'The user data has been successfully updated.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async updateAll(@Param('chatId') chatId: string, @Body() updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
+    return this.userDataService.updateAll(chatId, updateUserDataDto);
+  }
+
+
   @Get(':profile/:chatId')
   @ApiOperation({ summary: 'Get user data by ID' })
   //@apiresponse({ status: 200, description: 'Return the user data.' })

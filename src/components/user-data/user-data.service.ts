@@ -35,6 +35,15 @@ export class UserDataService {
         return updatedUser;
     }
 
+    async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
+        delete updateUserDataDto['_id']
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+        if (!updatedUser) {
+            throw new NotFoundException(`UserData with ID "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+
     async remove(profile: string, chatId: string): Promise<UserData> {
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
         if (!deletedUser) {
