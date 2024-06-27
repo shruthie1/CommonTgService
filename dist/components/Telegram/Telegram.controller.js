@@ -27,6 +27,13 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return 'Client connected successfully';
     }
+    async disconnect(mobile) {
+        return await this.telegramService.deleteClient(mobile);
+    }
+    async disconnectAll() {
+        await this.telegramService.disconnectAll();
+        return 'Clients disconnected successfully';
+    }
     async getMessages(mobile, username, limit = 8) {
         await this.connectToTelegram(mobile);
         return this.telegramService.getMessages(mobile, username, limit);
@@ -87,6 +94,23 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "connectClient", null);
+__decorate([
+    (0, common_1.Get)('disconnect/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create and connect a new Telegram client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "disconnect", null);
+__decorate([
+    (0, common_1.Get)('disconnectAll'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create and connect a new Telegram client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "disconnectAll", null);
 __decorate([
     (0, common_1.Get)('messages/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get messages from Telegram' }),

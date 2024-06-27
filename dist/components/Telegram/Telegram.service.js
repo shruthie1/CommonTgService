@@ -123,7 +123,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = TelegramService_1.clientsMap.get(mobile);
         return await telegramClient.getchatId(username);
     }
-    async tryJoiningChannel(telegramClient, chatEntity) {
+    async tryJoiningChannel(mobile, chatEntity) {
+        const telegramClient = TelegramService_1.clientsMap.get(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -136,9 +137,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         catch (error) {
-            (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
+            (0, utils_1.parseError)(error, `${mobile} @${chatEntity.username} Channels ERR: `);
             if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber);
+                const channels = await this.getChannelInfo(mobile);
+                this.bufferClientService.update(mobile, { channels: channels.canSendTrueCount });
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
         }
