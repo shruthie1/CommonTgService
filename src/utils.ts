@@ -1,6 +1,5 @@
-import axios, { AxiosRequestConfig } from 'axios';
-// import * as https from 'https';
-// import { timeout } from 'rxjs';
+import axios, { AddressFamily, AxiosRequestConfig } from 'axios';
+
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -18,29 +17,44 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
   options.timeout = options.timeout || 50000;
   options.method = options.method || 'GET';
 
-  for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+  const fetchWithProtocol = async (url: string, version: AddressFamily) => {
     const source = axios.CancelToken.source();
     const id = setTimeout(() => {
       source.cancel(`Request timed out after ${options.timeout}ms`);
     }, options.timeout);
 
     try {
-      const response = await axios.request({
+      const response = await axios({
         ...options,
-        url: resource,
+        url,
         headers: { 'Content-Type': 'application/json' },
-        cancelToken: source.token
+        cancelToken: source.token,
+        family: version
       });
       clearTimeout(id);
       return response;
     } catch (error) {
       clearTimeout(id);
-      console.log("Error at URL: ", resource);
+      console.log(`Error at URL (IPv${version}): `, url);
       parseError(error);
       if (axios.isCancel(error)) {
-        console.log('Request canceled:', error.message, resource);
+        console.log('Request canceled:', error.message, url);
         return undefined;
       }
+      throw error; // Rethrow the error to handle retry logic outside
+    }
+  };
+
+  for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+    try {
+      // First try with IPv4
+      const responseIPv4 = await fetchWithProtocol(resource, 4);
+      if (responseIPv4) return responseIPv4;
+
+      // If IPv4 fails, try with IPv6
+      const responseIPv6 = await fetchWithProtocol(resource, 6);
+      if (responseIPv6) return responseIPv6;
+    } catch (error) {
       if (retryCount < maxRetries) {
         console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds delay

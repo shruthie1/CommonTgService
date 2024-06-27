@@ -312,7 +312,7 @@ class TelegramManager {
             data["firstName"] = firstName
         }
         if (about !== undefined) {
-            data["about"] = firstName
+            data["about"] = about
         }
         try {
             const result = await this.client.invoke(

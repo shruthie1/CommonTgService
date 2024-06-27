@@ -231,6 +231,35 @@ export class ClientService {
         }
     }
 
+
+    async updateClients() {
+        const clients = await this.findAll();
+        for (const client of clients) {
+            try {
+                await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
+                await telegramClient.updateUsername(client.userName);
+                await sleep(2000)
+                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+                await sleep(3000)
+                await telegramClient.deleteProfilePhotos();
+                await sleep(3000)
+                await telegramClient.updatePrivacy();
+                await sleep(3000)
+                const rootPath = process.cwd();
+                await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+                await sleep(3000);
+                await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+                await sleep(3000);
+                await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
+                await sleep(2000);
+                await this.telegramService.deleteClient(client.mobile)
+            } catch (error) {
+                parseError(error)
+            }
+        }
+    }
+
     async generateNewSession(phoneNumber) {
         try {
             console.log("String Generation started");

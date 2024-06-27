@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
+import { CloudinaryService } from '../../cloudinary';
 
 @Injectable()
 export class ConfigurationService {
@@ -30,6 +31,7 @@ export class ConfigurationService {
             process.env[key] = data[key];
         }
         console.log("finished setting env");
+        await CloudinaryService.getInstance("divya");
     }
 
     async update(updateClientDto: any): Promise<any> {

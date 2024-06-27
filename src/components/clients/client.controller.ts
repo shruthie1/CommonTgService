@@ -35,6 +35,13 @@ export class ClientController {
     return this.clientService.findAll();
   }
 
+  @Get('updateClients')
+  @ApiOperation({ summary: 'Get user data by ID' })
+  //@apiresponse({ status: 200, description: 'Return the user data.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async updateClients() {
+    return this.clientService.updateClients();
+  }
 
   @Get(':clientId')
   @ApiOperation({ summary: 'Get user data by ID' })
