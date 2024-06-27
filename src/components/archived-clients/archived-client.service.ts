@@ -57,10 +57,9 @@ export class ArchivedClientService {
         await this.telegramService.disconnectAll()
         await sleep(2000);
         const clients = await this.findAll();
-        for (const document of clients) {
-            console.log(document)
+        clients.map(async (document) => {
             try {
-                const cli = await this.telegramService.createClient(document.mobile, true, false);
+                await this.telegramService.createClient(document.mobile, true, false);
                 await this.telegramService.updateUsername(document.mobile, '');
                 await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                 await this.telegramService.deleteClient(document.mobile)
@@ -70,7 +69,9 @@ export class ArchivedClientService {
                 this.remove(document.mobile)
                 await this.telegramService.deleteClient(document.mobile)
             }
-        }
+        })
+
+        return "Triggered ArchiveClients check"
     }
 
     async executeQuery(query: any): Promise<any> {

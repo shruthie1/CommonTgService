@@ -226,7 +226,6 @@ export class BufferClientService {
             }
         }
         for (const document of clients) {
-            console.log(document)
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 //Comment below line after 1-2 days

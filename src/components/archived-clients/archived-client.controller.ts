@@ -33,6 +33,14 @@ export class ArchivedClientController {
   async findAll(): Promise<Client[]> {
     return this.archivedclientService.findAll();
   }
+  
+  @Get('checkArchivedClients')
+  @ApiOperation({ summary: 'Get user data by ID' })
+  //@apiresponse({ status: 200, description: 'Return the user data.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async checkArchivedClients(): Promise<string> {
+    return this.archivedclientService.checkArchivedClients();
+  }
 
   @Get(':mobile')
   @ApiOperation({ summary: 'Get user data by ID' })
