@@ -154,7 +154,7 @@ export class ClientService {
                         await this.telegramService.createClient(newBufferClient.mobile, false, true);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
-                        let baseUsername = `${userCaps}_Redd` + fetchNumbersFromString(clientId)
+                        let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId)
                         const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, baseUsername);
                         if (isArchived) {
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
