@@ -9,8 +9,8 @@ export declare class UserDataController {
     create(createUserDataDto: CreateUserDataDto): Promise<UserData>;
     search(query: SearchDto): Promise<UserData[]>;
     findAll(): Promise<UserData[]>;
-    findOne(chatId: string): Promise<UserData>;
-    update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
-    remove(chatId: string): Promise<UserData>;
+    findOne(profile: string, chatId: string): Promise<UserData>;
+    update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
+    remove(profile: string, chatId: string): Promise<UserData>;
     executeQuery(requestBody: any): Promise<any>;
 }
