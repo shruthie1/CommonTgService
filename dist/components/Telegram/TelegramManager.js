@@ -116,10 +116,10 @@ class TelegramManager {
         let totalCount = 0;
         this.channelArray.length = 0;
         console.log("TotalChats:", chats.total);
-        chats.forEach(async (chat) => {
+        for (const chat of chats) {
             if (chat.isChannel || chat.isGroup) {
                 try {
-                    const chatEntity = await chat.entity.toJSON();
+                    const chatEntity = chat.entity.toJSON();
                     const { broadcast, defaultBannedRights } = chatEntity;
                     totalCount++;
                     if (!broadcast && !defaultBannedRights?.sendMessages) {
@@ -134,7 +134,8 @@ class TelegramManager {
                     console.log((0, utils_1.parseError)(error));
                 }
             }
-        });
+        }
+        ;
         return {
             chatsArrayLength: totalCount,
             canSendTrueCount,
