@@ -183,8 +183,8 @@ export class BufferClientService {
                     badIds.push(document.mobile);
                     await this.remove(document.mobile);
                 } else {
-                    const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
+                    const channelinfo = await this.telegramService.getChannelInfo(document.mobile);
+                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.canSendTrueCount, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile)
                 }
