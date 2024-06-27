@@ -9,7 +9,7 @@ export declare class Client {
     password: string;
     repl: string;
     session: string;
-    userName: string;
+    username: string;
     clientId: string;
     deployKey: string;
     mainAccount: string;

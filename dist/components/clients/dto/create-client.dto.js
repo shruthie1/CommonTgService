@@ -49,7 +49,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username of the user' }),
     __metadata("design:type", String)
-], CreateClientDto.prototype, "userName", void 0);
+], CreateClientDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID of the user' }),
     __metadata("design:type", String)

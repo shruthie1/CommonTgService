@@ -44,7 +44,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ required: false }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
-], User.prototype, "userName", void 0);
+], User.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)(),
@@ -110,11 +110,6 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], User.prototype, "gender", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false }),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "username", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Boolean }),
     __metadata("design:type", Boolean)

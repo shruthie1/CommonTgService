@@ -5,7 +5,7 @@ export declare class SearchUserDto {
     session?: string;
     firstName?: string;
     lastName?: string;
-    userName?: string;
+    username?: string;
     channels?: number;
     personalChats?: number;
     demoGiven?: boolean;
@@ -18,7 +18,6 @@ export declare class SearchUserDto {
     photoCount?: number;
     videoCount?: number;
     gender?: string;
-    username?: string;
     otherPhotoCount?: number;
     otherVideoCount?: number;
     ownPhotoCount?: number;

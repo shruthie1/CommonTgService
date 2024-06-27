@@ -3,7 +3,7 @@ export declare class CreateUserDto {
     session: string;
     firstName: string;
     lastName?: string | null;
-    userName?: string | null;
+    username?: string | null;
     channels: number;
     personalChats: number;
     demoGiven: boolean;
@@ -19,7 +19,6 @@ export declare class CreateUserDto {
     photoCount: number;
     videoCount: number;
     gender?: string | null;
-    username?: string | null;
     otherPhotoCount: number;
     otherVideoCount: number;
     ownPhotoCount: number;

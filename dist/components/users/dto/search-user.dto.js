@@ -57,7 +57,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SearchUserDto.prototype, "userName", void 0);
+], SearchUserDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by channels count' }),
     (0, class_validator_1.IsOptional)(),
@@ -131,12 +131,6 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "gender", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by username' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchUserDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by other photo count' }),
     (0, class_validator_1.IsOptional)(),
