@@ -15,6 +15,7 @@ export declare class UserData {
     paidReply: boolean;
     demoGiven: boolean;
     secondShow: boolean;
+    fullShow: boolean;
     profile: string;
 }
 export declare const UserDataSchema: import("mongoose").Schema<UserData, import("mongoose").Model<UserData, any, any, any, Document<unknown, any, UserData> & UserData & {
