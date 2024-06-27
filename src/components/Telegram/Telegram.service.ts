@@ -172,6 +172,9 @@ export class TelegramService {
                 }
             } catch (error) {
                 parseError(error, `${chatEntity.username} - Channels ERR: `);
+                if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
+                    clearTimeout(this.joinChannelTimeoutId)
+                }
                 await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             }
         };
