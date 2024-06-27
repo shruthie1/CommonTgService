@@ -141,7 +141,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber);
                 const channels = await this.getChannelInfo(mobile);
-                this.bufferClientService.update(mobile, { channels: channels.canSendTrueCount });
+                this.bufferClientService.update(mobile, { channels: channels.chatsArrayLength });
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
         }
