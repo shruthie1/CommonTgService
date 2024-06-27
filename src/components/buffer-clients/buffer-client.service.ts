@@ -114,8 +114,8 @@ export class BufferClientService {
                 const client = await this.telegramService.createClient(document.mobile, false, false);
                 console.log("Started Joining for : ", document.mobile)
                 const channels = await client.channelInfo(true);
-                await this.update(document.mobile, { channels: channels.chatsArrayLength });
-                console.log("Existing Channels Length : ", channels.chatsArrayLength);
+                console.log("Existing Channels Length : ", channels.ids.length);
+                await this.update(document.mobile, { channels: channels.ids.length });
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
                 this.joinChannelMap.set(document.mobile, result);
@@ -196,7 +196,7 @@ export class BufferClientService {
                     mobile: user.mobile,
                     createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                     availableDate,
-                    channels: channels.chatsArrayLength,
+                    channels: channels.ids.length,
                     updatedDate: (new Date(Date.now())).toISOString().split('T')[0]
                 }
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
@@ -233,7 +233,7 @@ export class BufferClientService {
                     await this.remove(document.mobile);
                 } else {
                     const channelinfo = await this.telegramService.getChannelInfo(document.mobile);
-                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.chatsArrayLength, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
+                    await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile)
                 }
@@ -280,7 +280,7 @@ export class BufferClientService {
                             mobile: document.mobile,
                             createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
-                            channels: channels.chatsArrayLength,
+                            channels: channels.ids.length,
                             updatedDate: (new Date(Date.now())).toISOString().split('T')[0],
                         }
                         await this.create(bufferClient);
