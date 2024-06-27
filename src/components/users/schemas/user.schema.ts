@@ -24,7 +24,7 @@ export class User {
 
   @ApiProperty({ required: false })
   @Prop()
-  userName: string | null;
+  username: string | null;
 
   @ApiProperty()
   @Prop()
@@ -77,10 +77,6 @@ export class User {
   @ApiProperty({ required: false })
   @Prop()
   gender: string | null;
-
-  @ApiProperty({ required: false })
-  @Prop()
-  username: string | null;
 
   @Prop({ required: false, type: Boolean })
   twoFA: boolean = false

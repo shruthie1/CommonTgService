@@ -40,7 +40,7 @@ export class Client{
   
     @ApiProperty({ example: 'ShruthiRedd2', description: 'Username of the user' })
     @Prop({ required: true })
-    userName: string;
+    username: string;
   
     @ApiProperty({ example: 'shruthi1', description: 'Client ID of the user' })
     @Prop({ required: true })

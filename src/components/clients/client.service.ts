@@ -187,15 +187,15 @@ export class ClientService {
         }
     }
 
-    async updateClientSession(session: string, mobile: string, userName: string, clientId: string) {
+    async updateClientSession(session: string, mobile: string, username: string, clientId: string) {
         this.telegramService.setActiveClientSetup(undefined)
         console.log("Updating Client session");
         await fetchWithTimeout(`${ppplbot()}&text=Final Details Recived`);
-        const newClient = await this.update(clientId, { session: session, mobile, userName, mainAccount: userName });
+        const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
         await this.bufferClientService.remove(mobile);
         if (fetchNumbersFromString(clientId) == '2') {
             const client2 = clientId.replace("1", "2")
-            await this.update(client2, { mainAccount: userName });
+            await this.update(client2, { mainAccount: username });
         }
         console.log("Update finished");
         await fetchWithTimeout(`${ppplbot()}&text=Update finished`);
@@ -212,7 +212,7 @@ export class ClientService {
             await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await sleep(2000)
-            await telegramClient.updateUsername(client.userName);
+            await telegramClient.updateUsername(client.username);
             await sleep(2000)
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             await sleep(3000)

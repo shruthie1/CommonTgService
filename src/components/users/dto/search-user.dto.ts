@@ -36,7 +36,7 @@ export class SearchUserDto {
   @ApiPropertyOptional({ description: 'Filter by username' })
   @IsOptional()
   @IsString()
-  userName?: string;
+  username?: string;
 
   @ApiPropertyOptional({ description: 'Filter by channels count' })
   @IsOptional()
@@ -98,11 +98,6 @@ export class SearchUserDto {
   @IsOptional()
   @IsString()
   gender?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by username' })
-  @IsOptional()
-  @IsString()
-  username?: string;
 
   @ApiPropertyOptional({ description: 'Filter by other photo count' })
   @IsOptional()

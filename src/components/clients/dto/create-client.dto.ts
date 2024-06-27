@@ -26,7 +26,7 @@ export class CreateClientDto {
     readonly session: string;
   
     @ApiProperty({ example: 'ShruthiRedd2', description: 'Username of the user' })
-    readonly userName: string;
+    readonly username: string;
   
     @ApiProperty({ example: 'shruthi1', description: 'Client ID of the user' })
     readonly clientId: string;
