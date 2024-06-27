@@ -86,7 +86,7 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs(params:IterDialogsParams): Promise<TotalList<Dialog>> {
+    async getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>> {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats
