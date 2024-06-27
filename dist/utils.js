@@ -23,29 +23,43 @@ function contains(str, arr) {
 async function fetchWithTimeout(resource, options = {}, maxRetries = 1) {
     options.timeout = options.timeout || 50000;
     options.method = options.method || 'GET';
-    for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+    const fetchWithProtocol = async (url, version) => {
         const source = axios_1.default.CancelToken.source();
         const id = setTimeout(() => {
             source.cancel(`Request timed out after ${options.timeout}ms`);
         }, options.timeout);
         try {
-            const response = await axios_1.default.request({
+            const response = await (0, axios_1.default)({
                 ...options,
-                url: resource,
+                url,
                 headers: { 'Content-Type': 'application/json' },
-                cancelToken: source.token
+                cancelToken: source.token,
+                family: version
             });
             clearTimeout(id);
             return response;
         }
         catch (error) {
             clearTimeout(id);
-            console.log("Error at URL: ", resource);
+            console.log(`Error at URL (IPv${version}): `, url);
             parseError(error);
             if (axios_1.default.isCancel(error)) {
-                console.log('Request canceled:', error.message, resource);
+                console.log('Request canceled:', error.message, url);
                 return undefined;
             }
+            throw error;
+        }
+    };
+    for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+        try {
+            const responseIPv4 = await fetchWithProtocol(resource, 4);
+            if (responseIPv4)
+                return responseIPv4;
+            const responseIPv6 = await fetchWithProtocol(resource, 6);
+            if (responseIPv6)
+                return responseIPv6;
+        }
+        catch (error) {
             if (retryCount < maxRetries) {
                 console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, 2000));

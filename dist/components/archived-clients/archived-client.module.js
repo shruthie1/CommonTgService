@@ -14,6 +14,7 @@ const Telegram_module_1 = require("../Telegram/Telegram.module");
 const archived_client_service_1 = require("./archived-client.service");
 const archived_client_controller_1 = require("./archived-client.controller");
 const init_module_1 = require("../ConfigurationInit/init.module");
+const client_module_1 = require("../clients/client.module");
 let ArchivedClientModule = class ArchivedClientModule {
 };
 exports.ArchivedClientModule = ArchivedClientModule;
@@ -22,7 +23,8 @@ exports.ArchivedClientModule = ArchivedClientModule = __decorate([
         imports: [
             init_module_1.initModule,
             mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
-            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule)
+            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule)
         ],
         controllers: [archived_client_controller_1.ArchivedClientController],
         providers: [archived_client_service_1.ArchivedClientService],

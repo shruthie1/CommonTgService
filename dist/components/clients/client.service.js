@@ -218,6 +218,8 @@ let ClientService = class ClientService {
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
+            await telegramClient.updateUsername(client.userName);
+            await (0, Helpers_1.sleep)(2000);
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.deleteProfilePhotos();
@@ -235,6 +237,12 @@ let ClientService = class ClientService {
         }
         catch (error) {
             (0, utils_1.parseError)(error);
+        }
+    }
+    async updateClients() {
+        const clients = await this.findAll();
+        for (const client of clients) {
+            await this.updateClient(client.clientId);
         }
     }
     async generateNewSession(phoneNumber) {

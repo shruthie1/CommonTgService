@@ -18,10 +18,12 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
+const client_service_1 = require("../clients/client.service");
 let ArchivedClientService = class ArchivedClientService {
-    constructor(archivedclientModel, telegramService) {
+    constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
         this.telegramService = telegramService;
+        this.clientService = clientService;
     }
     async create(createClientDto) {
         const createdUser = new this.archivedclientModel(createClientDto);
@@ -59,19 +61,26 @@ let ArchivedClientService = class ArchivedClientService {
     async checkArchivedClients() {
         await this.telegramService.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
-        const clients = await this.findAll();
-        clients.map(async (document) => {
-            try {
-                await this.telegramService.createClient(document.mobile, true, false);
-                await this.telegramService.updateUsername(document.mobile, '');
-                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
-                await this.telegramService.deleteClient(document.mobile);
-                await (0, Helpers_1.sleep)(2000);
+        const archivedClients = await this.findAll();
+        const clients = await this.clientService.findAll();
+        const clientIds = clients.map(client => client.mobile);
+        archivedClients.map(async (document) => {
+            if (!clientIds.includes(document.mobile)) {
+                try {
+                    await this.telegramService.createClient(document.mobile, true, false);
+                    await this.telegramService.updateUsername(document.mobile, '');
+                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                    await this.telegramService.deleteClient(document.mobile);
+                    await (0, Helpers_1.sleep)(2000);
+                }
+                catch (error) {
+                    console.log(document.mobile, " :  false");
+                    this.remove(document.mobile);
+                    await this.telegramService.deleteClient(document.mobile);
+                }
             }
-            catch (error) {
-                console.log(document.mobile, " :  false");
-                this.remove(document.mobile);
-                await this.telegramService.deleteClient(document.mobile);
+            else {
+                console.log("Number is a Active Client");
             }
         });
         return "Triggered ArchiveClients check";
@@ -93,7 +102,9 @@ exports.ArchivedClientService = ArchivedClientService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('ArchivedArchivedClientsModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        Telegram_service_1.TelegramService])
+        Telegram_service_1.TelegramService,
+        client_service_1.ClientService])
 ], ArchivedClientService);
 //# sourceMappingURL=archived-client.service.js.map

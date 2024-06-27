@@ -16,6 +16,7 @@ exports.ConfigurationService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const cloudinary_1 = require("../../cloudinary");
 let ConfigurationService = class ConfigurationService {
     constructor(configurationModel) {
         this.configurationModel = configurationModel;
@@ -40,6 +41,7 @@ let ConfigurationService = class ConfigurationService {
             process.env[key] = data[key];
         }
         console.log("finished setting env");
+        await cloudinary_1.CloudinaryService.getInstance("divya");
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
