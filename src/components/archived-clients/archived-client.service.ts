@@ -4,10 +4,14 @@ import { Model } from 'mongoose';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { Client, ClientDocument } from '../clients/schemas/client.schema';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
+import { TelegramService } from '../Telegram/Telegram.service';
+import { sleep } from 'telegram/Helpers';
 
 @Injectable()
 export class ArchivedClientService {
     constructor(@InjectModel('ArchivedArchivedClientsModule') private archivedclientModel: Model<ClientDocument>,
+        @Inject(forwardRef(() => TelegramService))
+        private telegramService: TelegramService,
     ) { }
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
@@ -27,7 +31,7 @@ export class ArchivedClientService {
 
     async update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto["_id"]
-        console.log({...updateClientDto});
+        console.log({ ...updateClientDto });
         const updatedUser = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         return updatedUser;
     }
@@ -47,6 +51,26 @@ export class ArchivedClientService {
         }
         console.log(filter)
         return this.archivedclientModel.find(filter).exec();
+    }
+
+    async checkArchivedClients() {
+        await this.telegramService.disconnectAll()
+        await sleep(2000);
+        const clients = await this.findAll();
+        for (const document of clients) {
+            console.log(document)
+            try {
+                const cli = await this.telegramService.createClient(document.mobile, true, false);
+                await this.telegramService.updateUsername(document.mobile, '');
+                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                await this.telegramService.deleteClient(document.mobile)
+                await sleep(2000);
+            } catch (error) {
+                console.log(document.mobile, " :  false");
+                this.remove(document.mobile)
+                await this.telegramService.deleteClient(document.mobile)
+            }
+        }
     }
 
     async executeQuery(query: any): Promise<any> {

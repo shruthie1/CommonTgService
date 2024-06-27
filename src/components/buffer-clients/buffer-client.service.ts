@@ -188,7 +188,7 @@ export class BufferClientService {
                 await telegramClient.updateProfile("Deleted Account", "Deleted Account");
                 await sleep(3000)
                 await telegramClient.deleteProfilePhotos();
-                const channels = await this.telegramService.getChannelInfo(mobile)
+                const channels = await this.telegramService.getChannelInfo(mobile, true)
                 await this.telegramService.deleteClient(mobile)
                 const bufferClient = {
                     tgId: user.tgId,
@@ -227,12 +227,13 @@ export class BufferClientService {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 //Comment below line after 1-2 days
                 await this.telegramService.updateUsername(document.mobile, '');
+                await this.telegramService.updateNameandBio(document.mobile,'Deleted Account');
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);
                     await this.remove(document.mobile);
                 } else {
-                    const channelinfo = await this.telegramService.getChannelInfo(document.mobile);
+                    const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
                     await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
                     console.log(document.mobile, " :  ALL Good");
                     goodIds.push(document.mobile)

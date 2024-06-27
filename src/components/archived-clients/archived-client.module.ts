@@ -10,7 +10,7 @@ import { initModule } from '../ConfigurationInit/init.module';
   imports: [
     initModule,
     MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: ClientSchema }]),
-    // forwardRef(() => TelegramModule)
+    forwardRef(() => TelegramModule)
   ],
   controllers: [ArchivedClientController],
   providers: [ArchivedClientService],

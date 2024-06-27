@@ -184,7 +184,7 @@ export class TelegramService implements OnModuleDestroy {
             parseError(error, `${mobile} @${chatEntity.username} Channels ERR: `);
             if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber)
-                const channels = await this.getChannelInfo(mobile);
+                const channels = await this.getChannelInfo(mobile, true);
                 this.bufferClientService.update(mobile, { channels: channels.ids.length });
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
@@ -312,7 +312,7 @@ export class TelegramService implements OnModuleDestroy {
     async updateNameandBio(
         mobile: string,
         firstName: string,
-        about: string,
+        about?: string,
     ) {
         const telegramClient = TelegramService.clientsMap.get(mobile)
         try {
