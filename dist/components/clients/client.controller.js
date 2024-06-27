@@ -33,6 +33,9 @@ let ClientController = class ClientController {
     async findAll() {
         return this.clientService.findAll();
     }
+    async updateClient(clientId) {
+        return this.clientService.updateClient(clientId);
+    }
     async findOne(clientId) {
         return this.clientService.findOne(clientId);
     }
@@ -79,6 +82,14 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('updateClient/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "updateClient", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),

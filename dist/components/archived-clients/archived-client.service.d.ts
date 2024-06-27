@@ -3,10 +3,12 @@ import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { Client, ClientDocument } from '../clients/schemas/client.schema';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { TelegramService } from '../Telegram/Telegram.service';
+import { ClientService } from '../clients/client.service';
 export declare class ArchivedClientService {
     private archivedclientModel;
     private telegramService;
-    constructor(archivedclientModel: Model<ClientDocument>, telegramService: TelegramService);
+    private clientService;
+    constructor(archivedclientModel: Model<ClientDocument>, telegramService: TelegramService, clientService: ClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findOne(mobile: string): Promise<Client>;
