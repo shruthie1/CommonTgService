@@ -49,6 +49,10 @@ export class ClientService {
         }
     }
 
+    async refreshMap() {
+        this.clientsMap.clear()
+    }
+
     async findOne(clientId: string): Promise<Client> {
         const client = this.clientsMap.get(clientId)
         if (client) {
@@ -237,7 +241,7 @@ export class ClientService {
     async updateClients() {
         const clients = await this.findAll();
         for (const client of clients) {
-           await this.updateClient(client.clientId)
+            await this.updateClient(client.clientId)
         }
     }
 
