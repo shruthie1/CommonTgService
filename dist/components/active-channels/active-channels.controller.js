@@ -14,7 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActiveChannelsController = void 0;
 const common_1 = require("@nestjs/common");
-const activechannels_service_1 = require("./activechannels.service");
+const active_channels_service_1 = require("./active-channels.service");
 const create_active_channel_dto_1 = require("./dto/create-active-channel.dto");
 const update_active_channel_dto_1 = require("./dto/update-active-channel.dto");
 const swagger_1 = require("@nestjs/swagger");
@@ -151,6 +151,6 @@ __decorate([
 exports.ActiveChannelsController = ActiveChannelsController = __decorate([
     (0, swagger_1.ApiTags)('Active Channels'),
     (0, common_1.Controller)('active-channels'),
-    __metadata("design:paramtypes", [activechannels_service_1.ActiveChannelsService])
+    __metadata("design:paramtypes", [active_channels_service_1.ActiveChannelsService])
 ], ActiveChannelsController);
-//# sourceMappingURL=activechannels.controller.js.map
+//# sourceMappingURL=active-channels.controller.js.map

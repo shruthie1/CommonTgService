@@ -3,7 +3,7 @@ import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
 import { OnModuleDestroy } from '@nestjs/common';
 import { Api } from 'telegram';
-import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 export declare class TelegramService implements OnModuleDestroy {

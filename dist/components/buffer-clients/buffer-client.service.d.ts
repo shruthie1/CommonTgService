@@ -3,7 +3,7 @@ import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
-import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 export declare class BufferClientService {

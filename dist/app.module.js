@@ -13,7 +13,7 @@ const user_data_module_1 = require("./components/user-data/user-data.module");
 const client_module_1 = require("./components/clients/client.module");
 const Telegram_module_1 = require("./components/Telegram/Telegram.module");
 const buffer_client_module_1 = require("./components/buffer-clients/buffer-client.module");
-const activechannels_module_1 = require("./components/activechannels/activechannels.module");
+const active_channels_module_1 = require("./components/active-channels/active-channels.module");
 const archived_client_module_1 = require("./components/archived-clients/archived-client.module");
 const init_module_1 = require("./components/ConfigurationInit/init.module");
 const channels_module_1 = require("./components/channels/channels.module");
@@ -27,7 +27,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             init_module_1.initModule,
             Telegram_module_1.TelegramModule,
-            activechannels_module_1.ActiveChannelsModule,
+            active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
@@ -39,7 +39,7 @@ exports.AppModule = AppModule = __decorate([
         providers: [app_service_1.AppService],
         exports: [
             Telegram_module_1.TelegramModule,
-            activechannels_module_1.ActiveChannelsModule,
+            active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,

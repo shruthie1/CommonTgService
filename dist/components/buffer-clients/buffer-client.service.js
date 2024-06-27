@@ -19,7 +19,7 @@ const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
-const activechannels_service_1 = require("../activechannels/activechannels.service");
+const active_channels_service_1 = require("../active-channels/active-channels.service");
 const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
 let BufferClientService = class BufferClientService {
@@ -311,12 +311,12 @@ exports.BufferClientService = BufferClientService = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('bufferClientModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => activechannels_service_1.ActiveChannelsService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
-        activechannels_service_1.ActiveChannelsService,
+        active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService])
 ], BufferClientService);
 //# sourceMappingURL=buffer-client.service.js.map

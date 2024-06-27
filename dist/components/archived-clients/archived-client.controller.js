@@ -120,7 +120,7 @@ __decorate([
 ], ArchivedClientController.prototype, "executeQuery", null);
 exports.ArchivedClientController = ArchivedClientController = __decorate([
     (0, swagger_1.ApiTags)('Archived Clients'),
-    (0, common_1.Controller)('ArchivedClients'),
+    (0, common_1.Controller)('archived-clients'),
     __metadata("design:paramtypes", [archived_client_service_1.ArchivedClientService])
 ], ArchivedClientController);
 //# sourceMappingURL=archived-client.controller.js.map

@@ -137,4 +137,4 @@ exports.ActiveChannelsService = ActiveChannelsService = __decorate([
     __param(0, (0, mongoose_1.InjectModel)(active_channel_schema_1.ActiveChannel.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])
 ], ActiveChannelsService);
-//# sourceMappingURL=activechannels.service.js.map
+//# sourceMappingURL=active-channels.service.js.map

@@ -135,7 +135,7 @@ __decorate([
 ], ClientController.prototype, "executeQuery", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
-    (0, common_1.Controller)('client'),
+    (0, common_1.Controller)('clients'),
     __metadata("design:paramtypes", [client_service_1.ClientService])
 ], ClientController);
 //# sourceMappingURL=client.controller.js.map

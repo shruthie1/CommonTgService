@@ -20,7 +20,7 @@ const utils_1 = require("../../utils");
 const TelegramManager_1 = require("./TelegramManager");
 const common_1 = require("@nestjs/common");
 const cloudinary_1 = require("../../cloudinary");
-const activechannels_service_1 = require("../activechannels/activechannels.service");
+const active_channels_service_1 = require("../active-channels/active-channels.service");
 const path = require("path");
 const channels_service_1 = require("../channels/channels.service");
 let TelegramService = TelegramService_1 = class TelegramService {
@@ -281,11 +281,11 @@ TelegramService.clientsMap = new Map();
 exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => activechannels_service_1.ActiveChannelsService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         buffer_client_service_1.BufferClientService,
-        activechannels_service_1.ActiveChannelsService,
+        active_channels_service_1.ActiveChannelsService,
         channels_service_1.ChannelsService])
 ], TelegramService);
 //# sourceMappingURL=Telegram.service.js.map
