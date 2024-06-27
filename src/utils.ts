@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import * as https from 'https';
-import { timeout } from 'rxjs';
+// import * as https from 'https';
+// import { timeout } from 'rxjs';
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -15,8 +15,8 @@ export function contains(str, arr) {
 
 
 export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = {}, maxRetries = 0) {
-  options["timeout"] = options['timeout'] || 50000;
-  options["method"] = options['method'] || 'GET';
+  options.timeout = options.timeout || 50000;
+  options.method = options.method || 'GET';
 
   for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
     const source = axios.CancelToken.source();
@@ -28,7 +28,6 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       const response = await axios.request({
         ...options,
         url: resource,
-        httpsAgent: new https.Agent({ keepAlive: true }),
         headers: { 'Content-Type': 'application/json' },
         cancelToken: source.token
       });
@@ -40,6 +39,7 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       parseError(error);
       if (axios.isCancel(error)) {
         console.log('Request canceled:', error.message, resource);
+        break;  // No point in retrying if request was cancelled due to timeout
       }
       if (retryCount < maxRetries) {
         console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
