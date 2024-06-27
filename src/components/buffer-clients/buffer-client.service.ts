@@ -134,28 +134,32 @@ export class BufferClientService {
 
     async joinChannelQueue() {
         this.joinChannelIntervalId = setInterval(async () => {
-            console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
-
             const keys = Array.from(this.joinChannelMap.keys());
-            const promises = keys.map(async mobile => {
-                const channels = this.joinChannelMap.get(mobile);
-                if (channels && channels.length > 0) {
-                    const channel = channels.shift();
-                    console.log(mobile, " Pending Channels :", channels.length)
-                    this.joinChannelMap.set(mobile, channels);
-                    try {
-                        await this.telegramService.createClient(mobile, false, false);
-                        console.log(mobile, " Trying to join :", channel.username);
-                        await this.telegramService.tryJoiningChannel(mobile, channel);
-                    } catch (error) {
-                        parseError(error, "Outer Err: ");
+            if (keys.length > 0) {
+                console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
+
+                const promises = keys.map(async mobile => {
+                    const channels = this.joinChannelMap.get(mobile);
+                    if (channels && channels.length > 0) {
+                        const channel = channels.shift();
+                        console.log(mobile, " Pending Channels :", channels.length)
+                        this.joinChannelMap.set(mobile, channels);
+                        try {
+                            await this.telegramService.createClient(mobile, false, false);
+                            console.log(mobile, " Trying to join :", channel.username);
+                            await this.telegramService.tryJoiningChannel(mobile, channel);
+                        } catch (error) {
+                            parseError(error, "Outer Err: ");
+                        }
+                        await this.telegramService.deleteClient(mobile);
+                    } else {
+                        this.joinChannelMap.delete(mobile);
                     }
-                    await this.telegramService.deleteClient(mobile);
-                } else {
-                    this.joinChannelMap.delete(mobile);
-                }
-            });
-            await Promise.all(promises);
+                });
+                await Promise.all(promises);
+            } else {
+                this.clearJoinChannelInterval()
+            }
         }, 3 * 60 * 1000);
     }
 
@@ -227,7 +231,7 @@ export class BufferClientService {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 //Comment below line after 1-2 days
                 await this.telegramService.updateUsername(document.mobile, '');
-                await this.telegramService.updateNameandBio(document.mobile,'Deleted Account');
+                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                 const hasPassword = await cli.hasPassword();
                 if (!hasPassword) {
                     badIds.push(document.mobile);
