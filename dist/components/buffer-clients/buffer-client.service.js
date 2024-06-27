@@ -29,6 +29,7 @@ let BufferClientService = class BufferClientService {
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.clientService = clientService;
+        this.joinChannelMap = new Map();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel(bufferClient);
@@ -87,6 +88,12 @@ let BufferClientService = class BufferClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    removeFromBufferMap(key) {
+        this.joinChannelMap.delete(key);
+    }
+    clearBufferMap() {
+        this.joinChannelMap.clear();
+    }
     async joinchannelForBufferClients() {
         console.log("Joining Channel Started");
         await this.telegramService.disconnectAll();
@@ -100,9 +107,8 @@ let BufferClientService = class BufferClientService {
                 console.log("Existing Channels Length : ", channels.ids.length);
                 const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                 const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
-                console.log("DbChannelsLen: ", result.length);
-                let resp = '';
-                this.telegramService.joinChannels(document.mobile, result);
+                this.joinChannelMap.set(document.mobile, result);
+                this.joinChannelQueue();
             }
             catch (error) {
                 (0, utils_1.parseError)(error);
@@ -110,6 +116,37 @@ let BufferClientService = class BufferClientService {
         });
         console.log("Joining Channel Triggered Succesfully");
         return "Initiated Joining channels";
+    }
+    async joinChannelQueue() {
+        this.joinChannelIntervalId = setInterval(async () => {
+            console.log("In JOIN CHANNEL interval");
+            const keys = Array.from(this.joinChannelMap.keys());
+            const promises = keys.map(async (key) => {
+                const channels = this.joinChannelMap.get(key);
+                if (channels && channels.length > 0) {
+                    const channel = channels.shift();
+                    this.joinChannelMap.set(key, channels);
+                    try {
+                        const telegramClient = await this.telegramService.createClient(key);
+                        console.log(key, " Trying to join :", channel.username);
+                        await this.telegramService.tryJoiningChannel(telegramClient, channel);
+                    }
+                    catch (error) {
+                        (0, utils_1.parseError)(error, "Outer Err: ");
+                    }
+                }
+                else {
+                    this.joinChannelMap.delete(key);
+                }
+            });
+            await Promise.all(promises);
+        }, 3 * 60 * 1000);
+    }
+    clearJoinChannelInterval() {
+        if (this.joinChannelIntervalId) {
+            clearInterval(this.joinChannelIntervalId);
+            this.joinChannelIntervalId = null;
+        }
     }
     async setAsBufferClient(mobile, availableDate = (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0]) {
         const user = (await this.usersService.search({ mobile }))[0];
