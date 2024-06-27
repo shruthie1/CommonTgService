@@ -7,7 +7,7 @@ import { SearchClientDto } from '../clients/dto/search-client.dto';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
 
 @ApiTags('Archived Clients')
-@Controller('ArchivedClients')
+@Controller('archived-clients')
 export class ArchivedClientController {
   constructor(private readonly archivedclientService: ArchivedClientService) { }
 

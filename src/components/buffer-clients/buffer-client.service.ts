@@ -7,7 +7,7 @@ import { BufferClient, BufferClientDocument } from './schemas/buffer-client.sche
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
-import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { parseError } from '../../utils';
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';

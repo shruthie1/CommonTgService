@@ -8,7 +8,7 @@ import { SetupClientQueryDto } from './dto/setup-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @ApiTags('Clients')
-@Controller('client')
+@Controller('clients')
 export class ClientController {
   constructor(private readonly clientService: ClientService) { }
 

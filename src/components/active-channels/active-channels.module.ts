@@ -1,8 +1,8 @@
 // src/activechannels/activechannels.module.ts
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ActiveChannelsService } from './activechannels.service';
-import { ActiveChannelsController } from './activechannels.controller';
+import { ActiveChannelsService } from './active-channels.service';
+import { ActiveChannelsController } from './active-channels.controller';
 import { ActiveChannel, ActiveChannelSchema } from './schemas/active-channel.schema';
 import { initModule } from '../ConfigurationInit/init.module';
 

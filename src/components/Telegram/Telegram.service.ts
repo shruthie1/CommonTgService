@@ -5,7 +5,7 @@ import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
 import { Api, TelegramClient } from 'telegram';
-import { ActiveChannelsService } from '../activechannels/activechannels.service';
+import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';

@@ -3,7 +3,7 @@ import { TelegramController } from './Telegram.controller';
 import { UsersModule } from '../users/users.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { TelegramService } from './Telegram.service';
-import { ActiveChannelsModule } from '../activechannels/activechannels.module';
+import { ActiveChannelsModule } from '../active-channels/active-channels.module';
 import { ChannelsModule } from '../channels/channels.module';
 
 @Module({

@@ -1,6 +1,6 @@
 // src/activechannels/activechannels.controller.ts
 import { Controller, Get, Post, Body, Patch, Param, Delete, NotFoundException, Query, BadRequestException } from '@nestjs/common';
-import { ActiveChannelsService } from './activechannels.service';
+import { ActiveChannelsService } from './active-channels.service';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
