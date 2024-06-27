@@ -9,7 +9,7 @@ import { UpdateUserDataDto } from './dto/update-user-data.dto';
 @ApiTags('UserData of TG clients')
 @Controller('userData')
 export class UserDataController {
-  constructor(private readonly userDataService: UserDataService) {}
+  constructor(private readonly userDataService: UserDataService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create user data' })
@@ -64,9 +64,10 @@ export class UserDataController {
   //@apiresponse({ status: 200, description: 'Query executed successfully.' })
   //@apiresponse({ status: 400, description: 'Invalid query.' })
   //@apiresponse({ status: 500, description: 'Internal server error.' })
-  async executeQuery(@Body() query: any): Promise<any> {
+  async executeQuery(@Body() requestBody: any): Promise<any> {
     try {
-      return await this.userDataService.executeQuery(query);
+      const { query, sort, limit, skip } = requestBody;
+      return await this.userDataService.executeQuery(query, sort, limit, skip);
     } catch (error) {
       throw error;  // You might want to handle errors more gracefully
     }

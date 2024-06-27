@@ -113,12 +113,13 @@ export class ActiveChannelsService {
     }
   }
 
-  async executeQuery(query: any, sort?: any, limit?: number): Promise<ActiveChannel[]> {
+  async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]> {
     try {
       if (!query) {
         throw new BadRequestException('Query is invalid.');
       }
       const queryExec = this.activeChannelModel.find(query);
+
       if (sort) {
         queryExec.sort(sort);
       }
@@ -127,9 +128,14 @@ export class ActiveChannelsService {
         queryExec.limit(limit);
       }
 
+      if (skip) {
+        queryExec.skip(skip);
+      }
+
       return await queryExec.exec();
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 }

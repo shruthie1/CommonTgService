@@ -55,9 +55,10 @@ export class UsersController {
   //@apiresponse({ status: 200, description: 'Query executed successfully.' })
   //@apiresponse({ status: 400, description: 'Invalid query.' })
   //@apiresponse({ status: 500, description: 'Internal server error.' })
-  async executeQuery(@Body() query: any): Promise<any> {
+  async executeQuery(@Body() requestBody: any): Promise<any> {
+    const { query, sort, limit, skip } = requestBody;
     try {
-      return await this.usersService.executeQuery(query);
+      return await this.usersService.executeQuery(query, sort, limit, skip);
     } catch (error) {
       throw error;  // You might want to handle errors more gracefully
     }

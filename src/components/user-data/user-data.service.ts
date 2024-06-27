@@ -52,14 +52,28 @@ export class UserDataService {
         return this.userDataModel.find(filter).exec();
     }
 
-  async executeQuery(query: any): Promise<any> {
-    try {
-      if (!query) {
-        throw new BadRequestException('Query is invalid.');
+    async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]> {
+        try {
+          if (!query) {
+            throw new BadRequestException('Query is invalid.');
+          }
+          const queryExec = this.userDataModel.find(query);
+    
+          if (sort) {
+            queryExec.sort(sort);
+          }
+    
+          if (limit) {
+            queryExec.limit(limit);
+          }
+    
+          if (skip) {
+            queryExec.skip(skip);
+          }
+    
+          return await queryExec.exec();
+        } catch (error) {
+          throw new InternalServerErrorException(error.message);
+        }
       }
-      return await this.userDataModel.find(query).exec();
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
-    }
-  }
 }
