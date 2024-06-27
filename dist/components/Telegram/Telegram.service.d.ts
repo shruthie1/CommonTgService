@@ -51,5 +51,5 @@ export declare class TelegramService implements OnModuleDestroy {
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    updateNameandBio(mobile: string, firstName: string, about: string): Promise<string>;
+    updateNameandBio(mobile: string, firstName: string, about?: string): Promise<string>;
 }

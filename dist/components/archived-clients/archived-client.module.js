@@ -10,6 +10,7 @@ exports.ArchivedClientModule = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const client_schema_1 = require("../clients/schemas/client.schema");
+const Telegram_module_1 = require("../Telegram/Telegram.module");
 const archived_client_service_1 = require("./archived-client.service");
 const archived_client_controller_1 = require("./archived-client.controller");
 const init_module_1 = require("../ConfigurationInit/init.module");
@@ -21,6 +22,7 @@ exports.ArchivedClientModule = ArchivedClientModule = __decorate([
         imports: [
             init_module_1.initModule,
             mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
+            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule)
         ],
         controllers: [archived_client_controller_1.ArchivedClientController],
         providers: [archived_client_service_1.ArchivedClientService],
