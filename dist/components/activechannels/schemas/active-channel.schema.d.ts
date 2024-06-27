@@ -1,7 +1,7 @@
 import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 export type ActiveChannelDocument = ActiveChannel & Document;
-export declare class ActiveChannel extends Document {
+export declare class ActiveChannel {
     channelId: string;
     broadcast: boolean;
     canSendMsgs: boolean;
@@ -16,10 +16,11 @@ export declare class ActiveChannel extends Document {
     reactions: string[];
     banned: boolean;
     megagroup: boolean;
+    private: boolean;
     reactRestricted: boolean;
 }
-export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel> & ActiveChannel & Required<{
-    _id: unknown;
-}>, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>> & mongoose.FlatRecord<ActiveChannel> & Required<{
-    _id: unknown;
-}>>;
+export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel> & ActiveChannel & {
+    _id: mongoose.Types.ObjectId;
+}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>> & mongoose.FlatRecord<ActiveChannel> & {
+    _id: mongoose.Types.ObjectId;
+}>;

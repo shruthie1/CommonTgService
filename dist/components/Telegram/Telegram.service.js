@@ -154,7 +154,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 console.log(mobile, " - Joined channel Success - ", chatEntity.username);
                 if (chatEntity.canSendMsgs) {
                     try {
-                        await this.activeChannelsService.update(chatEntity.id, chatEntity);
+                        await this.activeChannelsService.update(chatEntity.channelId, chatEntity);
                         console.log("updated ActiveChannels");
                     }
                     catch (error) {
@@ -163,14 +163,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     }
                 }
                 else {
-                    await this.channelsService.remove(chatEntity.id);
-                    await this.activeChannelsService.remove(chatEntity.id);
+                    await this.channelsService.remove(chatEntity.channelId);
+                    await this.activeChannelsService.remove(chatEntity.channelId);
                     console.log("Removed Channel- ", channel);
                 }
             }
             catch (error) {
                 (0, utils_1.parseError)(error, `${chatEntity.username} - Channels ERR: `);
-                await this.removeChannels(error, chatEntity.id.toString(), chatEntity.username);
+                await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             }
         };
         joinChannelWithDelay(0);

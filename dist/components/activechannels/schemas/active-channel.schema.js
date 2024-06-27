@@ -11,11 +11,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActiveChannelSchema = exports.ActiveChannel = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
-const mongoose_2 = require("mongoose");
 const mongoose = require("mongoose");
 const swagger_1 = require("@nestjs/swagger");
 const utils_1 = require("../../../utils");
-let ActiveChannel = class ActiveChannel extends mongoose_2.Document {
+let ActiveChannel = class ActiveChannel {
 };
 exports.ActiveChannel = ActiveChannel;
 __decorate([
@@ -90,6 +89,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "private", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),

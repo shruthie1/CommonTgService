@@ -30,6 +30,13 @@ __decorate([
 ], SearchChannelDto.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
+        description: 'privacy of the channel',
+        example: false,
+    }),
+    __metadata("design:type", String)
+], SearchChannelDto.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
         description: 'Username of the channel',
         example: 'ayesha_channel',
     }),

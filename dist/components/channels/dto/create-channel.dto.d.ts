@@ -8,4 +8,5 @@ export declare class CreateChannelDto {
     sendMessages?: boolean;
     title: string;
     username?: string;
+    private: boolean;
 }
