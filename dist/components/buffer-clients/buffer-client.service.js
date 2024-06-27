@@ -211,7 +211,7 @@ let BufferClientService = class BufferClientService {
                 badIds.push(1);
             }
         }
-        for (const document of clients) {
+        clients.map(async (document) => {
             try {
                 const cli = await this.telegramService.createClient(document.mobile, true, false);
                 await this.telegramService.updateUsername(document.mobile, '');
@@ -236,7 +236,7 @@ let BufferClientService = class BufferClientService {
                 this.remove(document.mobile);
                 await this.telegramService.deleteClient(document.mobile);
             }
-        }
+        });
         console.log(badIds, goodIds);
         this.addNewUserstoBufferClients(badIds, goodIds);
     }
