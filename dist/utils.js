@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultMessages = exports.defaultReactions = exports.ppplbot = void 0;
+exports.defaultMessages = exports.defaultReactions = void 0;
 exports.sleep = sleep;
 exports.contains = contains;
 exports.fetchWithTimeout = fetchWithTimeout;
 exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
+exports.ppplbot = ppplbot;
 const axios_1 = require("axios");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -169,17 +170,22 @@ function parseError(err, prefix = 'TgCms') {
     return resp;
 }
 let botCount = 0;
-const ppplbot = () => {
-    let token;
-    if (botCount % 2 == 1) {
-        token = `bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY`;
+function ppplbot(chatId, botToken) {
+    let token = botToken;
+    if (!token) {
+        if (botCount % 2 === 1) {
+            token = 'bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY';
+        }
+        else {
+            token = 'bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA';
+        }
+        botCount++;
     }
-    else {
-        token = `bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA`;
-    }
-    return `https://api.telegram.org/${token}/sendMessage?chat_id=-1001801844217`;
-};
-exports.ppplbot = ppplbot;
+    const targetChatId = chatId || '-1001801844217';
+    const apiUrl = `https://api.telegram.org/${token}/sendMessage?chat_id=${targetChatId}`;
+    return apiUrl;
+}
+;
 exports.defaultReactions = [
     '❤', '🔥', '👏', '🥰', '😁', '🤔',
     '🤯', '😱', '🤬', '😢', '🎉', '🤩',
