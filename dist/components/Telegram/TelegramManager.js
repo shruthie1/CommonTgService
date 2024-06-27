@@ -11,7 +11,7 @@ const utils_1 = require("../../utils");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
 const IMap_1 = require("../../IMap/IMap");
-const big_integer_1 = require("big-integer");
+const bigInt = require("big-integer");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -207,7 +207,7 @@ class TelegramManager {
             limit: 200,
             maxId: 0,
             minId: 0,
-            hash: (0, big_integer_1.default)(0),
+            hash: bigInt(0),
         }));
         const callLogs = result.messages.filter((message) => message.action instanceof tl_1.Api.MessageActionPhoneCall);
         const filteredResults = {
@@ -370,7 +370,7 @@ class TelegramManager {
     }
     async getContacts() {
         const exportedContacts = await this.client.invoke(new tl_1.Api.contacts.GetContacts({
-            hash: (0, big_integer_1.default)(0)
+            hash: bigInt(0)
         }));
         return exportedContacts;
     }
