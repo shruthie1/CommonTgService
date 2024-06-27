@@ -31,7 +31,6 @@ export class ConfigurationService {
             process.env[key] = data[key];
         }
         console.log("finished setting env");
-        await CloudinaryService.getInstance("divya");
     }
 
     async update(updateClientDto: any): Promise<any> {
