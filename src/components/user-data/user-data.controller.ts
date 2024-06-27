@@ -35,28 +35,28 @@ export class UserDataController {
     return this.userDataService.findAll();
   }
 
-  @Get(':chatId')
+  @Get(':profile/:chatId')
   @ApiOperation({ summary: 'Get user data by ID' })
   //@apiresponse({ status: 200, description: 'Return the user data.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async findOne(@Param('chatId') chatId: string): Promise<UserData> {
-    return this.userDataService.findOne(chatId);
+  async findOne(@Param('profile') profile: string, @Param('chatId') chatId: string): Promise<UserData> {
+    return this.userDataService.findOne(profile,chatId);
   }
 
-  @Patch(':chatId')
+  @Patch(':profile/:chatId')
   @ApiOperation({ summary: 'Update user data by ID' })
   //@apiresponse({ status: 200, description: 'The user data has been successfully updated.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async update(@Param('chatId') chatId: string, @Body() updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
-    return this.userDataService.update(chatId, updateUserDataDto);
+  async update(@Param('profile') profile: string, @Param('chatId') chatId: string, @Body() updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
+    return this.userDataService.update(profile,chatId, updateUserDataDto);
   }
 
-  @Delete(':chatId')
+  @Delete(':profile/:chatId')
   @ApiOperation({ summary: 'Delete user data by ID' })
   //@apiresponse({ status: 200, description: 'The user data has been successfully deleted.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
-  async remove(@Param('chatId') chatId: string): Promise<UserData> {
-    return this.userDataService.remove(chatId);
+  async remove(@Param('profile') profile: string,@Param('chatId') chatId: string): Promise<UserData> {
+    return this.userDataService.remove(profile,chatId);
   }
 
   @Post('query')

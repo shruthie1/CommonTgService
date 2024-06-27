@@ -18,25 +18,25 @@ export class UserDataService {
         return this.userDataModel.find().exec();
     }
 
-    async findOne(chatId: string): Promise<UserData> {
-        const user = await this.userDataModel.findOne({chatId}).exec();
+    async findOne(profile: string, chatId: string): Promise<UserData> {
+        const user = await this.userDataModel.findOne({ profile, chatId }).exec();
         if (!user) {
-            throw new NotFoundException(`UserData with ID "${chatId}" not found`);
+            throw new NotFoundException(`UserData with ID "${profile} - ${chatId}" not found`);
         }
         return user;
     }
 
-    async update(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
+    async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
         delete updateUserDataDto['_id']
-        const updatedUser = await this.userDataModel.findOneAndUpdate({chatId}, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new NotFoundException(`UserData with ID "${chatId}" not found`);
         }
         return updatedUser;
     }
 
-    async remove(chatId: string): Promise<UserData> {
-        const deletedUser = await this.userDataModel.findOneAndDelete({chatId}).exec();
+    async remove(profile: string, chatId: string): Promise<UserData> {
+        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
         if (!deletedUser) {
             throw new NotFoundException(`UserData with ID "${chatId}" not found`);
         }
@@ -54,26 +54,26 @@ export class UserDataService {
 
     async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]> {
         try {
-          if (!query) {
-            throw new BadRequestException('Query is invalid.');
-          }
-          const queryExec = this.userDataModel.find(query);
-    
-          if (sort) {
-            queryExec.sort(sort);
-          }
-    
-          if (limit) {
-            queryExec.limit(limit);
-          }
-    
-          if (skip) {
-            queryExec.skip(skip);
-          }
-    
-          return await queryExec.exec();
+            if (!query) {
+                throw new BadRequestException('Query is invalid.');
+            }
+            const queryExec = this.userDataModel.find(query);
+
+            if (sort) {
+                queryExec.sort(sort);
+            }
+
+            if (limit) {
+                queryExec.limit(limit);
+            }
+
+            if (skip) {
+                queryExec.skip(skip);
+            }
+
+            return await queryExec.exec();
         } catch (error) {
-          throw new InternalServerErrorException(error.message);
+            throw new InternalServerErrorException(error.message);
         }
-      }
+    }
 }
