@@ -144,7 +144,7 @@ export class BufferClientService {
                     console.log(mobile, " Pending Channels :", channels.length)
                     this.joinChannelMap.set(mobile, channels);
                     try {
-                        await this.telegramService.createClient(mobile);
+                        await this.telegramService.createClient(mobile, false, false);
                         console.log(mobile, " Trying to join :", channel.username);
                         await this.telegramService.tryJoiningChannel(mobile, channel);
                     } catch (error) {
