@@ -1,4 +1,4 @@
-import Imap from 'imap';
+import * as Imap from 'imap';
 import { fetchNumbersFromString, parseError } from '../utils';
 
 export class MailReader {
@@ -104,7 +104,7 @@ export class MailReader {
                 if (results.length > 0) {
                     console.log('Emails found', results.length)
                     const length = results.length
-                    const fetch = this.imap.fetch([results[length-1]], fetchOptions);
+                    const fetch = this.imap.fetch([results[length - 1]], fetchOptions);
                     await new Promise<void>((resolve, reject) => {
                         fetch.on('message', (msg, seqno) => {
                             const emailData: string[] = [];
@@ -158,7 +158,7 @@ export class MailReader {
                 console.error('Error:', err);
                 throw err; // Re-throw the error for caller to handle
             }
-            console.log('returning result:',this.result)
+            console.log('returning result:', this.result)
             return this.result;
         } catch (error) {
             console.log('In Error');
