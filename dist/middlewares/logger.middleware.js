@@ -38,6 +38,9 @@ let LoggerMiddleware = class LoggerMiddleware {
                 this.logger.log(color(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`));
             });
         }
+        else {
+            this.logger.log(`Url Length : ${originalUrl.length}`);
+        }
         next();
     }
 };
