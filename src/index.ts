@@ -1,3 +1,5 @@
+import { BuildService } from './components/builds/build.service';
+import { BuildModule } from './components/builds/build.module';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { ChannelsService } from './components/channels/channels.service';
 import { ChannelsModule } from './components/channels/channels.module';
@@ -24,6 +26,7 @@ export {
     ActiveChannelsModule,
     ClientModule,
     UserDataModule,
+    BuildModule,
     UsersModule,
     BufferClientModule,
     ArchivedClientModule,
@@ -34,6 +37,7 @@ export {
     UsersService,
     BufferClientService,
     ArchivedClientService,
+    BuildService,
     ChannelsModule,
     ChannelsService,
     fetchWithTimeout,

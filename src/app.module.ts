@@ -11,6 +11,7 @@ import { ChannelsModule } from './components/channels/channels.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
+import { BuildModule } from './components/builds/build.module';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { LoggerMiddleware } from './middlewares/logger.middleware';
     UsersModule,
     BufferClientModule,
     ArchivedClientModule,
-    ChannelsModule
+    ChannelsModule,
+    BuildModule
   ]
 })
 export class AppModule implements NestModule {
