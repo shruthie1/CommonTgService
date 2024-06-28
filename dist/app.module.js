@@ -19,7 +19,11 @@ const init_module_1 = require("./components/ConfigurationInit/init.module");
 const channels_module_1 = require("./components/channels/channels.module");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
+const logger_middleware_1 = require("./middlewares/logger.middleware");
 let AppModule = class AppModule {
+    configure(consumer) {
+        consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
+    }
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
