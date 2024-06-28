@@ -8,7 +8,7 @@ import { BuildSchema } from './builds.schema';
 @Module({
   imports: [
     BuildModule,
-    MongooseModule.forFeature([{ name: 'userModule', schema: BuildSchema, collection: 'users' }]),
+    MongooseModule.forFeature([{ name: 'buildModule', collection: 'builds', schema: BuildSchema }]),
   ],
   providers: [BuildService],
   controllers: [BuildController],
