@@ -12,6 +12,6 @@ import { BuildSchema } from './builds.schema';
   ],
   providers: [BuildService],
   controllers: [BuildController],
-  exports: [MongooseModule],
+  exports: [BuildModule],
 })
 export class BuildModule { }
