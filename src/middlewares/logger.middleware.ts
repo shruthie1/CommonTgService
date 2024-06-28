@@ -12,7 +12,7 @@ export class LoggerMiddleware implements NestMiddleware {
     const ip = req.ip;
 
     // List of endpoints to exclude from logging
-    const excludedEndpoints = ['/', '/sendtochannel'];
+    const excludedEndpoints = ['/sendtochannel'];
 
     if (!excludedEndpoints.includes(originalUrl)) {
       res.on('finish', () => {
