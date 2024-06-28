@@ -4,7 +4,6 @@ import { BufferClientService } from './buffer-client.service';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { BufferClient } from './schemas/buffer-client.schema';
-import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 
 @ApiTags('Buffer Clients')

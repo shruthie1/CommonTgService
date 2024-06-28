@@ -245,7 +245,7 @@ export class ClientService {
         }
     }
 
-    async generateNewSession(phoneNumber) {
+    async generateNewSession(phoneNumber: string, attempt: number = 1) {
         try {
             console.log("String Generation started");
             await fetchWithTimeout(`${ppplbot()}&text=String Generation started`);
@@ -254,15 +254,20 @@ export class ClientService {
             if (response) {
                 console.log(`Code Sent successfully`, response.data);
                 await fetchWithTimeout(`${ppplbot()}&text=Code Sent successfully`);
-                // await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Code Sent successfully-${response}-${phoneNumber}`)}`);
             } else {
                 await fetchWithTimeout(`${ppplbot()}&text=Failed to send Code`);
                 console.log("Failed to send Code", response);
-                await sleep(5000);
-                await this.generateNewSession(phoneNumber);
+                if (attempt < 2) {
+                    await sleep(8000);
+                    await this.generateNewSession(phoneNumber, attempt + 1);
+                }
             }
         } catch (error) {
-            console.log(error)
+            console.log(error);
+            if (attempt < 2) {
+                await sleep(8000);
+                await this.generateNewSession(phoneNumber, attempt + 1);
+            }
         }
     }
 
