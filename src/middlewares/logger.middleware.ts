@@ -9,14 +9,8 @@ export class LoggerMiddleware implements NestMiddleware {
         const { method, originalUrl, baseUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
-
-        // List of endpoints to exclude from logging
         const excludedEndpoints = ['/sendtochannel'];
-
-        // Function to check if an endpoint is excluded
         const isExcluded = (url: string) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
-        console.log("Base Url : ", baseUrl, isExcluded(originalUrl))
-
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
                 const { statusCode } = res;
@@ -32,7 +26,7 @@ export class LoggerMiddleware implements NestMiddleware {
                 }
             });
         } else {
-            this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+            // this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
         }
 
         next();
