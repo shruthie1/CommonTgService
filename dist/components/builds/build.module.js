@@ -20,7 +20,7 @@ exports.BuildModule = BuildModule = __decorate([
     (0, common_1.Module)({
         imports: [
             BuildModule,
-            mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: builds_schema_1.BuildSchema, collection: 'users' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: 'buildModule', collection: 'builds', schema: builds_schema_1.BuildSchema }]),
         ],
         providers: [build_service_1.BuildService],
         controllers: [build_controller_1.BuildController],
