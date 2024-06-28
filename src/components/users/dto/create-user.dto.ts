@@ -34,29 +34,29 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Timestamp of last active', example: '2024-06-03' })
   lastActive: string;
 
-  @ApiProperty({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03' })
-  date: string;
+  @ApiProperty({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03', default: (new Date(Date.now())).toISOString().split('T')[0] })
+  date: string = (new Date(Date.now())).toISOString().split('T')[0];
 
   @ApiProperty({ description: 'Telegram ID of the user', example: '2022068676' })
   tgId: string;
 
-  @ApiProperty({ description: 'Timestamp of last update', example: '2024-06-13' })
-  lastUpdated: string;
+  @ApiProperty({ description: 'Timestamp of last update', example: '2024-06-13', default: (new Date(Date.now())).toISOString().split('T')[0] })
+  lastUpdated: string = (new Date(Date.now())).toISOString().split('T')[0];
 
   @ApiProperty({ description: 'TwoFA status', example: 0 })
-  twoFA: boolean;
+  twoFA: boolean = false;
 
   @ApiProperty({ description: 'password', example: 0 })
-  password: boolean;
+  password: boolean = null;
 
   @ApiProperty({ description: 'Number of movies', example: 0 })
-  movieCount: number;
+  movieCount: number = 0;
 
   @ApiProperty({ description: 'Number of photos', example: 0 })
-  photoCount: number;
+  photoCount: number = 0;
 
   @ApiProperty({ description: 'Number of videos', example: 0 })
-  videoCount: number;
+  videoCount: number = 0;
 
   @ApiProperty({ description: 'Gender of the user', example: null })
   gender?: string | null;

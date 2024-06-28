@@ -7,6 +7,7 @@ import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
 import { fetchWithTimeout, ppplbot } from '../../utils';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -17,7 +18,7 @@ export class UsersService {
     private clientsService: ClientService
   ) { }
 
-  async create(user: User): Promise<User> {
+  async create(user: CreateUserDto): Promise<User> {
     const activeClientSetup = this.telegramService.getActiveClientSetup();
     console.log("New User received - ", user?.mobile);
     console.log("ActiveClientSetup::", activeClientSetup);
