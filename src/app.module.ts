@@ -23,7 +23,8 @@ import { BuildModule } from './components/builds/build.module';
     UsersModule,
     BufferClientModule,
     ArchivedClientModule,
-    ChannelsModule
+    ChannelsModule,
+    BuildModule
   ],
   controllers:[AppController],
   providers:[AppService],
@@ -36,7 +37,6 @@ import { BuildModule } from './components/builds/build.module';
     BufferClientModule,
     ArchivedClientModule,
     ChannelsModule,
-    BuildModule
   ]
 })
 export class AppModule implements NestModule {
