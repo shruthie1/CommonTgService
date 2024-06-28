@@ -13,25 +13,27 @@ export class LoggerMiddleware implements NestMiddleware {
     // List of endpoints to exclude from logging
     const excludedEndpoints = ['/sendtochannel'];
 
-    if (!excludedEndpoints.includes(originalUrl)) {
+    // Function to check if an endpoint is excluded
+    const isExcluded = (url: string) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
+
+    if (!isExcluded(originalUrl) && originalUrl !== '/') {
       res.on('finish', () => {
         const { statusCode } = res;
         const contentLength = res.get('content-length');
         if (statusCode >= 500) {
           this.logger.error(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else if (statusCode >= 400) {
-            this.logger.warn(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
+          this.logger.warn(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else if (statusCode >= 300) {
-            this.logger.verbose(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
+          this.logger.verbose(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else {
-            this.logger.log(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
+          this.logger.log(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         }
       });
-    }else{
-        this.logger.log(`Url Length : ${originalUrl.length}`)
+    } else {
+      this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
     }
 
     next();
   }
 }
-
