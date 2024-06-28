@@ -18,7 +18,6 @@ let LoggerMiddleware = class LoggerMiddleware {
         const ip = req.ip;
         const excludedEndpoints = ['/sendtochannel'];
         const isExcluded = (url) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
-        console.log("Base Url : ", baseUrl, isExcluded(originalUrl));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
                 const { statusCode } = res;
@@ -38,7 +37,6 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
         }
         else {
-            this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
         }
         next();
     }
