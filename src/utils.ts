@@ -55,7 +55,8 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       const responseIPv6 = await fetchWithProtocol(resource, 6);
       if (responseIPv6) return responseIPv6;
     } catch (error) {
-      if (retryCount < maxRetries) {
+      const errorDetails = parseError(error)
+      if (retryCount < maxRetries && error.code !== 'ERR_NETWORK' && error.code !== "ECONNABORTED" && error.code !== "ETIMEDOUT" && !errorDetails.message.toLowerCase().includes('too many requests') && !axios.isCancel(error)) {
         console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds delay
       } else {
@@ -167,7 +168,7 @@ export function parseError(
 }
 let botCount = 0;
 
-export function ppplbot (chatId?: string, botToken?: string) {
+export function ppplbot(chatId?: string, botToken?: string) {
   let token = botToken;
 
   if (!token) {
