@@ -1,3 +1,4 @@
+import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { ChannelsService } from './components/channels/channels.service';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppModule } from './app.module';
@@ -42,5 +43,6 @@ export {
     fetchNumbersFromString,
     ppplbot,
     defaultMessages,
-    defaultReactions
+    defaultReactions,
+    LoggerMiddleware
 }
