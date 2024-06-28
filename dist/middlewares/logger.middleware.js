@@ -13,11 +13,12 @@ let LoggerMiddleware = class LoggerMiddleware {
         this.logger = new common_1.Logger('HTTP');
     }
     use(req, res, next) {
-        const { method, originalUrl } = req;
+        const { method, originalUrl, baseUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
         const excludedEndpoints = ['/sendtochannel'];
         const isExcluded = (url) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
+        console.log("Base Url : ", baseUrl, isExcluded(originalUrl));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
                 const { statusCode } = res;
