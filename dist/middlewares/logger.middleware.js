@@ -8,7 +8,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoggerMiddleware = void 0;
 const common_1 = require("@nestjs/common");
-const chalk = require("chalk");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new common_1.Logger('HTTP');
@@ -22,20 +21,18 @@ let LoggerMiddleware = class LoggerMiddleware {
             res.on('finish', () => {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
-                let color;
                 if (statusCode >= 500) {
-                    color = chalk.red;
+                    this.logger.error(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
                 }
                 else if (statusCode >= 400) {
-                    color = chalk.yellow;
+                    this.logger.warn(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
                 }
                 else if (statusCode >= 300) {
-                    color = chalk.cyan;
+                    this.logger.verbose(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
                 }
                 else {
-                    color = chalk.green;
+                    this.logger.log(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
                 }
-                this.logger.log(color(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`));
             });
         }
         else {
