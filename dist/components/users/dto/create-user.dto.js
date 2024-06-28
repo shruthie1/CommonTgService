@@ -12,6 +12,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateUserDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class CreateUserDto {
+    constructor() {
+        this.date = (new Date(Date.now())).toISOString().split('T')[0];
+        this.lastUpdated = (new Date(Date.now())).toISOString().split('T')[0];
+        this.twoFA = false;
+        this.password = null;
+        this.movieCount = 0;
+        this.photoCount = 0;
+        this.videoCount = 0;
+    }
 }
 exports.CreateUserDto = CreateUserDto;
 __decorate([
@@ -59,7 +68,7 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03' }),
+    (0, swagger_1.ApiProperty)({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03', default: (new Date(Date.now())).toISOString().split('T')[0] }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "date", void 0);
 __decorate([
@@ -67,7 +76,7 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last update', example: '2024-06-13' }),
+    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last update', example: '2024-06-13', default: (new Date(Date.now())).toISOString().split('T')[0] }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastUpdated", void 0);
 __decorate([
