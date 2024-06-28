@@ -1,3 +1,4 @@
+import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { ChannelsService } from './components/channels/channels.service';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppModule } from './app.module';
@@ -16,4 +17,4 @@ import { ClientService } from './components/clients/client.service';
 import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, ppplbot, sleep, defaultMessages, defaultReactions, fetchNumbersFromString } from './utils';
-export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, ChannelsModule, ChannelsService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions };
+export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, ChannelsModule, ChannelsService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
