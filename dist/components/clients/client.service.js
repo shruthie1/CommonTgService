@@ -248,7 +248,7 @@ let ClientService = class ClientService {
             await this.updateClient(client.clientId);
         }
     }
-    async generateNewSession(phoneNumber) {
+    async generateNewSession(phoneNumber, attempt = 1) {
         try {
             console.log("String Generation started");
             await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=String Generation started`);
@@ -261,12 +261,18 @@ let ClientService = class ClientService {
             else {
                 await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Failed to send Code`);
                 console.log("Failed to send Code", response);
-                await (0, Helpers_1.sleep)(5000);
-                await this.generateNewSession(phoneNumber);
+                if (attempt < 2) {
+                    await (0, Helpers_1.sleep)(8000);
+                    await this.generateNewSession(phoneNumber, attempt + 1);
+                }
             }
         }
         catch (error) {
             console.log(error);
+            if (attempt < 2) {
+                await (0, Helpers_1.sleep)(8000);
+                await this.generateNewSession(phoneNumber, attempt + 1);
+            }
         }
     }
     async executeQuery(query) {
