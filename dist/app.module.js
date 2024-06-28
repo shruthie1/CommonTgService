@@ -38,7 +38,8 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
             archived_client_module_1.ArchivedClientModule,
-            channels_module_1.ChannelsModule
+            channels_module_1.ChannelsModule,
+            build_module_1.BuildModule
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -51,7 +52,6 @@ exports.AppModule = AppModule = __decorate([
             buffer_client_module_1.BufferClientModule,
             archived_client_module_1.ArchivedClientModule,
             channels_module_1.ChannelsModule,
-            build_module_1.BuildModule
         ]
     })
 ], AppModule);
