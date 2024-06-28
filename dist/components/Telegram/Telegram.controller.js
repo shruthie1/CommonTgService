@@ -42,6 +42,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getChatId(mobile, username);
     }
+    async lastActiveTime(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getLastActiveTime(mobile);
+    }
     async joinChannels(mobile, channels) {
         await this.connectToTelegram(mobile);
         return 'Joining Channels';
@@ -134,6 +138,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChatId", null);
+__decorate([
+    (0, common_1.Get)('lastActiveTime/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get Last Active time of a user' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "lastActiveTime", null);
 __decorate([
     (0, common_1.Post)('joinchannels/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Join channels' }),
