@@ -15,5 +15,5 @@ export declare class ClientController {
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<string>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
-    executeQuery(query: object): Promise<any>;
+    executeQuery(requestBody: any): Promise<any>;
 }

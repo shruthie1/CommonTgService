@@ -275,12 +275,22 @@ let ClientService = class ClientService {
             }
         }
     }
-    async executeQuery(query) {
+    async executeQuery(query, sort, limit, skip) {
         try {
             if (!query) {
                 throw new common_1.BadRequestException('Query is invalid.');
             }
-            return await this.clientModel.find(query).exec();
+            const queryExec = this.clientModel.find(query);
+            if (sort) {
+                queryExec.sort(sort);
+            }
+            if (limit) {
+                queryExec.limit(limit);
+            }
+            if (skip) {
+                queryExec.skip(skip);
+            }
+            return await queryExec.exec();
         }
         catch (error) {
             throw new common_1.InternalServerErrorException(error.message);

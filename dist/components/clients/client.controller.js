@@ -49,9 +49,10 @@ let ClientController = class ClientController {
     async remove(clientId) {
         return this.clientService.remove(clientId);
     }
-    async executeQuery(query) {
+    async executeQuery(requestBody) {
+        const { query, sort, limit, skip } = requestBody;
         try {
-            return await this.clientService.executeQuery(query);
+            return await this.clientService.executeQuery(query, sort, limit, skip);
         }
         catch (error) {
             throw error;
