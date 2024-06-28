@@ -43,6 +43,14 @@ let UserDataService = class UserDataService {
         }
         return updatedUser;
     }
+    async updateAll(chatId, updateUserDataDto) {
+        delete updateUserDataDto['_id'];
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+        if (!updatedUser) {
+            throw new common_1.NotFoundException(`UserData with ID "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
     async remove(profile, chatId) {
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
         if (!deletedUser) {
