@@ -1,6 +1,5 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import * as chalk from 'chalk';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -18,22 +17,15 @@ export class LoggerMiddleware implements NestMiddleware {
       res.on('finish', () => {
         const { statusCode } = res;
         const contentLength = res.get('content-length');
-
-        // Determine color based on status code
-        let color;
         if (statusCode >= 500) {
-          color = chalk.red;
+          this.logger.error(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else if (statusCode >= 400) {
-          color = chalk.yellow;
+            this.logger.warn(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else if (statusCode >= 300) {
-          color = chalk.cyan;
+            this.logger.verbose(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         } else {
-          color = chalk.green;
+            this.logger.log(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`);
         }
-
-        this.logger.log(
-          color(`${method} ${originalUrl} ${statusCode} ${contentLength} - ${userAgent} ${ip}`)
-        );
       });
     }else{
         this.logger.log(`Url Length : ${originalUrl.length}`)
