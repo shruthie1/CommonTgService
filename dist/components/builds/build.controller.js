@@ -46,7 +46,7 @@ __decorate([
 ], BuildController.prototype, "update", null);
 exports.BuildController = BuildController = __decorate([
     (0, swagger_1.ApiTags)('Build'),
-    (0, common_1.Controller)('build'),
+    (0, common_1.Controller)('builds'),
     __metadata("design:paramtypes", [build_service_1.BuildService])
 ], BuildController);
 //# sourceMappingURL=build.controller.js.map
