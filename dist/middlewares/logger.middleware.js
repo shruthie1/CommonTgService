@@ -17,7 +17,7 @@ let LoggerMiddleware = class LoggerMiddleware {
         const { method, originalUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
-        const excludedEndpoints = ['/', '/sendtochannel'];
+        const excludedEndpoints = ['/sendtochannel'];
         if (!excludedEndpoints.includes(originalUrl)) {
             res.on('finish', () => {
                 const { statusCode } = res;
