@@ -82,9 +82,10 @@ export class ClientController {
   //@apiresponse({ status: 400, description: 'Invalid query.' })
   //@apiresponse({ status: 500, description: 'Internal server error.' })
   @ApiBody({ type: Object })
-  async executeQuery(@Body() query: object): Promise<any> {
+  async executeQuery(@Body() requestBody: any): Promise<any> {
+    const { query, sort, limit, skip } = requestBody;
     try {
-      return await this.clientService.executeQuery(query);
+      return await this.clientService.executeQuery(query, sort, limit, skip);
     } catch (error) {
       throw error;  // You might want to handle errors more gracefully
     }

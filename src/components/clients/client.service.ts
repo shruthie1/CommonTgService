@@ -271,14 +271,28 @@ export class ClientService {
         }
     }
 
-    async executeQuery(query: any): Promise<any> {
+    async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]> {
         try {
-            if (!query) {
-                throw new BadRequestException('Query is invalid.');
-            }
-            return await this.clientModel.find(query).exec();
+          if (!query) {
+            throw new BadRequestException('Query is invalid.');
+          }
+          const queryExec = this.clientModel.find(query);
+    
+          if (sort) {
+            queryExec.sort(sort);
+          }
+    
+          if (limit) {
+            queryExec.limit(limit);
+          }
+    
+          if (skip) {
+            queryExec.skip(skip);
+          }
+    
+          return await queryExec.exec();
         } catch (error) {
-            throw new InternalServerErrorException(error.message);
+          throw new InternalServerErrorException(error.message);
         }
-    }
+      }
 }
