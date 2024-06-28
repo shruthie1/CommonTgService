@@ -37,6 +37,9 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
         }
         else {
+            if (originalUrl.includes('Video')) {
+                this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+            }
         }
         next();
     }
