@@ -64,6 +64,14 @@ export class TelegramController {
         return await this.telegramService.getChatId(mobile, username);
     }
 
+    @Get('lastActiveTime/:mobile')
+    @ApiOperation({ summary: 'Get Last Active time of a user' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async lastActiveTime(@Param('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getLastActiveTime(mobile);
+    }
+
     @Post('joinchannels/:mobile')
     @ApiOperation({ summary: 'Join channels' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })

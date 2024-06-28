@@ -137,6 +137,11 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getchatId(username);
     }
 
+    async getLastActiveTime(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.getLastActiveTime();
+    }
+
     // async joinChannels(mobile: string, channels: Channel[]) {
     //     console.log("Started Joining- ", mobile, " - channelsLen - ", channels.length);
 

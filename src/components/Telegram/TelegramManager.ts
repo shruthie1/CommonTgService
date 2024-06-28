@@ -410,13 +410,13 @@ class TelegramManager {
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
         let latest = 0
         result.authorizations.map((auth) => {
-            if (!auth.country.toLowerCase().includes('singapore')) {
+            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")) {
                 if (latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }
             }
-        })
-        return (new Date(latest)).toISOString().split('T')[0];
+        });
+        return (new Date(latest*1000)).toISOString().split('T')[0];
     }
 
     async getContacts() {
