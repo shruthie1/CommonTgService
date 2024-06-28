@@ -17,7 +17,8 @@ let LoggerMiddleware = class LoggerMiddleware {
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
         const excludedEndpoints = ['/sendtochannel'];
-        if (!excludedEndpoints.includes(originalUrl)) {
+        const isExcluded = (url) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
+        if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
@@ -36,7 +37,7 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
         }
         else {
-            this.logger.log(`Url Length : ${originalUrl.length}`);
+            this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
         }
         next();
     }
