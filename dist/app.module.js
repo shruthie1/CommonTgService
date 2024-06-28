@@ -20,6 +20,7 @@ const channels_module_1 = require("./components/channels/channels.module");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const logger_middleware_1 = require("./middlewares/logger.middleware");
+const build_module_1 = require("./components/builds/build.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -49,7 +50,8 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
             archived_client_module_1.ArchivedClientModule,
-            channels_module_1.ChannelsModule
+            channels_module_1.ChannelsModule,
+            build_module_1.BuildModule
         ]
     })
 ], AppModule);

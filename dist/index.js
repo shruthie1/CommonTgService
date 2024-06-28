@@ -1,6 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoggerMiddleware = exports.defaultReactions = exports.defaultMessages = exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ChannelsService = exports.ChannelsModule = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+exports.LoggerMiddleware = exports.defaultReactions = exports.defaultMessages = exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ChannelsService = exports.ChannelsModule = exports.BuildService = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.BuildModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+const build_service_1 = require("./components/builds/build.service");
+Object.defineProperty(exports, "BuildService", { enumerable: true, get: function () { return build_service_1.BuildService; } });
+const build_module_1 = require("./components/builds/build.module");
+Object.defineProperty(exports, "BuildModule", { enumerable: true, get: function () { return build_module_1.BuildModule; } });
 const logger_middleware_1 = require("./middlewares/logger.middleware");
 Object.defineProperty(exports, "LoggerMiddleware", { enumerable: true, get: function () { return logger_middleware_1.LoggerMiddleware; } });
 const channels_service_1 = require("./components/channels/channels.service");
