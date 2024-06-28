@@ -24,7 +24,7 @@ exports.BuildModule = BuildModule = __decorate([
         ],
         providers: [build_service_1.BuildService],
         controllers: [build_controller_1.BuildController],
-        exports: [mongoose_1.MongooseModule],
+        exports: [BuildModule],
     })
 ], BuildModule);
 //# sourceMappingURL=build.module.js.map
