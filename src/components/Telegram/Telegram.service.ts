@@ -190,8 +190,8 @@ export class TelegramService implements OnModuleDestroy {
                 console.log("Removed Channel- ", chatEntity.username);
             }
         } catch (error) {
-            parseError(error, `${mobile} @${chatEntity.username} Channels ERR: `);
-            if (error.errorMessage == 'CHANNELS_TOO_MUCH') {
+            const errorDetails = parseError(error, `${mobile} @${chatEntity.username} Channels ERR: `);
+            if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber)
                 const channels = await this.getChannelInfo(mobile, true);
                 this.bufferClientService.update(mobile, { channels: channels.ids.length });
