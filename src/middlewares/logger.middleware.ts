@@ -9,6 +9,7 @@ export class LoggerMiddleware implements NestMiddleware {
         const { method, originalUrl, baseUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
+
         const excludedEndpoints = ['/sendtochannel'];
         const isExcluded = (url: string) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
@@ -26,7 +27,9 @@ export class LoggerMiddleware implements NestMiddleware {
                 }
             });
         } else {
-            // this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+            if (originalUrl.includes('Video')) {
+                this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+            }
         }
 
         next();
