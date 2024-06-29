@@ -178,7 +178,6 @@ let BufferClientService = class BufferClientService {
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
-                await this.telegramService.deleteClient(mobile);
                 const bufferClient = {
                     tgId: user.tgId,
                     session: user.session,
@@ -189,12 +188,13 @@ let BufferClientService = class BufferClientService {
                     updatedDate: (new Date(Date.now())).toISOString().split('T')[0]
                 };
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
-                return "Client set as buffer successfully";
             }
             catch (error) {
                 const errorDetails = (0, utils_1.parseError)(error);
                 throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
             }
+            await this.telegramService.deleteClient(mobile);
+            return "Client set as buffer successfully";
         }
         else {
             throw new common_1.BadRequestException("Number is a Active Client");
