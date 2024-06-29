@@ -34,6 +34,9 @@ export class ArchivedClientService {
 
     async update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto["_id"]
+        if ((<any>updateClientDto)._doc) {
+            delete (<any>updateClientDto)._doc['_id']
+        }
         console.log({ ...updateClientDto });
         const updatedUser = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         return updatedUser;

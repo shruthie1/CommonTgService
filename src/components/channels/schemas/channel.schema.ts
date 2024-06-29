@@ -3,7 +3,13 @@ import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 
 export type ChannelDocument = Channel & Document;
-@Schema({ collection: 'channels', versionKey: false, autoIndex: true })  // Specify the collection name here
+@Schema({ collection: 'channels', versionKey: false, autoIndex: true ,  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret._id;
+    },
+  },})  // Specify the collection name here
 export class Channel {
   @Prop({ required: true, unique: true })
   channelId: string;

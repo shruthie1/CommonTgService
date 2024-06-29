@@ -6,7 +6,15 @@ import { defaultMessages, defaultReactions } from '../../../utils';
 
 export type ActiveChannelDocument = ActiveChannel & Document;
 
-@Schema({ collection: 'activeChannels', versionKey: false, autoIndex: true })
+@Schema({ collection: 'activeChannels', versionKey: false, autoIndex: true,
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret._id;
+    },
+  },
+ })
 export class ActiveChannel {
   @ApiProperty({ required: true })
   @Prop({ required: true, unique: true })

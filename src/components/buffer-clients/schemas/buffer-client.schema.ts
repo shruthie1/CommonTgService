@@ -2,7 +2,15 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 export type BufferClientDocument = BufferClient & Document;
-@Schema({ collection: 'bufferClients', versionKey: false, autoIndex: true })  // Specify the collection name here
+@Schema({ collection: 'bufferClients', versionKey: false, autoIndex: true,
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret._id;
+    },
+  },
+})  // Specify the collection name here
 export class BufferClient {
   @Prop({ required: true})
   tgId: string;

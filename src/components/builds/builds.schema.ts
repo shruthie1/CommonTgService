@@ -3,7 +3,13 @@ import mongoose, { Document } from 'mongoose';
 
 export type BuildDocument = Build & Document;
 
-@Schema({versionKey: false, autoIndex: true,strict: false })
+@Schema({versionKey: false, autoIndex: true,strict: false ,  timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (doc, ret) => {
+        delete ret._id;
+      },
+    },})
 export class Build {}
 
 export const BuildSchema = SchemaFactory.createForClass(Build);

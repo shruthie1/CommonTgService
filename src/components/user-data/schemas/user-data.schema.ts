@@ -3,7 +3,15 @@ import { Document } from 'mongoose';
 
 export type UserDataDocument = UserData & Document;
 
-@Schema({ collection: 'userData', versionKey: false, autoIndex: true })
+@Schema({
+    collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,
+    toJSON: {
+        virtuals: true,
+        transform: (doc, ret) => {
+            delete ret._id;
+        },
+    },
+})
 export class UserData {
     @Prop({ required: true })
     chatId: string;

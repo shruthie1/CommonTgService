@@ -4,7 +4,13 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export type UserDocument = User & Document;
 
-@Schema({ collection: 'users', versionKey: false, autoIndex: true })
+@Schema({ collection: 'users', versionKey: false, autoIndex: true,  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret._id;
+    },
+  }, })
 export class User {
   @ApiProperty()
   @Prop({required: true, unique: true})
