@@ -316,6 +316,7 @@ export class BufferClientService {
                 parseError(error)
                 console.error("An error occurred:", error);
             }
+            await this.telegramService.deleteClient(document.mobile)
         }
         setTimeout(() => {
             this.joinchannelForBufferClients()
