@@ -136,6 +136,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getchatId(username);
     }
+    async getLastActiveTime(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.getLastActiveTime();
+    }
     async tryJoiningChannel(mobile, chatEntity) {
         const telegramClient = await this.getClient(mobile);
         try {
