@@ -244,7 +244,7 @@ let BufferClientService = class BufferClientService {
                 console.log("Number is a Active Client");
             }
         });
-        console.log(badIds, goodIds);
+        console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
         this.addNewUserstoBufferClients(badIds, goodIds);
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
