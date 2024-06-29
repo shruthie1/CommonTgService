@@ -39,6 +39,9 @@ let ArchivedClientService = class ArchivedClientService {
     }
     async update(mobile, updateClientDto) {
         delete updateClientDto["_id"];
+        if (updateClientDto._doc) {
+            delete updateClientDto._doc['_id'];
+        }
         console.log({ ...updateClientDto });
         const updatedUser = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         return updatedUser;

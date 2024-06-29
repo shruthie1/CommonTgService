@@ -81,7 +81,15 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 exports.Client = Client = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'clients', versionKey: false, autoIndex: true })
+    (0, mongoose_1.Schema)({
+        collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], Client);
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
 //# sourceMappingURL=client.schema.js.map

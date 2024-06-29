@@ -79,7 +79,15 @@ __decorate([
     __metadata("design:type", String)
 ], UserData.prototype, "profile", void 0);
 exports.UserData = UserData = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'userData', versionKey: false, autoIndex: true })
+    (0, mongoose_1.Schema)({
+        collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], UserData);
 exports.UserDataSchema = mongoose_1.SchemaFactory.createForClass(UserData);
 //# sourceMappingURL=user-data.schema.js.map

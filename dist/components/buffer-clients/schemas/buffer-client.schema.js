@@ -43,7 +43,15 @@ __decorate([
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
 exports.BufferClient = BufferClient = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true })
+    (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
 //# sourceMappingURL=buffer-client.schema.js.map
