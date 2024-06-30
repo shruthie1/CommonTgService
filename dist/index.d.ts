@@ -1,3 +1,4 @@
+import { UpiIdService } from './components/upi-ids/upi-ids.service';
 import { BuildService } from './components/builds/build.service';
 import { BuildModule } from './components/builds/build.module';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
@@ -19,4 +20,5 @@ import { ClientService } from './components/clients/client.service';
 import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, ppplbot, sleep, defaultMessages, defaultReactions, fetchNumbersFromString } from './utils';
-export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
+import { UpiIdModule } from './components/upi-ids/upi-ids.module';
+export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, UpiIdModule, UpiIdService, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
