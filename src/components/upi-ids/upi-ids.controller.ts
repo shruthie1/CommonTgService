@@ -1,4 +1,4 @@
-import { Controller, Get, Body, Param, Patch } from '@nestjs/common';
+import { Controller, Get, Body, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { UpiIdService } from './upi-ids.service';
 
