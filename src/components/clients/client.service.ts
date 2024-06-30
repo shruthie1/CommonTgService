@@ -69,6 +69,10 @@ export class ClientService {
 
     async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto['_id']
+        if ((<any>updateClientDto)._doc) {
+            delete (<any>updateClientDto)._doc['_id']
+        }
+        await fetchWithTimeout(`${ppplbot()}&text=Updating the Existing client`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
@@ -142,6 +146,7 @@ export class ClientService {
                             await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
                         } else {
                             console.log("Client Archive Skipped")
+                            await fetchWithTimeout(`${ppplbot()}&text=Client Archive Failed`);
                         }
                     } catch (error) {
                         console.log("Cannot Archive Old Client");
@@ -172,6 +177,7 @@ export class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
                     if (archivedClient) {
+                        await fetchWithTimeout(`${ppplbot()}&text=Using Old Session from Archived Clients`);
                         await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
                     } else {
                         await this.generateNewSession(newBufferClient.mobile)
@@ -194,17 +200,17 @@ export class ClientService {
     async updateClientSession(session: string, mobile: string, username: string, clientId: string) {
         this.telegramService.setActiveClientSetup(undefined)
         console.log("Updating Client session");
-        await fetchWithTimeout(`${ppplbot()}&text=Final Details Recived`);
+        await fetchWithTimeout(`${ppplbot()}&text=Final Session Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
         await this.bufferClientService.remove(mobile);
-        if (fetchNumbersFromString(clientId) == '2') {
-            const client2 = clientId.replace("1", "2")
-            await this.update(client2, { mainAccount: username });
-        }
+        // if (fetchNumbersFromString(clientId) == '2') {
+        //     const client2 = clientId.replace("1", "2")
+        //     await this.update(client2, { mainAccount: username });
+        // }
         console.log("Update finished");
+        await fetchWithTimeout(newClient.deployKey);
         await fetchWithTimeout(`${ppplbot()}&text=Update finished`);
         await this.telegramService.disconnectAll();
-        await fetchWithTimeout(newClient.deployKey);
         setTimeout(async () => {
             await this.updateClient(clientId);
         }, 10000);
@@ -273,26 +279,26 @@ export class ClientService {
 
     async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]> {
         try {
-          if (!query) {
-            throw new BadRequestException('Query is invalid.');
-          }
-          const queryExec = this.clientModel.find(query);
-    
-          if (sort) {
-            queryExec.sort(sort);
-          }
-    
-          if (limit) {
-            queryExec.limit(limit);
-          }
-    
-          if (skip) {
-            queryExec.skip(skip);
-          }
-    
-          return await queryExec.exec();
+            if (!query) {
+                throw new BadRequestException('Query is invalid.');
+            }
+            const queryExec = this.clientModel.find(query);
+
+            if (sort) {
+                queryExec.sort(sort);
+            }
+
+            if (limit) {
+                queryExec.limit(limit);
+            }
+
+            if (skip) {
+                queryExec.skip(skip);
+            }
+
+            return await queryExec.exec();
         } catch (error) {
-          throw new InternalServerErrorException(error.message);
+            throw new InternalServerErrorException(error.message);
         }
-      }
+    }
 }
