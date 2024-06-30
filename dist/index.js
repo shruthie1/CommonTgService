@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LoggerMiddleware = exports.defaultReactions = exports.defaultMessages = exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ChannelsService = exports.ChannelsModule = exports.BuildService = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.BuildModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+exports.LoggerMiddleware = exports.defaultReactions = exports.defaultMessages = exports.ppplbot = exports.fetchNumbersFromString = exports.contains = exports.parseError = exports.sleep = exports.fetchWithTimeout = exports.ChannelsService = exports.ChannelsModule = exports.BuildService = exports.ArchivedClientService = exports.BufferClientService = exports.UsersService = exports.UserDataService = exports.ClientService = exports.ActiveChannelsService = exports.TelegramService = exports.UpiIdService = exports.UpiIdModule = exports.ArchivedClientModule = exports.BufferClientModule = exports.UsersModule = exports.BuildModule = exports.UserDataModule = exports.ClientModule = exports.ActiveChannelsModule = exports.TelegramModule = exports.AppModule = void 0;
+const upi_ids_service_1 = require("./components/upi-ids/upi-ids.service");
+Object.defineProperty(exports, "UpiIdService", { enumerable: true, get: function () { return upi_ids_service_1.UpiIdService; } });
 const build_service_1 = require("./components/builds/build.service");
 Object.defineProperty(exports, "BuildService", { enumerable: true, get: function () { return build_service_1.BuildService; } });
 const build_module_1 = require("./components/builds/build.module");
@@ -50,4 +52,6 @@ Object.defineProperty(exports, "sleep", { enumerable: true, get: function () { r
 Object.defineProperty(exports, "defaultMessages", { enumerable: true, get: function () { return utils_1.defaultMessages; } });
 Object.defineProperty(exports, "defaultReactions", { enumerable: true, get: function () { return utils_1.defaultReactions; } });
 Object.defineProperty(exports, "fetchNumbersFromString", { enumerable: true, get: function () { return utils_1.fetchNumbersFromString; } });
+const upi_ids_module_1 = require("./components/upi-ids/upi-ids.module");
+Object.defineProperty(exports, "UpiIdModule", { enumerable: true, get: function () { return upi_ids_module_1.UpiIdModule; } });
 //# sourceMappingURL=index.js.map
