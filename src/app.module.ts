@@ -12,6 +12,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { BuildModule } from './components/builds/build.module';
+import { UpiIdModule } from './components/upi-ids/upi-ids.module';
 
 @Module({
   imports: [
@@ -24,7 +25,8 @@ import { BuildModule } from './components/builds/build.module';
     BufferClientModule,
     ArchivedClientModule,
     ChannelsModule,
-    BuildModule
+    BuildModule,
+    UpiIdModule
   ],
   controllers:[AppController],
   providers:[AppService],
