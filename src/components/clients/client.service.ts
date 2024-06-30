@@ -78,7 +78,8 @@ export class ClientService {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
-        await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
+        // await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`, {}, 2);
+        await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
         return updatedUser;
     }
 
