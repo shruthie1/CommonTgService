@@ -81,7 +81,7 @@ let ClientService = class ClientService {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
-        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
+        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         return updatedUser;
     }
     async remove(clientId) {
