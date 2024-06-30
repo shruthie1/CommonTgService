@@ -24,7 +24,7 @@ exports.UpiIdModule = UpiIdModule = __decorate([
         ],
         providers: [upi_ids_service_1.UpiIdService],
         controllers: [upi_ids_controller_1.UpiIdController],
-        exports: [UpiIdModule],
+        exports: [upi_ids_service_1.UpiIdService],
     })
 ], UpiIdModule);
 //# sourceMappingURL=upi-ids.module.js.map
