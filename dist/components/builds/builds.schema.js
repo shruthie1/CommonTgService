@@ -13,7 +13,13 @@ let Build = class Build {
 };
 exports.Build = Build;
 exports.Build = Build = __decorate([
-    (0, mongoose_1.Schema)({ versionKey: false, autoIndex: true, strict: false })
+    (0, mongoose_1.Schema)({ versionKey: false, autoIndex: true, strict: false, timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        }, })
 ], Build);
 exports.BuildSchema = mongoose_1.SchemaFactory.createForClass(Build);
 exports.BuildSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });

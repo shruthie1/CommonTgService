@@ -100,7 +100,15 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "reactRestricted", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'activeChannels', versionKey: false, autoIndex: true })
+    (0, mongoose_1.Schema)({ collection: 'activeChannels', versionKey: false, autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], ActiveChannel);
 exports.ActiveChannelSchema = mongoose_1.SchemaFactory.createForClass(ActiveChannel);
 //# sourceMappingURL=active-channel.schema.js.map

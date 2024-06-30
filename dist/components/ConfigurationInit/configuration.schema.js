@@ -13,7 +13,15 @@ let Configuration = class Configuration {
 };
 exports.Configuration = Configuration;
 exports.Configuration = Configuration = __decorate([
-    (0, mongoose_1.Schema)({ versionKey: false, autoIndex: true, strict: false })
+    (0, mongoose_1.Schema)({
+        versionKey: false, autoIndex: true, strict: false, timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], Configuration);
 exports.ConfigurationSchema = mongoose_1.SchemaFactory.createForClass(Configuration);
 exports.ConfigurationSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
