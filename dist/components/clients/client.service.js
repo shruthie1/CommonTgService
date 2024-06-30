@@ -72,6 +72,10 @@ let ClientService = class ClientService {
     }
     async update(clientId, updateClientDto) {
         delete updateClientDto['_id'];
+        if (updateClientDto._doc) {
+            delete updateClientDto._doc['_id'];
+        }
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating the Existing client`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
@@ -144,6 +148,7 @@ let ClientService = class ClientService {
                         }
                         else {
                             console.log("Client Archive Skipped");
+                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archive Failed`);
                         }
                     }
                     catch (error) {
@@ -175,6 +180,7 @@ let ClientService = class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
                     if (archivedClient) {
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Using Old Session from Archived Clients`);
                         await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
                     }
                     else {
@@ -200,17 +206,13 @@ let ClientService = class ClientService {
     async updateClientSession(session, mobile, username, clientId) {
         this.telegramService.setActiveClientSetup(undefined);
         console.log("Updating Client session");
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Details Recived`);
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Session Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
         await this.bufferClientService.remove(mobile);
-        if ((0, utils_1.fetchNumbersFromString)(clientId) == '2') {
-            const client2 = clientId.replace("1", "2");
-            await this.update(client2, { mainAccount: username });
-        }
         console.log("Update finished");
+        await (0, utils_1.fetchWithTimeout)(newClient.deployKey);
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Update finished`);
         await this.telegramService.disconnectAll();
-        await (0, utils_1.fetchWithTimeout)(newClient.deployKey);
         setTimeout(async () => {
             await this.updateClient(clientId);
         }, 10000);
