@@ -13,13 +13,15 @@ let UpiId = class UpiId {
 };
 exports.UpiId = UpiId;
 exports.UpiId = UpiId = __decorate([
-    (0, mongoose_1.Schema)({ versionKey: false, autoIndex: true, strict: false, timestamps: true,
+    (0, mongoose_1.Schema)({
+        versionKey: false, autoIndex: true, strict: false, timestamps: true,
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
             },
-        }, })
+        },
+    })
 ], UpiId);
 exports.UpiIdSchema = mongoose_1.SchemaFactory.createForClass(UpiId);
 exports.UpiIdSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
