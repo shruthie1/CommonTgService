@@ -12,6 +12,6 @@ import { UpiIdSchema } from './upi-ids.schema';
   ],
   providers: [UpiIdService],
   controllers: [UpiIdController],
-  exports: [UpiIdModule],
+  exports: [UpiIdService],
 })
 export class UpiIdModule { }
