@@ -169,10 +169,12 @@ export class ClientService {
 
                 const query = { availableDate: { $lte: today } }
                 const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
+                let newClientMe;
                 try {
                     if (newBufferClient) {
                         this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId })
                         await this.telegramService.createClient(newBufferClient.mobile, false, false);
+                        newClientMe = await this.telegramService.getMe(newBufferClient.mobile);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId)
@@ -187,7 +189,6 @@ export class ClientService {
                         await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
                         console.log("Buffer Clients not available")
                     }
-                    const newClientMe = await this.telegramService.getMe(newBufferClient.mobile)
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
                     await this.telegramService.deleteClient(existingClientMobile);
                     if (archivedClient) {
@@ -198,6 +199,7 @@ export class ClientService {
                         await this.generateNewSession(newBufferClient.mobile)
                     }
                 } catch (error) {
+                    parseError(error)
                     console.log("Removing buffer as error")
                     const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
                     await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
