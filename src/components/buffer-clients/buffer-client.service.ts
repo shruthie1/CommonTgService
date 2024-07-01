@@ -215,55 +215,59 @@ export class BufferClientService {
     }
 
     async checkBufferClients() {
-        await this.telegramService.disconnectAll()
-        await sleep(2000);
-        const bufferclients = await this.findAll();
-        const goodIds = [];
-        const badIds = [];
-        if (bufferclients.length < 40) {
-            for (let i = 0; i < 40 - bufferclients.length; i++) {
-                badIds.push(1)
-            }
-        }
-        const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client.mobile);
-
-        for (const document of bufferclients) {
-            if (!clientIds.includes(document.mobile)) {
-                try {
-                    const cli = await this.telegramService.createClient(document.mobile, true, false);
-                    const me = await cli.getMe();
-                    if (me.username) {
-                        await this.telegramService.updateUsername(document.mobile, '');
-                    }
-                    if (me.firstName !== "Deleted Account") {
-                        await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
-                    }
-                    const hasPassword = await cli.hasPassword();
-                    if (!hasPassword) {
-                        console.log("Client does not have password");
-                        badIds.push(document.mobile);
-                        await this.remove(document.mobile);
-                    } else {
-                        const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                        await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
-                        console.log(document.mobile, " :  ALL Good");
-                        goodIds.push(document.mobile)
-                    }
-                    await this.telegramService.deleteClient(document.mobile)
-                    await sleep(2000);
-                } catch (error) {
-                    parseError(error);
-                    badIds.push(document.mobile);
-                    this.remove(document.mobile)
-                    await this.telegramService.deleteClient(document.mobile)
+        if (!this.telegramService.getActiveClientSetup()) {
+            await this.telegramService.disconnectAll()
+            await sleep(2000);
+            const bufferclients = await this.findAll();
+            const goodIds = [];
+            const badIds = [];
+            if (bufferclients.length < 40) {
+                for (let i = 0; i < 40 - bufferclients.length; i++) {
+                    badIds.push(1)
                 }
-            } else {
-                console.log("Number is a Active Client")
             }
+            const clients = await this.clientService.findAll();
+            const clientIds = clients.map(client => client.mobile);
+
+            for (const document of bufferclients) {
+                if (!clientIds.includes(document.mobile)) {
+                    try {
+                        const cli = await this.telegramService.createClient(document.mobile, true, false);
+                        const me = await cli.getMe();
+                        if (me.username) {
+                            await this.telegramService.updateUsername(document.mobile, '');
+                        }
+                        if (me.firstName !== "Deleted Account") {
+                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                        }
+                        const hasPassword = await cli.hasPassword();
+                        if (!hasPassword) {
+                            console.log("Client does not have password");
+                            badIds.push(document.mobile);
+                            await this.remove(document.mobile);
+                        } else {
+                            const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
+                            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
+                            console.log(document.mobile, " :  ALL Good");
+                            goodIds.push(document.mobile)
+                        }
+                        await this.telegramService.deleteClient(document.mobile)
+                        await sleep(2000);
+                    } catch (error) {
+                        parseError(error);
+                        badIds.push(document.mobile);
+                        this.remove(document.mobile)
+                        await this.telegramService.deleteClient(document.mobile)
+                    }
+                } else {
+                    console.log("Number is a Active Client")
+                }
+            }
+            console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
+            this.addNewUserstoBufferClients(badIds, goodIds);
+        } else {
+            console.log("ignored active check buffer channels as active client setup exists")
         }
-        console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
-        this.addNewUserstoBufferClients(badIds, goodIds);
     }
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
