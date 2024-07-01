@@ -19,7 +19,7 @@ export class SetupClientQueryDto {
     @Transform(({ value }) => {
         console.log("archiveOld: ", value)
         return value === 'true' || value === true
-    }) @Type(() => Boolean)
+    })
     @IsBoolean()
     archiveOld?: boolean = true;
 
