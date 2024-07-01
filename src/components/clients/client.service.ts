@@ -50,10 +50,10 @@ export class ClientService {
     }
 
     async findAllMasked(): Promise<Client[]> {
-        const results: Client[] = await this.clientModel.find({}, { session: 0 }).exec();
+        const results: Client[] = await this.clientModel.find({}, { session: 0, mobile: 0 }).exec();
         return results
     }
-    
+
     async refreshMap() {
         this.clientsMap.clear()
     }
