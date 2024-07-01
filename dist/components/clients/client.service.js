@@ -107,7 +107,7 @@ let ClientService = class ClientService {
     }
     async setupClient(clientId, setupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`);
-        if (Date.now() > (settingupClient + 300000)) {
+        if (Date.now() > (settingupClient + 240000)) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
@@ -152,7 +152,7 @@ let ClientService = class ClientService {
                         }
                         else {
                             console.log("Client Archive Skipped");
-                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archive Failed`);
+                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archive Skipped`);
                         }
                     }
                     catch (error) {
@@ -174,11 +174,12 @@ let ClientService = class ClientService {
                 try {
                     if (newBufferClient) {
                         this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId });
-                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
+                        await this.telegramService.createClient(newBufferClient.mobile, false, false);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
                         const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, baseUsername);
+                        await this.telegramService.deleteClient(newBufferClient.mobile);
                         if (isArchived) {
                             console.log("Updated Old Client Name and Bio");
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
@@ -190,13 +191,14 @@ let ClientService = class ClientService {
                         console.log("Buffer Clients not available");
                     }
                     const newClientMe = await this.telegramService.getMe(newBufferClient.mobile);
-                    await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
+                    await this.telegramService.deleteClient(existingClientMobile);
                     if (archivedClient) {
                         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
                         await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
                     }
                     else {
+                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
                         await this.generateNewSession(newBufferClient.mobile);
                     }
                 }
@@ -213,11 +215,12 @@ let ClientService = class ClientService {
             }
         }
         else {
-            console.log("Profile Setup Recently tried");
+            console.log("Profile Setup Recently tried, wait::", settingupClient - Date.now());
         }
     }
     async updateClientSession(session, mobile, username, clientId) {
         this.telegramService.setActiveClientSetup(undefined);
+        this.telegramService.deleteClient(mobile);
         console.log("Updating Client session for ", clientId, username, mobile);
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Session Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
