@@ -182,6 +182,7 @@ let ClientService = class ClientService {
                         let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
                         const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, baseUsername);
                         if (isArchived) {
+                            console.log("Updated Old Client Name and Bio");
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
                         }
                         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updated username for NewNumber:${newBufferClient.mobile} || ${updatedUsername}`);
@@ -219,11 +220,11 @@ let ClientService = class ClientService {
     }
     async updateClientSession(session, mobile, username, clientId) {
         this.telegramService.setActiveClientSetup(undefined);
-        console.log("Updating Client session");
+        console.log("Updating Client session for ", clientId, username, mobile);
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Final Session Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
         await this.bufferClientService.remove(mobile);
-        console.log("Update finished");
+        console.log("Update finished Exitting Exiiting Tg Service");
         await (0, utils_1.fetchWithTimeout)(newClient.deployKey);
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Update finished`);
         await this.telegramService.disconnectAll();
@@ -237,7 +238,13 @@ let ClientService = class ClientService {
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
-            await telegramClient.updateUsername(client.username);
+            const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
+            const userCaps = username[0].toUpperCase() + username.slice(1);
+            let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
+            const updatedUsername = await telegramClient.updateUsername(baseUsername);
+            if (updatedUsername !== client.username) {
+                await this.update(client.clientId, { username: updatedUsername });
+            }
             await (0, Helpers_1.sleep)(2000);
             await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             await (0, Helpers_1.sleep)(3000);

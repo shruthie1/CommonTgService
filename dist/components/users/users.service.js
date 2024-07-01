@@ -30,7 +30,7 @@ let UsersService = class UsersService {
         console.log("New User received - ", user?.mobile);
         console.log("ActiveClientSetup::", activeClientSetup);
         if (activeClientSetup && activeClientSetup.mobile === user.mobile) {
-            console.log("Updating New Session Details");
+            console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId);
             await this.clientsService.updateClientSession(user.session, user.mobile, user.username, activeClientSetup.clientId);
         }
         else {
