@@ -85,6 +85,7 @@ export class ClientService {
         this.clientsMap.set(clientId, updatedUser);
         await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
         await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
+        console.log("Refreshed Maps")
         return updatedUser;
     }
 
