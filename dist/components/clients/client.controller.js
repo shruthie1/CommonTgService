@@ -30,6 +30,9 @@ let ClientController = class ClientController {
     async search(query) {
         return this.clientService.search(query);
     }
+    async findAllMasked() {
+        return this.clientService.findAllMasked();
+    }
     async findAll() {
         return this.clientService.findAll();
     }
@@ -76,6 +79,13 @@ __decorate([
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('masked'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "findAllMasked", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
