@@ -40,7 +40,6 @@ __decorate([
         console.log("archiveOld: ", value);
         return value === 'true' || value === true;
     }),
-    (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
