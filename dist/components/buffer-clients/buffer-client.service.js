@@ -96,36 +96,41 @@ let BufferClientService = class BufferClientService {
         this.joinChannelMap.clear();
     }
     async joinchannelForBufferClients() {
-        console.log("Joining Channel Started");
-        await this.telegramService.disconnectAll();
-        await (0, Helpers_1.sleep)(2000);
-        const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
-        clients.map(async (document) => {
-            try {
-                const client = await this.telegramService.createClient(document.mobile, false, false);
-                console.log("Started Joining for : ", document.mobile);
-                const channels = await client.channelInfo(true);
-                console.log("Existing Channels Length : ", channels.ids.length);
-                await this.update(document.mobile, { channels: channels.ids.length });
-                const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
-                const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
-                this.joinChannelMap.set(document.mobile, result);
-                await this.telegramService.deleteClient(document.mobile);
+        if (!this.telegramService.getActiveClientSetup()) {
+            console.log("Joining Channel Started");
+            await this.telegramService.disconnectAll();
+            await (0, Helpers_1.sleep)(2000);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
+            for (const document of clients) {
+                try {
+                    const client = await this.telegramService.createClient(document.mobile, false, false);
+                    console.log("Started Joining for : ", document.mobile);
+                    const channels = await client.channelInfo(true);
+                    console.log("Existing Channels Length : ", channels.ids.length);
+                    await this.update(document.mobile, { channels: channels.ids.length });
+                    const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
+                    const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    this.joinChannelMap.set(document.mobile, result);
+                    await this.telegramService.deleteClient(document.mobile);
+                }
+                catch (error) {
+                    (0, utils_1.parseError)(error);
+                }
             }
-            catch (error) {
-                (0, utils_1.parseError)(error);
-            }
-        });
-        this.joinChannelQueue();
-        console.log("Joining Channel Triggered Succesfully for ", clients.length);
-        return "Initiated Joining channels";
+            this.joinChannelQueue();
+            console.log("Joining Channel Triggered Succesfully for ", clients.length);
+            return "Initiated Joining channels";
+        }
+        else {
+            console.log("ignored active check buffer channels as active client setup exists");
+        }
     }
     async joinChannelQueue() {
         this.joinChannelIntervalId = setInterval(async () => {
             const keys = Array.from(this.joinChannelMap.keys());
             if (keys.length > 0) {
                 console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
-                const promises = keys.map(async (mobile) => {
+                for (const mobile of keys) {
                     const channels = this.joinChannelMap.get(mobile);
                     if (channels && channels.length > 0) {
                         const channel = channels.shift();
@@ -144,8 +149,7 @@ let BufferClientService = class BufferClientService {
                     else {
                         this.joinChannelMap.delete(mobile);
                     }
-                });
-                await Promise.all(promises);
+                }
             }
             else {
                 this.clearJoinChannelInterval();
