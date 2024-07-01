@@ -159,7 +159,15 @@ let ClientService = class ClientService {
                     }
                     catch (error) {
                         console.log("Cannot Archive Old Client");
-                        (0, utils_1.parseError)(error);
+                        const errorDetails = (0, utils_1.parseError)(error);
+                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
+                            console.log("Deleting User: ", existingClientUser.mobile);
+                            await this.bufferClientService.remove(existingClientUser.mobile);
+                            await this.archivedClientService.remove(existingClientUser.mobile);
+                        }
+                        else {
+                            console.log('Not Deleting user');
+                        }
                         isArchived = false;
                     }
                 }
