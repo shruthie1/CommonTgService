@@ -85,6 +85,7 @@ let ClientService = class ClientService {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
+        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         return updatedUser;
     }
@@ -107,13 +108,13 @@ let ClientService = class ClientService {
         console.log(`Received New Client Request for - ${clientId}`);
         if (Date.now() > (settingupClient + 240000)) {
             settingupClient = Date.now();
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Received New Client Request for - ${clientId}`);
+            const existingClient = await this.findOne(clientId);
+            const existingClientMobile = existingClient.mobile;
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log(setupClientQueryDto);
             await this.telegramService.disconnectAll();
             try {
                 const archiveOld = (0, utils_1.toBoolean)(setupClientQueryDto.archiveOld);
-                const existingClient = await this.findOne(clientId);
-                const existingClientMobile = existingClient.mobile;
                 const today = (new Date(Date.now())).toISOString().split('T')[0];
                 const existingClientUser = (await this.usersService.search({ mobile: existingClientMobile }))[0];
                 let isArchived = false;
@@ -174,7 +175,7 @@ let ClientService = class ClientService {
                         if (isArchived) {
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
                         }
-                        console.log("client updated");
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updated username for NewNumber:${newBufferClient.mobile} || ${updatedUsername}`);
                     }
                     else {
                         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Buffer Clients not available`);
@@ -184,7 +185,7 @@ let ClientService = class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile);
                     if (archivedClient) {
-                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Using Old Session from Archived Clients`);
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
                         await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId);
                     }
                     else {
@@ -257,7 +258,7 @@ let ClientService = class ClientService {
     async generateNewSession(phoneNumber, attempt = 1) {
         try {
             console.log("String Generation started");
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=String Generation started`);
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=String Generation started for NewNumber:${phoneNumber}`);
             await (0, Helpers_1.sleep)(1000);
             const response = await (0, utils_1.fetchWithTimeout)(`https://tgsignup.onrender.com/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
             if (response) {
