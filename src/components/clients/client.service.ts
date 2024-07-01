@@ -108,7 +108,7 @@ export class ClientService {
 
     async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`)
-        if (Date.now() > (settingupClient + 300000)) {
+        if (Date.now() > (settingupClient + 240000)) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile
@@ -151,7 +151,7 @@ export class ClientService {
                             await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
                         } else {
                             console.log("Client Archive Skipped")
-                            await fetchWithTimeout(`${ppplbot()}&text=Client Archive Failed`);
+                            await fetchWithTimeout(`${ppplbot()}&text=Client Archive Skipped`);
                         }
                     } catch (error) {
                         console.log("Cannot Archive Old Client");
@@ -172,11 +172,12 @@ export class ClientService {
                 try {
                     if (newBufferClient) {
                         this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId })
-                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
+                        await this.telegramService.createClient(newBufferClient.mobile, false, false);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId)
                         const updatedUsername = await this.telegramService.updateUsername(newBufferClient.mobile, baseUsername);
+                        await this.telegramService.deleteClient(newBufferClient.mobile);
                         if (isArchived) {
                             console.log("Updated Old Client Name and Bio")
                             await this.telegramService.updateNameandBio(existingClientMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
@@ -187,12 +188,13 @@ export class ClientService {
                         console.log("Buffer Clients not available")
                     }
                     const newClientMe = await this.telegramService.getMe(newBufferClient.mobile)
-                    await this.telegramService.deleteClient(existingClientMobile);
                     const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
+                    await this.telegramService.deleteClient(existingClientMobile);
                     if (archivedClient) {
                         await fetchWithTimeout(`${ppplbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
                         await this.updateClientSession(archivedClient.session, newClientMe.phone, newClientMe.username, clientId)
                     } else {
+                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
                         await this.generateNewSession(newBufferClient.mobile)
                     }
                 } catch (error) {
@@ -206,12 +208,13 @@ export class ClientService {
                 this.telegramService.setActiveClientSetup(undefined)
             }
         } else {
-            console.log("Profile Setup Recently tried");
+            console.log("Profile Setup Recently tried, wait::", settingupClient - Date.now());
         }
     }
 
     async updateClientSession(session: string, mobile: string, username: string, clientId: string) {
-        this.telegramService.setActiveClientSetup(undefined)
+        this.telegramService.setActiveClientSetup(undefined);
+        this.telegramService.deleteClient(mobile)
         console.log("Updating Client session for ", clientId, username, mobile);
         await fetchWithTimeout(`${ppplbot()}&text=Final Session Details Recived`);
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
