@@ -223,7 +223,7 @@ export class ClientService {
         //     await this.update(client2, { mainAccount: username });
         // }
         console.log("Update finished Exitting Exiiting Tg Service");
-        await fetchWithTimeout(newClient.deployKey);
+        await fetchWithTimeout(newClient.deployKey, {}, 1);
         await fetchWithTimeout(`${ppplbot()}&text=Update finished`);
         await this.telegramService.disconnectAll();
         setTimeout(async () => {
