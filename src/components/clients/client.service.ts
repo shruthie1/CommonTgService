@@ -126,9 +126,7 @@ export class ClientService {
                         if (toBoolean(setupClientQueryDto.formalities)) {
                             console.log("Started Formalities")
                             await this.telegramService.updateUsername(existingClientMobile, '');
-                            await sleep(2000)
                             await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile)
-                            await sleep(2000)
                             await this.telegramService.deleteProfilePhotos(existingClientMobile)
                             console.log("Formalities finished")
                             await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);

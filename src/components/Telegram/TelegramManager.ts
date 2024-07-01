@@ -441,7 +441,7 @@ class TelegramManager {
                     } else {
                         username = baseUsername + increment;
                         increment++;
-                        await sleep(4000);
+                        await sleep(1000);
                     }
                 } catch (error) {
                     console.log(error.message)
