@@ -179,7 +179,7 @@ export class BufferClientService {
             throw new BadRequestException('user not found');
         }
         const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client.mobile);
+        const clientIds = clients.map(client => client?.mobile);
         if (!clientIds.includes(mobile)) {
             const telegramClient = await this.telegramService.createClient(mobile)
             try {
