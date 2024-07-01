@@ -225,7 +225,7 @@ let ClientService = class ClientService {
         const newClient = await this.update(clientId, { session: session, mobile, username, mainAccount: username });
         await this.bufferClientService.remove(mobile);
         console.log("Update finished Exitting Exiiting Tg Service");
-        await (0, utils_1.fetchWithTimeout)(newClient.deployKey);
+        await (0, utils_1.fetchWithTimeout)(newClient.deployKey, {}, 1);
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Update finished`);
         await this.telegramService.disconnectAll();
         setTimeout(async () => {
