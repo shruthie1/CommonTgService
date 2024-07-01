@@ -390,7 +390,7 @@ class TelegramManager {
                     else {
                         username = baseUsername + increment;
                         increment++;
-                        await (0, Helpers_1.sleep)(4000);
+                        await (0, Helpers_1.sleep)(1000);
                     }
                 }
                 catch (error) {
