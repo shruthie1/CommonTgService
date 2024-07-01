@@ -9,7 +9,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
-import { fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolean } from '../../utils';
+import { contains, fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolean } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
@@ -157,7 +157,14 @@ export class ClientService {
                         }
                     } catch (error) {
                         console.log("Cannot Archive Old Client");
-                        parseError(error)
+                        const errorDetails = parseError(error);
+                        if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
+                            console.log("Deleting User: ", existingClientUser.mobile);
+                            await this.bufferClientService.remove(existingClientUser.mobile);
+                            await this.archivedClientService.remove(existingClientUser.mobile);
+                        } else {
+                            console.log('Not Deleting user');
+                        }
                         isArchived = false
                     }
                 }
