@@ -87,6 +87,7 @@ let ClientService = class ClientService {
         this.clientsMap.set(clientId, updatedUser);
         await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
+        console.log("Refreshed Maps");
         return updatedUser;
     }
     async remove(clientId) {
