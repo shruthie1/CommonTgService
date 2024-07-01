@@ -27,7 +27,7 @@ export class ClientController {
     return this.clientService.search(query);
   }
 
-  @Get('masked')
+  @Get('maskedCls')
   @ApiOperation({ summary: 'Get all user data' })
   //@apiresponse({ status: 200, description: 'Return all user data.' })
   //@apiresponse({ status: 403, description: 'Forbidden.' })
