@@ -80,7 +80,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
 __decorate([
-    (0, common_1.Get)('masked'),
+    (0, common_1.Get)('maskedCls'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
