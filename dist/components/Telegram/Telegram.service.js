@@ -114,7 +114,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             catch (error) {
                 console.log("Parsing Error");
                 const errorDetails = (0, utils_1.parseError)(error);
-                if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked"])) {
+                if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                     console.log("Deleting User: ", user.mobile);
                     await this.usersService.delete(user.tgId);
                 }
