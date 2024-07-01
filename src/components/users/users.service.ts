@@ -23,7 +23,7 @@ export class UsersService {
     console.log("New User received - ", user?.mobile);
     console.log("ActiveClientSetup::", activeClientSetup);
     if (activeClientSetup && activeClientSetup.mobile === user.mobile) {
-      console.log("Updating New Session Details")
+      console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId)
       await this.clientsService.updateClientSession(user.session, user.mobile, user.username, activeClientSetup.clientId)
     } else {
       await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMsgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
