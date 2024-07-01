@@ -237,15 +237,18 @@ export class ClientService {
             await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await sleep(2000)
-            const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-            const userCaps = username[0].toUpperCase() + username.slice(1);
-            let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId)
-            const updatedUsername = await telegramClient.updateUsername(baseUsername);
-            if (updatedUsername !== client.username) {
+            const me = await telegramClient.getMe();
+            if (me.username !== client.username) {
+                const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
+                const userCaps = username[0].toUpperCase() + username.slice(1);
+                let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId);
+                const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername })
             }
             await sleep(2000)
-            await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+            if (me.firstName !== client.name) {
+                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+            }
             await sleep(3000)
             await telegramClient.deleteProfilePhotos();
             await sleep(3000)
