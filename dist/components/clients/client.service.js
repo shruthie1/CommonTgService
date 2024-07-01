@@ -42,7 +42,7 @@ let ClientService = class ClientService {
     async findAll() {
         const clientMapLength = this.clientsMap.size;
         console.log(clientMapLength);
-        if (clientMapLength < 3) {
+        if (clientMapLength < 20) {
             const results = await this.clientModel.find({}).exec();
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client);
@@ -238,15 +238,18 @@ let ClientService = class ClientService {
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
-            const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-            const userCaps = username[0].toUpperCase() + username.slice(1);
-            let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
-            const updatedUsername = await telegramClient.updateUsername(baseUsername);
-            if (updatedUsername !== client.username) {
+            const me = await telegramClient.getMe();
+            if (me.username !== client.username) {
+                const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
+                const userCaps = username[0].toUpperCase() + username.slice(1);
+                let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
+                const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername });
             }
             await (0, Helpers_1.sleep)(2000);
-            await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+            if (me.firstName !== client.name) {
+                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+            }
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.deleteProfilePhotos();
             await (0, Helpers_1.sleep)(3000);
