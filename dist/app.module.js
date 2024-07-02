@@ -25,6 +25,7 @@ const upi_ids_module_1 = require("./components/upi-ids/upi-ids.module");
 const promote_msgs_module_1 = require("./components/promote-msgs/promote-msgs.module");
 const stat_module_1 = require("./components/stats/stat.module");
 const stat2_module_1 = require("./components/stats2/stat2.module");
+const promote_stat_module_1 = require("./components/promote-stats/promote-stat.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -46,6 +47,7 @@ exports.AppModule = AppModule = __decorate([
             build_module_1.BuildModule,
             upi_ids_module_1.UpiIdModule,
             promote_msgs_module_1.PromoteMsgModule,
+            promote_stat_module_1.PromoteStatModule,
             stat_module_1.StatModule,
             stat2_module_1.Stat2Module
         ],
