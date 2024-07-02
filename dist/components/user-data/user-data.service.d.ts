@@ -13,4 +13,5 @@ export declare class UserDataService {
     remove(profile: string, chatId: string): Promise<UserData>;
     search(filter: any): Promise<UserData[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]>;
+    resetPaidUsers(): Promise<void>;
 }
