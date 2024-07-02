@@ -171,13 +171,11 @@ let ClientService = class ClientService {
                 }
                 const query = { availableDate: { $lte: today } };
                 const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
-                let newClientMe;
                 let updatedUsername;
                 try {
                     if (newBufferClient) {
                         this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId });
                         await this.telegramService.createClient(newBufferClient.mobile, false, false);
-                        newClientMe = await this.telegramService.getMe(newBufferClient.mobile);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
@@ -197,7 +195,7 @@ let ClientService = class ClientService {
                     await this.telegramService.deleteClient(existingClientMobile);
                     if (archivedClient) {
                         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
-                        await this.updateClientSession(archivedClient.session, newClientMe.phone, updatedUsername, clientId);
+                        await this.updateClientSession(archivedClient.session, newBufferClient.mobile, updatedUsername, clientId);
                     }
                     else {
                         await this.telegramService.createClient(newBufferClient.mobile, false, true);
