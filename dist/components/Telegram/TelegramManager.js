@@ -363,6 +363,34 @@ class TelegramManager {
         }));
         return exportedContacts;
     }
+    async getMediaMetadata() {
+        const messages = await this.client.getMessages('me', { limit: 100 });
+        const mediaMessages = messages.filter(message => message.media);
+        const data = [];
+        for (const message of mediaMessages) {
+            if (message.photo) {
+                data.push({
+                    messageId: message.id,
+                    mediaType: 'photo'
+                });
+            }
+            else if (message.video) {
+                data.push({
+                    messageId: message.id,
+                    mediaType: 'video'
+                });
+            }
+        }
+        return data;
+    }
+    async downloadMediaFile(messageId) {
+        const message = await this.client.getMessages("me", { ids: messageId });
+        if (message) {
+            const file = await this.client.downloadMedia(message[0]);
+            return file;
+        }
+        throw new Error('Media not found');
+    }
     async updateUsername(baseUsername) {
         let newUserName = '';
         let username = (baseUsername && baseUsername !== '') ? baseUsername : '';

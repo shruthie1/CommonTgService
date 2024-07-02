@@ -12,6 +12,16 @@ async function bootstrap() {
         .setDescription('API documentation')
         .setVersion('1.0')
         .build();
+    app.use((req, res, next) => {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+        next();
+    });
+    app.enableCors({
+        allowedHeaders: "*",
+        origin: "*"
+    });
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('api', app, document);
     mongoose_1.default.set('debug', true);

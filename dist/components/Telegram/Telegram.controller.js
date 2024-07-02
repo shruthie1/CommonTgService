@@ -87,6 +87,15 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.updateNameandBio(mobile, firstName, about);
     }
+    async getMediaMetadata(mobile) {
+        await this.connectToTelegram(mobile);
+        return this.telegramService.getMediaMetadata(mobile);
+    }
+    async downloadMediaFile(mobile, messageId) {
+        await this.connectToTelegram(mobile);
+        const file = await this.telegramService.downloadMediaFile(mobile, messageId);
+        return { file: file.toString('base64') };
+    }
 };
 exports.TelegramController = TelegramController;
 __decorate([
@@ -249,6 +258,21 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "updateName", null);
+__decorate([
+    (0, common_1.Get)('metadata'),
+    __param(0, (0, common_1.Query)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getMediaMetadata", null);
+__decorate([
+    (0, common_1.Get)('download'),
+    __param(0, (0, common_1.Query)('mobile')),
+    __param(1, (0, common_1.Query)('messageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "downloadMediaFile", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

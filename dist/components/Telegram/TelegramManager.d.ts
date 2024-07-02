@@ -58,6 +58,8 @@ declare class TelegramManager {
     updateProfile(firstName: string, about: string): Promise<void>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
+    getMediaMetadata(): Promise<any[]>;
+    downloadMediaFile(messageId: number): Promise<string | Buffer>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;

@@ -268,6 +268,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new Error("Failed to update username");
         }
     }
+    async getMediaMetadata(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.getMediaMetadata();
+    }
+    async downloadMediaFile(mobile, messageId) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.downloadMediaFile(messageId);
+    }
     async updateNameandBio(mobile, firstName, about) {
         const telegramClient = await this.getClient(mobile);
         try {
