@@ -17,6 +17,12 @@ export class PromoteStatService {
     return createdPromoteStat.save();
   }
 
+  async findAll(): Promise<PromoteStat[]> {
+    const promoteStat = await this.promoteStatModel.find().exec();
+    return promoteStat;
+  }
+
+
   async findByClient(client: string): Promise<PromoteStat> {
     const promoteStat = await this.promoteStatModel.findOne({ client }).exec();
     if (!promoteStat) {
