@@ -11,5 +11,6 @@ import { initModule } from '../ConfigurationInit/init.module';
         MongooseModule.forFeature([{ name: "StatsModule", collection: "stats", schema: StatSchema }])],
     controllers: [StatController],
     providers: [StatService],
+    exports:[StatService]
 })
 export class StatModule { }
