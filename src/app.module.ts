@@ -16,6 +16,7 @@ import { UpiIdModule } from './components/upi-ids/upi-ids.module';
 import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module';
 import { StatModule } from './components/stats/stat.module';
 import { Stat2Module } from './components/stats2/stat2.module';
+import { PromoteStatModule } from './components/promote-stats/promote-stat.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { Stat2Module } from './components/stats2/stat2.module';
     BuildModule,
     UpiIdModule,
     PromoteMsgModule,
+    PromoteStatModule,
     StatModule,
     Stat2Module
   ],

@@ -1,3 +1,5 @@
+import { PromoteStatService } from './components/promote-stats/promote-stat.service';
+import { PromoteStatModule } from './components/promote-stats/promote-stat.module';
 import { StatService } from './components/stats/stat.service';
 import { StatModule } from './components/stats/stat.module';
 import { Stat2Service } from './components/stats2/stat2.service';
@@ -56,6 +58,8 @@ export {
     Stat2Service,
     StatModule,
     StatService,
+    PromoteStatModule,
+    PromoteStatService,
     fetchWithTimeout,
     sleep,
     parseError,
