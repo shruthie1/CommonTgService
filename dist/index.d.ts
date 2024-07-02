@@ -1,3 +1,9 @@
+import { StatService } from './components/stats/stat.service';
+import { StatModule } from './components/stats/stat.module';
+import { Stat2Service } from './components/stats2/stat2.service';
+import { Stat2Module } from './components/stats2/stat2.module';
+import { PromoteMsgsService } from './components/promote-msgs/promote-msgs.service';
+import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module';
 import { UpiIdService } from './components/upi-ids/upi-ids.service';
 import { BuildService } from './components/builds/build.service';
 import { BuildModule } from './components/builds/build.module';
@@ -21,4 +27,4 @@ import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, ppplbot, sleep, defaultMessages, defaultReactions, fetchNumbersFromString } from './utils';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
-export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, UpiIdModule, UpiIdService, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
+export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, UpiIdModule, UpiIdService, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, PromoteMsgModule, PromoteMsgsService, Stat2Module, Stat2Service, StatModule, StatService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
