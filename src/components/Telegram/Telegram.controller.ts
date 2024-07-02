@@ -184,4 +184,20 @@ export class TelegramController {
         return await this.telegramService.updateNameandBio(mobile, firstName, about)
     }
 
+    @Get('metadata')
+    async getMediaMetadata(@Query('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return this.telegramService.getMediaMetadata(mobile);
+    }
+
+    @Get('download')
+    async downloadMediaFile(
+        @Query('mobile') mobile: string,
+        @Query('messageId') messageId: number,
+    ) {
+        await this.connectToTelegram(mobile);
+        const file = await this.telegramService.downloadMediaFile(mobile, messageId);
+        return { file: file.toString('base64') };
+    }
+
 }

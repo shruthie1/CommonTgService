@@ -323,6 +323,16 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
+    async getMediaMetadata(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.getMediaMetadata();
+    }
+
+    async downloadMediaFile(mobile: string, messageId: number) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.downloadMediaFile(messageId)
+    }
+
     async updateNameandBio(
         mobile: string,
         firstName: string,

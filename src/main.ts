@@ -11,6 +11,18 @@ async function bootstrap() {
     .setDescription('API documentation')
     .setVersion('1.0')
     .build();
+
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    next();
+  });
+
+  app.enableCors({
+    allowedHeaders: "*",
+    origin: "*"
+  });
   const document = SwaggerModule.createDocument(app, config);
   // fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
   SwaggerModule.setup('api', app, document);
@@ -25,7 +37,7 @@ async function bootstrap() {
   process.on('uncaughtException', (reason, promise) => {
     console.error(promise, reason);
   });
-  
+
   let isShuttingDown = false;
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;
