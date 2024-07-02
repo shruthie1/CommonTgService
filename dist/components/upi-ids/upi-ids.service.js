@@ -24,7 +24,7 @@ let UpiIdService = class UpiIdService {
         console.log("Config Module Inited");
     }
     async findOne() {
-        if (this.upiIds) {
+        if (this.upiIds && Object.keys(this.upiIds).length > 5) {
             return this.upiIds;
         }
         else {
