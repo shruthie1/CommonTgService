@@ -5,19 +5,22 @@ import { UpiId } from './upi-ids.schema';
 
 @Injectable()
 export class UpiIdService {
+    private upiIds;
     constructor(@InjectModel('UpiIdModule') private UpiIdModel: Model<UpiId>) {
-     }
+    }
 
     async OnModuleInit() {
-       console.log("Config Module Inited")
+        console.log("Config Module Inited")
     }
 
     async findOne(): Promise<any> {
-        const user = await this.UpiIdModel.findOne({}).exec();
-        if (!user) {
-            throw new NotFoundException(`UpiIdModel not found`);
+        if (this.upiIds) {
+            return this.upiIds
+        } else {
+            const upiIds = await this.UpiIdModel.findOne({}).exec();
+            this.upiIds = upiIds;
+            return upiIds
         }
-        return user;
     }
 
     async update(updateClientDto: any): Promise<any> {
