@@ -13,6 +13,9 @@ import { AppService } from './app.service';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { BuildModule } from './components/builds/build.module';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
+import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module';
+import { StatModule } from './components/stats/stat.module';
+import { Stat2Module } from './components/stats2/stat2.module';
 
 @Module({
   imports: [
@@ -26,7 +29,10 @@ import { UpiIdModule } from './components/upi-ids/upi-ids.module';
     ArchivedClientModule,
     ChannelsModule,
     BuildModule,
-    UpiIdModule
+    UpiIdModule,
+    PromoteMsgModule,
+    StatModule,
+    Stat2Module
   ],
   controllers:[AppController],
   providers:[AppService],

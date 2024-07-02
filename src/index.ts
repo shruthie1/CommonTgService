@@ -1,3 +1,9 @@
+import { StatService } from './components/stats/stat.service';
+import { StatModule } from './components/stats/stat.module';
+import { Stat2Service } from './components/stats2/stat2.service';
+import { Stat2Module } from './components/stats2/stat2.module';
+import { PromoteMsgsService } from './components/promote-msgs/promote-msgs.service';
+import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module';
 import { UpiIdService } from './components/upi-ids/upi-ids.service';
 import { BuildService } from './components/builds/build.service';
 import { BuildModule } from './components/builds/build.module';
@@ -44,6 +50,12 @@ export {
     BuildService,
     ChannelsModule,
     ChannelsService,
+    PromoteMsgModule,
+    PromoteMsgsService,
+    Stat2Module,
+    Stat2Service,
+    StatModule,
+    StatService,
     fetchWithTimeout,
     sleep,
     parseError,
