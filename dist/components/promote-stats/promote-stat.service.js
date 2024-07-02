@@ -27,6 +27,10 @@ let PromoteStatService = class PromoteStatService {
         const createdPromoteStat = new this.promoteStatModel(createPromoteStatDto);
         return createdPromoteStat.save();
     }
+    async findAll() {
+        const promoteStat = await this.promoteStatModel.find().exec();
+        return promoteStat;
+    }
     async findByClient(client) {
         const promoteStat = await this.promoteStatModel.findOne({ client }).exec();
         if (!promoteStat) {

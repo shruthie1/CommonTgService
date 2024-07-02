@@ -8,6 +8,7 @@ export declare class PromoteStatService {
     private clientService;
     constructor(promoteStatModel: Model<PromoteStatDocument>, clientService: ClientService);
     create(createPromoteStatDto: CreatePromoteStatDto): Promise<PromoteStat>;
+    findAll(): Promise<PromoteStat[]>;
     findByClient(client: string): Promise<PromoteStat>;
     update(client: string, updatePromoteStatDto: UpdatePromoteStatDto): Promise<PromoteStat>;
     deleteOne(client: string): Promise<void>;
