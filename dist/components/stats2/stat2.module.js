@@ -24,6 +24,7 @@ exports.Stat2Module = Stat2Module = __decorate([
         ],
         controllers: [stat2_controller_1.Stat2Controller],
         providers: [stat2_service_1.Stat2Service],
+        exports: [stat2_service_1.Stat2Service]
     })
 ], Stat2Module);
 //# sourceMappingURL=stat2.module.js.map
