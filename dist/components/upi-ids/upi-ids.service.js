@@ -24,11 +24,14 @@ let UpiIdService = class UpiIdService {
         console.log("Config Module Inited");
     }
     async findOne() {
-        const user = await this.UpiIdModel.findOne({}).exec();
-        if (!user) {
-            throw new common_1.NotFoundException(`UpiIdModel not found`);
+        if (this.upiIds) {
+            return this.upiIds;
         }
-        return user;
+        else {
+            const upiIds = await this.UpiIdModel.findOne({}).exec();
+            this.upiIds = upiIds;
+            return upiIds;
+        }
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
