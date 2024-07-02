@@ -24,7 +24,7 @@ exports.PromoteMsgModule = PromoteMsgModule = __decorate([
         ],
         providers: [promote_msgs_service_1.PromoteMsgsService],
         controllers: [promote_msgs_controller_1.PromoteMsgsController],
-        exports: [PromoteMsgModule],
+        exports: [promote_msgs_service_1.PromoteMsgsService],
     })
 ], PromoteMsgModule);
 //# sourceMappingURL=promote-msgs.module.js.map

@@ -13,13 +13,16 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActiveChannelsService = void 0;
+const promote_msgs_service_1 = require("./../promote-msgs/promote-msgs.service");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const active_channel_schema_1 = require("./schemas/active-channel.schema");
+const utils_1 = require("../../utils");
 let ActiveChannelsService = class ActiveChannelsService {
-    constructor(activeChannelModel) {
+    constructor(activeChannelModel, promoteMsgsService) {
         this.activeChannelModel = activeChannelModel;
+        this.promoteMsgsService = promoteMsgsService;
     }
     async create(createActiveChannelDto) {
         const createdChannel = new this.activeChannelModel(createActiveChannelDto);
@@ -130,11 +133,76 @@ let ActiveChannelsService = class ActiveChannelsService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async resetAvailableMsgs() {
+        try {
+            const data = await this.promoteMsgsService.findOne();
+            const keys = Object.keys(data);
+            await this.activeChannelModel.updateMany({
+                $expr: {
+                    $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+                }
+            }, {
+                $set: {
+                    "wordRestriction": 0,
+                    "dMRestriction": 0,
+                    "banned": false,
+                    "availableMsgs": keys
+                }
+            });
+        }
+        catch (e) {
+            console.log((0, utils_1.parseError)(e));
+        }
+    }
+    async updateBannedChannels() {
+        await this.activeChannelModel.updateMany({ banned: true }, {
+            $set: {
+                "wordRestriction": 0,
+                "dMRestriction": 0,
+                banned: false,
+                "availableMsgs": [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                    "6",
+                    "7",
+                    "8",
+                    "9",
+                    "10",
+                    "11",
+                    "12",
+                    "14",
+                    "15",
+                    "16"
+                ]
+            }
+        });
+    }
+    async updateDefaultReactions() {
+        await this.activeChannelModel.updateMany({}, {
+            $set: {
+                reactions: [
+                    '❤', '🔥', '👏', '🥰', '😁', '🤔',
+                    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+                    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+                    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+                    '🤣', '💔', '🏆', '😭', '😴', '👍',
+                    '🌚', '⚡', '🍌', '😐', '💋', '👻',
+                    '👀', '🙈', '🤝', '🤗', '🆒',
+                    '🗿', '🙉', '🙊', '🤷', '👎'
+                ]
+            }
+        });
+    }
 };
 exports.ActiveChannelsService = ActiveChannelsService;
 exports.ActiveChannelsService = ActiveChannelsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(active_channel_schema_1.ActiveChannel.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_msgs_service_1.PromoteMsgsService))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        promote_msgs_service_1.PromoteMsgsService])
 ], ActiveChannelsService);
 //# sourceMappingURL=active-channels.service.js.map

@@ -13,6 +13,7 @@ const active_channels_service_1 = require("./active-channels.service");
 const active_channels_controller_1 = require("./active-channels.controller");
 const active_channel_schema_1 = require("./schemas/active-channel.schema");
 const init_module_1 = require("../ConfigurationInit/init.module");
+const promote_msgs_module_1 = require("../promote-msgs/promote-msgs.module");
 let ActiveChannelsModule = class ActiveChannelsModule {
 };
 exports.ActiveChannelsModule = ActiveChannelsModule;
@@ -21,6 +22,7 @@ exports.ActiveChannelsModule = ActiveChannelsModule = __decorate([
         imports: [
             init_module_1.initModule,
             mongoose_1.MongooseModule.forFeature([{ name: active_channel_schema_1.ActiveChannel.name, schema: active_channel_schema_1.ActiveChannelSchema }]),
+            promote_msgs_module_1.PromoteMsgModule
         ],
         controllers: [active_channels_controller_1.ActiveChannelsController],
         providers: [active_channels_service_1.ActiveChannelsService],

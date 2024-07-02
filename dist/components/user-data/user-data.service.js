@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_data_schema_1 = require("./schemas/user-data.schema");
+const utils_1 = require("../../utils");
 let UserDataService = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
@@ -85,6 +86,20 @@ let UserDataService = class UserDataService {
         }
         catch (error) {
             throw new common_1.InternalServerErrorException(error.message);
+        }
+    }
+    async resetPaidUsers() {
+        try {
+            const entry = await this.userDataModel.updateMany({ $and: [{ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }] }, {
+                $set: {
+                    totalCount: 10,
+                    limitTime: Date.now(),
+                    paidReply: true
+                }
+            });
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error);
         }
     }
 };
