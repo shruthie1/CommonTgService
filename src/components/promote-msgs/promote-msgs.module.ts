@@ -12,6 +12,6 @@ import { PromoteMsgSchema } from './promote-msgs.schema';
   ],
   providers: [PromoteMsgsService],
   controllers: [PromoteMsgsController],
-  exports: [PromoteMsgModule],
+  exports: [PromoteMsgsService],
 })
 export class PromoteMsgModule { }

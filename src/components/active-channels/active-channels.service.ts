@@ -1,14 +1,18 @@
+import { PromoteMsgsService } from './../promote-msgs/promote-msgs.service';
 // src/activechannels/activechannels.service.ts
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
+import { parseError } from '../../utils';
 @Injectable()
 export class ActiveChannelsService {
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
+    @Inject(forwardRef(() => PromoteMsgsService))
+    private promoteMsgsService: PromoteMsgsService
   ) { }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
@@ -138,4 +142,68 @@ export class ActiveChannelsService {
     }
   }
 
+  async resetAvailableMsgs() {
+    try {
+      const data = await this.promoteMsgsService.findOne();
+      const keys = Object.keys(data);
+      await this.activeChannelModel.updateMany({
+        $expr: {
+          $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+        }
+      }, {
+        $set: {
+          "wordRestriction": 0,
+          "dMRestriction": 0,
+          "banned": false,
+          "availableMsgs": keys
+        }
+      })
+    } catch (e) {
+      console.log(parseError(e))
+    }
+  }
+
+  async updateBannedChannels() {
+    await this.activeChannelModel.updateMany({ banned: true }, {
+      $set: {
+        "wordRestriction": 0,
+        "dMRestriction": 0,
+        banned: false,
+        "availableMsgs": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "14",
+          "15",
+          "16"
+        ]
+      }
+    })
+  }
+
+  async updateDefaultReactions() {
+    await this.activeChannelModel.updateMany({}, {
+      $set: {
+        reactions: [
+          '❤', '🔥', '👏', '🥰', '😁', '🤔',
+          '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+          '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+          '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+          '🤣', '💔', '🏆', '😭', '😴', '👍',
+          '🌚', '⚡', '🍌', '😐', '💋', '👻',
+          '👀', '🙈', '🤝', '🤗', '🆒',
+          '🗿', '🙉', '🙊', '🤷', '👎'
+        ]
+      }
+    })
+  }
 }

@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
+import { parseError } from '../../utils';
 
 @Injectable()
 export class UserDataService {
@@ -83,6 +84,20 @@ export class UserDataService {
             return await queryExec.exec();
         } catch (error) {
             throw new InternalServerErrorException(error.message);
+        }
+    }
+
+    async resetPaidUsers() {
+        try {
+            const entry = await this.userDataModel.updateMany({ $and: [{ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }] }, {
+                $set: {
+                    totalCount: 10,
+                    limitTime: Date.now(),
+                    paidReply: true
+                }
+            });
+        } catch (error) {
+            parseError(error)
         }
     }
 }
