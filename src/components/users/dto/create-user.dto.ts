@@ -34,14 +34,8 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Timestamp of last active', example: '2024-06-03' })
   lastActive: string;
 
-  @ApiProperty({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03', default: (new Date(Date.now())).toISOString().split('T')[0] })
-  date: string = (new Date(Date.now())).toISOString().split('T')[0];
-
   @ApiProperty({ description: 'Telegram ID of the user', example: '2022068676' })
   tgId: string;
-
-  @ApiProperty({ description: 'Timestamp of last update', example: '2024-06-13', default: (new Date(Date.now())).toISOString().split('T')[0] })
-  lastUpdated: string = (new Date(Date.now())).toISOString().split('T')[0];
 
   @ApiProperty({ description: 'TwoFA status', example: 0 })
   twoFA: boolean = false;

@@ -69,16 +69,6 @@ export class SearchUserDto {
   @IsNumber()
   lastActive?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by date' })
-  @IsOptional()
-  @IsString()
-  date?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by last updated timestamp' })
-  @IsOptional()
-  @IsString()
-  lastUpdated?: string;
-
   @ApiPropertyOptional({ description: 'Filter by movie count' })
   @IsOptional()
   @IsNumber()

@@ -57,16 +57,8 @@ export class User {
   lastActive: string;
 
   @ApiProperty()
-  @Prop()
-  date: string;
-
-  @ApiProperty()
   @Prop({required: true, unique: true})
   tgId: string;
-
-  @ApiProperty()
-  @Prop()
-  lastUpdated: string;
 
   @ApiProperty()
   @Prop()

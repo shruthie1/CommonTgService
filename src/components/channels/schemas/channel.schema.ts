@@ -9,7 +9,7 @@ export type ChannelDocument = Channel & Document;
     transform: (doc, ret) => {
       delete ret._id;
     },
-  },})  // Specify the collection name here
+  },})
 export class Channel {
   @Prop({ required: true, unique: true })
   channelId: string;

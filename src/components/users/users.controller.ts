@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Patch, Delete, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { SearchUserDto } from './dto/search-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -53,9 +53,6 @@ export class UsersController {
 
   @Post('query')
   @ApiOperation({ summary: 'Execute a custom MongoDB query' })
-  //@apiresponse({ status: 200, description: 'Query executed successfully.' })
-  //@apiresponse({ status: 400, description: 'Invalid query.' })
-  //@apiresponse({ status: 500, description: 'Internal server error.' })
   async executeQuery(@Body() requestBody: any): Promise<any> {
     const { query, sort, limit, skip } = requestBody;
     try {
