@@ -13,8 +13,6 @@ exports.CreateUserDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class CreateUserDto {
     constructor() {
-        this.date = (new Date(Date.now())).toISOString().split('T')[0];
-        this.lastUpdated = (new Date(Date.now())).toISOString().split('T')[0];
         this.twoFA = false;
         this.password = null;
         this.movieCount = 0;
@@ -68,17 +66,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date of creation in YYYY-MM-DD format', example: '2024-06-03', default: (new Date(Date.now())).toISOString().split('T')[0] }),
-    __metadata("design:type", String)
-], CreateUserDto.prototype, "date", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Telegram ID of the user', example: '2022068676' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "tgId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last update', example: '2024-06-13', default: (new Date(Date.now())).toISOString().split('T')[0] }),
-    __metadata("design:type", String)
-], CreateUserDto.prototype, "lastUpdated", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'TwoFA status', example: 0 }),
     __metadata("design:type", Boolean)

@@ -10,9 +10,7 @@ export declare class CreateUserDto {
     msgs: number;
     totalChats: number;
     lastActive: string;
-    date: string;
     tgId: string;
-    lastUpdated: string;
     twoFA: boolean;
     password: boolean;
     movieCount: number;

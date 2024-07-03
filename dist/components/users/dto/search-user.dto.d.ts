@@ -12,8 +12,6 @@ export declare class SearchUserDto {
     msgs?: number;
     totalChats?: number;
     lastActive?: string;
-    date?: string;
-    lastUpdated?: string;
     movieCount?: number;
     photoCount?: number;
     videoCount?: number;
