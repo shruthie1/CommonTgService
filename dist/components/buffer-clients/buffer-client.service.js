@@ -13,6 +13,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BufferClientService = void 0;
+const channels_service_1 = require("./../channels/channels.service");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
@@ -23,12 +24,13 @@ const active_channels_service_1 = require("../active-channels/active-channels.se
 const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
 let BufferClientService = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.clientService = clientService;
+        this.channelsService = channelsService;
         this.joinChannelMap = new Map();
     }
     async create(bufferClient) {
@@ -109,7 +111,7 @@ let BufferClientService = class BufferClientService {
                     console.log("Existing Channels Length : ", channels.ids.length);
                     await this.update(document.mobile, { channels: channels.ids.length });
                     const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
-                    const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    const result = await this.channelsService.getActiveChannels(150, 0, keys, channels.ids);
                     this.joinChannelMap.set(document.mobile, result);
                     await this.telegramService.deleteClient(document.mobile);
                 }
@@ -331,10 +333,12 @@ exports.BufferClientService = BufferClientService = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
-        client_service_1.ClientService])
+        client_service_1.ClientService,
+        channels_service_1.ChannelsService])
 ], BufferClientService);
 //# sourceMappingURL=buffer-client.service.js.map

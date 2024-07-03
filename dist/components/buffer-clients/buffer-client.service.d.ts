@@ -1,3 +1,4 @@
+import { ChannelsService } from './../channels/channels.service';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
@@ -12,9 +13,10 @@ export declare class BufferClientService {
     private usersService;
     private activeChannelsService;
     private clientService;
+    private channelsService;
     private joinChannelMap;
     private joinChannelIntervalId;
-    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService);
+    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService);
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
     findOne(mobile: string): Promise<BufferClient>;

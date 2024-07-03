@@ -108,6 +108,48 @@ let ChannelsService = class ChannelsService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async getActiveChannels(limit = 50, skip = 0, keywords = [], notIds = []) {
+        const pattern = new RegExp(keywords.join('|'), 'i');
+        const notPattern = new RegExp('online|board|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser', "i");
+        let query = {
+            $and: [
+                { username: { $ne: null } },
+                {
+                    $or: [
+                        { title: { $regex: pattern } },
+                        { username: { $regex: pattern } }
+                    ]
+                },
+                {
+                    username: {
+                        $not: {
+                            $regex: "^(" + notIds.map(id => "(?i)" + id?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))?.join("|") + ")$"
+                        }
+                    }
+                },
+                {
+                    title: { $not: { $regex: notPattern } }
+                },
+                {
+                    username: { $not: { $regex: notPattern } }
+                },
+                {
+                    sendMessages: false,
+                    broadcast: false,
+                    restricted: false
+                }
+            ]
+        };
+        const sort = { participantsCount: "desc" };
+        try {
+            const result = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+            return result;
+        }
+        catch (error) {
+            console.error('Error:', error);
+            return [];
+        }
+    }
 };
 exports.ChannelsService = ChannelsService;
 exports.ChannelsService = ChannelsService = __decorate([

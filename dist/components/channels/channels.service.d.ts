@@ -14,4 +14,5 @@ export declare class ChannelsService {
     search(filter: any): Promise<Channel[]>;
     getChannels(limit?: number, skip?: number, keywords?: any[], notIds?: any[]): Promise<Channel[]>;
     executeQuery(query: any, sort?: any, limit?: number): Promise<Channel[]>;
+    getActiveChannels(limit?: number, skip?: number, keywords?: any[], notIds?: any[]): Promise<Channel[]>;
 }
