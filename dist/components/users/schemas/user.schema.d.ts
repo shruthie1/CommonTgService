@@ -12,9 +12,7 @@ export declare class User {
     msgs: number;
     totalChats: number;
     lastActive: string;
-    date: string;
     tgId: string;
-    lastUpdated: string;
     movieCount: number;
     photoCount: number;
     videoCount: number;

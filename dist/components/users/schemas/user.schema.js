@@ -77,19 +77,9 @@ __decorate([
 ], User.prototype, "lastActive", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "date", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "tgId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "lastUpdated", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)(),

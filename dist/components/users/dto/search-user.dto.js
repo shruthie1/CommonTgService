@@ -96,18 +96,6 @@ __decorate([
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "lastActive", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by date' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchUserDto.prototype, "date", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by last updated timestamp' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchUserDto.prototype, "lastUpdated", void 0);
-__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by movie count' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
