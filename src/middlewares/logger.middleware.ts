@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import { fetchWithTimeout, ppplbot } from 'src/utils';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -17,8 +18,10 @@ export class LoggerMiddleware implements NestMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
+                    fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.error(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 } else if (statusCode >= 400) {
+                    fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.warn(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 } else if (statusCode >= 300) {
                     this.logger.verbose(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
