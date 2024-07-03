@@ -24,6 +24,10 @@ let StatService = class StatService {
         const createdStat = new this.statModel(createStatDto);
         return createdStat.save();
     }
+    async findAll() {
+        const stats = await this.statModel.find().exec();
+        return stats;
+    }
     async findByChatIdAndProfile(chatId, profile) {
         const stat = await this.statModel.findOne({ chatId, profile }).exec();
         if (!stat) {

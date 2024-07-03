@@ -8,6 +8,7 @@ export declare class Stat2Service {
     create(createStatDto: CreateStatDto): Promise<Stat2>;
     findByChatIdAndProfile(chatId: string, profile: string): Promise<Stat2>;
     update(chatId: string, profile: string, updateStatDto: UpdateStatDto): Promise<Stat2>;
+    findAll(): Promise<Stat2[]>;
     deleteOne(chatId: string, profile: string): Promise<void>;
     deleteAll(): Promise<void>;
 }
