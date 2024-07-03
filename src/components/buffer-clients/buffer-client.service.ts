@@ -262,7 +262,8 @@ export class BufferClientService {
                         await this.telegramService.deleteClient(document.mobile)
                     }
                 } else {
-                    console.log("Number is a Active Client")
+                    console.log("Number is a Active Client");
+                    this.remove(document.mobile)
                 }
             }
             console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
