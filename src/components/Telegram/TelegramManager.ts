@@ -12,7 +12,6 @@ import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
 import * as bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
-import { message } from 'telegram/client';
 
 class TelegramManager {
     private session: StringSession;
