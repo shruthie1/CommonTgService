@@ -9,7 +9,7 @@ export declare class UserDataController {
     create(createUserDataDto: CreateUserDataDto): Promise<UserData>;
     search(query: SearchDto): Promise<UserData[]>;
     findAll(): Promise<UserData[]>;
-    updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
+    updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<any>;
     findOne(profile: string, chatId: string): Promise<UserData>;
     update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
     remove(profile: string, chatId: string): Promise<UserData>;
