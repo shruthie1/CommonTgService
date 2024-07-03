@@ -59,11 +59,11 @@ let PromoteStatService = class PromoteStatService {
         for (const user of users) {
             await this.promoteStatModel.updateOne({ client: user.clientId }, {
                 $set: {
-                    data: Object.fromEntries((await this.promoteStatModel.findOne({ client: user.clientId })).channels?.map(channel => [channel, 0])),
                     totalCount: 0,
                     uniqueChannels: 0,
                     releaseDay: Date.now(),
-                    lastupdatedTimeStamp: Date.now()
+                    lastupdatedTimeStamp: Date.now(),
+                    data: Object.fromEntries((await this.promoteStatModel.findOne({ client: user.clientId })).channels?.map(channel => [channel, 0])),
                 }
             });
         }
