@@ -53,8 +53,8 @@ let ClientService = class ClientService {
             return Array.from(this.clientsMap.values());
         }
     }
-    async findAllMasked() {
-        const results = await this.clientModel.find({}, { session: 0, mobile: 0, password: 0 }).exec();
+    async findAllMasked(query) {
+        const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0 }).exec();
         return results;
     }
     async refreshMap() {

@@ -9,7 +9,7 @@ export declare class ClientController {
     constructor(clientService: ClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
-    findAllMasked(): Promise<Client[]>;
+    findAllMasked(query: SearchClientDto): Promise<Client[]>;
     findAll(): Promise<Client[]>;
     updateClient(clientId: string): Promise<void>;
     findOne(clientId: string): Promise<Client>;
