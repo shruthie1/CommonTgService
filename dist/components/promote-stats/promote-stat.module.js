@@ -20,7 +20,7 @@ exports.PromoteStatModule = PromoteStatModule;
 exports.PromoteStatModule = PromoteStatModule = __decorate([
     (0, common_1.Module)({
         imports: [init_module_1.initModule,
-            mongoose_1.MongooseModule.forFeature([{ name: promote_stat_schema_1.PromoteStat.name, schema: promote_stat_schema_1.PromoteStatSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_stat_schema_1.PromoteStat.name, collection: "promoteStats", schema: promote_stat_schema_1.PromoteStatSchema }]),
             client_module_1.ClientModule
         ],
         controllers: [promote_stat_controller_1.PromoteStatController],
