@@ -46,7 +46,7 @@ let UserDataService = class UserDataService {
     }
     async updateAll(chatId, updateUserDataDto) {
         delete updateUserDataDto['_id'];
-        const updatedUser = await this.userDataModel.findOneAndUpdate({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+        const updatedUser = await this.userDataModel.updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UserData with ID "${chatId}" not found`);
         }
