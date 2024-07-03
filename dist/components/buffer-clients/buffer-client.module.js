@@ -17,6 +17,7 @@ const active_channels_module_1 = require("../active-channels/active-channels.mod
 const users_module_1 = require("../users/users.module");
 const client_module_1 = require("../clients/client.module");
 const init_module_1 = require("../ConfigurationInit/init.module");
+const channels_module_1 = require("../channels/channels.module");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -28,7 +29,8 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule)
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
