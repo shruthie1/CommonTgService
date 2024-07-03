@@ -277,7 +277,8 @@ export class BufferClientService {
     }
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false }, { lastActive: 1 }, badIds.length + 3);
+        const sixMonthsAgo = (new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, lastActive: { $lt: sixMonthsAgo } }, { tgId: 1 }, badIds.length + 3);
         console.log("New buffer documents to be added: ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
