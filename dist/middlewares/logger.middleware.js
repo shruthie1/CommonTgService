@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoggerMiddleware = void 0;
 const common_1 = require("@nestjs/common");
+const utils_1 = require("../utils");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new common_1.Logger('HTTP');
@@ -23,9 +24,11 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
+                    (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.error(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 400) {
+                    (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.warn(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 300) {
