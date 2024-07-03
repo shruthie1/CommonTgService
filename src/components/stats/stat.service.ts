@@ -14,6 +14,11 @@ export class StatService {
     return createdStat.save();
   }
 
+  async findAll(): Promise<Stat[]> {
+    const stats = await this.statModel.find().exec();
+    return stats;
+  }
+
   async findByChatIdAndProfile(chatId: string, profile: string): Promise<Stat> {
     const stat = await this.statModel.findOne({ chatId, profile }).exec();
     if (!stat) {

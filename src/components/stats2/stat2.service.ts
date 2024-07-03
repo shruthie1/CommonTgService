@@ -30,6 +30,11 @@ export class Stat2Service {
     return stat;
   }
 
+  async findAll(): Promise<Stat2[]> {
+    const stats = await this.statModel.find().exec();
+    return stats;
+  }
+
   async deleteOne(chatId: string, profile: string): Promise<void> {
     const result = await this.statModel.deleteOne({ chatId, profile }).exec();
     if (result.deletedCount === 0) {
