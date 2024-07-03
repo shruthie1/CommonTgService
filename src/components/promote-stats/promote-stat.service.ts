@@ -18,7 +18,7 @@ export class PromoteStatService {
   }
 
   async findAll(): Promise<PromoteStat[]> {
-    const promoteStat = await this.promoteStatModel.find().exec();
+    const promoteStat = await this.promoteStatModel.find().sort({ totalCount: -1 }).exec();
     return promoteStat;
   }
 
