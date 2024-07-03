@@ -6,6 +6,7 @@ export declare class StatService {
     private statModel;
     constructor(statModel: Model<StatDocument>);
     create(createStatDto: CreateStatDto): Promise<Stat>;
+    findAll(): Promise<Stat[]>;
     findByChatIdAndProfile(chatId: string, profile: string): Promise<Stat>;
     update(chatId: string, profile: string, updateStatDto: UpdateStatDto): Promise<Stat>;
     deleteOne(chatId: string, profile: string): Promise<void>;

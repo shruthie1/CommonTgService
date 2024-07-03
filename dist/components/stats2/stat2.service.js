@@ -38,6 +38,10 @@ let Stat2Service = class Stat2Service {
         }
         return stat;
     }
+    async findAll() {
+        const stats = await this.statModel.find().exec();
+        return stats;
+    }
     async deleteOne(chatId, profile) {
         const result = await this.statModel.deleteOne({ chatId, profile }).exec();
         if (result.deletedCount === 0) {
