@@ -1,3 +1,4 @@
+import { ChannelsService } from './../channels/channels.service';
 import { Channel } from './../channels/schemas/channel.schema';
 import { BadRequestException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -25,6 +26,8 @@ export class BufferClientService {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ClientService))
         private clientService: ClientService,
+        @Inject(forwardRef(() => ActiveChannelsService))
+        private channelsService: ChannelsService,
     ) { }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
@@ -118,7 +121,7 @@ export class BufferClientService {
                     console.log("Existing Channels Length : ", channels.ids.length);
                     await this.update(document.mobile, { channels: channels.ids.length });
                     const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
-                    const result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    const result = await this.channelsService.getActiveChannels(150, 0, keys, channels.ids);
                     this.joinChannelMap.set(document.mobile, result);
                     await this.telegramService.deleteClient(document.mobile);
                     // console.log("DbChannelsLen: ", result.length);

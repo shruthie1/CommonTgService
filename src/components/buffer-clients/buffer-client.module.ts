@@ -8,6 +8,7 @@ import { ActiveChannelsModule } from '../active-channels/active-channels.module'
 import { UsersModule } from '../users/users.module';
 import { ClientModule } from '../clients/client.module';
 import { initModule } from '../ConfigurationInit/init.module';
+import { ChannelsModule } from '../channels/channels.module';
 
 @Module({
   imports: [
@@ -16,7 +17,9 @@ import { initModule } from '../ConfigurationInit/init.module';
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ActiveChannelsModule),
-    forwardRef(() => ClientModule)],
+    forwardRef(() => ClientModule),
+    forwardRef(() => ChannelsModule),
+ ],
   controllers: [BufferClientController],
   providers: [BufferClientService],
   exports: [BufferClientService]
