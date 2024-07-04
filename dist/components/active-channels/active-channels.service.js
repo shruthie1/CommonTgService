@@ -40,6 +40,12 @@ let ActiveChannelsService = class ActiveChannelsService {
         const updatedChannel = await this.activeChannelModel.findOneAndUpdate({ channelId }, { $set: updateActiveChannelDto }, { new: true, upsert: true }).exec();
         return updatedChannel;
     }
+    async removeFromAvailableMsgs(channelId, msg) {
+        return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $pull: { availableMsgs: msg } });
+    }
+    async addToAvailableMsgs(channelId, msg) {
+        return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $addToSet: { availableMsgs: msg } });
+    }
     async remove(channelId) {
         const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
     }
