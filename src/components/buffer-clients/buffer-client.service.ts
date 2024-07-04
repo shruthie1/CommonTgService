@@ -40,7 +40,7 @@ export class BufferClientService {
     }
 
     async findOne(mobile: string): Promise<BufferClient> {
-        const user = (await this.bufferClientModel.findOne({ mobile }).exec()).toJSON();
+        const user = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
         if (!user) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
@@ -63,7 +63,7 @@ export class BufferClientService {
     }
 
     async createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient> {
-        const existingUser = (await this.bufferClientModel.findOne({ mobile }).exec()).toJSON();
+        const existingUser = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
             console.log("Updating")
             return this.update(existingUser.mobile, createOrUpdateUserDto as UpdateBufferClientDto);

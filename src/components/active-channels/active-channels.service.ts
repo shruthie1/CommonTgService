@@ -25,7 +25,7 @@ export class ActiveChannelsService {
   }
 
   async findOne(channelId: string): Promise<ActiveChannel> {
-    const channel = (await this.activeChannelModel.findOne({ channelId }).exec()).toJSON();
+    const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
     return channel;
   }
 
@@ -64,7 +64,7 @@ export class ActiveChannelsService {
   }
 
   async getRandomReaction(channelId: string): Promise<string> {
-    const channel = (await this.activeChannelModel.findOne({ channelId }).exec()).toJSON();
+    const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
     if (!channel) {
       return undefined;
     }

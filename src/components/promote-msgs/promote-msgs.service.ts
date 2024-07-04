@@ -13,7 +13,7 @@ export class PromoteMsgsService {
     }
 
     async findOne(): Promise<any> {
-        const user = (await this.promotemsgModel.findOne({}).exec()).toJSON();
+        const user = (await this.promotemsgModel.findOne({}).exec())?.toJSON();
         if (!user) {
             throw new NotFoundException(`promotemsgModel not found`);
         }

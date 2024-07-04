@@ -28,7 +28,7 @@ export class ArchivedClientService {
     }
 
     async findOne(mobile: string): Promise<Client> {
-        const user = (await this.archivedclientModel.findOne({ mobile }).exec()).toJSON();
+        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
         return user;
     }
 

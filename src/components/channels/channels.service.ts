@@ -26,7 +26,7 @@ export class ChannelsService {
   }
 
   async findOne(channelId: string): Promise<Channel> {
-    const channel = (await this.ChannelModel.findOne({ channelId }).exec()).toJSON();
+    const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
     return channel;
   }
 

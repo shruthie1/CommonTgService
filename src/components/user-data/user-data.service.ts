@@ -20,7 +20,7 @@ export class UserDataService {
     }
 
     async findOne(profile: string, chatId: string): Promise<UserData> {
-        const user = (await this.userDataModel.findOne({ profile, chatId }).exec()).toJSON();
+        const user = (await this.userDataModel.findOne({ profile, chatId }).exec())?.toJSON();
         if (!user) {
             console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
