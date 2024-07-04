@@ -34,7 +34,7 @@ let ArchivedClientService = class ArchivedClientService {
         return results;
     }
     async findOne(mobile) {
-        const user = await this.archivedclientModel.findOne({ mobile }).exec();
+        const user = (await this.archivedclientModel.findOne({ mobile }).exec()).toJSON();
         return user;
     }
     async update(mobile, updateClientDto) {
