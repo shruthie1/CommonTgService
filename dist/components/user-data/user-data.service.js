@@ -27,10 +27,10 @@ let UserDataService = class UserDataService {
         return createdUser.save();
     }
     async findAll() {
-        return this.userDataModel.find().exec();
+        return await this.userDataModel.find().exec();
     }
     async findOne(profile, chatId) {
-        const user = await this.userDataModel.findOne({ profile, chatId }).exec();
+        const user = (await this.userDataModel.findOne({ profile, chatId }).exec()).toJSON();
         if (!user) {
             console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
