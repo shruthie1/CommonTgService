@@ -37,7 +37,7 @@ export class UsersService {
   }
 
   async findOne(tgId: string): Promise<User> {
-    const user = await this.userModel.findOne({ tgId }).exec();
+    const user = await (await this.userModel.findOne({ tgId }).exec()).toJSON()
     if (!user) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }

@@ -24,7 +24,7 @@ export class PromoteStatService {
 
 
   async findByClient(client: string): Promise<PromoteStat> {
-    const promoteStat = await this.promoteStatModel.findOne({ client }).exec();
+    const promoteStat = await (await this.promoteStatModel.findOne({ client }).exec()).toJSON()
     if (!promoteStat) {
       throw new NotFoundException(`PromoteStat not found for client ${client}`);
     }

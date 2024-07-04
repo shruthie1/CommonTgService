@@ -64,7 +64,7 @@ export class ClientService {
         if (client) {
             return client;
         } else {
-            const user = await this.clientModel.findOne({ clientId }, { _id: 0 }).exec();
+            const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec()).toJSON();
             this.clientsMap.set(clientId, user);
             if (!user) {
                 throw new NotFoundException(`Client with ID "${clientId}" not found`);
