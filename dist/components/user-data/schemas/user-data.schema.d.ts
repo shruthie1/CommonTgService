@@ -17,7 +17,7 @@ export declare class UserData {
     secondShow: boolean;
     fullShow: boolean;
     profile: string;
-    picSent: string;
+    picSent: boolean;
 }
 export declare const UserDataSchema: import("mongoose").Schema<UserData, import("mongoose").Model<UserData, any, any, any, Document<unknown, any, UserData> & UserData & {
     _id: import("mongoose").Types.ObjectId;

@@ -78,6 +78,6 @@ __decorate([
 ], SearchDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Pics Sent status' }),
-    __metadata("design:type", String)
+    __metadata("design:type", Boolean)
 ], SearchDto.prototype, "picsSent", void 0);
 //# sourceMappingURL=search-user-data.dto.js.map
