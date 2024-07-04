@@ -175,7 +175,7 @@ let ClientService = class ClientService {
                 try {
                     if (newBufferClient) {
                         this.telegramService.setActiveClientSetup({ mobile: newBufferClient.mobile, clientId });
-                        await this.telegramService.createClient(newBufferClient.mobile, false, false);
+                        await this.telegramService.createClient(newBufferClient.mobile, false, true);
                         const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                         const userCaps = username[0].toUpperCase() + username.slice(1);
                         let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
