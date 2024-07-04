@@ -47,5 +47,5 @@ export class CreateUserDataDto {
     profile: string;
 
     @ApiProperty({ example: false, description: 'Pics Sent status' })
-    picsSent: string;
+    picsSent: boolean;
 }

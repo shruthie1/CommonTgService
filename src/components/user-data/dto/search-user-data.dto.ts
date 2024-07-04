@@ -49,5 +49,5 @@ export class SearchDto {
   chatId?: string;
 
   @ApiPropertyOptional({ description: 'Pics Sent status' })
-  picsSent?: string;
+  picsSent?: boolean;
 }

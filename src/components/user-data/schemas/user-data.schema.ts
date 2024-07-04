@@ -62,7 +62,7 @@ export class UserData {
     profile: string;
 
     @Prop({ required: true })
-    picSent: string;
+    picSent: boolean;
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
