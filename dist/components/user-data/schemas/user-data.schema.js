@@ -78,6 +78,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], UserData.prototype, "profile", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], UserData.prototype, "picSent", void 0);
 exports.UserData = UserData = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,

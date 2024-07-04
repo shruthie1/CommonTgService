@@ -74,4 +74,8 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'sneha', description: 'Profile name' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "profile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Pics Sent status' }),
+    __metadata("design:type", String)
+], CreateUserDataDto.prototype, "picsSent", void 0);
 //# sourceMappingURL=create-user-data.dto.js.map
