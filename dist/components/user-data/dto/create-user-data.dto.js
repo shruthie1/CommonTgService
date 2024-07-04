@@ -76,6 +76,6 @@ __decorate([
 ], CreateUserDataDto.prototype, "profile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: false, description: 'Pics Sent status' }),
-    __metadata("design:type", String)
+    __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "picsSent", void 0);
 //# sourceMappingURL=create-user-data.dto.js.map

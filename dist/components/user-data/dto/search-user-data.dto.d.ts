@@ -14,5 +14,5 @@ export declare class SearchDto {
     secondShow?: boolean;
     profile?: string;
     chatId?: string;
-    picsSent?: string;
+    picsSent?: boolean;
 }
