@@ -39,6 +39,14 @@ export class ActiveChannelsService {
     return updatedChannel;
   }
 
+  async removeFromAvailableMsgs(channelId: string, msg: string) {
+    return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $pull: { availableMsgs: msg } })
+  }
+
+  async addToAvailableMsgs(channelId: string, msg: string) {
+    return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $addToSet: { availableMsgs: msg } })
+  }
+
   async remove(channelId: string): Promise<void> {
     const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
   }
