@@ -24,14 +24,8 @@ let UpiIdService = class UpiIdService {
         console.log("Config Module Inited");
     }
     async findOne() {
-        if (this.upiIds && Object.keys(this.upiIds).length > 5) {
-            return this.upiIds;
-        }
-        else {
-            const upiIds = await this.UpiIdModel.findOne({}).exec();
-            this.upiIds = upiIds;
-            return upiIds;
-        }
+        const upiIds = await this.UpiIdModel.findOne({}).exec();
+        return upiIds;
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
