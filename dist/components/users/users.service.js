@@ -43,7 +43,7 @@ let UsersService = class UsersService {
         return this.userModel.find().exec();
     }
     async findOne(tgId) {
-        const user = await (await this.userModel.findOne({ tgId }).exec()).toJSON();
+        const user = await (await this.userModel.findOne({ tgId }).exec())?.toJSON();
         if (!user) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
