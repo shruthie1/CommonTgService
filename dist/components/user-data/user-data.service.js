@@ -32,7 +32,7 @@ let UserDataService = class UserDataService {
     async findOne(profile, chatId) {
         const user = await this.userDataModel.findOne({ profile, chatId }).exec();
         if (!user) {
-            throw new common_1.NotFoundException(`UserData with ID "${profile} - ${chatId}" not found`);
+            console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
         return user;
     }
@@ -40,7 +40,7 @@ let UserDataService = class UserDataService {
         delete updateUserDataDto['_id'];
         const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
-            throw new common_1.NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return updatedUser;
     }
@@ -48,14 +48,14 @@ let UserDataService = class UserDataService {
         delete updateUserDataDto['_id'];
         const updatedUser = await this.userDataModel.updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
-            throw new common_1.NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return updatedUser;
     }
     async remove(profile, chatId) {
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
         if (!deletedUser) {
-            throw new common_1.NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return deletedUser;
     }
