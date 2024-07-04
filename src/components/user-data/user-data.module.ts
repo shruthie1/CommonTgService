@@ -8,9 +8,9 @@ import { initModule } from '../ConfigurationInit/init.module';
 @Module({
   imports: [
     initModule,
-    MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema }])],
+    MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema, collection: "userData" }])],
   controllers: [UserDataController],
   providers: [UserDataService],
-  exports:[UserDataService]
+  exports: [UserDataService]
 })
-export class UserDataModule {}
+export class UserDataModule { }

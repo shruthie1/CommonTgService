@@ -45,4 +45,7 @@ export class CreateUserDataDto {
 
     @ApiProperty({ example: 'sneha', description: 'Profile name' })
     profile: string;
+
+    @ApiProperty({ example: false, description: 'Pics Sent status' })
+    picsSent: string;
 }

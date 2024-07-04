@@ -47,4 +47,7 @@ export class SearchDto {
 
   @ApiPropertyOptional({ description: 'Chat ID' })
   chatId?: string;
+
+  @ApiPropertyOptional({ description: 'Pics Sent status' })
+  picsSent?: string;
 }

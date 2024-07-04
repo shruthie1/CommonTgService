@@ -60,6 +60,9 @@ export class UserData {
 
     @Prop({ required: true })
     profile: string;
+
+    @Prop({ required: true })
+    picSent: string;
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
