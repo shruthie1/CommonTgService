@@ -125,6 +125,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         else {
+            console.log("Client Already exists");
             return await this.getClient(mobile);
         }
     }
