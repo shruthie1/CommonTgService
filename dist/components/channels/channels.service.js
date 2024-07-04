@@ -34,7 +34,7 @@ let ChannelsService = class ChannelsService {
         return this.ChannelModel.find().exec();
     }
     async findOne(channelId) {
-        const channel = (await this.ChannelModel.findOne({ channelId }).exec()).toJSON();
+        const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
         return channel;
     }
     async update(channelId, updateChannelDto) {

@@ -24,7 +24,7 @@ let PromoteMsgsService = class PromoteMsgsService {
         console.log("Config Module Inited");
     }
     async findOne() {
-        const user = (await this.promotemsgModel.findOne({}).exec()).toJSON();
+        const user = (await this.promotemsgModel.findOne({}).exec())?.toJSON();
         if (!user) {
             throw new common_1.NotFoundException(`promotemsgModel not found`);
         }
