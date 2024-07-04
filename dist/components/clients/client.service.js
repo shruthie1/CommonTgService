@@ -121,8 +121,8 @@ let ClientService = class ClientService {
                 let isArchived = false;
                 if (existingClientUser) {
                     try {
-                        await this.telegramService.createClient(existingClientMobile, false, true);
                         if ((0, utils_1.toBoolean)(setupClientQueryDto.formalities)) {
+                            await this.telegramService.createClient(existingClientMobile, false, true);
                             console.log("Started Formalities");
                             await this.telegramService.updateUsername(existingClientMobile, '');
                             await this.telegramService.updatePrivacyforDeletedAccount(existingClientMobile);
