@@ -22,7 +22,7 @@ export class UserDataService {
     async findOne(profile: string, chatId: string): Promise<UserData> {
         const user = await this.userDataModel.findOne({ profile, chatId }).exec();
         if (!user) {
-            throw new NotFoundException(`UserData with ID "${profile} - ${chatId}" not found`);
+            console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
         return user;
     }
@@ -31,7 +31,7 @@ export class UserDataService {
         delete updateUserDataDto['_id']
         const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
-            throw new NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return updatedUser;
     }
@@ -40,7 +40,7 @@ export class UserDataService {
         delete updateUserDataDto['_id']
         const updatedUser = await this.userDataModel.updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
-            throw new NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return updatedUser;
     }
@@ -48,7 +48,7 @@ export class UserDataService {
     async remove(profile: string, chatId: string): Promise<UserData> {
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
         if (!deletedUser) {
-            throw new NotFoundException(`UserData with ID "${chatId}" not found`);
+            console.warn(`UserData with ID "${chatId}" not found`);
         }
         return deletedUser;
     }
