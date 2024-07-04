@@ -123,6 +123,7 @@ export class TelegramService implements OnModuleDestroy {
                 throw new BadRequestException(errorDetails.message)
             }
         } else {
+            console.log("Client Already exists")
             return await this.getClient(mobile)
         }
     }
