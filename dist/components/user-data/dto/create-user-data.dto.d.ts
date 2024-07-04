@@ -14,4 +14,5 @@ export declare class CreateUserDataDto {
     demoGiven: boolean;
     secondShow: boolean;
     profile: string;
+    picsSent: string;
 }
