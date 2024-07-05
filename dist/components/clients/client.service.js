@@ -151,6 +151,8 @@ let ClientService = class ClientService {
         try {
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+            await this.telegramService.disconnectAll();
+            await (0, Helpers_1.sleep)(2000);
             let updatedUsername;
             await this.telegramService.createClient(newMobile, false, true);
             const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
