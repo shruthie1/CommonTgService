@@ -19,14 +19,6 @@ export class SearchBufferClientDto {
   readonly mobile?: string;
 
   @ApiPropertyOptional({
-    description: 'createdDate of the bufferClient',
-    example: '2023-06-22',
-  })
-  @IsOptional()
-  @IsString()
-  readonly createdDate?: string;
-
-  @ApiPropertyOptional({
     description: 'availableDate of the bufferClient',
     example: '2023-06-22',
   })

@@ -17,20 +17,6 @@ export class CreateBufferClientDto {
   readonly mobile: string;
 
   @ApiProperty({
-    description: 'Date of the creation',
-    example: '2023-06-22',
-  })
-  @IsString()
-  readonly createdDate: string;
-
-  @ApiProperty({
-    description: 'Date of the updation',
-    example: '2023-06-22',
-  })
-  @IsString()
-  readonly updatedDate: string;
-
-  @ApiProperty({
     description: 'Date of the session',
     example: '2023-06-22',
   })

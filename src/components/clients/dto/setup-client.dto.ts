@@ -21,7 +21,7 @@ export class SetupClientQueryDto {
         return value === 'true' || value === true
     })
     @IsBoolean()
-    archiveOld?: boolean = true;
+    archiveOld: boolean = true;
 
     @ApiPropertyOptional({
         type: String
@@ -39,5 +39,5 @@ export class SetupClientQueryDto {
         return value === 'true' || value === true
     })
     @IsBoolean()
-    formalities?: boolean = true;
+    formalities: boolean = true;
 }

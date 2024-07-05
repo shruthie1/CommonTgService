@@ -18,7 +18,7 @@ class TelegramManager {
     public phoneNumber: string;
     private client: TelegramClient | null;
     private channelArray: string[];
-    private static activeClientSetup: { mobile: string, clientId: string };
+    private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
 
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
@@ -32,7 +32,7 @@ class TelegramManager {
         return TelegramManager.activeClientSetup;
     }
 
-    public static setActiveClientSetup(data: { mobile: string, clientId: string } | undefined) {
+    public static setActiveClientSetup(data: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string } | undefined) {
         TelegramManager.activeClientSetup = data;
     }
 
@@ -303,7 +303,7 @@ class TelegramManager {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
-                if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.mobile) {
+                if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.newMobile) {
                     console.log("LoginText: ", event.message.text)
                     const code = (event.message.text.split('.')[0].split("code:**")[1].trim())
                     console.log("Code is:", code);

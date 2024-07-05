@@ -22,12 +22,6 @@ export class BufferClient {
   session: string;
 
   @Prop({ required: true })
-  createdDate: string;
-
-  @Prop({ required: true })
-  updatedDate: string;
-
-  @Prop({ required: true })
   availableDate: string;
 
   @Prop({ required: true, type: Number })

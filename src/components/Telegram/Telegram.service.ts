@@ -31,7 +31,7 @@ export class TelegramService implements OnModuleDestroy {
         return TelegramManager.getActiveClientSetup();
     }
 
-    public setActiveClientSetup(data: { mobile: string, clientId: string } | undefined) {
+    public setActiveClientSetup(data: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string } | undefined) {
         TelegramManager.setActiveClientSetup(data);
     }
 
