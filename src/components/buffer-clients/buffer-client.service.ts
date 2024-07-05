@@ -202,10 +202,8 @@ export class BufferClientService {
                     tgId: user.tgId,
                     session: user.session,
                     mobile: user.mobile,
-                    createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                     availableDate,
                     channels: channels.ids.length,
-                    updatedDate: (new Date(Date.now())).toISOString().split('T')[0]
                 }
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
             } catch (error) {
@@ -252,7 +250,7 @@ export class BufferClientService {
                             await this.remove(document.mobile);
                         } else {
                             const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length, updatedDate: (new Date(Date.now())).toISOString().split('T')[0] })
+                            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length })
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile)
                         }
@@ -305,10 +303,8 @@ export class BufferClientService {
                             tgId: document.tgId,
                             session: document.session,
                             mobile: document.mobile,
-                            createdDate: (new Date(Date.now())).toISOString().split('T')[0],
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
-                            updatedDate: (new Date(Date.now())).toISOString().split('T')[0],
                         }
                         await this.create(bufferClient);
                         console.log("=============Created BufferClient=============")
