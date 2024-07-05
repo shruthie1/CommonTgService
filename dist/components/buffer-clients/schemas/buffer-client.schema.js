@@ -29,14 +29,6 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
-], BufferClient.prototype, "createdDate", void 0);
-__decorate([
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", String)
-], BufferClient.prototype, "updatedDate", void 0);
-__decorate([
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", String)
 ], BufferClient.prototype, "availableDate", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),

@@ -35,15 +35,6 @@ __decorate([
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'createdDate of the bufferClient',
-        example: '2023-06-22',
-    }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "createdDate", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({
         description: 'availableDate of the bufferClient',
         example: '2023-06-22',
     }),

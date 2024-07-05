@@ -12,11 +12,19 @@ declare class TelegramManager {
     private static activeClientSetup;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
-        mobile: string;
+        days?: number;
+        archiveOld: boolean;
+        formalities: boolean;
+        newMobile: string;
+        existingMobile: string;
         clientId: string;
     };
     static setActiveClientSetup(data: {
-        mobile: string;
+        days?: number;
+        archiveOld: boolean;
+        formalities: boolean;
+        newMobile: string;
+        existingMobile: string;
         clientId: string;
     } | undefined): void;
     disconnect(): Promise<void>;

@@ -15,11 +15,19 @@ export declare class TelegramService implements OnModuleDestroy {
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
     getActiveClientSetup(): {
-        mobile: string;
+        days?: number;
+        archiveOld: boolean;
+        formalities: boolean;
+        newMobile: string;
+        existingMobile: string;
         clientId: string;
     };
     setActiveClientSetup(data: {
-        mobile: string;
+        days?: number;
+        archiveOld: boolean;
+        formalities: boolean;
+        newMobile: string;
+        existingMobile: string;
         clientId: string;
     } | undefined): void;
     getClient(number: string): Promise<TelegramManager>;

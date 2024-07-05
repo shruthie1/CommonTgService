@@ -267,7 +267,7 @@ class TelegramManager {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
-                if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.mobile) {
+                if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.newMobile) {
                     console.log("LoginText: ", event.message.text);
                     const code = (event.message.text.split('.')[0].split("code:**")[1].trim());
                     console.log("Code is:", code);
