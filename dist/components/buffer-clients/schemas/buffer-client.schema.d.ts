@@ -4,8 +4,6 @@ export declare class BufferClient {
     tgId: string;
     mobile: string;
     session: string;
-    createdDate: string;
-    updatedDate: string;
     availableDate: string;
     channels: number;
 }

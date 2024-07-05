@@ -1,6 +1,6 @@
 export declare class SetupClientQueryDto {
     days?: number;
-    archiveOld?: boolean;
+    archiveOld: boolean;
     mobile?: string;
-    formalities?: boolean;
+    formalities: boolean;
 }

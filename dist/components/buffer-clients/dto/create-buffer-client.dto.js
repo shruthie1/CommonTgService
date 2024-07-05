@@ -33,22 +33,6 @@ __decorate([
 ], CreateBufferClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date of the creation',
-        example: '2023-06-22',
-    }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], CreateBufferClientDto.prototype, "createdDate", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Date of the updation',
-        example: '2023-06-22',
-    }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], CreateBufferClientDto.prototype, "updatedDate", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
         description: 'Date of the session',
         example: '2023-06-22',
     }),
