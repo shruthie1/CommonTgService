@@ -56,4 +56,4 @@ export class Stat {
 }
 
 export const StatSchema = SchemaFactory.createForClass(Stat);
-StatSchema.index({ chatId: 1, profile: 1 }, { unique: true });
+StatSchema.index({ chatId: 1, profile: 1, client: 1 }, { unique: true });
