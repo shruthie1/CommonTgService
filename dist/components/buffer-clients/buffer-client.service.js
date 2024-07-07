@@ -102,7 +102,7 @@ let BufferClientService = class BufferClientService {
             console.log("Joining Channel Started");
             await this.telegramService.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 180 } }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 220 } }).limit(4);
             for (const document of clients) {
                 try {
                     const client = await this.telegramService.createClient(document.mobile, false, false);
