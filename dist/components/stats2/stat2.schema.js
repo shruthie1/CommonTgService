@@ -79,5 +79,5 @@ exports.Stat2 = Stat2 = __decorate([
     (0, mongoose_1.Schema)()
 ], Stat2);
 exports.StatSchema = mongoose_1.SchemaFactory.createForClass(Stat2);
-exports.StatSchema.index({ chatId: 1, profile: 1 }, { unique: true });
+exports.StatSchema.index({ chatId: 1, profile: 1, client: 1 }, { unique: true });
 //# sourceMappingURL=stat2.schema.js.map
