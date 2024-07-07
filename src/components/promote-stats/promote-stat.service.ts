@@ -51,18 +51,19 @@ export class PromoteStatService {
   }
 
   async reinitPromoteStats() {
-    const users = await this.clientService.findAll();
+    const users = await this.findAll()
     for (const user of users) {
-      await this.promoteStatModel.updateOne({ client: user.clientId },
+      await this.promoteStatModel.updateOne({ client: user.client },
         {
           $set: {
             totalCount: 0,
             uniqueChannels: 0,
             releaseDay: Date.now(),
             lastupdatedTimeStamp: Date.now(),
-            data: Object.fromEntries((await this.promoteStatModel.findOne({ client: user.clientId })).channels?.map(channel => [channel, 0])),
+            data: Object.fromEntries((await this.promoteStatModel.findOne({ client: user.client })).channels?.map(channel => [channel, 0])),
           }
-        });
+        }
+      );
     }
   }
 }
