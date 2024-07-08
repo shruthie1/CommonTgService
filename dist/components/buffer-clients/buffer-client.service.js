@@ -102,7 +102,7 @@ let BufferClientService = class BufferClientService {
             console.log("Joining Channel Started");
             await this.telegramService.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 220 } }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 } }).limit(4);
             for (const document of clients) {
                 try {
                     const client = await this.telegramService.createClient(document.mobile, false, false);
@@ -111,7 +111,13 @@ let BufferClientService = class BufferClientService {
                     console.log("Existing Channels Length : ", channels.ids.length);
                     await this.update(document.mobile, { channels: channels.ids.length });
                     const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
-                    const result = await this.channelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    let result = [];
+                    if (channels.ids.length < 220) {
+                        result = await this.channelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    }
+                    else {
+                        result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
+                    }
                     this.joinChannelMap.set(document.mobile, result);
                     await this.telegramService.deleteClient(document.mobile);
                 }
