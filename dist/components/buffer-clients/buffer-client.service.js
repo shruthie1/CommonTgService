@@ -240,7 +240,6 @@ let BufferClientService = class BufferClientService {
                         if (!hasPassword || document.availableDate > today) {
                             console.log("Client does not have password");
                             badIds.push(document.mobile);
-                            await this.remove(document.mobile);
                         }
                         else {
                             const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
