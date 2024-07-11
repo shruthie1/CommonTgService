@@ -6,7 +6,7 @@ import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
-import { parseError } from '../../utils';
+import { defaultMessages, parseError } from '../../utils';
 @Injectable()
 export class ActiveChannelsService {
   constructor(
@@ -178,29 +178,7 @@ export class ActiveChannelsService {
         "wordRestriction": 0,
         "dMRestriction": 0,
         banned: false,
-        "availableMsgs": [
-          "1",
-          "2",
-          "3",
-          "4",
-          "5",
-          "6",
-          "7",
-          "8",
-          "9",
-          "10",
-          "11",
-          "12",
-          "14",
-          "15",
-          "16",
-          "17",
-          "18",
-          "19",
-          "20",
-          "21",
-          "22"
-        ]
+        "availableMsgs": defaultMessages
       }
     })
   }

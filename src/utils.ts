@@ -55,7 +55,7 @@ export async function fetchWithTimeout(resource: string, options: AxiosRequestCo
       const responseIPv6 = await fetchWithProtocol(resource, 6);
       if (responseIPv6) return responseIPv6;
     } catch (error) {
-      console.log("Error at URL : ",resource)
+      console.log("Error at URL : ", resource)
       const errorDetails = parseError(error)
       if (retryCount < maxRetries && error.code !== 'ERR_NETWORK' && error.code !== "ECONNABORTED" && error.code !== "ETIMEDOUT" && !errorDetails.message.toLowerCase().includes('too many requests') && !axios.isCancel(error)) {
         console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
@@ -195,4 +195,8 @@ export const defaultReactions = [
   '👀', '🙈', '🤝', '🤗', '🆒',
   '🗿', '🙉', '🙊', '🤷', '👎'
 ]
-export const defaultMessages = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+export const defaultMessages = [
+  "1", "2", "3", "4", "5", "6", "7", "8",
+  "9", "10", "11", "12", "13", "14", "15",
+  "16", "17", "18", "19", "20", "21", "22"
+];
