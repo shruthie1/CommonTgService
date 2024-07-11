@@ -16,6 +16,7 @@ export class ActiveChannelsService {
   ) { }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
+    createActiveChannelDto.availableMsgs = Object.keys(await this.promoteMsgsService.findOne())
     const createdChannel = new this.activeChannelModel(createActiveChannelDto);
     return createdChannel.save();
   }
@@ -192,7 +193,13 @@ export class ActiveChannelsService {
           "12",
           "14",
           "15",
-          "16"
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22"
         ]
       }
     })

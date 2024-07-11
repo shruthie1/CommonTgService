@@ -6,14 +6,14 @@ import { PromoteMsg } from './promote-msgs.schema';
 @Injectable()
 export class PromoteMsgsService {
     constructor(@InjectModel('promotemsgModule') private promotemsgModel: Model<PromoteMsg>) {
-     }
+    }
 
     async OnModuleInit() {
-       console.log("Config Module Inited")
+        console.log("Config Module Inited")
     }
 
     async findOne(): Promise<any> {
-        const user = (await this.promotemsgModel.findOne({}).exec())?.toJSON();
+        const user = (await this.promotemsgModel.findOne({}, { _id: 0 }).exec())?.toJSON();
         if (!user) {
             throw new NotFoundException(`promotemsgModel not found`);
         }

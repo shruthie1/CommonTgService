@@ -35,8 +35,8 @@ export class CreateActiveChannelDto {
   @ApiProperty({ default: 0 })
   dMRestriction?: number = 0;
 
-  @ApiProperty({ type: [String], default: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"] })
-  availableMsgs?: string[] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+  @ApiProperty({ type: [String] })
+  availableMsgs?: string[];
 
   @ApiProperty({
     type: [String], default: [

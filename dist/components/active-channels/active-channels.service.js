@@ -181,7 +181,13 @@ let ActiveChannelsService = class ActiveChannelsService {
                     "12",
                     "14",
                     "15",
-                    "16"
+                    "16",
+                    "17",
+                    "18",
+                    "19",
+                    "20",
+                    "21",
+                    "22"
                 ]
             }
         });
@@ -209,6 +215,6 @@ exports.ActiveChannelsService = ActiveChannelsService = __decorate([
     __param(0, (0, mongoose_1.InjectModel)(active_channel_schema_1.ActiveChannel.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_msgs_service_1.PromoteMsgsService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        promote_msgs_service_1.PromoteMsgsService])
+    promote_msgs_service_1.PromoteMsgsService])
 ], ActiveChannelsService);
 //# sourceMappingURL=active-channels.service.js.map
