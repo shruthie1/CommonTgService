@@ -237,7 +237,7 @@ let BufferClientService = class BufferClientService {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                         }
                         const hasPassword = await cli.hasPassword();
-                        if (!hasPassword || document.availableDate > today) {
+                        if (!hasPassword) {
                             console.log("Client does not have password");
                             badIds.push(document.mobile);
                         }
