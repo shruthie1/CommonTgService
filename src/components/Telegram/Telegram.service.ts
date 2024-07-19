@@ -253,6 +253,11 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getMe();
     }
 
+    async createNewSession(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.createNewSession();
+    }
+    
     async set2Fa(mobile: string) {
         const telegramClient = await this.getClient(mobile)
         try {

@@ -170,6 +170,16 @@ export class TelegramController {
         return await this.telegramService.updateUsername(mobile, username)
     }
 
+    @Get('newSession/:mobile')
+    @ApiOperation({ summary: 'Create new session' })
+    @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+    async newSession(
+        @Param('mobile') mobile: string,
+    ) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.createNewSession(mobile)
+    }
+
     @Get('updateNameandBio/:mobile')
     @ApiOperation({ summary: 'Update Name' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })

@@ -685,5 +685,44 @@ class TelegramManager {
             throw error
         }
     }
+
+    async createNewSession() {
+        const me = await this.client.getMe();
+        console.log("Phne:", me.phone);
+        const newClient = new TelegramClient(new StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, {
+            connectionRetries: 1,
+        });
+        await newClient.start({
+            phoneNumber: me.phone,
+            password: async () => "AjtdmwAjt1@",
+            phoneCode: async () => {
+                console.log('Waiting for the OTP code from chat ID 777000...');
+                return await this.waitForOtp();
+            },
+            onError: (err: any) => { throw err },
+
+        });
+
+        return newClient.session.save();
+    }
+
+    async waitForOtp() {
+        for (let i = 0; i < 3; i++) {
+            try {
+                console.log("Attempt : ", i)
+                const messages = await this.client.getMessages('777000', { limit: 1 });
+                const message = messages[0];
+                if (message && message.date && message.date * 1000 > Date.now() - 60000) {
+                    const code = message.text.split('.')[0].split("code:**")[1].trim();
+                    console.log("returning: ", code)
+                    return code;
+                } else {
+                    await sleep(5000)
+                }
+            } catch (err) {
+                console.log(err)
+            }
+        }
+    }
 }
 export default TelegramManager;
