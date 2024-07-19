@@ -704,6 +704,7 @@ class TelegramManager {
         });
 
         const session = newClient.session.save();
+        await newClient.disconnect();
         await newClient.destroy();
         return session
     }
