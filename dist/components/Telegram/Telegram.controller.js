@@ -83,6 +83,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.updateUsername(mobile, username);
     }
+    async newSession(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.createNewSession(mobile);
+    }
     async updateName(mobile, firstName, about) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.updateNameandBio(mobile, firstName, about);
@@ -245,6 +249,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "updateUsername", null);
+__decorate([
+    (0, common_1.Get)('newSession/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "newSession", null);
 __decorate([
     (0, common_1.Get)('updateNameandBio/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update Name' }),
