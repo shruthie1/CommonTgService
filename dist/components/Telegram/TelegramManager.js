@@ -625,7 +625,10 @@ class TelegramManager {
             },
             onError: (err) => { throw err; },
         });
-        return newClient.session.save();
+        const session = newClient.session.save();
+        await newClient.disconnect();
+        await newClient.destroy();
+        return session;
     }
     async waitForOtp() {
         for (let i = 0; i < 3; i++) {
