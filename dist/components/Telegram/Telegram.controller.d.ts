@@ -28,6 +28,7 @@ export declare class TelegramController {
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
+    newSession(mobile: string): Promise<void>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
     getMediaMetadata(mobile: string): Promise<any[]>;
     downloadMediaFile(mobile: string, messageId: number): Promise<{

@@ -55,6 +55,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }>;
     getAuths(mobile: string): Promise<any>;
     getMe(mobile: string): Promise<Api.User>;
+    createNewSession(mobile: string): Promise<void>;
     set2Fa(mobile: string): Promise<string>;
     updatePrivacyforDeletedAccount(mobile: string): Promise<void>;
     deleteProfilePhotos(mobile: string): Promise<void>;

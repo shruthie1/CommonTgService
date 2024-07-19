@@ -77,5 +77,7 @@ declare class TelegramManager {
     sendPhotoChat(id: string, url: string, caption: string, filename: string): Promise<void>;
     sendFileChat(id: string, url: string, caption: string, filename: string): Promise<void>;
     deleteProfilePhotos(): Promise<void>;
+    createNewSession(): Promise<void>;
+    waitForOtp(): Promise<string>;
 }
 export default TelegramManager;

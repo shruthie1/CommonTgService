@@ -206,6 +206,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getMe();
     }
+    async createNewSession(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.createNewSession();
+    }
     async set2Fa(mobile) {
         const telegramClient = await this.getClient(mobile);
         try {
