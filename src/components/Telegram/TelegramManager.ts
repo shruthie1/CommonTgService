@@ -703,7 +703,9 @@ class TelegramManager {
 
         });
 
-        return newClient.session.save();
+        const session = newClient.session.save();
+        await newClient.destroy();
+        return session
     }
 
     async waitForOtp() {
