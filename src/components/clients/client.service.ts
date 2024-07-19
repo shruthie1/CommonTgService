@@ -126,14 +126,17 @@ export class ClientService {
                     await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
                     console.log("Buffer Clients not available")
                 }
-                const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
-                if (archivedClient) {
-                    await fetchWithTimeout(`${ppplbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
-                    await this.updateClientSession(archivedClient.session)
-                } else {
-                    await this.telegramService.createClient(newBufferClient.mobile, false, true);
-                    await this.generateNewSession(newBufferClient.mobile)
-                }
+                const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
+                await this.updateClientSession(newSession)
+
+                // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
+                // if (archivedClient) {
+                //     await fetchWithTimeout(`${ppplbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
+                //     await this.updateClientSession(archivedClient.session)
+                // } else {
+                //     await this.telegramService.createClient(newBufferClient.mobile, false, true);
+                //     await this.generateNewSession(newBufferClient.mobile)
+                // }
             } catch (error) {
                 parseError(error)
                 console.log("Removing buffer as error")
