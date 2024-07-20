@@ -125,7 +125,9 @@ let ClientService = class ClientService {
                     await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Buffer Clients not available`);
                     console.log("Buffer Clients not available");
                 }
+                await this.telegramService.createClient(newBufferClient.mobile);
                 const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
+                await this.telegramService.deleteClient(newBufferClient.mobile);
                 await this.updateClientSession(newSession);
             }
             catch (error) {
