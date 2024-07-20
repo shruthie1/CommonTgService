@@ -32,6 +32,30 @@ export class ArchivedClientService {
         return user;
     }
 
+    async fetchOne(mobile: string): Promise<Client> {
+        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
+        if (user) {
+            return user;
+        } else {
+            const newSession = await this.telegramService.createNewSession(mobile);
+            return await this.create({
+                "channelLink": "default",
+                "clientId": "default",
+                "dbcoll": "default",
+                "deployKey": "default",
+                "link": "default",
+                "mainAccount": "default",
+                "name": "default",
+                "password": "Ajtdmwajt1@",
+                "repl": "default",
+                "session": newSession,
+                "username": "default",
+                "mobile": mobile,
+                product: "default"
+            })
+        }
+    }
+
     async update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client> {
         delete updateClientDto["_id"]
         if ((<any>updateClientDto)._doc) {

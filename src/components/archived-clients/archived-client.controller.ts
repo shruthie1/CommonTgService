@@ -49,6 +49,14 @@ export class ArchivedClientController {
   async findOne(@Param('mobile') mobile: string): Promise<Client> {
     return this.archivedclientService.findOne(mobile);
   }
+  
+  @Get('fetchOne/:mobile')
+  @ApiOperation({ summary: 'Get user data by ID' })
+  //@apiresponse({ status: 200, description: 'Return the user data.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async fetchOne(@Param('mobile') mobile: string): Promise<Client> {
+    return this.archivedclientService.fetchOne(mobile);
+  }
 
   @Patch(':mobile')
   @ApiOperation({ summary: 'Update user data by ID' })
