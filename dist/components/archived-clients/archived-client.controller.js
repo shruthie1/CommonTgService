@@ -38,6 +38,9 @@ let ArchivedClientController = class ArchivedClientController {
     async findOne(mobile) {
         return this.archivedclientService.findOne(mobile);
     }
+    async fetchOne(mobile) {
+        return this.archivedclientService.fetchOne(mobile);
+    }
     async update(mobile, updateClientDto) {
         return this.archivedclientService.update(mobile, updateClientDto);
     }
@@ -92,6 +95,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Get)('fetchOne/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "fetchOne", null);
 __decorate([
     (0, common_1.Patch)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),

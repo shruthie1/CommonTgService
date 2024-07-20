@@ -11,6 +11,7 @@ export declare class ArchivedClientController {
     findAll(): Promise<Client[]>;
     checkArchivedClients(): Promise<string>;
     findOne(mobile: string): Promise<Client>;
+    fetchOne(mobile: string): Promise<Client>;
     update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(mobile: string): Promise<Client>;
     executeQuery(query: object): Promise<any>;
