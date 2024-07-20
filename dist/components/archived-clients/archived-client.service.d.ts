@@ -12,6 +12,7 @@ export declare class ArchivedClientService {
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findOne(mobile: string): Promise<Client>;
+    fetchOne(mobile: string): Promise<Client>;
     update(mobile: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(mobile: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;
