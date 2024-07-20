@@ -37,7 +37,9 @@ export class ArchivedClientService {
         if (user) {
             return user;
         } else {
+            await this.telegramService.createClient(mobile)
             const newSession = await this.telegramService.createNewSession(mobile);
+            await this.telegramService.deleteClient(mobile)
             return await this.create({
                 "channelLink": "default",
                 "clientId": "default",
