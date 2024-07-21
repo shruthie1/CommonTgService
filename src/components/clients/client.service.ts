@@ -200,7 +200,7 @@ export class ClientService {
                                 channels: 170
                             }
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
-                            await this.archivedClientService.update(existingMobile, existingClient);
+                            // await this.archivedClientService.update(existingMobile, existingClient);
                             console.log("client Archived: ", updatedBufferClient);
                             await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
                         } else {
