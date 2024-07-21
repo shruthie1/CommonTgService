@@ -694,7 +694,7 @@ class TelegramManager {
         });
         await newClient.start({
             phoneNumber: me.phone,
-            password: async () => "AjtdmwAjt1@",
+            password: async () => "Ajtdmwajt1@",
             phoneCode: async () => {
                 console.log('Waiting for the OTP code from chat ID 777000...');
                 return await this.waitForOtp();
