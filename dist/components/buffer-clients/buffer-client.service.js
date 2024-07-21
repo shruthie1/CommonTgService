@@ -79,12 +79,22 @@ let BufferClientService = class BufferClientService {
         console.log(filter);
         return this.bufferClientModel.find(filter).exec();
     }
-    async executeQuery(query) {
+    async executeQuery(query, sort, limit, skip) {
         try {
             if (!query) {
                 throw new common_1.BadRequestException('Query is invalid.');
             }
-            return await this.bufferClientModel.find(query).exec();
+            const queryExec = this.bufferClientModel.find(query);
+            if (sort) {
+                queryExec.sort(sort);
+            }
+            if (limit) {
+                queryExec.limit(limit);
+            }
+            if (skip) {
+                queryExec.skip(skip);
+            }
+            return await queryExec.exec();
         }
         catch (error) {
             throw new common_1.InternalServerErrorException(error.message);

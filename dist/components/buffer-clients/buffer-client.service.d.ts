@@ -24,7 +24,7 @@ export declare class BufferClientService {
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient>;
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;
-    executeQuery(query: any): Promise<BufferClient[]>;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClient[]>;
     removeFromBufferMap(key: string): void;
     clearBufferMap(): void;
     joinchannelForBufferClients(): Promise<string>;
