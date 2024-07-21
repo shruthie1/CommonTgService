@@ -117,8 +117,8 @@ export class ClientService {
             console.log(setupClientQueryDto);
             await this.telegramService.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
-            const query = { availableDate: { $lte: today } }
-            const newBufferClient = (await this.bufferClientService.executeQuery(query))[0];
+            const query = { availableDate: { $lte: today }, channels: { $gt: 200 } }
+            const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             try {
                 if (newBufferClient) {
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile })

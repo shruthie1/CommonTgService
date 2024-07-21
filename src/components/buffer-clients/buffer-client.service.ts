@@ -88,12 +88,26 @@ export class BufferClientService {
         return this.bufferClientModel.find(filter).exec();
     }
 
-    async executeQuery(query: any): Promise<BufferClient[]> {
+    async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClient[]> {
         try {
+
             if (!query) {
                 throw new BadRequestException('Query is invalid.');
             }
-            return await this.bufferClientModel.find(query).exec();
+            const queryExec = this.bufferClientModel.find(query);
+            if (sort) {
+                queryExec.sort(sort);
+            }
+
+            if (limit) {
+                queryExec.limit(limit);
+            }
+
+            if (skip) {
+                queryExec.skip(skip);
+            }
+
+            return await queryExec.exec();
         } catch (error) {
             throw new InternalServerErrorException(error.message);
         }
