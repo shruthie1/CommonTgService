@@ -17,7 +17,15 @@ export class ChannelsService {
   }
 
   async createMultiple(createChannelDtos: CreateChannelDto[]): Promise<string> {
-    await this.ChannelModel.insertMany(createChannelDtos);
+    const bulkOps = createChannelDtos.map((dto) => ({
+      updateOne: {
+        filter: { channelId: dto.channelId }, // Use unique identifier for the channel
+        update: { $set: dto },
+        upsert: true
+      }
+    }));
+
+    await this.ChannelModel.bulkWrite(bulkOps);
     return 'Channels Saved';
   }
 
