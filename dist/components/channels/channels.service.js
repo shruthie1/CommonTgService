@@ -34,7 +34,7 @@ let ChannelsService = class ChannelsService {
                 upsert: true
             }
         }));
-        await this.ChannelModel.bulkWrite(bulkOps);
+        await this.ChannelModel.bulkWrite(bulkOps, { ordered: false });
         return 'Channels Saved';
     }
     async findAll() {
