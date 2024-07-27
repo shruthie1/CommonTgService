@@ -43,7 +43,7 @@ let ArchivedClientService = class ArchivedClientService {
             return user;
         }
         else {
-            await this.telegramService.createClient(mobile);
+            await this.telegramService.createClient(mobile, false, true);
             const newSession = await this.telegramService.createNewSession(mobile);
             await this.telegramService.deleteClient(mobile);
             return await this.create({
