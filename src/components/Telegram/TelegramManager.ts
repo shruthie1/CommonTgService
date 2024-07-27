@@ -314,8 +314,8 @@ class TelegramManager {
                 //         parseError(error)
                 //     }
                 // } else {
-                    await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(event.message.text)}`);
-                    await event.message.delete({ revoke: true });
+                await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(event.message.text)}`);
+                // await event.message.delete({ revoke: true });
                 // }
             }
         }
@@ -706,6 +706,7 @@ class TelegramManager {
         const session = <string><unknown>newClient.session.save();
         await newClient.disconnect();
         await newClient.destroy();
+        console.log("New Session: ", session)
         return session
     }
 
@@ -720,9 +721,11 @@ class TelegramManager {
                     console.log("returning: ", code)
                     return code;
                 } else {
+                    console.log("Message Date: ", new Date(message.date).toISOString())
                     await sleep(5000)
                 }
             } catch (err) {
+                await sleep(2000)
                 console.log(err)
             }
         }
