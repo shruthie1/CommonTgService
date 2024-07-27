@@ -724,7 +724,10 @@ class TelegramManager {
                 } else {
                     console.log("Message Date: ", new Date(message.date * 1000).toISOString(), "Now: ", new Date(Date.now() - 60000).toISOString());
                     const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("Skipped Code: ", code)
+                    console.log("Skipped Code: ", code);
+                    if (i == 2) {
+                        return code;
+                    }
                     await sleep(5000)
                 }
             } catch (err) {
