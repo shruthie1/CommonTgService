@@ -120,7 +120,6 @@ export class ChannelsService {
   }
 
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {
-    const notInpattern = new RegExp(notIds.join('|'), 'i');
     const query = {
       '$and':
         [
