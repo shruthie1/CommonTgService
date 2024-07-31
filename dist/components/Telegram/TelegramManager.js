@@ -121,11 +121,11 @@ class TelegramManager {
             if (chat.isChannel || chat.isGroup) {
                 try {
                     const chatEntity = chat.entity.toJSON();
-                    const { broadcast, defaultBannedRights } = chatEntity;
+                    const { broadcast, defaultBannedRights, id } = chatEntity;
                     totalCount++;
                     if (!broadcast && !defaultBannedRights?.sendMessages) {
                         canSendTrueCount++;
-                        this.channelArray.push(chatEntity.username);
+                        this.channelArray.push(id.toString()?.replace(/^-100/, ""));
                     }
                     else {
                         canSendFalseCount++;
