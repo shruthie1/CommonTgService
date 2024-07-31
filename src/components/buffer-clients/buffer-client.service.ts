@@ -134,12 +134,11 @@ export class BufferClientService {
                     const channels = await client.channelInfo(true);
                     console.log("Existing Channels Length : ", channels.ids.length);
                     await this.update(document.mobile, { channels: channels.ids.length });
-                    const keys = ['wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl', 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video', 'service', 'real', 'call', 'desi'];
                     let result = []
                     if (channels.ids.length < 220) {
-                        result = await this.channelsService.getActiveChannels(150, 0, keys, channels.ids);
+                        result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
                     } else {
-                        result = await this.activeChannelsService.getActiveChannels(150, 0, keys, channels.ids);
+                        result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
                     }
                     this.joinChannelMap.set(document.mobile, result);
                     await this.telegramService.deleteClient(document.mobile);
