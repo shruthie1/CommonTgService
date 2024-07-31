@@ -78,7 +78,6 @@ let ActiveChannelsService = class ActiveChannelsService {
         return channel;
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
-        const notInpattern = new RegExp(notIds.join('|'), 'i');
         const query = {
             '$and': [
                 {
@@ -93,7 +92,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                 },
                 { title: { '$not': { '$regex': /online|board|design|realt|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i } } },
                 { username: { '$not': { '$regex': /online|board|design|realt|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i } } },
-                { username: { '$not': { '$regex': notInpattern } } },
+                { username: { '$nin': notIds } },
                 { participantsCount: { $gt: 2000 } },
                 { banned: false },
                 { canSendMsgs: true }
