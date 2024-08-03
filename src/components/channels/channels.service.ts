@@ -143,15 +143,10 @@ export class ChannelsService {
           { forbidden: false }
         ]
     }
+
+    const sort: { participantsCount: "desc" } = { participantsCount: "desc" };
     try {
-      const result: Channel[] = await this.ChannelModel.aggregate([
-        { $match: query },
-        { $skip: skip },
-        { $limit: limit },
-        { $addFields: { randomField: { $rand: {} } } }, // Add a random field
-        { $sort: { randomField: 1 } }, // Sort by the random field
-        { $project: { randomField: 0 } } // Remove the random field from the output
-      ]).exec();
+      const result: Channel[] = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);
