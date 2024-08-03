@@ -53,6 +53,7 @@ let ArchivedClientService = class ArchivedClientService {
                 "deployKey": "default",
                 "link": "default",
                 "mainAccount": "default",
+                promoteRepl: "default",
                 "name": "default",
                 "password": "Ajtdmwajt1@",
                 "repl": "default",

@@ -8,6 +8,7 @@ export declare class Client {
     mobile: string;
     password: string;
     repl: string;
+    promoteRepl: string;
     session: string;
     username: string;
     clientId: string;

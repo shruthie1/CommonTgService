@@ -6,6 +6,7 @@ export declare class CreateClientDto {
     readonly mobile: string;
     readonly password: string;
     readonly repl: string;
+    readonly promoteRepl: string;
     readonly session: string;
     readonly username: string;
     readonly clientId: string;
