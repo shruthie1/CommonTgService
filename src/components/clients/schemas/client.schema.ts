@@ -42,6 +42,10 @@ export class Client {
     @Prop({ required: true })
     repl: string;
 
+    @ApiProperty({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' })
+    @Prop({ required: true })
+    promoteRepl: string;
+
     @ApiProperty({ example: '1BQANOTEuM==', description: 'Session token' })
     @Prop({ required: true })
     session: string;

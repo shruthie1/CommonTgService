@@ -66,4 +66,7 @@ export class CreateActiveChannelDto {
 
   @ApiProperty({ default: true, required: false })
   megagroup?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  forbidden?: boolean
 }

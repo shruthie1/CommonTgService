@@ -81,6 +81,10 @@ export class ActiveChannel {
   @ApiProperty({ default: false })
   @Prop({ default: false })
   reactRestricted: boolean
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  forbidden: boolean
 }
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);

@@ -191,7 +191,7 @@ export class ClientService {
                             console.log("Formalities skipped")
                         }
                         if (archiveOld) {
-                            const availableDate = (new Date(Date.now() + (days * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
+                            const availableDate = (new Date(Date.now() + ((days + 1) * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
                             const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
                                 mobile: existingMobile,
                                 availableDate,

@@ -28,6 +28,9 @@ export class SearchClientDto {
     @ApiPropertyOptional({ description: 'Repl link of the client' })
     repl?: string;
 
+    @ApiPropertyOptional({ description: 'Promotion Repl link of the client' })
+    promoteRepl?: string;
+
     @ApiPropertyOptional({ description: 'Clientname of the client' })
     clientName?: string;
 
