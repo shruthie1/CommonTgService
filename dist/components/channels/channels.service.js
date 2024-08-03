@@ -137,15 +137,9 @@ let ChannelsService = class ChannelsService {
                 { forbidden: false }
             ]
         };
+        const sort = { participantsCount: "desc" };
         try {
-            const result = await this.ChannelModel.aggregate([
-                { $match: query },
-                { $skip: skip },
-                { $limit: limit },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
-                { $project: { randomField: 0 } }
-            ]).exec();
+            const result = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
             return result;
         }
         catch (error) {
