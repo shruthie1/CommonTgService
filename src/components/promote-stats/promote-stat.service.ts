@@ -60,7 +60,7 @@ export class PromoteStatService {
             uniqueChannels: 0,
             releaseDay: Date.now(),
             lastupdatedTimeStamp: Date.now(),
-            data: Object.fromEntries((await this.promoteStatModel.findOne({ client: user.client })).channels?.map(channel => [channel, 0])),
+            data: {}//Object.fromEntries((await this.promoteStatModel.findOne({ client: user.client })).channels?.map(channel => [channel, 0])),
           }
         }
       );
