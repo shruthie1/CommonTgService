@@ -110,7 +110,14 @@ export class ActiveChannelsService {
         ]
     }
     try {
-      const result: ActiveChannel[] = await this.activeChannelModel.find(query).skip(skip).limit(limit).exec();
+      const result: ActiveChannel[] = await this.activeChannelModel.aggregate([
+        { $match: query },
+        { $skip: skip },
+        { $limit: limit },
+        { $addFields: { randomField: { $rand: {} } } }, // Add a random field
+        { $sort: { randomField: 1 } }, // Sort by the random field
+        { $project: { randomField: 0 } } // Remove the random field from the output
+      ]).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);
