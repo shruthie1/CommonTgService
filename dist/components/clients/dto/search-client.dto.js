@@ -50,6 +50,10 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "repl", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Promotion Repl link of the client' }),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "promoteRepl", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Clientname of the client' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "clientName", void 0);

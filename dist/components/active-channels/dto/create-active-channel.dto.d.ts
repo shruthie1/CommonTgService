@@ -14,4 +14,5 @@ export declare class CreateActiveChannelDto {
     reactions?: string[];
     banned?: boolean;
     megagroup?: boolean;
+    forbidden?: boolean;
 }

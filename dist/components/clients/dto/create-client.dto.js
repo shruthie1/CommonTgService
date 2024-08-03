@@ -43,6 +43,10 @@ __decorate([
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "repl", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' }),
+    __metadata("design:type", String)
+], CreateClientDto.prototype, "promoteRepl", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: '1BQANOTEuMTA4LjUg==', description: 'Session token' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "session", void 0);

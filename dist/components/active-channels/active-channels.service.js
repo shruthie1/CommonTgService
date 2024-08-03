@@ -95,12 +95,19 @@ let ActiveChannelsService = class ActiveChannelsService {
                 { channelId: { '$nin': notIds } },
                 { participantsCount: { $gt: 2000 } },
                 { banned: false },
-                { canSendMsgs: true }
+                { canSendMsgs: true },
+                { forbidden: false }
             ]
         };
-        const sort = { participantsCount: "desc" };
         try {
-            const result = await this.activeChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+            const result = await this.activeChannelModel.aggregate([
+                { $match: query },
+                { $skip: skip },
+                { $limit: limit },
+                { $addFields: { randomField: { $rand: {} } } },
+                { $sort: { randomField: 1 } },
+                { $project: { randomField: 0 } }
+            ]).exec();
             return result;
         }
         catch (error) {

@@ -7,6 +7,7 @@ export declare class SearchClientDto {
     number?: string;
     password?: string;
     repl?: string;
+    promoteRepl?: string;
     clientName?: string;
     deployKey?: string;
     mainAccount?: string;

@@ -18,6 +18,7 @@ export declare class ActiveChannel {
     megagroup: boolean;
     private: boolean;
     reactRestricted: boolean;
+    forbidden: boolean;
 }
 export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel> & ActiveChannel & {
     _id: mongoose.Types.ObjectId;

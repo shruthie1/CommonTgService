@@ -51,6 +51,11 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "repl", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Client.prototype, "promoteRepl", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==', description: 'Session token' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)

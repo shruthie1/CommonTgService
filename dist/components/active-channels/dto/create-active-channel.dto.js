@@ -101,4 +101,8 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: true, required: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "forbidden", void 0);
 //# sourceMappingURL=create-active-channel.dto.js.map
