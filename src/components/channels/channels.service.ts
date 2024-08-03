@@ -143,10 +143,8 @@ export class ChannelsService {
           { forbidden: false }
         ]
     }
-
-    const sort: { participantsCount: "desc" } = { participantsCount: "desc" };
     try {
-      const result: Channel[] = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+      const result: Channel[] = await this.ChannelModel.find(query).skip(skip).limit(limit).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);

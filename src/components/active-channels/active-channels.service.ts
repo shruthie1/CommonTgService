@@ -109,10 +109,8 @@ export class ActiveChannelsService {
           { forbidden: false }
         ]
     }
-
-    const sort: { participantsCount: "desc" } = { participantsCount: "desc" };
     try {
-      const result: ActiveChannel[] = await this.activeChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+      const result: ActiveChannel[] = await this.activeChannelModel.find(query).skip(skip).limit(limit).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);
