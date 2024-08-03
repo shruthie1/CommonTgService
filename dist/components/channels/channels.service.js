@@ -137,9 +137,16 @@ let ChannelsService = class ChannelsService {
                 { forbidden: false }
             ]
         };
-        const sort = { participantsCount: "desc" };
+        const sort = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 };
         try {
-            const result = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+            const result = await this.ChannelModel.aggregate([
+                { $match: query },
+                { $skip: skip },
+                { $limit: limit },
+                { $addFields: { randomField: { $rand: {} } } },
+                { $sort: sort },
+                { $project: { randomField: 0 } }
+            ]).exec();
             return result;
         }
         catch (error) {

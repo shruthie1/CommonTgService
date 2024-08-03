@@ -99,13 +99,14 @@ let ActiveChannelsService = class ActiveChannelsService {
                 { forbidden: false }
             ]
         };
+        const sort = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 };
         try {
             const result = await this.activeChannelModel.aggregate([
                 { $match: query },
                 { $skip: skip },
                 { $limit: limit },
                 { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
+                { $sort: sort },
                 { $project: { randomField: 0 } }
             ]).exec();
             return result;
