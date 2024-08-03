@@ -144,9 +144,16 @@ export class ChannelsService {
         ]
     }
 
-    const sort: { participantsCount: "desc" } = { participantsCount: "desc" };
+    const sort: Record<string, 1 | -1> = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 }
     try {
-      const result: Channel[] = await this.ChannelModel.find(query).sort(sort).skip(skip).limit(limit).exec();
+      const result: Channel[] = await this.ChannelModel.aggregate([
+        { $match: query },
+        { $skip: skip },
+        { $limit: limit },
+        { $addFields: { randomField: { $rand: {} } } }, // Add a random field
+        { $sort: sort }, // Sort by the random field
+        { $project: { randomField: 0 } } // Remove the random field from the output
+      ]).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);

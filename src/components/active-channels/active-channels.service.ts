@@ -83,7 +83,7 @@ export class ActiveChannelsService {
     return channel;
   }
 
-  async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+  async getActiveChannels(limit = 50, skip = 0, notIds: string[] = []) {
     const query = {
       '$and':
         [
@@ -109,13 +109,14 @@ export class ActiveChannelsService {
           { forbidden: false }
         ]
     }
+    const sort: Record<string, 1 | -1> = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 }
     try {
       const result: ActiveChannel[] = await this.activeChannelModel.aggregate([
         { $match: query },
         { $skip: skip },
         { $limit: limit },
         { $addFields: { randomField: { $rand: {} } } }, // Add a random field
-        { $sort: { randomField: 1 } }, // Sort by the random field
+        { $sort: sort }, // Sort by the random field
         { $project: { randomField: 0 } } // Remove the random field from the output
       ]).exec();
       return result;
