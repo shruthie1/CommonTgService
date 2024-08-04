@@ -74,7 +74,7 @@ export class ActiveChannel {
   @Prop({ default: true })
   megagroup: boolean;
 
-  @ApiProperty({ default: false })
+  @ApiProperty({ default: false})
   @Prop({ default: false })
   private: boolean;
 

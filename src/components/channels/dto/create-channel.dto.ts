@@ -66,4 +66,10 @@ export class CreateChannelDto {
     required: false,
   })
   private: boolean = false;
+
+  @ApiProperty({
+    default: false, example: false,
+    required: false,
+  })
+  forbidden: boolean = false;
 }

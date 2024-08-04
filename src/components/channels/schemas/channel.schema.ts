@@ -37,6 +37,9 @@ export class Channel {
   
   @Prop({ required: true, default: false })
   private: boolean;
+  
+  @Prop({ default: false })
+  forbidden: boolean
 }
 
 export const ChannelSchema = SchemaFactory.createForClass(Channel);
