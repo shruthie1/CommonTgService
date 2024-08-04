@@ -14,6 +14,7 @@ const swagger_1 = require("@nestjs/swagger");
 class CreateChannelDto {
     constructor() {
         this.private = false;
+        this.forbidden = false;
     }
 }
 exports.CreateChannelDto = CreateChannelDto;
@@ -93,4 +94,11 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        default: false, example: false,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "forbidden", void 0);
 //# sourceMappingURL=create-channel.dto.js.map

@@ -9,4 +9,5 @@ export declare class CreateChannelDto {
     title: string;
     username?: string;
     private: boolean;
+    forbidden: boolean;
 }

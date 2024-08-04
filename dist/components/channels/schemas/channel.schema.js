@@ -51,6 +51,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "private", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "forbidden", void 0);
 exports.Channel = Channel = __decorate([
     (0, mongoose_1.Schema)({ collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
