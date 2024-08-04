@@ -11,6 +11,7 @@ export declare class Channel {
     title: string;
     username: string;
     private: boolean;
+    forbidden: boolean;
 }
 export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Channel, any, any, any, Document<unknown, any, Channel> & Channel & {
     _id: mongoose.Types.ObjectId;
