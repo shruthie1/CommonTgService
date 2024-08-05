@@ -688,7 +688,7 @@ class TelegramManager {
     }
 
     async createNewSession(): Promise<string> {
-        const me = await this.client.getMe();
+        const me = <Api.User>await this.client.getMe();
         console.log("Phne:", me.phone);
         const newClient = new TelegramClient(new StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 1,
