@@ -38,7 +38,7 @@
     "rxjs": "^7.8.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
-    "telegram": "^2.22.2"
+    "telegram": "2.18.26"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
