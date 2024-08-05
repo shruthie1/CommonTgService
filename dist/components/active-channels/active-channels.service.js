@@ -139,35 +139,10 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     async resetAvailableMsgs() {
-        try {
-            const data = await this.promoteMsgsService.findOne();
-            const keys = Object.keys(data);
-            await this.activeChannelModel.updateMany({
-                $expr: {
-                    $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
-                }
-            }, {
-                $set: {
-                    "wordRestriction": 0,
-                    "dMRestriction": 0,
-                    "banned": false,
-                    "availableMsgs": keys
-                }
-            });
-        }
-        catch (e) {
-            console.log((0, utils_1.parseError)(e));
-        }
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
     }
     async updateBannedChannels() {
-        await this.activeChannelModel.updateMany({ banned: true }, {
-            $set: {
-                "wordRestriction": 0,
-                "dMRestriction": 0,
-                banned: false,
-                "availableMsgs": utils_1.defaultMessages
-            }
-        });
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for update banned Channels`);
     }
     async updateDefaultReactions() {
         await this.activeChannelModel.updateMany({}, {
