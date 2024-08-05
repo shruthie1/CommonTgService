@@ -6,7 +6,7 @@ import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
-import { defaultMessages, parseError } from '../../utils';
+import { defaultMessages, fetchWithTimeout, parseError, ppplbot } from '../../utils';
 @Injectable()
 export class ActiveChannelsService {
   constructor(
@@ -153,35 +153,37 @@ export class ActiveChannelsService {
   }
 
   async resetAvailableMsgs() {
-    try {
-      const data = await this.promoteMsgsService.findOne();
-      const keys = Object.keys(data);
-      await this.activeChannelModel.updateMany({
-        $expr: {
-          $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
-        }
-      }, {
-        $set: {
-          "wordRestriction": 0,
-          "dMRestriction": 0,
-          "banned": false,
-          "availableMsgs": keys
-        }
-      })
-    } catch (e) {
-      console.log(parseError(e))
-    }
+    await fetchWithTimeout(`${ppplbot()}&text=Request Received for Reset Available Msgs`);
+    // try {
+    //   const data = await this.promoteMsgsService.findOne();
+    //   const keys = Object.keys(data);
+    //   await this.activeChannelModel.updateMany({
+    //     $expr: {
+    //       $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+    //     }
+    //   }, {
+    //     $set: {
+    //       "wordRestriction": 0,
+    //       "dMRestriction": 0,
+    //       "banned": false,
+    //       "availableMsgs": keys
+    //     }
+    //   })
+    // } catch (e) {
+    //   console.log(parseError(e))
+    // }
   }
 
   async updateBannedChannels() {
-    await this.activeChannelModel.updateMany({ banned: true }, {
-      $set: {
-        "wordRestriction": 0,
-        "dMRestriction": 0,
-        banned: false,
-        "availableMsgs": defaultMessages
-      }
-    })
+    await fetchWithTimeout(`${ppplbot()}&text=Request Received for update banned Channels`);
+    // await this.activeChannelModel.updateMany({ banned: true }, {
+    //   $set: {
+    //     "wordRestriction": 0,
+    //     "dMRestriction": 0,
+    //     banned: false,
+    //     "availableMsgs": defaultMessages
+    //   }
+    // })
   }
 
   async updateDefaultReactions() {
