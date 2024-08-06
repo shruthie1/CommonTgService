@@ -86,6 +86,7 @@ export class TelegramService implements OnModuleDestroy {
             const telegramManager = new TelegramManager(user.session, user.mobile);
             try {
                 const client = await telegramManager.createClient(handler);
+                await client.getMe();
                 if (client) {
                     TelegramService.clientsMap.set(mobile, telegramManager);
                     if (autoDisconnect) {
