@@ -88,6 +88,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
             try {
                 const client = await telegramManager.createClient(handler);
+                await client.getMe();
                 if (client) {
                     TelegramService_1.clientsMap.set(mobile, telegramManager);
                     if (autoDisconnect) {
