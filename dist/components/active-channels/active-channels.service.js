@@ -95,6 +95,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                 { channelId: { '$nin': notIds } },
                 { participantsCount: { $gt: 2000 } },
                 { username: { "$ne": null } },
+                { private: false },
                 { banned: false },
                 { canSendMsgs: true },
                 { forbidden: false }
