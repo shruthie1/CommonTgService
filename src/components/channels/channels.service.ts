@@ -145,7 +145,7 @@ export class ChannelsService {
         ]
     }
 
-    const sort: Record<string, 1 | -1> = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 }
+    const sort: Record<string, 1 | -1> = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 }
     try {
       const result: Channel[] = await this.ChannelModel.aggregate([
         { $match: query },

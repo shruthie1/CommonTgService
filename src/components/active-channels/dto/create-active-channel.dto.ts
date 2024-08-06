@@ -69,4 +69,11 @@ export class CreateActiveChannelDto {
 
   @ApiProperty({ default: false, required: false })
   forbidden?: boolean
+
+  @ApiProperty({
+    description: 'Whether the channel is private',
+    example: false,
+    required: false,
+  })
+  private: boolean = false;
 }

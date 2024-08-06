@@ -207,7 +207,7 @@ export class TelegramService implements OnModuleDestroy {
     };
 
     async removeChannels(error: any, channelId: string, username: string) {
-        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
             try {
                 if (channelId) {
                     await this.channelsService.remove(channelId)
@@ -222,6 +222,9 @@ export class TelegramService implements OnModuleDestroy {
             } catch (searchError) {
                 console.log("Failed to search/remove channel: ", searchError);
             }
+        } else if (error.errorMessage === "CHANNEL_PRIVATE") {
+            await this.channelsService.update(channelId, { private: true })
+            await this.activeChannelsService.update(channelId, { private: true });
         }
     }
 
@@ -257,7 +260,7 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await this.getClient(mobile)
         return await telegramClient.createNewSession();
     }
-    
+
     async set2Fa(mobile: string) {
         const telegramClient = await this.getClient(mobile)
         try {
