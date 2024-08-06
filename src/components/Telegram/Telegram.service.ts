@@ -72,7 +72,7 @@ export class TelegramService implements OnModuleDestroy {
                 console.log(`Failed to Disconnect : ${phoneNumber}`);
             }
         }
-
+        TelegramService.clientsMap.clear();
         this.bufferClientService.clearBufferMap()
         this.bufferClientService.clearJoinChannelInterval()
     }
