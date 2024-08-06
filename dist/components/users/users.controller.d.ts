@@ -10,7 +10,7 @@ export declare class UsersController {
     search(queryParams: SearchUserDto): Promise<User[]>;
     findAll(): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
-    update(tgId: string, updateUserDto: UpdateUserDto): Promise<User>;
+    update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
     remove(tgId: string): Promise<void>;
     executeQuery(requestBody: any): Promise<any>;
 }
