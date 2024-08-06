@@ -27,6 +27,7 @@ class CreateActiveChannelDto {
             '🗿', '🙉', '🙊', '🤷', '👎'
         ];
         this.banned = false;
+        this.private = false;
     }
 }
 exports.CreateActiveChannelDto = CreateActiveChannelDto;
@@ -105,4 +106,12 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false, required: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "forbidden", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether the channel is private',
+        example: false,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "private", void 0);
 //# sourceMappingURL=create-active-channel.dto.js.map
