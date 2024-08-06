@@ -166,7 +166,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     ;
     async removeChannels(error, channelId, username) {
-        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
             try {
                 if (channelId) {
                     await this.channelsService.remove(channelId);
@@ -183,6 +183,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
             catch (searchError) {
                 console.log("Failed to search/remove channel: ", searchError);
             }
+        }
+        else if (error.errorMessage === "CHANNEL_PRIVATE") {
+            await this.channelsService.update(channelId, { private: true });
+            await this.activeChannelsService.update(channelId, { private: true });
         }
     }
     async removeOtherAuths(mobile) {

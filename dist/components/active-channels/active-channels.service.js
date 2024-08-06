@@ -100,7 +100,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                 { forbidden: false }
             ]
         };
-        const sort = notIds.length > 300 ? { randomField: 1 } : { participantsCount: -1 };
+        const sort = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 };
         try {
             const result = await this.activeChannelModel.aggregate([
                 { $match: query },
