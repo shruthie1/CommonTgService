@@ -44,13 +44,13 @@ export class UsersService {
     return user;
   }
 
-  async update(tgId: string, user: UpdateUserDto): Promise<User> {
+  async update(tgId: string, user: UpdateUserDto): Promise<number> {
     delete user['_id']
-    const existingUser = await this.userModel.findOneAndUpdate({ tgId }, { $set: user }, { new: true, upsert: true }).exec();
-    if (!existingUser) {
-      throw new NotFoundException(`User with tgId ${tgId} not found`);
+    const result = await this.userModel.updateMany({ tgId }, { $set: user }, { new: true, upsert: true }).exec();
+    if (result.matchedCount === 0) {
+      throw new NotFoundException(`Users with tgId ${tgId} not found`);
     }
-    return existingUser;
+    return result.modifiedCount;
   }
 
   async delete(tgId: string): Promise<void> {
