@@ -75,6 +75,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 console.log(`Failed to Disconnect : ${phoneNumber}`);
             }
         }
+        TelegramService_1.clientsMap.clear();
         this.bufferClientService.clearBufferMap();
         this.bufferClientService.clearJoinChannelInterval();
     }
