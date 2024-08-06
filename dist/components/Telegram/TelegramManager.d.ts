@@ -50,7 +50,7 @@ declare class TelegramManager {
     getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
     joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates>;
     connected(): boolean;
-    connect(): Promise<void>;
+    connect(): Promise<boolean>;
     removeOtherAuths(): Promise<void>;
     getAuths(): Promise<any>;
     getAllChats(): Promise<any[]>;
