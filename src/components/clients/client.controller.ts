@@ -59,14 +59,14 @@ export class ClientController {
     return this.clientService.findOne(clientId);
   }
 
-  @Get('setupClient/:clientId')
-  @ApiOperation({ summary: 'SetUp Client data' })
-  //@apiresponse({ status: 200, description: 'Return the user data.' })
-  //@apiresponse({ status: 404, description: 'User data not found.' })
-  async setupClient(@Param('clientId') clientId: string, @Query() setupClientQueryDto: SetupClientQueryDto) {
-    this.clientService.setupClient(clientId, setupClientQueryDto);
-    return `Started Client Seup for ${clientId}`
-  }
+  // @Get('setupClient/:clientId')
+  // @ApiOperation({ summary: 'SetUp Client data' })
+  // //@apiresponse({ status: 200, description: 'Return the user data.' })
+  // //@apiresponse({ status: 404, description: 'User data not found.' })
+  // async setupClient(@Param('clientId') clientId: string, @Query() setupClientQueryDto: SetupClientQueryDto) {
+  //   this.clientService.setupClient(clientId, setupClientQueryDto);
+  //   return `Started Client Seup for ${clientId}`
+  // }
 
   @Patch(':clientId')
   @ApiOperation({ summary: 'Update user data by ID' })
