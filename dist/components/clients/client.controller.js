@@ -18,7 +18,6 @@ const swagger_1 = require("@nestjs/swagger");
 const client_service_1 = require("./client.service");
 const create_client_dto_1 = require("./dto/create-client.dto");
 const search_client_dto_1 = require("./dto/search-client.dto");
-const setup_client_dto_1 = require("./dto/setup-client.dto");
 const update_client_dto_1 = require("./dto/update-client.dto");
 let ClientController = class ClientController {
     constructor(clientService) {
@@ -41,10 +40,6 @@ let ClientController = class ClientController {
     }
     async findOne(clientId) {
         return this.clientService.findOne(clientId);
-    }
-    async setupClient(clientId, setupClientQueryDto) {
-        this.clientService.setupClient(clientId, setupClientQueryDto);
-        return `Started Client Seup for ${clientId}`;
     }
     async update(clientId, updateClientDto) {
         return this.clientService.update(clientId, updateClientDto);
@@ -110,15 +105,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findOne", null);
-__decorate([
-    (0, common_1.Get)('setupClient/:clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'SetUp Client data' }),
-    __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, setup_client_dto_1.SetupClientQueryDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "setupClient", null);
 __decorate([
     (0, common_1.Patch)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
