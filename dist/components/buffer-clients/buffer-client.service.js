@@ -226,8 +226,8 @@ let BufferClientService = class BufferClientService {
             const bufferclients = await this.findAll();
             const goodIds = [];
             const badIds = [];
-            if (bufferclients.length < 40) {
-                for (let i = 0; i < 40 - bufferclients.length; i++) {
+            if (bufferclients.length < 70) {
+                for (let i = 0; i < 70 - bufferclients.length; i++) {
                     badIds.push(1);
                 }
             }
