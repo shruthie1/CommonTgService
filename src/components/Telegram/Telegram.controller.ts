@@ -196,7 +196,7 @@ export class TelegramController {
 
     @Get('metadata')
     async getMediaMetadata(@Query('mobile') mobile: string, @Query('chatId') chatId: string) {
-        await this.connectToTelegram(mobile);
+        await this.telegramService.createClient(mobile, false, false);
         return this.telegramService.getMediaMetadata(mobile, chatId);
     }
 
