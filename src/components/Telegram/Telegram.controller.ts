@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
 import { TelegramService } from './Telegram.service';
 
@@ -195,19 +195,20 @@ export class TelegramController {
     }
 
     @Get('metadata')
-    async getMediaMetadata(@Query('mobile') mobile: string) {
+    async getMediaMetadata(@Query('mobile') mobile: string, @Query('chatId') chatId: string) {
         await this.connectToTelegram(mobile);
-        return this.telegramService.getMediaMetadata(mobile);
+        return this.telegramService.getMediaMetadata(mobile, chatId);
     }
 
     @Get('download')
     async downloadMediaFile(
         @Query('mobile') mobile: string,
         @Query('messageId') messageId: number,
+        @Query('chatId') chatId: string,
+        @Res() res: Response
     ) {
         await this.connectToTelegram(mobile);
-        const file = await this.telegramService.downloadMediaFile(mobile, messageId);
-        return { file: file.toString('base64') };
+        await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
 
 }

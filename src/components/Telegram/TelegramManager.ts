@@ -417,17 +417,18 @@ class TelegramManager {
     }
 
 
-    async getMediaMetadata() {
-        const messages = await this.client.getMessages('me', { limit: 100 });
+    async getMediaMetadata(chatId: string = 'me') {
+        const messages = await this.client.getMessages(chatId, { limit: 500 });
+        console.log("Total:", messages.total, "ChatId: ", chatId);
         const mediaMessages = messages.filter(message => message.media);
         const data = []
         for (const message of mediaMessages) {
-            if (message.photo) {
+            if (message.media instanceof Api.MessageMediaPhoto) {
                 data.push({
                     messageId: message.id,
                     mediaType: 'photo'
                 })
-            } else if (message.video) {
+            } else if (message.media instanceof Api.MessageMediaDocument && (message.media.document as any).mimeType == 'video/mp4') {
                 data.push({
                     messageId: message.id,
                     mediaType: 'video'
@@ -437,13 +438,74 @@ class TelegramManager {
         return data
     }
 
-    async downloadMediaFile(messageId: number) {
-        const message = await this.client.getMessages("me", { ids: messageId });
-        if (message) {
-            const file = await this.client.downloadMedia(message[0]);
-            return file;
+    async downloadMediaFile(messageId: number, chatId: string = 'me', res: any) {
+        try {
+            await this.client.connect();
+            const messages = await this.client.getMessages(chatId, { ids: [messageId] })
+            const message = <Api.Message>messages[0]
+            if (message && !(message.media instanceof Api.MessageMediaEmpty) &&  (message.video || <Api.Photo>message.photo)) {
+                const media = message.media;
+                let contentType;
+                let filename;
+                let fileLocation;
+                const inputLocation = message.video || <Api.Photo>message.photo;
+                    const data = {
+                        id: inputLocation.id,
+                        accessHash: inputLocation.accessHash,
+                        fileReference: inputLocation.fileReference,
+                        
+                    }
+                    if (media instanceof Api.MessageMediaPhoto) {
+                        contentType = 'image/jpeg';
+                        filename = 'photo.jpg'; // Replace with your logic
+                        fileLocation = new Api.InputPhotoFileLocation({...data, thumbSize: 'm'});
+                    } else if (media instanceof Api.MessageMediaDocument) {
+                        contentType = (media as any).mimeType || 'video/mp4'; // Use provided mimeType if available
+                        filename = 'video.mp4'; // Replace with your logic
+                        fileLocation = new Api.InputDocumentFileLocation({...data, thumbSize: ''})
+                    } else {
+                        return res.status(415).send('Unsupported media type');
+                    }
+
+                    console.log("accessHash :", inputLocation.accessHash, "fileReference: ", inputLocation.fileReference);
+
+                    res.setHeader('Content-Type', contentType);
+                    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+                    const chunkSize = 512 * 1024; // 1 MB chunks
+                    const end = 80 * 1024 * 1024; // 10 MB limit
+
+                    try {
+
+                        for await (const chunk of this.client.iterDownload({
+                            file: fileLocation,
+                            offset: bigInt[0],
+                            limit: end,
+                            requestSize: chunkSize
+                        })) {
+                            res.write(chunk);
+                        }
+                        res.end(); // End the response when streaming is complete
+                    } catch (downloadError) {
+                        console.log(message.video)
+                        if (downloadError.message.includes('FILE_REFERENCE_EXPIRED')) {
+                            console.warn('File reference expired. Attempting to re-fetch media...');
+                            // Implement logic to re-fetch message or handle gracefully
+                            return res.status(404).send('Media reference expired');
+                        } else {
+                            console.error(downloadError);
+                            // Handle other download errors
+                            return res.status(500).send('Error while streaming media');
+                        }
+                    }
+                
+            } else {
+                res.status(404).send('Media not found');
+            }
+        } catch (error) {
+            console.error(error);
+            res.status(500).send('Error while streaming media');
         }
-        throw new Error('Media not found');
     }
 
     async updateUsername(baseUsername) {
