@@ -92,7 +92,7 @@ let TelegramController = class TelegramController {
         return await this.telegramService.updateNameandBio(mobile, firstName, about);
     }
     async getMediaMetadata(mobile, chatId) {
-        await this.connectToTelegram(mobile);
+        await this.telegramService.createClient(mobile, false, false);
         return this.telegramService.getMediaMetadata(mobile, chatId);
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
