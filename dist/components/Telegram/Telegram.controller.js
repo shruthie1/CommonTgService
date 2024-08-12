@@ -285,7 +285,7 @@ __decorate([
     __param(2, (0, common_1.Query)('chatId')),
     __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, String, Response]),
+    __metadata("design:paramtypes", [String, Number, String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "downloadMediaFile", null);
 exports.TelegramController = TelegramController = __decorate([
