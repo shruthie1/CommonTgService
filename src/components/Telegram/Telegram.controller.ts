@@ -205,7 +205,7 @@ export class TelegramController {
         @Query('mobile') mobile: string,
         @Query('messageId') messageId: number,
         @Query('chatId') chatId: string,
-        @Res() res: Response
+        @Res() res: any
     ) {
         await this.connectToTelegram(mobile);
         await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
