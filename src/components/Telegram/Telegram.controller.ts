@@ -195,9 +195,9 @@ export class TelegramController {
     }
 
     @Get('metadata')
-    async getMediaMetadata(@Query('mobile') mobile: string, @Query('chatId') chatId: string) {
+    async getMediaMetadata(@Query('mobile') mobile: string, @Query('chatId') chatId: string, @Query('offset') offset: number, @Query('limit') limit: number) {
         await this.telegramService.createClient(mobile, false, false);
-        return this.telegramService.getMediaMetadata(mobile, chatId);
+        return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
     }
 
     @Get('download')
@@ -211,4 +211,29 @@ export class TelegramController {
         await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
 
+    @Get('forward/:mobile/:chatId/:messageId')
+    @ApiOperation({ summary: 'Create new session' })
+    @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+    @ApiParam({ name: 'chatId', description: 'chatId of user', type: String })
+    @ApiParam({ name: 'messageId', description: 'messageId of message', type: String })
+    async forrward(
+        @Param('mobile') mobile: string,
+        @Param('chatId') chatId: string,
+        @Param('messageId') messageId: number,
+    ) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.forwardMessage(mobile, chatId, messageId)
+    }
+    
+    @Get('deleteChat/:mobile/:chatId')
+    @ApiOperation({ summary: 'Create new session' })
+    @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+    @ApiParam({ name: 'chatId', description: 'chatId of user', type: String })
+    async deleteChat(
+        @Param('mobile') mobile: string,
+        @Param('chatId') chatId: string,
+    ) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.deleteChat(mobile, chatId)
+    }
 }
