@@ -360,7 +360,7 @@ class TelegramManager {
         console.log("Query: ", query);
         const messages = await this.client.getMessages(chatId, query);
         const mediaMessages = messages.filter(message => message.media);
-        console.log("Total:", messages.total, "ChatId: ", chatId, "Media :", mediaMessages.length);
+        console.log("Total:", messages.total, "fetched: ", messages, "ChatId: ", chatId, "Media :", mediaMessages.length);
         const data = [];
         for (const message of mediaMessages) {
             console.log(message.media.className, message.document?.mimeType);
