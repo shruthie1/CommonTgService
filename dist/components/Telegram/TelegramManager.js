@@ -351,11 +351,11 @@ class TelegramManager {
     }
     async getMediaMetadata(chatId = 'me', offset = undefined, limit = 100) {
         const query = {
-            limit: limit
+            limit: parseInt(limit.toString())
         };
         if (offset) {
             console.log("Setting offset");
-            query['offsetId'] = offset;
+            query['offsetId'] = parseInt(offset.toString());
         }
         console.log("Query: ", query);
         const messages = await this.client.getMessages(chatId, query);
@@ -375,7 +375,7 @@ class TelegramManager {
                     thumb: thumbBuffer
                 });
             }
-            else if (message.media instanceof tl_1.Api.MessageMediaDocument && message.document.mimeType.startsWith('video')) {
+            else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document.mimeType.startsWith('video') || message.document.mimeType.startsWith('image'))) {
                 console.log("messageId video:", message.id);
                 const sizes = message.document?.thumbs || [1];
                 thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
@@ -386,6 +386,7 @@ class TelegramManager {
                 });
             }
         }
+        console.log("Returning : ", data.length);
         return data;
     }
     async deleteChat(chatId) {
