@@ -375,7 +375,7 @@ class TelegramManager {
                     thumb: thumbBuffer
                 });
             }
-            else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document.mimeType.startsWith('video') || message.document.mimeType.startsWith('image'))) {
+            else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
                 console.log("messageId video:", message.id);
                 const sizes = message.document?.thumbs || [1];
                 thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
