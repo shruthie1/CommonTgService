@@ -50,7 +50,7 @@ declare class TelegramManager {
     getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
     joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates>;
     connected(): boolean;
-    connect(): Promise<boolean>;
+    connect(): Promise<void>;
     removeOtherAuths(): Promise<void>;
     getAuths(): Promise<any>;
     getAllChats(): Promise<any[]>;
@@ -66,8 +66,10 @@ declare class TelegramManager {
     updateProfile(firstName: string, about: string): Promise<void>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
-    getMediaMetadata(chatId?: string): Promise<any[]>;
+    getMediaMetadata(chatId?: string, offset?: number, limit?: number): Promise<any[]>;
+    deleteChat(chatId: string): Promise<void>;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
+    forwardMessage(chatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;

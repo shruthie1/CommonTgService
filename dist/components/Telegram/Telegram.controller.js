@@ -91,13 +91,21 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.updateNameandBio(mobile, firstName, about);
     }
-    async getMediaMetadata(mobile, chatId) {
+    async getMediaMetadata(mobile, chatId, offset, limit) {
         await this.telegramService.createClient(mobile, false, false);
-        return this.telegramService.getMediaMetadata(mobile, chatId);
+        return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
         await this.connectToTelegram(mobile);
         await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
+    }
+    async forrward(mobile, chatId, messageId) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.forwardMessage(mobile, chatId, messageId);
+    }
+    async deleteChat(mobile, chatId) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.deleteChat(mobile, chatId);
     }
 };
 exports.TelegramController = TelegramController;
@@ -274,8 +282,10 @@ __decorate([
     (0, common_1.Get)('metadata'),
     __param(0, (0, common_1.Query)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('offset')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMediaMetadata", null);
 __decorate([
@@ -285,9 +295,33 @@ __decorate([
     __param(2, (0, common_1.Query)('chatId')),
     __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, String, Response]),
+    __metadata("design:paramtypes", [String, Number, String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "downloadMediaFile", null);
+__decorate([
+    (0, common_1.Get)('forward/:mobile/:chatId/:messageId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'chatId of user', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'messageId', description: 'messageId of message', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('chatId')),
+    __param(2, (0, common_1.Param)('messageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "forrward", null);
+__decorate([
+    (0, common_1.Get)('deleteChat/:mobile/:chatId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'chatId of user', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "deleteChat", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),
