@@ -419,11 +419,11 @@ class TelegramManager {
 
     async getMediaMetadata(chatId: string = 'me', offset: number = undefined, limit = 100) {
         const query = {
-            limit: limit
+            limit: parseInt(limit.toString())
         }
         if (offset) {
             console.log("Setting offset")
-            query['offsetId'] = offset
+            query['offsetId'] = parseInt(offset.toString())
         }
         console.log("Query: ", query)
 
@@ -444,7 +444,7 @@ class TelegramManager {
                     mediaType: 'photo',
                     thumb: thumbBuffer
                 })
-            } else if (message.media instanceof Api.MessageMediaDocument && message.document.mimeType.startsWith('video')) {
+            } else if (message.media instanceof Api.MessageMediaDocument && (message.document.mimeType.startsWith('video') || message.document.mimeType.startsWith('image'))) {
                 console.log("messageId video:", message.id)
                 const sizes = message.document?.thumbs || [1]
                 // await message.forwardTo('@fuckyoubabie')
