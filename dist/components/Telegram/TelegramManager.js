@@ -367,7 +367,7 @@ class TelegramManager {
             let thumbBuffer = null;
             if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
                 console.log("messageId image:", message.id);
-                const sizes = message.photo.sizes || [1];
+                const sizes = message.photo?.sizes || [1];
                 thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
                 data.push({
                     messageId: message.id,
