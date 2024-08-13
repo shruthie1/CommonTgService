@@ -444,7 +444,7 @@ class TelegramManager {
                     mediaType: 'photo',
                     thumb: thumbBuffer
                 })
-            } else if (message.media instanceof Api.MessageMediaDocument && (message.document.mimeType.startsWith('video') || message.document.mimeType.startsWith('image'))) {
+            } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
                 console.log("messageId video:", message.id)
                 const sizes = message.document?.thumbs || [1]
                 // await message.forwardTo('@fuckyoubabie')
