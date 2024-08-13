@@ -436,7 +436,7 @@ class TelegramManager {
             let thumbBuffer = null;
             if (message.media instanceof Api.MessageMediaPhoto) {
                 console.log("messageId image:", message.id)
-                const sizes = (<Api.Photo>message.photo).sizes || [1];
+                const sizes = (<Api.Photo>message.photo)?.sizes || [1];
                 // await message.forwardTo('@fuckyoubabie')
                 thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
                 data.push({
