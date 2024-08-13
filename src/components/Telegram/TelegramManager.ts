@@ -457,6 +457,7 @@ class TelegramManager {
             }
             // await sleep(2500)
         }
+        console.log("Returning : ", data.length)
         // await this.deleteChat(bigInt(chatId))
         return data
     }
