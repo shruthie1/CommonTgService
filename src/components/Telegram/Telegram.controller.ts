@@ -53,6 +53,22 @@ export class TelegramController {
         return this.telegramService.getMessages(mobile, username, limit);
     }
 
+    @Get('messagesNew/:mobile')
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ name: 'chatId', description: 'Username to fetch messages from', required: true })
+    @ApiQuery({ name: 'limit', description: 'Limit the number of messages', required: false })
+    @ApiQuery({ name: 'offset', description: 'offset the number of messages', required: false })
+    async getMessagesNew(
+        @Param('mobile') mobile: string,
+        @Query('chatId') chatId: string,
+        @Query('offset') offset: number,
+        @Query('limit') limit: number = 20
+    ) {
+        await this.telegramService.createClient(mobile, false, false);
+        const messages = await this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
+        return messages;
+    }
+
     @Get('chatid/:mobile')
     @ApiOperation({ summary: 'Get chat ID for a username' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -224,7 +240,7 @@ export class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.forwardMessage(mobile, chatId, messageId)
     }
-    
+
     @Get('deleteChat/:mobile/:chatId')
     @ApiOperation({ summary: 'Create new session' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })

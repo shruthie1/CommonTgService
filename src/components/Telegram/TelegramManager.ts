@@ -218,6 +218,49 @@ class TelegramManager {
         }
         return chatData;
     }
+    async getMessagesNew(chatId: string, offset: number = 0, limit: number = 20): Promise<any> {
+        const messages = await this.client.getMessages(chatId, {
+            offsetId: offset,
+            limit,
+        });
+
+        const result = await Promise.all(messages.map(async (message: Api.Message) => {
+            const media = message.media
+                ? {
+                    type: message.media.className.includes('video') ? 'video' : 'photo',
+                    thumbnailUrl: await this.getMediaUrl(message),
+                }
+                : null;
+
+            return {
+                id: message.id,
+                message: message.message,
+                date: message.date,
+                sender: {
+                    id: message.senderId?.toString(),
+                    is_self: message.out,
+                    username: message.fromId ? message.fromId.toString() : null,
+                },
+                media,
+            };
+        }));
+
+        return result;
+    }
+
+    async getMediaUrl(message: Api.Message): Promise<string | Buffer> {
+        if (message.media instanceof Api.MessageMediaPhoto) {
+            console.log("messageId image:", message.id)
+            const sizes = (<Api.Photo>message.photo)?.sizes || [1];
+            return await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
+
+        } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
+            console.log("messageId video:", message.id)
+            const sizes = message.document?.thumbs || [1]
+            return await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
+        }
+        return null;
+    }
 
     async getCallLog() {
         const result = <Api.messages.Messages>await this.client.invoke(
@@ -282,12 +325,29 @@ class TelegramManager {
             }
             filteredResults.chatCallCounts[chatId].count++;
         }
-        const filteredChatCallCounts = Object.entries(filteredResults.chatCallCounts)
-            .filter(([chatId, details]) => details["count"] > 5)
-            .map(([chatId, details]) => ({
-                ...(details as any),
-                chatId,
-            }));
+        const filteredChatCallCounts = [];
+        Object.entries(filteredResults.chatCallCounts)
+            .forEach(async ([chatId, details]) => {
+                if (details['count'] > 5) {
+                    let video = 0;
+                    let photo = 0
+                    const msgs = await this.client.getMessages(chatId, { limit: 10 })
+                    for (const message of msgs) {
+                        if (message.media instanceof Api.MessageMediaPhoto) {
+                            photo++
+                        } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
+                            video++
+                        }
+                        filteredChatCallCounts.push({
+                            ...(details as any),
+                            msgs: msgs.total,
+                            video,
+                            photo,
+                            chatId,
+                        })
+                    }
+                }
+            })
         console.log({
             ...filteredResults,
             chatCallCounts: filteredChatCallCounts
@@ -565,7 +625,7 @@ class TelegramManager {
                 console.log(error)
             }
         } else {
-            while (true) {
+            while (increment < 10) {
                 try {
                     const result = await this.client.invoke(
                         new Api.account.CheckUsername({ username })
