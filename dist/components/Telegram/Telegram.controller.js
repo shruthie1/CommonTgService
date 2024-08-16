@@ -38,6 +38,11 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return this.telegramService.getMessages(mobile, username, limit);
     }
+    async getMessagesNew(mobile, chatId, offset, limit = 20) {
+        await this.telegramService.createClient(mobile, false, false);
+        const messages = await this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
+        return messages;
+    }
     async getChatId(mobile, username) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getChatId(mobile, username);
@@ -147,6 +152,20 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMessages", null);
+__decorate([
+    (0, common_1.Get)('messagesNew/:mobile'),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Username to fetch messages from', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Limit the number of messages', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', description: 'offset the number of messages', required: false }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('offset')),
+    __param(3, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getMessagesNew", null);
 __decorate([
     (0, common_1.Get)('chatid/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get chat ID for a username' }),

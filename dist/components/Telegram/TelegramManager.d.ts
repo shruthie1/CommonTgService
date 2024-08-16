@@ -54,6 +54,8 @@ declare class TelegramManager {
     removeOtherAuths(): Promise<void>;
     getAuths(): Promise<any>;
     getAllChats(): Promise<any[]>;
+    getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<any>;
+    getMediaUrl(message: Api.Message): Promise<string | Buffer>;
     getCallLog(): Promise<{
         chatCallCounts: any[];
         outgoing: number;
