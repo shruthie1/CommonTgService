@@ -139,6 +139,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return telegramClient.getMessagesNew(username, offset, limit);
     }
+    async sendInlineMessage(mobile, chatId, message, url) {
+        const telegramClient = await this.getClient(mobile);
+        return telegramClient.sendInlineMessage(chatId, message, url);
+    }
     async getChatId(mobile, username) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getchatId(username);

@@ -31,6 +31,7 @@ export declare class User {
         chatCallCounts: any[];
         totalCalls: number;
     };
+    recentUsers: [];
 }
 export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any, any, any, mongoose.Document<unknown, any, User> & User & {
     _id: mongoose.Types.ObjectId;
