@@ -262,6 +262,18 @@ class TelegramManager {
         return null;
     }
 
+    async sendInlineMessage(chatId: string, message: string, url: string) {
+        const button = {
+            text: "Open URL",
+            url: url,
+        };
+        const result = await this.client.sendMessage(chatId, {
+            message: message,
+            buttons: [new Api.KeyboardButtonUrl(button)]
+        })
+        return result;
+    }
+
     async getCallLog() {
         const result = <Api.messages.Messages>await this.client.invoke(
             new Api.messages.Search({

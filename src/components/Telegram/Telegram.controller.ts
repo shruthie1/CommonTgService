@@ -80,6 +80,20 @@ export class TelegramController {
         return await this.telegramService.getChatId(mobile, username);
     }
 
+    @Get('sendInlineMessage/:mobile')
+    @ApiOperation({ summary: 'Get chat ID for a username' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ name: 'chatId', description: 'chat ID of user', required: true })
+    @ApiQuery({ name: 'message', description: 'message ID of user', required: true })
+    @ApiQuery({ name: 'url', description: 'url ID of user', required: true })
+    async sendInlineMessage(@Param('mobile') mobile: string,
+        @Query('chatId') chatId: string,
+        @Query('message') message: string,
+        @Query('url') url: string,) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.sendInlineMessage(mobile, chatId, message, url);
+    }
+
     @Get('lastActiveTime/:mobile')
     @ApiOperation({ summary: 'Get Last Active time of a user' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })

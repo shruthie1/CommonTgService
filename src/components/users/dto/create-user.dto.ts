@@ -87,4 +87,10 @@ export class CreateUserDto {
     chatCallCounts: any[];
     totalCalls: number;
   };
+  
+  @ApiProperty({
+    description: 'Call details of the user',
+    example: []
+  })
+  recentUsers: [];
 }

@@ -120,6 +120,13 @@ export class User {
     chatCallCounts: any[];
     totalCalls: number;
   };
+  
+  @ApiProperty()
+  @Prop({
+    type: mongoose.Schema.Types.Mixed,
+    default:[]
+  })
+  recentUsers: [];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
