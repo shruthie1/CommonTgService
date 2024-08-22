@@ -148,10 +148,11 @@ __decorate([
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiPropertyOptional)(),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: []
+        default: [],
+        required: false,
     }),
     __metadata("design:type", Array)
 ], User.prototype, "recentUsers", void 0);

@@ -52,17 +52,19 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Channel.prototype, "private", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false, required: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "forbidden", void 0);
 exports.Channel = Channel = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
+    (0, mongoose_1.Schema)({
+        collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
             },
-        }, })
+        },
+    })
 ], Channel);
 exports.ChannelSchema = mongoose_1.SchemaFactory.createForClass(Channel);
 //# sourceMappingURL=channel.schema.js.map
