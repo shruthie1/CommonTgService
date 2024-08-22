@@ -156,13 +156,15 @@ __decorate([
     __metadata("design:type", Array)
 ], User.prototype, "recentUsers", void 0);
 exports.User = User = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'users', versionKey: false, autoIndex: true, timestamps: true,
+    (0, mongoose_1.Schema)({
+        collection: 'users', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
             },
-        }, })
+        },
+    })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
 //# sourceMappingURL=user.schema.js.map
