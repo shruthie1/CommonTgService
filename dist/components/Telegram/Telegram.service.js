@@ -135,6 +135,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return telegramClient.getMessages(username, limit);
     }
+    async getMessagesNew(mobile, username, offset, limit) {
+        const telegramClient = await this.getClient(mobile);
+        return telegramClient.getMessagesNew(username, offset, limit);
+    }
     async getChatId(mobile, username) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getchatId(username);
