@@ -126,4 +126,11 @@ __decorate([
     }),
     __metadata("design:type", Object)
 ], CreateUserDto.prototype, "calls", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Call details of the user',
+        example: []
+    }),
+    __metadata("design:type", Array)
+], CreateUserDto.prototype, "recentUsers", void 0);
 //# sourceMappingURL=create-user.dto.js.map

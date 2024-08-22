@@ -9,6 +9,7 @@ export declare class TelegramController {
     getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
     getMessagesNew(mobile: string, chatId: string, offset: number, limit?: number): Promise<any>;
     getChatId(mobile: string, username: string): Promise<any>;
+    sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
     lastActiveTime(mobile: string): Promise<string>;
     joinChannels(mobile: string, channels: string): Promise<string>;
     removeOtherAuths(mobile: string): Promise<string>;

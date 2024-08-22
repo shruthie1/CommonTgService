@@ -37,6 +37,7 @@ export declare class TelegramService implements OnModuleDestroy {
     createClient(mobile: string, autoDisconnect?: boolean, handler?: boolean): Promise<TelegramManager>;
     getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
     getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<any>;
+    sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
     getChatId(mobile: string, username: string): Promise<any>;
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;

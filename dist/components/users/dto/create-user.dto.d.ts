@@ -29,4 +29,5 @@ export declare class CreateUserDto {
         chatCallCounts: any[];
         totalCalls: number;
     };
+    recentUsers: [];
 }

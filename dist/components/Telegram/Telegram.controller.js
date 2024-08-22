@@ -47,6 +47,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getChatId(mobile, username);
     }
+    async sendInlineMessage(mobile, chatId, message, url) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.sendInlineMessage(mobile, chatId, message, url);
+    }
     async lastActiveTime(mobile) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getLastActiveTime(mobile);
@@ -177,6 +181,21 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChatId", null);
+__decorate([
+    (0, common_1.Get)('sendInlineMessage/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chat ID for a username' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'chat ID of user', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'message', description: 'message ID of user', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'url', description: 'url ID of user', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('message')),
+    __param(3, (0, common_1.Query)('url')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "sendInlineMessage", null);
 __decorate([
     (0, common_1.Get)('lastActiveTime/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get Last Active time of a user' }),
