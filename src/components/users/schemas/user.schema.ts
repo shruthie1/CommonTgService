@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export type UserDocument = User & Document;
 
@@ -123,10 +123,11 @@ export class User {
     totalCalls: number;
   };
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @Prop({
     type: mongoose.Schema.Types.Mixed,
-    default: []
+    default: [],
+    required: false,
   })
   recentUsers: any[];
 }

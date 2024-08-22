@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Mobile number of the user', example: '917330803480' })
@@ -88,7 +88,7 @@ export class CreateUserDto {
     totalCalls: number;
   };
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Call details of the user',
     example: []
   })

@@ -3,13 +3,15 @@ import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 
 export type ChannelDocument = Channel & Document;
-@Schema({ collection: 'channels', versionKey: false, autoIndex: true ,  timestamps: true,
+@Schema({
+  collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
   toJSON: {
     virtuals: true,
     transform: (doc, ret) => {
       delete ret._id;
     },
-  },})
+  },
+})
 export class Channel {
   @Prop({ required: true, unique: true })
   channelId: string;
@@ -34,11 +36,11 @@ export class Channel {
 
   @Prop({ required: false, default: null })
   username: string;
-  
+
   @Prop({ required: true, default: false })
   private: boolean;
-  
-  @Prop({ default: false })
+
+  @Prop({ default: false, required: false })
   forbidden: boolean
 }
 
