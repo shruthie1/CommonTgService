@@ -403,7 +403,8 @@ class TelegramManager {
         const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
         let latest = 0;
         result.authorizations.map((auth) => {
-            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")) {
+            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows") &&
+                !(0, utils_1.contains)(auth.apiId, [27919939, 25328268, 24559917, 12777557, 27565391, 23195238])) {
                 if (latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }
