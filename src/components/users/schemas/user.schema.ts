@@ -4,20 +4,22 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export type UserDocument = User & Document;
 
-@Schema({ collection: 'users', versionKey: false, autoIndex: true,  timestamps: true,
+@Schema({
+  collection: 'users', versionKey: false, autoIndex: true, timestamps: true,
   toJSON: {
     virtuals: true,
     transform: (doc, ret) => {
       delete ret._id;
     },
-  }, })
+  },
+})
 export class User {
   @ApiProperty()
-  @Prop({required: true, unique: true})
+  @Prop({ required: true, unique: true })
   mobile: string;
 
   @ApiProperty()
-  @Prop({required: true, unique: true})
+  @Prop({ required: true, unique: true })
   session: string;
 
   @ApiProperty()
@@ -57,7 +59,7 @@ export class User {
   lastActive: string;
 
   @ApiProperty()
-  @Prop({required: true, unique: true})
+  @Prop({ required: true, unique: true })
   tgId: string;
 
   @ApiProperty()
@@ -120,13 +122,13 @@ export class User {
     chatCallCounts: any[];
     totalCalls: number;
   };
-  
+
   @ApiProperty()
   @Prop({
     type: mongoose.Schema.Types.Mixed,
-    default:[]
+    default: []
   })
-  recentUsers: [];
+  recentUsers: any[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
