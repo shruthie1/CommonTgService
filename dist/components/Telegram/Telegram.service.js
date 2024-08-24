@@ -76,7 +76,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         TelegramService_1.clientsMap.clear();
-        this.bufferClientService.clearBufferMap();
         this.bufferClientService.clearJoinChannelInterval();
     }
     async createClient(mobile, autoDisconnect = true, handler = true) {
