@@ -126,7 +126,7 @@ export class BufferClientService {
             console.log("Joining Channel Started")
             await this.telegramService.disconnectAll();
             await sleep(2000);
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 300 } }).sort({ channels: -1 }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 300 } }).sort({ channels: 1 }).limit(4);
             for (const document of clients) {
                 try {
                     if (!this.joinChannelMap.has(document.mobile)) {
