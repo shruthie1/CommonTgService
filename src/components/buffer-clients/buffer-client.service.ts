@@ -129,22 +129,24 @@ export class BufferClientService {
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 300 } }).sort({ channels: -1 }).limit(4);
             for (const document of clients) {
                 try {
-                    const client = await this.telegramService.createClient(document.mobile, false, false);
-                    console.log("Started Joining for : ", document.mobile)
-                    const channels = await client.channelInfo(true);
-                    console.log("Existing Channels Length : ", channels.ids.length);
-                    await this.update(document.mobile, { channels: channels.ids.length });
-                    let result = []
-                    if (channels.ids.length < 220) {
-                        result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
-                    } else {
-                        result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                    if (!this.joinChannelMap.has(document.mobile)) {
+                        const client = await this.telegramService.createClient(document.mobile, false, false);
+                        console.log("Started Joining for : ", document.mobile)
+                        const channels = await client.channelInfo(true);
+                        console.log("Existing Channels Length : ", channels.ids.length);
+                        await this.update(document.mobile, { channels: channels.ids.length });
+                        let result = [];
+                        if (channels.ids.length < 220) {
+                            result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                        } else {
+                            result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                        }
+                        this.joinChannelMap.set(document.mobile, result);
+                        await this.telegramService.deleteClient(document.mobile);
+                        // console.log("DbChannelsLen: ", result.length);
+                        // let resp = '';
+                        // this.telegramService.joinChannels(document.mobile, result);
                     }
-                    this.joinChannelMap.set(document.mobile, result);
-                    await this.telegramService.deleteClient(document.mobile);
-                    // console.log("DbChannelsLen: ", result.length);
-                    // let resp = '';
-                    // this.telegramService.joinChannels(document.mobile, result);
                 } catch (error) {
                     parseError(error)
                 }

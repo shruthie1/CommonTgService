@@ -73,7 +73,7 @@ export class TelegramService implements OnModuleDestroy {
             }
         }
         TelegramService.clientsMap.clear();
-        this.bufferClientService.clearBufferMap()
+        // this.bufferClientService.clearBufferMap()
         this.bufferClientService.clearJoinChannelInterval()
     }
 
