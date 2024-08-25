@@ -127,7 +127,7 @@ export class BufferClientService {
             await this.telegramService.disconnectAll();
             await sleep(2000);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 300, availableDate: { $lt: today } } }).sort({ channels: 1 }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 300 }, availableDate: { $lt: today } }).sort({ channels: 1 }).limit(4);
             for (const document of clients) {
                 try {
                     if (!this.joinChannelMap.has(document.mobile)) {
