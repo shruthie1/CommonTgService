@@ -24,6 +24,7 @@ export declare class ActiveChannelsService {
     removeReaction(channelId: string, reaction: string): Promise<ActiveChannel>;
     getActiveChannels(limit?: number, skip?: number, notIds?: string[]): Promise<ActiveChannel[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]>;
+    resetWordRestrictions(): Promise<void>;
     resetAvailableMsgs(): Promise<void>;
     updateBannedChannels(): Promise<void>;
     updateDefaultReactions(): Promise<void>;
