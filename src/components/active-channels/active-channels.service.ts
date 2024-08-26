@@ -155,38 +155,53 @@ export class ActiveChannelsService {
     }
   }
 
+  async resetWordRestrictions() {
+    await fetchWithTimeout(`${ppplbot()}&text=Request Received for Reset Available Msgs`);
+    try {
+      await this.activeChannelModel.updateMany({
+        banned: false
+      }, {
+        $set: {
+          "wordRestriction": 0,
+          "dMRestriction": 0
+        }
+      })
+    } catch (e) {
+      console.log(parseError(e))
+    }
+  }
+
   async resetAvailableMsgs() {
     await fetchWithTimeout(`${ppplbot()}&text=Request Received for Reset Available Msgs`);
-    // try {
-    //   const data = await this.promoteMsgsService.findOne();
-    //   const keys = Object.keys(data);
-    //   await this.activeChannelModel.updateMany({
-    //     $expr: {
-    //       $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
-    //     }
-    //   }, {
-    //     $set: {
-    //       "wordRestriction": 0,
-    //       "dMRestriction": 0,
-    //       "banned": false,
-    //       "availableMsgs": keys
-    //     }
-    //   })
-    // } catch (e) {
-    //   console.log(parseError(e))
-    // }
+    try {
+      const data = await this.promoteMsgsService.findOne();
+      const keys = Object.keys(data);
+      await this.activeChannelModel.updateMany({
+        $expr: {
+          $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+        }
+      }, {
+        $set: {
+          "wordRestriction": 0,
+          "dMRestriction": 0,
+          "banned": false,
+          "availableMsgs": keys
+        }
+      })
+    } catch (e) {
+      console.log(parseError(e))
+    }
   }
 
   async updateBannedChannels() {
     await fetchWithTimeout(`${ppplbot()}&text=Request Received for update banned Channels`);
-    // await this.activeChannelModel.updateMany({ banned: true }, {
-    //   $set: {
-    //     "wordRestriction": 0,
-    //     "dMRestriction": 0,
-    //     banned: false,
-    //     "availableMsgs": defaultMessages
-    //   }
-    // })
+    await this.activeChannelModel.updateMany({ banned: true }, {
+      $set: {
+        "wordRestriction": 0,
+        "dMRestriction": 0,
+        banned: false
+      }
+    })
   }
 
   async updateDefaultReactions() {
