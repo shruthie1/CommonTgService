@@ -141,11 +141,53 @@ let ActiveChannelsService = class ActiveChannelsService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async resetWordRestrictions() {
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        try {
+            await this.activeChannelModel.updateMany({
+                banned: false
+            }, {
+                $set: {
+                    "wordRestriction": 0,
+                    "dMRestriction": 0
+                }
+            });
+        }
+        catch (e) {
+            console.log((0, utils_1.parseError)(e));
+        }
+    }
     async resetAvailableMsgs() {
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        try {
+            const data = await this.promoteMsgsService.findOne();
+            const keys = Object.keys(data);
+            await this.activeChannelModel.updateMany({
+                $expr: {
+                    $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+                }
+            }, {
+                $set: {
+                    "wordRestriction": 0,
+                    "dMRestriction": 0,
+                    "banned": false,
+                    "availableMsgs": keys
+                }
+            });
+        }
+        catch (e) {
+            console.log((0, utils_1.parseError)(e));
+        }
     }
     async updateBannedChannels() {
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for update banned Channels`);
+        await this.activeChannelModel.updateMany({ banned: true }, {
+            $set: {
+                "wordRestriction": 0,
+                "dMRestriction": 0,
+                banned: false
+            }
+        });
     }
     async updateDefaultReactions() {
         await this.activeChannelModel.updateMany({}, {
