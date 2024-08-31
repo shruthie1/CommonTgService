@@ -175,11 +175,12 @@ class TelegramManager {
                         channel: id
                     })
                 );
+                console.log("Left channel :", id)
+                await sleep(30000);
             } catch (error) {
                 const errorDetails = parseError(error);
                 console.log("Failed to leave channel :", errorDetails.message)
             }
-
         }
     }
 
