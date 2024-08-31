@@ -163,6 +163,7 @@ class TelegramManager {
     }
 
     async leaveChannels() {
+        console.log("Leaving Channels: initaied!!");
         const chats = await this.client.getDialogs({ limit: 600 });
         for (let chatDialog of chats) {
             if (chatDialog.isChannel || chatDialog.isGroup) {
