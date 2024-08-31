@@ -176,18 +176,21 @@ export class ActiveChannelsService {
     try {
       const data = await this.promoteMsgsService.findOne();
       const keys = Object.keys(data);
-      await this.activeChannelModel.updateMany({
-        $expr: {
-          $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+      await this.activeChannelModel.updateMany(
+        {
+          $expr: {
+            $lt: [{ $size: { $ifNull: ["$availableMsgs", []] } }, 5]
+          }
+        },
+        {
+          $set: {
+            "wordRestriction": 0,
+            "dMRestriction": 0,
+            "banned": false,
+            "availableMsgs": keys
+          }
         }
-      }, {
-        $set: {
-          "wordRestriction": 0,
-          "dMRestriction": 0,
-          "banned": false,
-          "availableMsgs": keys
-        }
-      })
+      );
     } catch (e) {
       console.log(parseError(e))
     }
