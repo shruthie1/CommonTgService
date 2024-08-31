@@ -213,10 +213,6 @@ export class TelegramService implements OnModuleDestroy {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber)
                 const channels = await this.getChannelInfo(mobile, true);
                 await this.bufferClientService.update(mobile, { channels: channels.ids.length });
-                setTimeout(async () => {
-                    await this.createClient(mobile, false, false)
-                    telegramClient.leaveChannels()
-                }, 30000);
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
         }

@@ -129,13 +129,14 @@ class TelegramManager {
         return { photoCount, videoCount, movieCount, total: messageHistory.total };
     }
 
-    async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[] }> {
+    async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[], canSendFalseChats: string[] }> {
         if (!this.client) throw new Error('Client is not initialized');
         const chats = await this.client.getDialogs({ limit: 600 });
         let canSendTrueCount = 0;
         let canSendFalseCount = 0;
         let totalCount = 0;
         this.channelArray.length = 0;
+        const canSendFalseChats = [];
         console.log("TotalChats:", chats.total);
         for (const chat of chats) {
             if (chat.isChannel || chat.isGroup) {
@@ -148,6 +149,7 @@ class TelegramManager {
                         this.channelArray.push(id.toString()?.replace(/^-100/, ""));
                     } else {
                         canSendFalseCount++;
+                        canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
                     }
                 } catch (error) {
                     parseError(error);
@@ -158,32 +160,26 @@ class TelegramManager {
             chatsArrayLength: totalCount,
             canSendTrueCount,
             canSendFalseCount,
-            ids: sendIds ? this.channelArray : []
+            ids: sendIds ? this.channelArray : [],
+            canSendFalseChats
         };
     }
 
-    async leaveChannels() {
+    async leaveChannels(chats: string[]) {
         console.log("Leaving Channels: initaied!!");
-        const chats = await this.client.getDialogs({ limit: 300 });
-        console.log("ChatsLength: ",chats)
-        for (let chatDialog of chats) {
-            if (chatDialog.isChannel || chatDialog.isGroup) {
-                const chatEntity: Api.Channel = <any>chatDialog.entity.toJSON();
-                const { title, id, broadcast, defaultBannedRights, participantsCount, restricted, username } = chatEntity;
-                if (chatEntity && (chatEntity.restricted || !(!chatEntity.broadcast && !defaultBannedRights?.sendMessages))) {
-                    console.log("leaving :", chatEntity?.title);
-                    try {
-                        const joinResult = await this.client.invoke(
-                            new Api.channels.LeaveChannel({
-                                channel: id
-                            })
-                        );
-                    } catch (error) {
-                        const errorDetails = parseError(error);
-                        console.log("Failed to leave channel :", errorDetails.message)
-                    }
-                }
+        console.log("ChatsLength: ", chats)
+        for (let id of chats) {
+            try {
+                const joinResult = await this.client.invoke(
+                    new Api.channels.LeaveChannel({
+                        channel: id
+                    })
+                );
+            } catch (error) {
+                const errorDetails = parseError(error);
+                console.log("Failed to leave channel :", errorDetails.message)
             }
+
         }
     }
 
