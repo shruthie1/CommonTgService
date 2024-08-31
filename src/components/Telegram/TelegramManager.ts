@@ -162,6 +162,30 @@ class TelegramManager {
         };
     }
 
+    async leaveChannels() {
+        const chats = await this.client.getDialogs({ limit: 600 });
+        for (let chatDialog of chats) {
+            if (chatDialog.isChannel || chatDialog.isGroup) {
+                const chatEntity: Api.Channel = <any>chatDialog.entity.toJSON();
+                const { title, id, broadcast, defaultBannedRights, participantsCount, restricted, username } = chatEntity;
+                if (chatEntity && (chatEntity.restricted || !(!chatEntity.broadcast && !defaultBannedRights?.sendMessages))) {
+                    console.log("leaving :", chatEntity?.title);
+                    try {
+                        const joinResult = await this.client.invoke(
+                            new Api.channels.LeaveChannel({
+                                channel: id
+                            })
+                        );
+                        await sleep(60000);
+                    } catch (error) {
+                        const errorDetails = parseError(error);
+                        console.log("Failed to leave channel :", errorDetails.message)
+                    }
+                }
+            }
+        }
+    }
+
     async getEntity(entity: Api.TypeEntityLike) {
         return await this.client?.getEntity(entity)
     }
@@ -473,7 +497,7 @@ class TelegramManager {
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
         let latest = 0
         result.authorizations.map((auth) => {
-            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows") 
+            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")
                 // && !contains(auth.apiId?.toString() || "default",
                 //     ["27919939", "25328268", "24559917", "12777557", "27565391", "23195238"]
                 // )
