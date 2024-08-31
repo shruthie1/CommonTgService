@@ -164,7 +164,8 @@ class TelegramManager {
 
     async leaveChannels() {
         console.log("Leaving Channels: initaied!!");
-        const chats = await this.client.getDialogs({ limit: 600 });
+        const chats = await this.client.getDialogs({ limit: 300 });
+        console.log("ChatsLength: ",chats)
         for (let chatDialog of chats) {
             if (chatDialog.isChannel || chatDialog.isGroup) {
                 const chatEntity: Api.Channel = <any>chatDialog.entity.toJSON();
@@ -177,7 +178,6 @@ class TelegramManager {
                                 channel: id
                             })
                         );
-                        await sleep(60000);
                     } catch (error) {
                         const errorDetails = parseError(error);
                         console.log("Failed to leave channel :", errorDetails.message)
