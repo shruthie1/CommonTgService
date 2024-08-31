@@ -54,6 +54,7 @@ export declare class TelegramService implements OnModuleDestroy {
         canSendTrueCount: number;
         canSendFalseCount: number;
         ids: string[];
+        canSendFalseChats: string[];
     }>;
     getAuths(mobile: string): Promise<any>;
     getMe(mobile: string): Promise<Api.User>;

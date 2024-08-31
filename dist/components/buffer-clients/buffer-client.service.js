@@ -123,14 +123,19 @@ let BufferClientService = class BufferClientService {
                         console.log("Existing Channels Length : ", channels.ids.length);
                         await this.update(document.mobile, { channels: channels.ids.length });
                         let result = [];
-                        if (channels.ids.length < 220) {
-                            result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                        if (channels.canSendFalseCount < 100) {
+                            if (channels.ids.length < 220) {
+                                result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                            }
+                            else {
+                                result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                            }
+                            this.joinChannelMap.set(document.mobile, result);
+                            await this.telegramService.deleteClient(document.mobile);
                         }
                         else {
-                            result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                            client.leaveChannels(channels.canSendFalseChats);
                         }
-                        this.joinChannelMap.set(document.mobile, result);
-                        await this.telegramService.deleteClient(document.mobile);
                     }
                 }
                 catch (error) {
