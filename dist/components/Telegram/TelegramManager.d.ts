@@ -47,6 +47,7 @@ declare class TelegramManager {
         canSendFalseCount: number;
         ids: string[];
     }>;
+    leaveChannels(): Promise<void>;
     getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
     joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates>;
     connected(): boolean;

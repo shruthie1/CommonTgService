@@ -144,6 +144,28 @@ class TelegramManager {
             ids: sendIds ? this.channelArray : []
         };
     }
+    async leaveChannels() {
+        const chats = await this.client.getDialogs({ limit: 600 });
+        for (let chatDialog of chats) {
+            if (chatDialog.isChannel || chatDialog.isGroup) {
+                const chatEntity = chatDialog.entity.toJSON();
+                const { title, id, broadcast, defaultBannedRights, participantsCount, restricted, username } = chatEntity;
+                if (chatEntity && (chatEntity.restricted || !(!chatEntity.broadcast && !defaultBannedRights?.sendMessages))) {
+                    console.log("leaving :", chatEntity?.title);
+                    try {
+                        const joinResult = await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
+                            channel: id
+                        }));
+                        await (0, Helpers_1.sleep)(60000);
+                    }
+                    catch (error) {
+                        const errorDetails = (0, utils_1.parseError)(error);
+                        console.log("Failed to leave channel :", errorDetails.message);
+                    }
+                }
+            }
+        }
+    }
     async getEntity(entity) {
         return await this.client?.getEntity(entity);
     }
