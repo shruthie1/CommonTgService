@@ -116,6 +116,7 @@ class TelegramManager {
         let canSendFalseCount = 0;
         let totalCount = 0;
         this.channelArray.length = 0;
+        const canSendFalseChats = [];
         console.log("TotalChats:", chats.total);
         for (const chat of chats) {
             if (chat.isChannel || chat.isGroup) {
@@ -129,6 +130,7 @@ class TelegramManager {
                     }
                     else {
                         canSendFalseCount++;
+                        canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
                     }
                 }
                 catch (error) {
@@ -141,29 +143,22 @@ class TelegramManager {
             chatsArrayLength: totalCount,
             canSendTrueCount,
             canSendFalseCount,
-            ids: sendIds ? this.channelArray : []
+            ids: sendIds ? this.channelArray : [],
+            canSendFalseChats
         };
     }
-    async leaveChannels() {
+    async leaveChannels(chats) {
         console.log("Leaving Channels: initaied!!");
-        const chats = await this.client.getDialogs({ limit: 300 });
         console.log("ChatsLength: ", chats);
-        for (let chatDialog of chats) {
-            if (chatDialog.isChannel || chatDialog.isGroup) {
-                const chatEntity = chatDialog.entity.toJSON();
-                const { title, id, broadcast, defaultBannedRights, participantsCount, restricted, username } = chatEntity;
-                if (chatEntity && (chatEntity.restricted || !(!chatEntity.broadcast && !defaultBannedRights?.sendMessages))) {
-                    console.log("leaving :", chatEntity?.title);
-                    try {
-                        const joinResult = await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
-                            channel: id
-                        }));
-                    }
-                    catch (error) {
-                        const errorDetails = (0, utils_1.parseError)(error);
-                        console.log("Failed to leave channel :", errorDetails.message);
-                    }
-                }
+        for (let id of chats) {
+            try {
+                const joinResult = await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
+                    channel: id
+                }));
+            }
+            catch (error) {
+                const errorDetails = (0, utils_1.parseError)(error);
+                console.log("Failed to leave channel :", errorDetails.message);
             }
         }
     }

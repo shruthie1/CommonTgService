@@ -24,6 +24,7 @@ export declare class TelegramController {
         canSendTrueCount: number;
         canSendFalseCount: number;
         ids: string[];
+        canSendFalseChats: string[];
     }>;
     getAuths(mobile: string): Promise<any>;
     set2Fa(mobile: string): Promise<string>;
