@@ -168,8 +168,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
             if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                 this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber);
                 const channels = await this.getChannelInfo(mobile, true);
-                this.bufferClientService.update(mobile, { channels: channels.ids.length });
-                telegramClient.leaveChannels();
+                await this.bufferClientService.update(mobile, { channels: channels.ids.length });
+                setTimeout(async () => {
+                    await this.createClient(mobile, false, false);
+                    telegramClient.leaveChannels();
+                }, 30000);
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
         }
