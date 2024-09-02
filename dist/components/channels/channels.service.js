@@ -116,30 +116,17 @@ let ChannelsService = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+        const existPattern = /wife|adult|lanj|lesb|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi/i;
+        const notExistPattern = /online|realestat|propert|board|design|realt|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i;
         const query = {
-            '$and': [
-                {
-                    '$or': [
-                        { title: { '$regex': /wife|adult|lanj|lesb|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi/i } },
-                        { username: { '$regex': /wife|adult|lanj|lesb|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi/i } },
-                    ]
-                },
-                {
-                    '$or': [
-                        { title: { '$not': { '$regex': /online|realestat|propert|board|design|realt|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i } } },
-                        { username: { '$not': { '$regex': /online|realestat|propert|board|design|realt|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i } } },
-                    ]
-                },
-                {
-                    channelId: { '$nin': notIds },
-                    participantsCount: { $gt: 1000 },
-                    username: { "$ne": null },
-                    private: false,
-                    canSendMsgs: true,
-                    restricted: false,
-                    forbidden: false
-                }
-            ]
+            username: { $exists: true, '$regex': existPattern, $not: { $regex: notExistPattern } },
+            title: { $exists: true, '$regex': existPattern, $not: { $regex: notExistPattern } },
+            channelId: { '$nin': notIds },
+            participantsCount: { $gt: 1000 },
+            private: false,
+            canSendMsgs: true,
+            restricted: false,
+            forbidden: false
         };
         const sort = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 };
         try {
