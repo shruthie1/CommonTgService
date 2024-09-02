@@ -155,6 +155,8 @@ class TelegramManager {
                 const joinResult = await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
                     channel: id
                 }));
+                console.log("Left channel :", id);
+                await (0, Helpers_1.sleep)(30000);
             }
             catch (error) {
                 const errorDetails = (0, utils_1.parseError)(error);
