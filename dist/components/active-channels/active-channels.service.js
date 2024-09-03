@@ -168,11 +168,12 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async updateBannedChannels() {
         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for update banned Channels`);
-        await this.activeChannelModel.updateMany({ banned: true }, {
+        await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
             $set: {
                 "wordRestriction": 0,
                 "dMRestriction": 0,
-                banned: false
+                banned: false,
+                "private": false
             }
         });
     }
