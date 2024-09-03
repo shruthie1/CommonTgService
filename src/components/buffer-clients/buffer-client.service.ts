@@ -137,7 +137,7 @@ export class BufferClientService {
                         console.log("Existing Channels Length : ", channels.ids.length);
                         await this.update(document.mobile, { channels: channels.ids.length });
                         let result = [];
-                        if (channels.canSendFalseCount < 100) {
+                        if (channels.canSendFalseCount < 50) {
                             if (channels.ids.length < 220) {
                                 result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
                             } else {
