@@ -60,7 +60,6 @@ export class PromoteStatService {
             uniqueChannels: 0,
             releaseDay: Date.now(),
             lastUpdatedTimeStamp: Date.now(),
-            channels:[],
             data: {}//Object.fromEntries((await this.promoteStatModel.findOne({ client: user.client })).channels?.map(channel => [channel, 0])),
           }
         }
