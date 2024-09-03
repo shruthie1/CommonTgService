@@ -4,8 +4,7 @@ export declare class CreatePromoteStatDto {
     totalCount: number;
     uniqueChannels: number;
     releaseDay: number;
-    lastupdatedTimeStamp: number;
-    isActive: boolean;
     lastUpdatedTimeStamp: number;
+    isActive: boolean;
     channels: string[];
 }

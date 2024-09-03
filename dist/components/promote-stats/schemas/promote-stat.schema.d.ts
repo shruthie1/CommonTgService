@@ -6,7 +6,6 @@ export declare class PromoteStat {
     totalCount: number;
     uniqueChannels: number;
     releaseDay: number;
-    lastupdatedTimeStamp: number;
     isActive: boolean;
     lastUpdatedTimeStamp: number;
     channels: string[];

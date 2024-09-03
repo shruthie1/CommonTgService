@@ -37,15 +37,11 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 1719860106247.0, description: 'Last Updated TimeStamp' }),
     __metadata("design:type", Number)
-], CreatePromoteStatDto.prototype, "lastupdatedTimeStamp", void 0);
+], CreatePromoteStatDto.prototype, "lastUpdatedTimeStamp", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: true, description: 'Is Active' }),
     __metadata("design:type", Boolean)
 ], CreatePromoteStatDto.prototype, "isActive", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719929752982.0, description: 'Last Updated TimeStamp' }),
-    __metadata("design:type", Number)
-], CreatePromoteStatDto.prototype, "lastUpdatedTimeStamp", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: ["And_Girls_Boys_Group_Chatting", "Girls_Chating_Group_07"], description: 'Channels' }),
     __metadata("design:type", Array)
