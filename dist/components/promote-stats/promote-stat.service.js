@@ -63,7 +63,6 @@ let PromoteStatService = class PromoteStatService {
                     uniqueChannels: 0,
                     releaseDay: Date.now(),
                     lastUpdatedTimeStamp: Date.now(),
-                    channels: [],
                     data: {}
                 }
             });
