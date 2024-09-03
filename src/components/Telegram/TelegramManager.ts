@@ -780,6 +780,7 @@ class TelegramManager {
             throw error
         }
     }
+    
     async hasPassword() {
         const passwordInfo = await this.client.invoke(new Api.account.GetPassword());
         return passwordInfo.hasPassword
