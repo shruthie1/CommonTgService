@@ -41,11 +41,6 @@ __decorate([
     __metadata("design:type", Number)
 ], PromoteStat.prototype, "releaseDay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719860106247.0, description: 'Last Updated TimeStamp' }),
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", Number)
-], PromoteStat.prototype, "lastupdatedTimeStamp", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: true, description: 'Is Active' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
