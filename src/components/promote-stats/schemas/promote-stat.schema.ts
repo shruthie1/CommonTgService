@@ -26,10 +26,6 @@ export class PromoteStat {
   @Prop({ required: true })
   releaseDay: number;
 
-  @ApiProperty({ example: 1719860106247.0, description: 'Last Updated TimeStamp' })
-  @Prop({ required: true })
-  lastupdatedTimeStamp: number;
-
   @ApiProperty({ example: true, description: 'Is Active' })
   @Prop({ required: true })
   isActive: boolean;
