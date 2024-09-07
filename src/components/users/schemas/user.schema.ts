@@ -81,6 +81,9 @@ export class User {
   @Prop({ required: false, type: Boolean })
   twoFA: boolean = false
 
+  @Prop({ required: false, type: Boolean, default: false })
+  expired: boolean = false
+
   @Prop({ required: false })
   password: string = null
 
@@ -130,6 +133,8 @@ export class User {
     required: false,
   })
   recentUsers: any[];
+
+  
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

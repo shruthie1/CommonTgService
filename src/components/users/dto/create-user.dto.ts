@@ -37,8 +37,11 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Telegram ID of the user', example: '2022068676' })
   tgId: string;
 
-  @ApiProperty({ description: 'TwoFA status', example: 0 })
+  @ApiProperty({ description: 'TwoFA status', example: false })
   twoFA: boolean = false;
+
+  @ApiProperty({ description: 'Expiration status', example: false })
+  expired: boolean = false;
 
   @ApiProperty({ description: 'password', example: 0 })
   password: boolean = null;
