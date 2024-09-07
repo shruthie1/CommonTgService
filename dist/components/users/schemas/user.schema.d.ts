@@ -18,6 +18,7 @@ export declare class User {
     videoCount: number;
     gender: string | null;
     twoFA: boolean;
+    expired: boolean;
     password: string;
     otherPhotoCount: number;
     otherVideoCount: number;

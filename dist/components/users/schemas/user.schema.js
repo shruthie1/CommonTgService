@@ -16,6 +16,7 @@ const swagger_1 = require("@nestjs/swagger");
 let User = class User {
     constructor() {
         this.twoFA = false;
+        this.expired = false;
         this.password = null;
     }
 };
@@ -104,6 +105,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Boolean }),
     __metadata("design:type", Boolean)
 ], User.prototype, "twoFA", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "expired", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)

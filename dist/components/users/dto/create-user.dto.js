@@ -14,6 +14,7 @@ const swagger_1 = require("@nestjs/swagger");
 class CreateUserDto {
     constructor() {
         this.twoFA = false;
+        this.expired = false;
         this.password = null;
         this.movieCount = 0;
         this.photoCount = 0;
@@ -70,9 +71,13 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'TwoFA status', example: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'TwoFA status', example: false }),
     __metadata("design:type", Boolean)
 ], CreateUserDto.prototype, "twoFA", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Expiration status', example: false }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "expired", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'password', example: 0 }),
     __metadata("design:type", Boolean)
