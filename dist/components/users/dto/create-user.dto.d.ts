@@ -12,6 +12,7 @@ export declare class CreateUserDto {
     lastActive: string;
     tgId: string;
     twoFA: boolean;
+    expired: boolean;
     password: boolean;
     movieCount: number;
     photoCount: number;
