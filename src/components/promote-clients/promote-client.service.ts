@@ -254,7 +254,7 @@ export class PromoteClientService {
             const goodIds = [];
             const badIds = [];
             if (promoteclients.length < 70) {
-                for (let i = 0; i < 70 - promoteclients.length; i++) {
+                for (let i = 0; i < 70 - promoteclients.length && badIds.length < 4; i++) {
                     badIds.push(1)
                 }
             }
@@ -276,7 +276,7 @@ export class PromoteClientService {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                         }
                         const hasPassword = await cli.hasPassword();
-                        if (!hasPassword) {
+                        if (!hasPassword && badIds.length < 4) {
                             console.log("Client does not have password");
                             badIds.push(document.mobile);
                             // await this.remove(document.mobile);
