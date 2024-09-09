@@ -23,14 +23,16 @@ const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
 const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
+const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
 let PromoteClientService = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.clientService = clientService;
         this.channelsService = channelsService;
+        this.bufferClientService = bufferClientService;
         this.joinChannelMap = new Map();
     }
     async create(promoteClient) {
@@ -192,8 +194,9 @@ let PromoteClientService = class PromoteClientService {
             throw new common_1.BadRequestException('user not found');
         }
         const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client?.mobile);
-        if (!clientIds.includes(mobile)) {
+        const clientMobiles = clients.map(client => client?.mobile);
+        const clientPromoteMobiles = clients.map(client => client?.promoteMobile);
+        if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
             const telegramClient = await this.telegramService.createClient(mobile);
             try {
                 await telegramClient.set2fa();
@@ -208,7 +211,7 @@ let PromoteClientService = class PromoteClientService {
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
                 const promoteClient = {
                     tgId: user.tgId,
-                    session: user.session,
+                    lastActive: "default",
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
@@ -234,15 +237,17 @@ let PromoteClientService = class PromoteClientService {
             const goodIds = [];
             const badIds = [];
             if (promoteclients.length < 70) {
-                for (let i = 0; i < 70 - promoteclients.length; i++) {
+                for (let i = 0; i < 70 - promoteclients.length && badIds.length < 4; i++) {
                     badIds.push(1);
                 }
             }
             const clients = await this.clientService.findAll();
+            const bufferClients = await this.bufferClientService.findAll();
             const clientIds = clients.map(client => client.mobile);
+            const bufferClientIds = bufferClients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of promoteclients) {
-                if (!clientIds.includes(document.mobile)) {
+                if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
                     try {
                         const cli = await this.telegramService.createClient(document.mobile, true, false);
                         const me = await cli.getMe();
@@ -253,7 +258,7 @@ let PromoteClientService = class PromoteClientService {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
                         }
                         const hasPassword = await cli.hasPassword();
-                        if (!hasPassword) {
+                        if (!hasPassword && badIds.length < 4) {
                             console.log("Client does not have password");
                             badIds.push(document.mobile);
                         }
@@ -275,6 +280,7 @@ let PromoteClientService = class PromoteClientService {
                 }
                 else {
                     console.log("Number is a Active Client");
+                    goodIds.push(document.mobile);
                     this.remove(document.mobile);
                 }
             }
@@ -353,11 +359,13 @@ exports.PromoteClientService = PromoteClientService = __decorate([
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
-        channels_service_1.ChannelsService])
+        channels_service_1.ChannelsService,
+        buffer_client_service_1.BufferClientService])
 ], PromoteClientService);
 //# sourceMappingURL=promote-client.service.js.map
