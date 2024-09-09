@@ -85,7 +85,6 @@ let ActiveChannelsService = class ActiveChannelsService {
             title: { $exists: true, '$regex': existPattern, $not: { $regex: notExistPattern } },
             channelId: { '$nin': notIds },
             participantsCount: { $gt: 1000 },
-            private: false,
             canSendMsgs: true,
             restricted: false,
             forbidden: false
