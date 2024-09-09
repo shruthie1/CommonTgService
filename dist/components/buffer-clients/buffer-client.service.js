@@ -23,14 +23,16 @@ const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
 const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
+const promote_client_service_1 = require("../promote-clients/promote-client.service");
 let BufferClientService = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.clientService = clientService;
         this.channelsService = channelsService;
+        this.promoteClientService = promoteClientService;
         this.joinChannelMap = new Map();
     }
     async create(bufferClient) {
@@ -192,8 +194,9 @@ let BufferClientService = class BufferClientService {
             throw new common_1.BadRequestException('user not found');
         }
         const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client?.mobile);
-        if (!clientIds.includes(mobile)) {
+        const clientMobiles = clients.map(client => client?.mobile);
+        const clientPromoteMobiles = clients.map(client => client?.promoteMobile);
+        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             const telegramClient = await this.telegramService.createClient(mobile);
             try {
                 await telegramClient.set2fa();
@@ -239,10 +242,12 @@ let BufferClientService = class BufferClientService {
                 }
             }
             const clients = await this.clientService.findAll();
+            const promoteclients = await this.promoteClientService.findAll();
             const clientIds = clients.map(client => client.mobile);
+            const promoteclientIds = promoteclients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of bufferclients) {
-                if (!clientIds.includes(document.mobile)) {
+                if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
                     try {
                         const cli = await this.telegramService.createClient(document.mobile, true, false);
                         const me = await cli.getMe();
@@ -275,6 +280,7 @@ let BufferClientService = class BufferClientService {
                 }
                 else {
                     console.log("Number is a Active Client");
+                    goodIds.push(document.mobile);
                     this.remove(document.mobile);
                 }
             }
@@ -353,11 +359,13 @@ exports.BufferClientService = BufferClientService = __decorate([
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
-        channels_service_1.ChannelsService])
+        channels_service_1.ChannelsService,
+        promote_client_service_1.PromoteClientService])
 ], BufferClientService);
 //# sourceMappingURL=buffer-client.service.js.map

@@ -26,6 +26,7 @@ const promote_msgs_module_1 = require("./components/promote-msgs/promote-msgs.mo
 const stat_module_1 = require("./components/stats/stat.module");
 const stat2_module_1 = require("./components/stats2/stat2.module");
 const promote_stat_module_1 = require("./components/promote-stats/promote-stat.module");
+const promote_client_module_1 = require("./components/promote-clients/promote-client.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -44,6 +45,7 @@ exports.AppModule = AppModule = __decorate([
             buffer_client_module_1.BufferClientModule,
             archived_client_module_1.ArchivedClientModule,
             channels_module_1.ChannelsModule,
+            promote_client_module_1.PromoteClientModule,
             build_module_1.BuildModule,
             upi_ids_module_1.UpiIdModule,
             promote_msgs_module_1.PromoteMsgModule,
@@ -62,6 +64,7 @@ exports.AppModule = AppModule = __decorate([
             buffer_client_module_1.BufferClientModule,
             archived_client_module_1.ArchivedClientModule,
             channels_module_1.ChannelsModule,
+            promote_client_module_1.PromoteClientModule
         ]
     })
 ], AppModule);

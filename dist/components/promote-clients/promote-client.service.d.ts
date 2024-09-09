@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
+import { BufferClientService } from '../buffer-clients/buffer-client.service';
 export declare class PromoteClientService {
     private promoteClientModel;
     private telegramService;
@@ -14,9 +15,10 @@ export declare class PromoteClientService {
     private activeChannelsService;
     private clientService;
     private channelsService;
+    private bufferClientService;
     private joinChannelMap;
     private joinChannelIntervalId;
-    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService);
+    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(): Promise<PromoteClient[]>;
     findOne(mobile: string): Promise<PromoteClient>;
