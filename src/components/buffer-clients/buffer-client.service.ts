@@ -12,6 +12,7 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { parseError } from '../../utils';
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
+import { PromoteClientService } from '../promote-clients/promote-client.service';
 
 @Injectable()
 export class BufferClientService {
@@ -28,6 +29,8 @@ export class BufferClientService {
         private clientService: ClientService,
         @Inject(forwardRef(() => ActiveChannelsService))
         private channelsService: ChannelsService,
+        @Inject(forwardRef(() => PromoteClientService))
+        private promoteClientService: PromoteClientService,
     ) { }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
@@ -209,8 +212,9 @@ export class BufferClientService {
             throw new BadRequestException('user not found');
         }
         const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client?.mobile);
-        if (!clientIds.includes(mobile)) {
+        const clientMobiles = clients.map(client => client?.mobile);
+        const clientPromoteMobiles = clients.map(client => client?.promoteMobile);
+        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             const telegramClient = await this.telegramService.createClient(mobile)
             try {
                 await telegramClient.set2fa();
@@ -255,10 +259,12 @@ export class BufferClientService {
                 }
             }
             const clients = await this.clientService.findAll();
+            const promoteclients = await this.promoteClientService.findAll();
             const clientIds = clients.map(client => client.mobile);
+            const promoteclientIds = promoteclients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of bufferclients) {
-                if (!clientIds.includes(document.mobile)) {
+                if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
                     try {
                         const cli = await this.telegramService.createClient(document.mobile, true, false);
                         const me = await cli.getMe();
@@ -289,6 +295,7 @@ export class BufferClientService {
                     }
                 } else {
                     console.log("Number is a Active Client");
+                    goodIds.push(document.mobile)
                     this.remove(document.mobile)
                 }
             }

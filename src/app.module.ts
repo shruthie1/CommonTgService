@@ -17,6 +17,7 @@ import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module'
 import { StatModule } from './components/stats/stat.module';
 import { Stat2Module } from './components/stats2/stat2.module';
 import { PromoteStatModule } from './components/promote-stats/promote-stat.module';
+import { PromoteClientModule } from './components/promote-clients/promote-client.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PromoteStatModule } from './components/promote-stats/promote-stat.modul
     BufferClientModule,
     ArchivedClientModule,
     ChannelsModule,
+    PromoteClientModule,
     BuildModule,
     UpiIdModule,
     PromoteMsgModule,
@@ -47,6 +49,7 @@ import { PromoteStatModule } from './components/promote-stats/promote-stat.modul
     BufferClientModule,
     ArchivedClientModule,
     ChannelsModule,
+    PromoteClientModule
   ]
 })
 export class AppModule implements NestModule {

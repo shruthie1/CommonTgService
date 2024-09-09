@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { ClientModule } from '../clients/client.module';
 import { initModule } from '../ConfigurationInit/init.module';
 import { ChannelsModule } from '../channels/channels.module';
+import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ChannelsModule } from '../channels/channels.module';
     forwardRef(() => ActiveChannelsModule),
     forwardRef(() => ClientModule),
     forwardRef(() => ChannelsModule),
+    forwardRef(() => BufferClientModule),
  ],
   controllers: [PromoteClientController],
   providers: [PromoteClientService],
