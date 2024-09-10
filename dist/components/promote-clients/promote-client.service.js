@@ -168,7 +168,12 @@ let PromoteClientService = class PromoteClientService {
                             await this.telegramService.tryJoiningChannel(mobile, channel);
                         }
                         catch (error) {
-                            (0, utils_1.parseError)(error, "Outer Err: ");
+                            const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                            if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
+                                this.removeFromPromoteMap(mobile);
+                                const channels = await this.telegramService.getChannelInfo(mobile, true);
+                                await this.update(mobile, { channels: channels.ids.length });
+                            }
                         }
                         await this.telegramService.deleteClient(mobile);
                     }

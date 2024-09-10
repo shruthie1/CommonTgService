@@ -164,13 +164,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         catch (error) {
-            const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${chatEntity.username} Channels ERR: `);
-            if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
-                this.bufferClientService.removeFromBufferMap(telegramClient.phoneNumber);
-                const channels = await this.getChannelInfo(mobile, true);
-                await this.bufferClientService.update(mobile, { channels: channels.ids.length });
-            }
-            await this.removeChannels(error, chatEntity.channelId, chatEntity.username);
+            this.removeChannels(error, chatEntity.channelId, chatEntity.username);
+            throw error;
         }
     }
     ;
