@@ -54,7 +54,7 @@ let ClientService = class ClientService {
         }
     }
     async findAllMasked(query) {
-        const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0 }).exec();
+        const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0, promoteMobile: 0 }).exec();
         return results;
     }
     async refreshMap() {
