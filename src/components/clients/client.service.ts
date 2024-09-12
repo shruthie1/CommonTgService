@@ -51,7 +51,7 @@ export class ClientService {
     }
 
     async findAllMasked(query?: SearchClientDto): Promise<Client[]> {
-        const results: Client[] = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0 }).exec();
+        const results: Client[] = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0, promoteMobile: 0 }).exec();
         return results
     }
 
