@@ -164,6 +164,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         catch (error) {
+            console.log(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             throw error;
         }
