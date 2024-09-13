@@ -208,6 +208,7 @@ export class TelegramService implements OnModuleDestroy {
                 console.log("Removed Channel- ", chatEntity.username);
             }
         } catch (error) {
+            console.log(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             throw error
         }
