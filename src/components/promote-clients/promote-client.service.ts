@@ -286,8 +286,8 @@ export class PromoteClientService {
                             badIds.push(document.mobile);
                             // await this.remove(document.mobile);
                         } else {
-                            const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                            await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length })
+                            // const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
+                            // await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length })
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile)
                         }

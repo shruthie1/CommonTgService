@@ -285,8 +285,8 @@ export class BufferClientService {
                             badIds.push(document.mobile);
                             // await this.remove(document.mobile);
                         } else {
-                            const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
-                            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length })
+                            // const channelinfo = await this.telegramService.getChannelInfo(document.mobile, true);
+                            // await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, { channels: channelinfo.ids.length })
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile)
                         }
