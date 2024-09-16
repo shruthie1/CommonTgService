@@ -344,6 +344,7 @@ export class BufferClientService {
                             channels: channels.ids.length,
                         }
                         await this.create(bufferClient);
+                        await this.usersService.update(document.tgId, { twoFA: true })
                         console.log("=============Created BufferClient=============")
                         await this.telegramService.deleteClient(document.mobile)
                         badIds.pop();

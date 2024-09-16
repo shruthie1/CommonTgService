@@ -345,6 +345,7 @@ export class PromoteClientService {
                             channels: channels.ids.length,
                         }
                         await this.create(promoteClient);
+                        await this.usersService.update(document.tgId, { twoFA: true })
                         console.log("=============Created PromoteClient=============")
                         await this.telegramService.deleteClient(document.mobile)
                         badIds.pop();

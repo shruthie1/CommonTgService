@@ -12,7 +12,6 @@ import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
 import * as bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
-import { EntityLike } from 'telegram/define';
 
 class TelegramManager {
     private session: StringSession;
@@ -60,6 +59,8 @@ class TelegramManager {
 
     async errorHandler(error) {
         if (error.message && error.message == 'TIMEOUT') {
+            await this.client.disconnect();
+            await this.client.destroy();
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
             console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
