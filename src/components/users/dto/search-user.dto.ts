@@ -18,6 +18,11 @@ export class SearchUserDto {
   @IsBoolean()
   twoFA?: boolean;
 
+  @ApiPropertyOptional({ description: 'Filter by Expiration status', type: Boolean })
+  @IsOptional()
+  @IsBoolean()
+  expired?: boolean;
+
   @ApiPropertyOptional({ description: 'Filter by session' })
   @IsOptional()
   @IsString()
