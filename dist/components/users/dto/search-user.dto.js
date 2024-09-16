@@ -35,6 +35,12 @@ __decorate([
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "twoFA", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Expiration status', type: Boolean }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SearchUserDto.prototype, "expired", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by session' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
