@@ -256,11 +256,11 @@ export class BufferClientService {
             await this.telegramService.disconnectAll()
             await sleep(2000);
             const bufferclients = await this.findAll();
-            const goodIds = [];
-            const badIds = [];
+            let goodIds: string[] = [];
+            let badIds: string[] = [];
             if (bufferclients.length < 70) {
                 for (let i = 0; i < 70 - bufferclients.length; i++) {
-                    badIds.push(1)
+                    badIds.push(i.toString())
                 }
             }
             const clients = await this.clientService.findAll();
@@ -304,6 +304,7 @@ export class BufferClientService {
                     this.remove(document.mobile)
                 }
             }
+            goodIds = [...goodIds, ...clientIds, ...promoteclientIds]
             console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
             this.addNewUserstoBufferClients(badIds, goodIds);
         } else {
