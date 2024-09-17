@@ -19,6 +19,7 @@ const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const client_service_1 = require("../clients/client.service");
+const utils_1 = require("../../utils");
 let ArchivedClientService = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
@@ -43,25 +44,31 @@ let ArchivedClientService = class ArchivedClientService {
             return user;
         }
         else {
-            await this.telegramService.createClient(mobile, false, true);
-            const newSession = await this.telegramService.createNewSession(mobile);
-            await this.telegramService.deleteClient(mobile);
-            return await this.create({
-                "channelLink": "default",
-                "clientId": "default",
-                "dbcoll": "default",
-                "deployKey": "default",
-                "link": "default",
-                "mainAccount": "default",
-                promoteRepl: "default",
-                "name": "default",
-                "password": "Ajtdmwajt1@",
-                "repl": "default",
-                "session": newSession,
-                "username": "default",
-                "mobile": mobile,
-                product: "default"
-            });
+            try {
+                await this.telegramService.createClient(mobile, false, true);
+                const newSession = await this.telegramService.createNewSession(mobile);
+                await this.telegramService.deleteClient(mobile);
+                return await this.create({
+                    "channelLink": "default",
+                    "clientId": "default",
+                    "dbcoll": "default",
+                    "deployKey": "default",
+                    "link": "default",
+                    "mainAccount": "default",
+                    promoteRepl: "default",
+                    "name": "default",
+                    "password": "Ajtdmwajt1@",
+                    "repl": "default",
+                    "session": newSession,
+                    "username": "default",
+                    "mobile": mobile,
+                    product: "default"
+                });
+            }
+            catch (e) {
+                await this.telegramService.deleteClient(mobile);
+                throw new common_1.NotFoundException((0, utils_1.parseError)(e).message);
+            }
         }
     }
     async update(mobile, updateClientDto) {
