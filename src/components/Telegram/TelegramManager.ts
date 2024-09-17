@@ -389,7 +389,7 @@ class TelegramManager {
                 if (details['count'] > 5) {
                     let video = 0;
                     let photo = 0
-                    const msgs = await this.client.getMessages(chatId, { limit: 10 })
+                    const msgs = await this.client.getMessages(chatId, { limit: 600 })
                     for (const message of msgs) {
                         if (message.media instanceof Api.MessageMediaPhoto) {
                             photo++
