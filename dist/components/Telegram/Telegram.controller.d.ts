@@ -23,6 +23,13 @@ export declare class TelegramController {
         ownVideoCount: number;
         otherVideoCount: number;
     }>;
+    getCallLog(mobile: string): Promise<{
+        chatCallCounts: any[];
+        outgoing: number;
+        incoming: number;
+        video: number;
+        totalCalls: number;
+    }>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
         chatsArrayLength: number;
         canSendTrueCount: number;

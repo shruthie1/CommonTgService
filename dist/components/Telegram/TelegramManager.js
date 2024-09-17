@@ -331,11 +331,9 @@ class TelegramManager {
             }
             filteredResults.chatCallCounts[chatId].count++;
         }
-        console.log(filteredResults.chatCallCounts);
         const filteredChatCallCounts = [];
-        Object.entries(filteredResults.chatCallCounts)
-            .forEach(async ([chatId, details]) => {
-            if (details['count'] > 5) {
+        for (const [chatId, details] of Object.entries(filteredResults.chatCallCounts)) {
+            if (details['count'] > 4) {
                 let video = 0;
                 let photo = 0;
                 const msgs = await this.client.getMessages(chatId, { limit: 600 });
@@ -346,16 +344,16 @@ class TelegramManager {
                     else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
                         video++;
                     }
-                    filteredChatCallCounts.push({
-                        ...details,
-                        msgs: msgs.total,
-                        video,
-                        photo,
-                        chatId,
-                    });
                 }
+                filteredChatCallCounts.push({
+                    ...details,
+                    msgs: msgs.total,
+                    video,
+                    photo,
+                    chatId,
+                });
             }
-        });
+        }
         console.log({
             ...filteredResults,
             chatCallCounts: filteredChatCallCounts
