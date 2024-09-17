@@ -105,31 +105,54 @@ class TelegramManager {
         return resp;
     }
 
-    async getSelfMSgsInfo(): Promise<{ photoCount: number; videoCount: number; movieCount: number, total: number }> {
+    async getSelfMSgsInfo(): Promise<{
+        photoCount: number;
+        videoCount: number;
+        movieCount: number,
+        total: number,
+        ownPhotoCount: number,
+        otherPhotoCount: number,
+        ownVideoCount: number,
+        otherVideoCount: number
+    }> {
         if (!this.client) throw new Error('Client is not initialized');
         const self = <Api.User>await this.client.getMe();
         const selfChatId = self.id;
 
         let photoCount = 0;
+        let ownPhotoCount = 0;
+        let ownVideoCount = 0;
+        let otherPhotoCount = 0;
+        let otherVideoCount = 0;
         let videoCount = 0;
         let movieCount = 0;
 
-        const messageHistory = await this.client.getMessages(selfChatId, { limit: 200 });
+        const messageHistory = await this.client.getMessages(selfChatId, { limit: 200 }); // Adjust limit as needed
         for (const message of messageHistory) {
-            if (message.photo) {
-                photoCount++;
-            } else if (message.video) {
-                videoCount++;
-            }
             const text = message.text.toLocaleLowerCase();
-            if (contains(text, ['movie', 'series', '1080', '720', '640', 'title', 'aac', '265', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'])) {
-                movieCount++;
+            if (contains(text, ['movie', 'series', '1080', '720', 'terabox', '640', 'title', 'aac', '265', '264', 'instagr', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'])) {
+                movieCount++
+            } else {
+                if (message.photo) {
+                    photoCount++;
+                    if (!message.fwdFrom) {
+                        ownPhotoCount++
+                    } else {
+                        otherPhotoCount++
+                    }
+                } else if (message.video) {
+                    videoCount++;
+                    if (!message.fwdFrom) {
+                        ownVideoCount++
+                    } else {
+                        otherVideoCount++
+                    }
+                }
             }
         }
 
-        return { photoCount, videoCount, movieCount, total: messageHistory.total };
+        return ({ total: messageHistory.total, photoCount, videoCount, movieCount, ownPhotoCount, otherPhotoCount, ownVideoCount, otherVideoCount })
     }
-
     async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[], canSendFalseChats: string[] }> {
         if (!this.client) throw new Error('Client is not initialized');
         const chats = await this.client.getDialogs({ limit: 600 });
