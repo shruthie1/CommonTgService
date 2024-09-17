@@ -84,7 +84,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new common_1.BadRequestException('user not found');
         }
         if (!this.hasClient(mobile)) {
-            const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
+            let telegramManager = new TelegramManager_1.default(user.session, user.mobile);
             let client;
             try {
                 client = await telegramManager.createClient(handler);
@@ -117,6 +117,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 console.log("Parsing Error");
                 if (client) {
                     await client.destroy();
+                    telegramManager = null;
+                    TelegramService_1.clientsMap.delete(mobile);
                 }
                 const errorDetails = (0, utils_1.parseError)(error);
                 if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
