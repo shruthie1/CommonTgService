@@ -140,6 +140,7 @@ let BufferClientService = class BufferClientService {
                     }
                 }
                 catch (error) {
+                    await this.telegramService.deleteClient(document.mobile);
                     (0, utils_1.parseError)(error);
                 }
             }
@@ -168,6 +169,7 @@ let BufferClientService = class BufferClientService {
                             await this.telegramService.tryJoiningChannel(mobile, channel);
                         }
                         catch (error) {
+                            await this.telegramService.deleteClient(mobile);
                             const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
                             if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                                 this.removeFromBufferMap(mobile);
