@@ -7,6 +7,7 @@ import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { ClientService } from '../clients/client.service';
+import { parseError } from '../../utils';
 
 @Injectable()
 export class ArchivedClientService {
@@ -37,25 +38,30 @@ export class ArchivedClientService {
         if (user) {
             return user;
         } else {
-            await this.telegramService.createClient(mobile, false, true)
-            const newSession = await this.telegramService.createNewSession(mobile);
-            await this.telegramService.deleteClient(mobile)
-            return await this.create({
-                "channelLink": "default",
-                "clientId": "default",
-                "dbcoll": "default",
-                "deployKey": "default",
-                "link": "default",
-                "mainAccount": "default",
-                promoteRepl: "default",
-                "name": "default",
-                "password": "Ajtdmwajt1@",
-                "repl": "default",
-                "session": newSession,
-                "username": "default",
-                "mobile": mobile,
-                product: "default"
-            })
+            try {
+                await this.telegramService.createClient(mobile, false, true)
+                const newSession = await this.telegramService.createNewSession(mobile);
+                await this.telegramService.deleteClient(mobile)
+                return await this.create({
+                    "channelLink": "default",
+                    "clientId": "default",
+                    "dbcoll": "default",
+                    "deployKey": "default",
+                    "link": "default",
+                    "mainAccount": "default",
+                    promoteRepl: "default",
+                    "name": "default",
+                    "password": "Ajtdmwajt1@",
+                    "repl": "default",
+                    "session": newSession,
+                    "username": "default",
+                    "mobile": mobile,
+                    product: "default"
+                })
+            } catch (e) {
+                await this.telegramService.deleteClient(mobile)
+                throw new NotFoundException(parseError(e).message);
+            }
         }
     }
 

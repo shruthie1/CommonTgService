@@ -84,8 +84,9 @@ export class TelegramService implements OnModuleDestroy {
         }
         if (!this.hasClient(mobile)) {
             const telegramManager = new TelegramManager(user.session, user.mobile);
+            let client : TelegramClient
             try {
-                const client = await telegramManager.createClient(handler);
+                client = await telegramManager.createClient(handler);
                 await client.getMe();
                 if (client) {
                     TelegramService.clientsMap.set(mobile, telegramManager);
@@ -114,6 +115,7 @@ export class TelegramService implements OnModuleDestroy {
                 }
             } catch (error) {
                 console.log("Parsing Error");
+                await client.destroy()
                 const errorDetails = parseError(error);
                 if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                     console.log("Deleting User: ", user.mobile);

@@ -220,8 +220,8 @@ export class BufferClientService {
         const clientMobiles = clients.map(client => client?.mobile);
         const clientPromoteMobiles = clients.map(client => client?.promoteMobile);
         if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
-            const telegramClient = await this.telegramService.createClient(mobile)
             try {
+                const telegramClient = await this.telegramService.createClient(mobile)
                 await telegramClient.set2fa();
                 await sleep(15000)
                 await telegramClient.updateUsername('');
