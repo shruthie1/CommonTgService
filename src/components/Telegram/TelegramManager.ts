@@ -352,12 +352,12 @@ class TelegramManager {
             filteredResults.totalCalls++;
             const logAction = <Api.MessageActionPhoneCall>log.action
 
-            const callInfo = {
-                callId: logAction.callId.toString(),
-                duration: logAction.duration,
-                video: logAction.video,
-                timestamp: log.date
-            };
+            // const callInfo = {
+            //     callId: logAction.callId.toString(),
+            //     duration: logAction.duration,
+            //     video: logAction.video,
+            //     timestamp: log.date
+            // };
 
             // Categorize by type
             if (log.out) {
@@ -383,6 +383,7 @@ class TelegramManager {
             }
             filteredResults.chatCallCounts[chatId].count++;
         }
+        console.log(filteredResults.chatCallCounts);
         const filteredChatCallCounts = [];
         Object.entries(filteredResults.chatCallCounts)
             .forEach(async ([chatId, details]) => {
