@@ -188,8 +188,8 @@ class TelegramManager {
             if (auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
                 auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
                 auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
-                auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru')
-                || auth.deviceModel.toLowerCase().includes('windows')) {
+                auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
+                auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows')) {
                 return auth;
             }
             else {
@@ -425,7 +425,8 @@ class TelegramManager {
         const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
         let latest = 0;
         result.authorizations.map((auth) => {
-            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")) {
+            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")
+                && !auth.appName.toLowerCase().includes("hanslnz")) {
                 if (latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }
