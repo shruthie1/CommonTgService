@@ -116,7 +116,8 @@ export class TelegramService implements OnModuleDestroy {
             } catch (error) {
                 console.log("Parsing Error");
                 if (client) {
-                    await client.destroy()
+                    await client.destroy();
+                    TelegramService.clientsMap.delete(mobile);
                 }
                 const errorDetails = parseError(error);
                 if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
