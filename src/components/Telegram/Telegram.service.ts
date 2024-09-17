@@ -115,8 +115,8 @@ export class TelegramService implements OnModuleDestroy {
                 }
             } catch (error) {
                 console.log("Parsing Error");
-                if (client) {
-                    await client.destroy();
+                if (telegramManager) {
+                    await telegramManager.disconnect();
                     telegramManager = null;
                     TelegramService.clientsMap.delete(mobile);
                 }
