@@ -115,8 +115,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
             catch (error) {
                 console.log("Parsing Error");
-                if (client) {
-                    await client.destroy();
+                if (telegramManager) {
+                    await telegramManager.disconnect();
                     telegramManager = null;
                     TelegramService_1.clientsMap.delete(mobile);
                 }
