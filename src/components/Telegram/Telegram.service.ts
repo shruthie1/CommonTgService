@@ -83,7 +83,7 @@ export class TelegramService implements OnModuleDestroy {
             throw new BadRequestException('user not found');
         }
         if (!this.hasClient(mobile)) {
-            const telegramManager = new TelegramManager(user.session, user.mobile);
+            let telegramManager = new TelegramManager(user.session, user.mobile);
             let client: TelegramClient
             try {
                 client = await telegramManager.createClient(handler);
@@ -117,6 +117,7 @@ export class TelegramService implements OnModuleDestroy {
                 console.log("Parsing Error");
                 if (client) {
                     await client.destroy();
+                    telegramManager = null;
                     TelegramService.clientsMap.delete(mobile);
                 }
                 const errorDetails = parseError(error);
