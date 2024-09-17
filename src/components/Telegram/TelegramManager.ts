@@ -383,30 +383,28 @@ class TelegramManager {
             }
             filteredResults.chatCallCounts[chatId].count++;
         }
-        console.log(filteredResults.chatCallCounts);
         const filteredChatCallCounts = [];
-        Object.entries(filteredResults.chatCallCounts)
-            .forEach(async ([chatId, details]) => {
-                if (details['count'] > 5) {
-                    let video = 0;
-                    let photo = 0
-                    const msgs = await this.client.getMessages(chatId, { limit: 600 })
-                    for (const message of msgs) {
-                        if (message.media instanceof Api.MessageMediaPhoto) {
-                            photo++
-                        } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-                            video++
-                        }
-                        filteredChatCallCounts.push({
-                            ...(details as any),
-                            msgs: msgs.total,
-                            video,
-                            photo,
-                            chatId,
-                        })
+        for (const [chatId, details] of Object.entries(filteredResults.chatCallCounts)) {
+            if (details['count'] > 4) {
+                let video = 0;
+                let photo = 0
+                const msgs = await this.client.getMessages(chatId, { limit: 600 })
+                for (const message of msgs) {
+                    if (message.media instanceof Api.MessageMediaPhoto) {
+                        photo++
+                    } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
+                        video++
                     }
                 }
-            })
+                filteredChatCallCounts.push({
+                    ...(details as any),
+                    msgs: msgs.total,
+                    video,
+                    photo,
+                    chatId,
+                })
+            }
+        }
         console.log({
             ...filteredResults,
             chatCallCounts: filteredChatCallCounts

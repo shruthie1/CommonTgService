@@ -255,6 +255,11 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getSelfMSgsInfo();
     }
 
+    async getCallLog(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.getCallLog();
+    }
+
     async getChannelInfo(mobile: string, sendIds: boolean = false) {
         const telegramClient = await this.getClient(mobile)
         return await telegramClient.channelInfo(sendIds);
