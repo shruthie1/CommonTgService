@@ -40,6 +40,10 @@ declare class TelegramManager {
         videoCount: number;
         movieCount: number;
         total: number;
+        ownPhotoCount: number;
+        otherPhotoCount: number;
+        ownVideoCount: number;
+        otherVideoCount: number;
     }>;
     channelInfo(sendIds?: boolean): Promise<{
         chatsArrayLength: number;
