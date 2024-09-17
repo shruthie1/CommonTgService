@@ -310,12 +310,6 @@ class TelegramManager {
         for (const log of callLogs) {
             filteredResults.totalCalls++;
             const logAction = log.action;
-            const callInfo = {
-                callId: logAction.callId.toString(),
-                duration: logAction.duration,
-                video: logAction.video,
-                timestamp: log.date
-            };
             if (log.out) {
                 filteredResults.outgoing++;
             }
@@ -337,6 +331,7 @@ class TelegramManager {
             }
             filteredResults.chatCallCounts[chatId].count++;
         }
+        console.log(filteredResults.chatCallCounts);
         const filteredChatCallCounts = [];
         Object.entries(filteredResults.chatCallCounts)
             .forEach(async ([chatId, details]) => {
