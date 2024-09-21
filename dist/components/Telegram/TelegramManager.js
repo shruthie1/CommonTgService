@@ -338,11 +338,14 @@ class TelegramManager {
                 let photo = 0;
                 const msgs = await this.client.getMessages(chatId, { limit: 600 });
                 for (const message of msgs) {
-                    if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
-                        photo++;
-                    }
-                    else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-                        video++;
+                    const text = message.text.toLocaleLowerCase();
+                    if (!(0, utils_1.contains)(text, ['movie', 'series', '1080', '720', 'terabox', '640', 'title', 'aac', '265', '264', 'instagr', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'])) {
+                        if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
+                            photo++;
+                        }
+                        else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
+                            video++;
+                        }
                     }
                 }
                 filteredChatCallCounts.push({
