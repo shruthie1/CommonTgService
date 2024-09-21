@@ -8,7 +8,8 @@ export class UpiIdService {
     private upiIds = {}
     constructor(@InjectModel('UpiIdModule') private UpiIdModel: Model<UpiId>) {
         this.UpiIdModel.findOne({}).exec().then((data) => {
-            this.upiIds = data
+            this.upiIds = data;
+            console.log("Refreshed UPIs")
         })
         setInterval(async () => {
             await this.refreshUPIs()
@@ -20,6 +21,7 @@ export class UpiIdService {
     }
 
     async refreshUPIs() {
+        console.log("Refreshed UPIs")
         this.upiIds = await this.UpiIdModel.findOne({}).exec();
     }
 
@@ -29,6 +31,7 @@ export class UpiIdService {
         }
         const result = await this.UpiIdModel.findOne({}).exec();
         this.upiIds = result
+        console.log("Refreshed UPIs")
         return result
     }
 
@@ -39,7 +42,8 @@ export class UpiIdService {
             { $set: { ...updateClientDto } },
             { new: true, upsert: true }
         ).exec();
-        this.upiIds = updatedUser
+        this.upiIds = updatedUser;
+        console.log("Refreshed UPIs")
         if (!updatedUser) {
             throw new NotFoundException(`UpiIdModel not found`);
         }

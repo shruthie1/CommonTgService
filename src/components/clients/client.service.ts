@@ -48,6 +48,7 @@ export class ClientService {
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client)
             }
+            console.log("Refreshed Clients")
             return results
         } else {
             return Array.from(this.clientsMap.values())
@@ -60,6 +61,7 @@ export class ClientService {
     }
 
     async refreshMap() {
+        console.log("Refreshed Clients")
         this.clientsMap.clear()
     }
 
