@@ -50,6 +50,7 @@ let ClientService = class ClientService {
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client);
             }
+            console.log("Refreshed Clients");
             return results;
         }
         else {
@@ -61,6 +62,7 @@ let ClientService = class ClientService {
         return results;
     }
     async refreshMap() {
+        console.log("Refreshed Clients");
         this.clientsMap.clear();
     }
     async findOne(clientId) {
