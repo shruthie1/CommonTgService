@@ -14,10 +14,12 @@ export declare class ClientService {
     private bufferClientService;
     private usersService;
     private archivedClientService;
+    private clientsMap;
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findAllMasked(query?: SearchClientDto): Promise<Client[]>;
+    refreshMap(): Promise<void>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
