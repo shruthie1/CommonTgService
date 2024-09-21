@@ -39,6 +39,7 @@ export class UpiIdService {
             { $set: { ...updateClientDto } },
             { new: true, upsert: true }
         ).exec();
+        this.upiIds = updatedUser
         if (!updatedUser) {
             throw new NotFoundException(`UpiIdModel not found`);
         }
