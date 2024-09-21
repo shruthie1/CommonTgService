@@ -20,7 +20,6 @@ export declare class ClientController {
         deployKey: string;
         mainAccount: string;
         product: string;
-        promoteMobile: string;
     }[]>;
     findAll(): Promise<Client[]>;
     updateClient(clientId: string): Promise<void>;

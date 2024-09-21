@@ -65,7 +65,7 @@ let ClientService = class ClientService {
             })
             : allClients;
         const results = filteredClients.map(client => {
-            const { session, mobile, password, ...maskedClient } = client;
+            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
             return maskedClient;
         });
         return results;
