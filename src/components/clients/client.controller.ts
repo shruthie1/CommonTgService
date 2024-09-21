@@ -31,7 +31,7 @@ export class ClientController {
   @ApiOperation({ summary: 'Get all user data' })
   //@apiresponse({ status: 200, description: 'Return all user data.' })
   //@apiresponse({ status: 403, description: 'Forbidden.' })
-  async findAllMasked(@Query() query: SearchClientDto): Promise<Client[]> {
+  async findAllMasked(@Query() query: SearchClientDto) {
     return this.clientService.findAllMasked(query);
   }
 
