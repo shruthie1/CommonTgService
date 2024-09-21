@@ -33,25 +33,49 @@ let ClientService = class ClientService {
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
+        this.clientsMap = new Map();
+        setInterval(async () => {
+            await this.refreshMap();
+        }, 5 * 60 * 1000);
     }
     async create(createClientDto) {
         const createdUser = new this.clientModel(createClientDto);
         return createdUser.save();
     }
     async findAll() {
-        const results = await this.clientModel.find({}).exec();
-        return results;
+        const clientMapLength = this.clientsMap.size;
+        console.log(clientMapLength);
+        if (clientMapLength < 20) {
+            const results = await this.clientModel.find({}).exec();
+            for (const client of results) {
+                this.clientsMap.set(client.clientId, client);
+            }
+            return results;
+        }
+        else {
+            return Array.from(this.clientsMap.values());
+        }
     }
     async findAllMasked(query) {
         const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0, promoteMobile: 0 }).exec();
         return results;
     }
+    async refreshMap() {
+        this.clientsMap.clear();
+    }
     async findOne(clientId) {
-        const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
-        if (!user) {
-            throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+        const client = this.clientsMap.get(clientId);
+        if (client) {
+            return client;
         }
-        return user;
+        else {
+            const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
+            this.clientsMap.set(clientId, user);
+            if (!user) {
+                throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            return user;
+        }
     }
     async update(clientId, updateClientDto) {
         delete updateClientDto['_id'];
@@ -63,6 +87,7 @@ let ClientService = class ClientService {
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        this.clientsMap.set(clientId, updatedUser);
         await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");

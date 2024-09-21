@@ -19,13 +19,27 @@ const mongoose_2 = require("mongoose");
 let UpiIdService = class UpiIdService {
     constructor(UpiIdModel) {
         this.UpiIdModel = UpiIdModel;
+        this.upiIds = {};
+        this.UpiIdModel.findOne({}).exec().then((data) => {
+            this.upiIds = data;
+        });
+        setInterval(async () => {
+            await this.refreshUPIs();
+        }, 5 * 60 * 1000);
     }
     async OnModuleInit() {
         console.log("Config Module Inited");
     }
+    async refreshUPIs() {
+        this.upiIds = await this.UpiIdModel.findOne({}).exec();
+    }
     async findOne() {
-        const upiIds = await this.UpiIdModel.findOne({}).exec();
-        return upiIds;
+        if (Object.keys(this.upiIds).length > 0) {
+            return this.upiIds;
+        }
+        const result = await this.UpiIdModel.findOne({}).exec();
+        this.upiIds = result;
+        return result;
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
