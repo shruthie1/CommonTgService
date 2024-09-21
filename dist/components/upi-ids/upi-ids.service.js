@@ -22,6 +22,7 @@ let UpiIdService = class UpiIdService {
         this.upiIds = {};
         this.UpiIdModel.findOne({}).exec().then((data) => {
             this.upiIds = data;
+            console.log("Refreshed UPIs");
         });
         setInterval(async () => {
             await this.refreshUPIs();
@@ -31,6 +32,7 @@ let UpiIdService = class UpiIdService {
         console.log("Config Module Inited");
     }
     async refreshUPIs() {
+        console.log("Refreshed UPIs");
         this.upiIds = await this.UpiIdModel.findOne({}).exec();
     }
     async findOne() {
@@ -39,12 +41,14 @@ let UpiIdService = class UpiIdService {
         }
         const result = await this.UpiIdModel.findOne({}).exec();
         this.upiIds = result;
+        console.log("Refreshed UPIs");
         return result;
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
         const updatedUser = await this.UpiIdModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
         this.upiIds = updatedUser;
+        console.log("Refreshed UPIs");
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UpiIdModel not found`);
         }
