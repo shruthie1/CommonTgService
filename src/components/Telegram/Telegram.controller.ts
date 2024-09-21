@@ -145,6 +145,16 @@ export class TelegramController {
         return await this.telegramService.getCallLog(mobile);
     }
 
+    @Get('getMe/:mobile')
+    @ApiOperation({ summary: 'Get me  info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Self messages info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async getMe(@Param('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getMe(mobile);
+    }
+
     @Get('channelinfo/:mobile')
     @ApiOperation({ summary: 'Get channel info' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
