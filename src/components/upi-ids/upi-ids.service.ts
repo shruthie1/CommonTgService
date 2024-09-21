@@ -5,16 +5,31 @@ import { UpiId } from './upi-ids.schema';
 
 @Injectable()
 export class UpiIdService {
+    private upiIds = {}
     constructor(@InjectModel('UpiIdModule') private UpiIdModel: Model<UpiId>) {
+        this.UpiIdModel.findOne({}).exec().then((data) => {
+            this.upiIds = data
+        })
+        setInterval(async () => {
+            await this.refreshUPIs()
+        }, 5 * 60 * 1000);
     }
 
     async OnModuleInit() {
         console.log("Config Module Inited")
     }
 
+    async refreshUPIs() {
+        this.upiIds = await this.UpiIdModel.findOne({}).exec();
+    }
+
     async findOne(): Promise<any> {
-        const upiIds = await this.UpiIdModel.findOne({}).exec();
-        return upiIds
+        if (Object.keys(this.upiIds).length > 0) {
+            return this.upiIds
+        }
+        const result = await this.UpiIdModel.findOne({}).exec();
+        this.upiIds = result
+        return result
     }
 
     async update(updateClientDto: any): Promise<any> {

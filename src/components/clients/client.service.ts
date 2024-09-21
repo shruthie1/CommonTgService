@@ -19,6 +19,7 @@ import { SearchClientDto } from './dto/search-client.dto';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
+    private clientsMap: Map<string, Client> = new Map();
     constructor(@InjectModel(Client.name) private clientModel: Model<ClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
@@ -28,7 +29,11 @@ export class ClientService {
         private usersService: UsersService,
         @Inject(forwardRef(() => ArchivedClientService))
         private archivedClientService: ArchivedClientService,
-    ) {}
+    ) {
+        setInterval(async () => {
+            await this.refreshMap()
+        }, 5 * 60 * 1000);
+    }
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
         const createdUser = new this.clientModel(createClientDto);
@@ -36,8 +41,17 @@ export class ClientService {
     }
 
     async findAll(): Promise<Client[]> {
-        const results: Client[] = await this.clientModel.find({}).exec();
-        return results
+        const clientMapLength = this.clientsMap.size
+        console.log(clientMapLength)
+        if (clientMapLength < 20) {
+            const results: Client[] = await this.clientModel.find({}).exec();
+            for (const client of results) {
+                this.clientsMap.set(client.clientId, client)
+            }
+            return results
+        } else {
+            return Array.from(this.clientsMap.values())
+        }
     }
 
     async findAllMasked(query?: SearchClientDto): Promise<Client[]> {
@@ -45,12 +59,22 @@ export class ClientService {
         return results
     }
 
+    async refreshMap() {
+        this.clientsMap.clear()
+    }
+
     async findOne(clientId: string): Promise<Client> {
-        const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
-        if (!user) {
-            throw new NotFoundException(`Client with ID "${clientId}" not found`);
+        const client = this.clientsMap.get(clientId)
+        if (client) {
+            return client;
+        } else {
+            const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
+            this.clientsMap.set(clientId, user);
+            if (!user) {
+                throw new NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            return user;
         }
-        return user;
     }
 
     async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
@@ -63,6 +87,7 @@ export class ClientService {
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        this.clientsMap.set(clientId, updatedUser);
         await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
         await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps")
