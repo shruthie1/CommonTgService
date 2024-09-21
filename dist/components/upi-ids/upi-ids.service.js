@@ -44,6 +44,7 @@ let UpiIdService = class UpiIdService {
     async update(updateClientDto) {
         delete updateClientDto['_id'];
         const updatedUser = await this.UpiIdModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
+        this.upiIds = updatedUser;
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UpiIdModel not found`);
         }
