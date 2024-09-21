@@ -46,7 +46,7 @@ let ClientService = class ClientService {
         const clientMapLength = this.clientsMap.size;
         console.log(clientMapLength);
         if (clientMapLength < 20) {
-            const results = await this.clientModel.find({}).exec();
+            const results = await this.clientModel.find({}).lean();
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client);
             }
@@ -58,8 +58,23 @@ let ClientService = class ClientService {
         }
     }
     async findAllMasked(query) {
-        const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0, promoteMobile: 0 }).exec();
-        return results;
+        const allClients = Array.from(this.clientsMap.values());
+        if (allClients.length < 20) {
+            const results = await this.clientModel.find(query, { session: 0, mobile: 0, password: 0, promoteMobile: 0 }).exec();
+            return results;
+        }
+        else {
+            const filteredClients = query
+                ? allClients.filter(client => {
+                    return Object.keys(query).every(key => client[key] === query[key]);
+                })
+                : allClients;
+            const results = filteredClients.map(client => {
+                const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+                return maskedClient;
+            });
+            return results;
+        }
     }
     async refreshMap() {
         console.log("Refreshed Clients");

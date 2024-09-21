@@ -18,7 +18,19 @@ export declare class ClientService {
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
-    findAllMasked(query?: SearchClientDto): Promise<Client[]>;
+    findAllMasked(query?: SearchClientDto): Promise<{
+        channelLink: string;
+        dbcoll: string;
+        link: string;
+        name: string;
+        repl: string;
+        promoteRepl: string;
+        username: string;
+        clientId: string;
+        deployKey: string;
+        mainAccount: string;
+        product: string;
+    }[]>;
     refreshMap(): Promise<void>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;

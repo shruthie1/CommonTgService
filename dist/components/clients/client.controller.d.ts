@@ -8,7 +8,19 @@ export declare class ClientController {
     constructor(clientService: ClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
-    findAllMasked(query: SearchClientDto): Promise<Client[]>;
+    findAllMasked(query: SearchClientDto): Promise<{
+        channelLink: string;
+        dbcoll: string;
+        link: string;
+        name: string;
+        repl: string;
+        promoteRepl: string;
+        username: string;
+        clientId: string;
+        deployKey: string;
+        mainAccount: string;
+        product: string;
+    }[]>;
     findAll(): Promise<Client[]>;
     updateClient(clientId: string): Promise<void>;
     findOne(clientId: string): Promise<Client>;
