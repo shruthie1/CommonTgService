@@ -30,7 +30,6 @@ export declare class ClientService {
         deployKey: string;
         mainAccount: string;
         product: string;
-        promoteMobile: string;
     }[]>;
     refreshMap(): Promise<void>;
     findOne(clientId: string): Promise<Client>;
