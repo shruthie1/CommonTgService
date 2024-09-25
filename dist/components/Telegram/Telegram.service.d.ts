@@ -60,6 +60,7 @@ export declare class TelegramService implements OnModuleDestroy {
         video: number;
         totalCalls: number;
     }>;
+    getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
         chatsArrayLength: number;
         canSendTrueCount: number;

@@ -31,6 +31,7 @@ export declare class TelegramController {
         totalCalls: number;
     }>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
+    getMedia(mobile: string): Promise<import("telegram").Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
         chatsArrayLength: number;
         canSendTrueCount: number;
