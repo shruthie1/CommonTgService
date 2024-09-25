@@ -26,7 +26,7 @@ export class TgSignupController {
     @Get('otp')
     @ApiQuery({ name: 'phone', required: true })
     @ApiQuery({ name: 'code', required: true })
-    @ApiQuery({ name: 'password' })
+    @ApiQuery({ name: 'password', required: false })
     async verifyCode(@Query('phone') phone: string, @Query('code') code: string, @Query('password') password: string) {
         const cli = await getClient(phone);
         if (cli) {
