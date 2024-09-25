@@ -76,6 +76,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getMe(mobile);
     }
+    async getMedia(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getmedia(mobile);
+    }
     async getChannelInfo(mobile, sendIds = false) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getChannelInfo(mobile, sendIds);
@@ -260,6 +264,15 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMe", null);
+__decorate([
+    (0, common_1.Get)('getMedia/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get me  info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getMedia", null);
 __decorate([
     (0, common_1.Get)('channelinfo/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get channel info' }),

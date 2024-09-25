@@ -19,6 +19,11 @@ class CreateUserDto {
         this.movieCount = 0;
         this.photoCount = 0;
         this.videoCount = 0;
+        this.otherPhotoCount = 0;
+        this.otherVideoCount = 0;
+        this.ownPhotoCount = 0;
+        this.ownVideoCount = 0;
+        this.contacts = 0;
     }
 }
 exports.CreateUserDto = CreateUserDto;
@@ -51,10 +56,6 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "personalChats", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Boolean flag indicating if demo was given', example: false }),
-    __metadata("design:type", Boolean)
-], CreateUserDto.prototype, "demoGiven", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of messages', example: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "msgs", void 0);
@@ -79,8 +80,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateUserDto.prototype, "expired", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'password', example: 0 }),
-    __metadata("design:type", Boolean)
+    (0, swagger_1.ApiProperty)({ description: 'password', example: "pass" }),
+    __metadata("design:type", String)
 ], CreateUserDto.prototype, "password", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of movies', example: 0 }),

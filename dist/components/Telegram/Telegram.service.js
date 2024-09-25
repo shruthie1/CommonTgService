@@ -213,6 +213,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getCallLog();
     }
+    async getmedia(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.getMediaMessages();
+    }
     async getChannelInfo(mobile, sendIds = false) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.channelInfo(sendIds);

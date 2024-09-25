@@ -63,6 +63,7 @@ declare class TelegramManager {
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<any>;
     getMediaUrl(message: Api.Message): Promise<string | Buffer>;
     sendInlineMessage(chatId: string, message: string, url: string): Promise<Api.Message>;
+    getMediaMessages(): Promise<Api.messages.Messages>;
     getCallLog(): Promise<{
         chatCallCounts: any[];
         outgoing: number;

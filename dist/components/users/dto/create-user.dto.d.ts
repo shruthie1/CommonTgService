@@ -6,14 +6,13 @@ export declare class CreateUserDto {
     username?: string | null;
     channels: number;
     personalChats: number;
-    demoGiven: boolean;
     msgs: number;
     totalChats: number;
     lastActive: string;
     tgId: string;
     twoFA: boolean;
     expired: boolean;
-    password: boolean;
+    password: string;
     movieCount: number;
     photoCount: number;
     videoCount: number;
