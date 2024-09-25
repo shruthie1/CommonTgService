@@ -42,6 +42,7 @@ class TelegramManager {
             await this.client.destroy();
             this.client._destroyed = true
             await this.client.disconnect();
+            this.client = null;
         }
         this.session.delete();
     }
@@ -319,6 +320,26 @@ class TelegramManager {
         })
         return result;
     }
+
+    async getMediaMessages() {
+        const result = <Api.messages.Messages>await this.client.invoke(
+            new Api.messages.Search({
+                peer: new Api.InputPeerEmpty(),
+                q: '',
+                filter: new Api.InputMessagesFilterPhotos(),
+                minDate: 0,
+                maxDate: 0,
+                offsetId: 0,
+                addOffset: 0,
+                limit: 200,
+                maxId: 0,
+                minId: 0,
+                hash: bigInt(0),
+            })
+        );
+        return result
+    }
+
 
     async getCallLog() {
         const result = <Api.messages.Messages>await this.client.invoke(

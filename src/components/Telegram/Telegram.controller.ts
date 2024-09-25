@@ -1,13 +1,12 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
 import { TelegramService } from './Telegram.service';
-
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
     constructor(
         private readonly telegramService: TelegramService
-    ) { }
+    ) {}
 
     async connectToTelegram(mobile: string) {
         return await this.telegramService.createClient(mobile);
@@ -153,6 +152,16 @@ export class TelegramController {
     async getMe(@Param('mobile') mobile: string) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getMe(mobile);
+    }
+
+    @Get('getMedia/:mobile')
+    @ApiOperation({ summary: 'Get me  info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Self messages info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async getMedia(@Param('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getmedia(mobile);
     }
 
     @Get('channelinfo/:mobile')

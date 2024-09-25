@@ -21,7 +21,7 @@ export class TelegramService implements OnModuleDestroy {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
-    ) { }
+    ) {}
 
     async onModuleDestroy() {
         await this.disconnectAll();
@@ -258,6 +258,11 @@ export class TelegramService implements OnModuleDestroy {
     async getCallLog(mobile: string) {
         const telegramClient = await this.getClient(mobile)
         return await telegramClient.getCallLog();
+    }
+
+    async getmedia(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.getMediaMessages();
     }
 
     async getChannelInfo(mobile: string, sendIds: boolean = false) {

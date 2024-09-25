@@ -22,9 +22,6 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Number of personal chats', example: 74 })
   personalChats: number;
 
-  @ApiProperty({ description: 'Boolean flag indicating if demo was given', example: false })
-  demoGiven: boolean;
-
   @ApiProperty({ description: 'Number of messages', example: 0 })
   msgs: number;
 
@@ -43,8 +40,8 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Expiration status', example: false })
   expired: boolean = false;
 
-  @ApiProperty({ description: 'password', example: 0 })
-  password: boolean = null;
+  @ApiProperty({ description: 'password', example: "pass" })
+  password: string = null;
 
   @ApiProperty({ description: 'Number of movies', example: 0 })
   movieCount: number = 0;
@@ -59,19 +56,19 @@ export class CreateUserDto {
   gender?: string | null;
 
   @ApiProperty({ description: 'Number of other photos', example: 0 })
-  otherPhotoCount: number;
+  otherPhotoCount: number = 0;
 
   @ApiProperty({ description: 'Number of other videos', example: 0 })
-  otherVideoCount: number;
+  otherVideoCount: number = 0;
 
   @ApiProperty({ description: 'Number of own photos', example: 0 })
-  ownPhotoCount: number;
+  ownPhotoCount: number = 0;
 
   @ApiProperty({ description: 'Number of own videos', example: 0 })
-  ownVideoCount: number;
+  ownVideoCount: number = 0;
 
   @ApiProperty({ description: 'Number of contacts', example: 105 })
-  contacts: number;
+  contacts: number = 0;
 
   @ApiProperty({
     description: 'Call details of the user',

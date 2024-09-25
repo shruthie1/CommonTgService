@@ -1,3 +1,4 @@
+import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { PromoteClientService } from './components/promote-clients/promote-client.service';
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
 import { PromoteStatService } from './components/promote-stats/promote-stat.service';
@@ -56,6 +57,7 @@ export {
     ChannelsService,
     PromoteMsgModule,
     PromoteMsgsService,
+    TgSignupModule,
     Stat2Module,
     Stat2Service,
     StatModule,
