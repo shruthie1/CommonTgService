@@ -17,7 +17,7 @@ let LoggerMiddleware = class LoggerMiddleware {
         const { method, originalUrl, baseUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
-        const excludedEndpoints = ['/sendtochannel', '/favicon.'];
+        const excludedEndpoints = ['/sendtochannel', '/favicon.', '/tgsignup'];
         const isExcluded = (url) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {

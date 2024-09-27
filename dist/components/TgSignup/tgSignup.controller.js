@@ -59,7 +59,7 @@ __decorate([
     (0, common_1.Get)('otp'),
     (0, swagger_1.ApiQuery)({ name: 'phone', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'code', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'password' }),
+    (0, swagger_1.ApiQuery)({ name: 'password', required: false }),
     __param(0, (0, common_1.Query)('phone')),
     __param(1, (0, common_1.Query)('code')),
     __param(2, (0, common_1.Query)('password')),
