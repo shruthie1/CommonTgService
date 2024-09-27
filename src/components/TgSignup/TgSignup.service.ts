@@ -6,6 +6,8 @@ import { sleep } from "telegram/Helpers";
 import { computeCheck } from "telegram/Password";
 import bigInt from "big-integer";
 import { LogLevel } from "telegram/extensions/Logger";
+import { parseError } from "../../utils";
+import { BadRequestException } from "@nestjs/common";
 
 const clients = new Map();
 let creds = [
@@ -115,7 +117,8 @@ export async function createClient(number) {
             return (await cli.sendCode(false));
         }
     } catch (error) {
-        console.log(error)
+        console.log(parseError(error))
+        throw new BadRequestException(parseError(error).message)
     }
 }
 
@@ -244,7 +247,6 @@ export class TgSignupService {
                 throw sendCodeError; // Rethrow the error to the outer catch block
             }
         } catch (err: any) {
-            console.log("here:", err);
             if (err.errorMessage === "AUTH_RESTART") {
                 try {
                     return this.client.sendCode({ apiId: this.apiId, apiHash: this.apiHash }, `+${this.phoneNumber}`, forceSMS);
