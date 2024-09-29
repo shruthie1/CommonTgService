@@ -410,7 +410,7 @@ class TgSignupService {
         }
         console.log("Calculated results");
         try {
-            const url = `https://tg-cms.onrender.com/user`;
+            const url = `${process.env.tgcms}/user`;
             console.log("posting results : ", url);
             await axios_1.default.post(url, payload3, { headers: { 'Content-Type': 'application/json' } });
         }
