@@ -303,7 +303,7 @@ export class ClientService {
             console.log("String Generation started");
             await fetchWithTimeout(`${ppplbot()}&text=String Generation started for NewNumber:${phoneNumber}`);
             await sleep(1000);
-            const response = await fetchWithTimeout(`https://tgsignup.onrender.com/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
+            const response = await fetchWithTimeout(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
             if (response) {
                 console.log(`Code Sent successfully`, response.data);
                 await fetchWithTimeout(`${ppplbot()}&text=Code Sent successfully`);
