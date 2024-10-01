@@ -77,7 +77,7 @@ export declare class TelegramService implements OnModuleDestroy {
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any[]>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
     forwardMessage(mobile: string, chatId: string, messageId: number): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;

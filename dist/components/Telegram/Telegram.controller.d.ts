@@ -46,7 +46,7 @@ export declare class TelegramController {
     updateUsername(mobile: string, username: string): Promise<string>;
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any[]>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<void>;
     forrward(mobile: string, chatId: string, messageId: number): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
