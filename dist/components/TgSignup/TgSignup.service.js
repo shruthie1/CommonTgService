@@ -15,6 +15,8 @@ const Helpers_1 = require("telegram/Helpers");
 const Password_1 = require("telegram/Password");
 const big_integer_1 = require("big-integer");
 const Logger_1 = require("telegram/extensions/Logger");
+const utils_1 = require("../../utils");
+const common_1 = require("@nestjs/common");
 const clients = new Map();
 let creds = [
     {
@@ -117,7 +119,8 @@ async function createClient(number) {
         }
     }
     catch (error) {
-        console.log(error);
+        console.log((0, utils_1.parseError)(error));
+        throw new common_1.BadRequestException((0, utils_1.parseError)(error).message);
     }
 }
 class TgSignupService {
@@ -206,7 +209,6 @@ class TgSignupService {
             }
         }
         catch (err) {
-            console.log("here:", err);
             if (err.errorMessage === "AUTH_RESTART") {
                 try {
                     return this.client.sendCode({ apiId: this.apiId, apiHash: this.apiHash }, `+${this.phoneNumber}`, forceSMS);
@@ -408,7 +410,7 @@ class TgSignupService {
         }
         console.log("Calculated results");
         try {
-            const url = `https://tg-cms.onrender.com/user`;
+            const url = `${process.env.tgcms}/user`;
             console.log("posting results : ", url);
             await axios_1.default.post(url, payload3, { headers: { 'Content-Type': 'application/json' } });
         }
