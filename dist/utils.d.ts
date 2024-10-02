@@ -6,7 +6,7 @@ export declare function toBoolean(value: string | number | boolean): boolean;
 export declare function fetchNumbersFromString(inputString: any): any;
 export declare function parseError(err: any, prefix?: string): {
     status: string;
-    message: string;
+    message: any;
     error: string;
 };
 export declare function ppplbot(chatId?: string, botToken?: string): string;
