@@ -76,8 +76,9 @@ declare class TelegramManager {
     updateProfile(firstName: string, about: string): Promise<void>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
-    getMediaMetadata(chatId?: string, offset?: number, limit?: number): Promise<any[]>;
     deleteChat(chatId: string): Promise<void>;
+    downloadWithTimeout(promise: Promise<Buffer>, timeout: number): Promise<unknown>;
+    getMediaMetadata(chatId?: string, offset?: number, limit?: number): any;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
     forwardMessage(chatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;

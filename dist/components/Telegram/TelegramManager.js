@@ -471,46 +471,6 @@ class TelegramManager {
         }));
         return exportedContacts;
     }
-    async getMediaMetadata(chatId = 'me', offset = undefined, limit = 100) {
-        const query = {
-            limit: parseInt(limit.toString())
-        };
-        if (offset) {
-            console.log("Setting offset");
-            query['offsetId'] = parseInt(offset.toString());
-        }
-        console.log("Query: ", query);
-        const messages = await this.client.getMessages(chatId, query);
-        const mediaMessages = messages.filter(message => message.media);
-        console.log("Total:", messages.total, "fetched: ", messages.length, "ChatId: ", chatId, "Media :", mediaMessages.length);
-        const data = [];
-        for (const message of mediaMessages) {
-            console.log(message.media.className, message.document?.mimeType);
-            let thumbBuffer = null;
-            if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
-                console.log("messageId image:", message.id);
-                const sizes = message.photo?.sizes || [1];
-                thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
-                data.push({
-                    messageId: message.id,
-                    mediaType: 'photo',
-                    thumb: thumbBuffer
-                });
-            }
-            else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-                console.log("messageId video:", message.id);
-                const sizes = message.document?.thumbs || [1];
-                thumbBuffer = await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
-                data.push({
-                    messageId: message.id,
-                    mediaType: 'video',
-                    thumb: thumbBuffer
-                });
-            }
-        }
-        console.log("Returning : ", data.length);
-        return data;
-    }
     async deleteChat(chatId) {
         try {
             await this.client.invoke(new tl_1.Api.messages.DeleteHistory({
@@ -524,16 +484,98 @@ class TelegramManager {
             console.error('Failed to delete dialog:', error);
         }
     }
+    downloadWithTimeout(promise, timeout) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Download timeout')), timeout))
+        ]);
+    }
+    async getMediaMetadata(chatId = 'me', offset = undefined, limit = 100) {
+        try {
+            const query = { limit: parseInt(limit.toString()) };
+            if (offset)
+                query['offsetId'] = parseInt(offset.toString());
+            const messages = await this.client.getMessages(chatId, query);
+            const mediaMessages = messages.filter(message => {
+                return (message.media && message.media.className !== "MessageMediaWebPage");
+            });
+            console.log("Total:", messages.total, "fetched: ", messages.length, "ChatId: ", chatId, "Media :", mediaMessages.length);
+            if (!messages.length) {
+                console.log("No more media messages found. Reached the end of the chat.");
+                return { data: [], endOfMessages: true };
+            }
+            const data = [];
+            for (const message of mediaMessages) {
+                console.log(message.media.className, message.document?.mimeType);
+                let thumbBuffer = null;
+                try {
+                    if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
+                        const sizes = message.photo?.sizes || [1];
+                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
+                        console.log("messageId image:", message.id);
+                        data.push({
+                            messageId: message.id,
+                            mediaType: 'photo',
+                            thumb: thumbBuffer?.toString('base64') || null,
+                        });
+                    }
+                    else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
+                        const sizes = message.document?.thumbs || [1];
+                        console.log("messageId video:", message.id);
+                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
+                        data.push({
+                            messageId: message.id,
+                            mediaType: 'video',
+                            thumb: thumbBuffer?.toString('base64') || null,
+                        });
+                    }
+                }
+                catch (downloadError) {
+                    if (downloadError.message === 'Download timeout') {
+                        console.warn(`Skipping media messageId: ${message.id} due to download timeout.`);
+                    }
+                    else if (downloadError.message.includes('FILE_REFERENCE_EXPIRED')) {
+                        console.warn('File reference expired for message. Skipping this media.');
+                    }
+                    else {
+                        console.error(`Failed to download media thumbnail for messageId: ${message.id}`, downloadError);
+                    }
+                    data.push({
+                        messageId: message.id,
+                        mediaType: 'photo',
+                        thumb: null,
+                    });
+                    continue;
+                }
+            }
+            if (!data.length) {
+                data.push({
+                    messageId: messages[messages.length - 1].id,
+                    mediaType: 'photo',
+                    thumb: null,
+                });
+            }
+            console.log("Returning ", data.length);
+            return { data, endOfMessages: false };
+        }
+        catch (error) {
+            console.error('Error in getMediaMetadata:', error);
+            if (error.message.includes('FLOOD_WAIT')) {
+                const retryAfter = parseInt(error.message.match(/FLOOD_WAIT_(\d+)/)[1], 10);
+                console.warn(`Rate limit hit. Retrying after ${retryAfter} seconds.`);
+                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                return this.getMediaMetadata(chatId, offset, limit);
+            }
+            throw new Error('Error fetching media metadata');
+        }
+    }
     async downloadMediaFile(messageId, chatId = 'me', res) {
         try {
-            await this.client.connect();
             const messages = await this.client.getMessages(chatId, { ids: [messageId] });
             const message = messages[0];
-            if (message && !(message.media instanceof tl_1.Api.MessageMediaEmpty) && (message.video || message.photo)) {
+            if (message && !(message.media instanceof tl_1.Api.MessageMediaEmpty)) {
                 const media = message.media;
-                let contentType;
-                let filename;
-                let fileLocation;
+                let contentType, filename, fileLocation;
                 const inputLocation = message.video || message.photo;
                 const data = {
                     id: inputLocation.id,
@@ -553,41 +595,29 @@ class TelegramManager {
                 else {
                     return res.status(415).send('Unsupported media type');
                 }
-                console.log("accessHash :", inputLocation.accessHash, "fileReference: ", inputLocation.fileReference);
                 res.setHeader('Content-Type', contentType);
                 res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
                 const chunkSize = 512 * 1024;
-                const end = 80 * 1024 * 1024;
-                try {
-                    for await (const chunk of this.client.iterDownload({
-                        file: fileLocation,
-                        offset: bigInt[0],
-                        limit: end,
-                        requestSize: chunkSize
-                    })) {
-                        res.write(chunk);
-                    }
-                    res.end();
+                for await (const chunk of this.client.iterDownload({
+                    file: fileLocation,
+                    offset: bigInt[0],
+                    limit: 5 * 1024 * 1024,
+                    requestSize: chunkSize,
+                })) {
+                    res.write(chunk);
                 }
-                catch (downloadError) {
-                    console.log(message.video);
-                    if (downloadError.message.includes('FILE_REFERENCE_EXPIRED')) {
-                        console.warn('File reference expired. Attempting to re-fetch media...');
-                        return res.status(404).send('Media reference expired');
-                    }
-                    else {
-                        console.error(downloadError);
-                        return res.status(500).send('Error while streaming media');
-                    }
-                }
+                res.end();
             }
             else {
                 res.status(404).send('Media not found');
             }
         }
         catch (error) {
-            console.error(error);
-            res.status(500).send('Error while streaming media');
+            if (error.message.includes('FILE_REFERENCE_EXPIRED')) {
+                return res.status(404).send('File reference expired');
+            }
+            console.error('Error downloading media:', error);
+            res.status(500).send('Error downloading media');
         }
     }
     async forwardMessage(chatId, messageId) {

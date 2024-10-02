@@ -288,7 +288,7 @@ let ClientService = class ClientService {
             console.log("String Generation started");
             await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=String Generation started for NewNumber:${phoneNumber}`);
             await (0, Helpers_1.sleep)(1000);
-            const response = await (0, utils_1.fetchWithTimeout)(`https://tgsignup.onrender.com/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
+            const response = await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
             if (response) {
                 console.log(`Code Sent successfully`, response.data);
                 await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Code Sent successfully`);
