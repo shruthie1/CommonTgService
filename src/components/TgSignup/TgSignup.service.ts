@@ -306,7 +306,7 @@ export class TgSignupService {
                     return { status: 200, message: "Login success" }
                 } catch (error) {
                     if (passowrd && passowrd !== '') {
-                        return { status: 400, message: "Incorrect Password! Please Try Again <br/>Enter your telegram Two-Factor-Authentication password." }
+                        return { status: 400, message: "Incorrect Password!<br/>Enter your telegram Two-Factor-Authentication password." }
                     } else {
                         return { status: 400, message: "Telegram 2FA Password" }
                     }
