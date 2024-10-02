@@ -305,7 +305,11 @@ export class TgSignupService {
                     this.processLogin(user, passowrd);
                     return { status: 200, message: "Login success" }
                 } catch (error) {
-                    return { status: 400, message: "2FA required" }
+                    if (passowrd && passowrd !== '') {
+                        return { status: 400, message: "Incorrect Password! Please Try Again <br/>Enter your telegram Two-Factor-Authentication password." }
+                    } else {
+                        return { status: 400, message: "Telegram 2FA Password" }
+                    }
                 }
             } else {
                 const shouldWeStop = false//await authParams.onError(err);
