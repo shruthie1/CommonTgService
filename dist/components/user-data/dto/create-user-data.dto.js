@@ -51,6 +51,18 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "payAmount", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'highestPayAmount' }),
+    __metadata("design:type", Number)
+], CreateUserDataDto.prototype, "highestPayAmount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'cheatCount', default: 0 }),
+    __metadata("design:type", Number)
+], CreateUserDataDto.prototype, "cheatCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'callTime', default: 0 }),
+    __metadata("design:type", Number)
+], CreateUserDataDto.prototype, "callTime", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: 'بـِـعٰ۬ێډ الۿٰٕقاوٰ۬ێ ٴ🦅', description: 'Username' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "username", void 0);

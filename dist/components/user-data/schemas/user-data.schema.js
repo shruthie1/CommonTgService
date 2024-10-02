@@ -71,8 +71,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], UserData.prototype, "secondShow", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", Boolean)
+    (0, mongoose_1.Prop)({ required: true, default: 0 }),
+    __metadata("design:type", Number)
 ], UserData.prototype, "fullShow", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: true }),

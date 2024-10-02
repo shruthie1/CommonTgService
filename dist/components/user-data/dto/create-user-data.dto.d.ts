@@ -8,6 +8,9 @@ export declare class CreateUserDataDto {
     prfCount: number;
     canReply: number;
     payAmount: number;
+    highestPayAmount: number;
+    cheatCount: number;
+    callTime: number;
     username: string;
     accessHash: string;
     paidReply: boolean;
