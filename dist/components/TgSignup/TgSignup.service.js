@@ -104,7 +104,7 @@ async function createClient(number) {
             const cli = clients.get(number);
             setTimeout(async () => {
                 await restAcc(number);
-            }, 60000);
+            }, 120000);
             return (await cli.sendCode(false));
         }
         else {
@@ -242,7 +242,7 @@ class TgSignupService {
                 termsOfService = result.termsOfService;
             }
             else {
-                this.processLogin(result.user);
+                await this.processLogin(result.user);
                 await restAcc(this.phoneNumber);
                 return { status: 200, message: "Login success" };
             }
@@ -275,7 +275,6 @@ class TgSignupService {
                     throw new Error("AUTH_USER_CANCEL");
                 }
             }
-            await restAcc(this.phoneNumber);
             return { status: 400, message: err.errorMessage };
         }
         if (isRegistrationRequired) {
@@ -302,7 +301,6 @@ class TgSignupService {
                 }
             }
         }
-        await restAcc(this.phoneNumber);
     }
     async getCallLogs() {
         try {
