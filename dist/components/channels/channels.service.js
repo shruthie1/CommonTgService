@@ -133,7 +133,6 @@ let ChannelsService = class ChannelsService {
                 {
                     channelId: { '$nin': notIds },
                     participantsCount: { $gt: 1000 },
-                    private: false,
                     canSendMsgs: true,
                     restricted: false,
                     forbidden: false
