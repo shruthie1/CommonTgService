@@ -134,6 +134,7 @@ function parseError(err, prefix = 'TgCms') {
         message =
             response.data?.message ||
                 response.data?.errors ||
+                response.errorMessage ||
                 response.message ||
                 response.statusText ||
                 response.data ||
