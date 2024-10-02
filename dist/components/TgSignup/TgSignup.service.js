@@ -218,7 +218,7 @@ class TgSignupService {
                 }
             }
             else {
-                console.log(err);
+                throw err;
             }
         }
     }
