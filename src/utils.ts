@@ -164,7 +164,7 @@ export function parseError(
 
   const msg = `${prefix ? `${prefix} ::` : ""} ${extractMessage(message)} `
 
-  const resp = { status, message: error == 'RPCError' ? err.errorMessage : msg, error };
+  const resp = { status, message: err.errorMessage || msg, error };
   console.log(resp.error == 'RPCError' ? resp.message : resp);
   return resp
 }
