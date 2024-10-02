@@ -28,6 +28,15 @@ export class CreateUserDataDto {
     @ApiProperty({ example: 0, description: 'Pay amount' })
     payAmount: number;
 
+    @ApiProperty({ example: 0, description: 'highestPayAmount' })
+    highestPayAmount: number;
+
+    @ApiProperty({ example: 0, description: 'cheatCount', default: 0 })
+    cheatCount: number;
+
+    @ApiProperty({ example: 0, description: 'callTime', default: 0 })
+    callTime: number;
+
     @ApiProperty({ example: 'بـِـعٰ۬ێډ الۿٰٕقاوٰ۬ێ ٴ🦅', description: 'Username' })
     username: string;
 
