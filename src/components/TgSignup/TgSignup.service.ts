@@ -254,7 +254,7 @@ export class TgSignupService {
                     console.log("heelo: ", error)
                 }
             } else {
-                console.log(err)
+                throw err
             }
         }
     }
