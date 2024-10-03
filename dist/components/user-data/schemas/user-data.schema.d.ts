@@ -21,6 +21,10 @@ export declare class UserData {
 }
 export declare const UserDataSchema: import("mongoose").Schema<UserData, import("mongoose").Model<UserData, any, any, any, Document<unknown, any, UserData> & UserData & {
     _id: import("mongoose").Types.ObjectId;
+} & {
+    __v?: number;
 }, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, UserData, Document<unknown, {}, import("mongoose").FlatRecord<UserData>> & import("mongoose").FlatRecord<UserData> & {
     _id: import("mongoose").Types.ObjectId;
+} & {
+    __v?: number;
 }>;

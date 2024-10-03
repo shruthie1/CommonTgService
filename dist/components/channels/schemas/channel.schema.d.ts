@@ -15,6 +15,10 @@ export declare class Channel {
 }
 export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Channel, any, any, any, Document<unknown, any, Channel> & Channel & {
     _id: mongoose.Types.ObjectId;
+} & {
+    __v?: number;
 }, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, Channel, Document<unknown, {}, mongoose.FlatRecord<Channel>> & mongoose.FlatRecord<Channel> & {
     _id: mongoose.Types.ObjectId;
+} & {
+    __v?: number;
 }>;
