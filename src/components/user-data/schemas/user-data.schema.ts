@@ -63,6 +63,15 @@ export class UserData {
 
     @Prop({ required: true })
     picSent: boolean;
+
+    @Prop({ required: true })
+    highestPayAmount: number;
+
+    @Prop({ required: true })
+    cheatCount: number;
+
+    @Prop({ required: true })
+    callTime: number;
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
