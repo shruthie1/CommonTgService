@@ -26,7 +26,7 @@ export declare class ActiveChannelsService {
     addReactions(channelId: string, reactions: string[]): Promise<ActiveChannel>;
     getRandomReaction(channelId: string): Promise<string>;
     removeReaction(channelId: string, reaction: string): Promise<ActiveChannel>;
-    getActiveChannels(limit?: number, skip?: number, notIds?: string[]): Promise<ActiveChannel[]>;
+    getActiveChannels(limit?: number, skip?: number, notIds?: any[]): Promise<ActiveChannel[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]>;
     resetWordRestrictions(): Promise<void>;
     resetAvailableMsgs(): Promise<void>;
