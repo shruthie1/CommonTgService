@@ -4,6 +4,10 @@ export declare class PromoteMsg {
 }
 export declare const PromoteMsgSchema: mongoose.Schema<PromoteMsg, mongoose.Model<PromoteMsg, any, any, any, mongoose.Document<unknown, any, PromoteMsg> & PromoteMsg & Required<{
     _id: unknown;
-}>, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, PromoteMsg, mongoose.Document<unknown, {}, mongoose.FlatRecord<PromoteMsg>> & mongoose.FlatRecord<PromoteMsg> & Required<{
+}> & {
+    __v?: number;
+}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, PromoteMsg, mongoose.Document<unknown, {}, mongoose.FlatRecord<PromoteMsg>> & mongoose.FlatRecord<PromoteMsg> & Required<{
     _id: unknown;
-}>>;
+}> & {
+    __v?: number;
+}>;

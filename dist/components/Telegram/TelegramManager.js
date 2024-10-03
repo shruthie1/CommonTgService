@@ -12,6 +12,7 @@ const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
 const IMap_1 = require("../../IMap/IMap");
 const bigInt = require("big-integer");
+const TgSignup_service_1 = require("../TgSignup/TgSignup.service");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -49,6 +50,7 @@ class TelegramManager {
         if (error.message && error.message == 'TIMEOUT') {
             await this.client.disconnect();
             await this.client.destroy();
+            await (0, TgSignup_service_1.disconnectAll)();
         }
         else {
             console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
@@ -59,6 +61,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+        this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
         console.log("Connected Client : ", me.phone);
