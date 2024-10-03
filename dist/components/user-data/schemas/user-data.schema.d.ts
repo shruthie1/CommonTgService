@@ -15,7 +15,7 @@ export declare class UserData {
     paidReply: boolean;
     demoGiven: boolean;
     secondShow: boolean;
-    fullShow: boolean;
+    fullShow: number;
     profile: string;
     picSent: boolean;
 }
