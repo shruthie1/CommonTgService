@@ -13,7 +13,7 @@ export class ActiveChannelsService {
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
     @Inject(forwardRef(() => PromoteMsgsService))
     private promoteMsgsService: PromoteMsgsService
-  ) { }
+  ) {}
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
     createActiveChannelDto.availableMsgs = Object.keys(await this.promoteMsgsService.findOne())
@@ -83,7 +83,7 @@ export class ActiveChannelsService {
     return channel;
   }
 
-  async getActiveChannels(limit = 50, skip = 0, notIds: string[] = []) {
+  async getActiveChannels(limit = 50, skip = 0, notIds = []) {
     const query = {
       '$and':
         [
@@ -102,22 +102,20 @@ export class ActiveChannelsService {
           },
           {
             channelId: { '$nin': notIds },
-            participantsCount: { $gt: 1000 },
-            username: { "$ne": null },
-            private: false,
+            participantsCount: { $gt: 600 },
             canSendMsgs: true,
             restricted: false,
             forbidden: false
           }
         ]
     }
-    const sort: Record<string, 1 | -1> = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 }
+
+    const sort: Record<string, 1 | -1> = { participantsCount: -1 }
     try {
       const result: ActiveChannel[] = await this.activeChannelModel.aggregate([
         { $match: query },
         { $skip: skip },
         { $limit: limit },
-        { $addFields: { randomField: { $rand: {} } } }, // Add a random field
         { $sort: sort }, // Sort by the random field
         { $project: { randomField: 0 } } // Remove the random field from the output
       ]).exec();
@@ -127,7 +125,6 @@ export class ActiveChannelsService {
       return [];
     }
   }
-
   async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]> {
     try {
       if (!query) {
