@@ -94,22 +94,19 @@ let ActiveChannelsService = class ActiveChannelsService {
                 },
                 {
                     channelId: { '$nin': notIds },
-                    participantsCount: { $gt: 1000 },
-                    username: { "$ne": null },
-                    private: false,
+                    participantsCount: { $gt: 600 },
                     canSendMsgs: true,
                     restricted: false,
                     forbidden: false
                 }
             ]
         };
-        const sort = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 };
+        const sort = { participantsCount: -1 };
         try {
             const result = await this.activeChannelModel.aggregate([
                 { $match: query },
                 { $skip: skip },
                 { $limit: limit },
-                { $addFields: { randomField: { $rand: {} } } },
                 { $sort: sort },
                 { $project: { randomField: 0 } }
             ]).exec();
