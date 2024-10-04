@@ -103,6 +103,7 @@ export class ActiveChannelsService {
           {
             channelId: { '$nin': notIds },
             participantsCount: { $gt: 600 },
+            username: {$ne: null},
             canSendMsgs: true,
             restricted: false,
             forbidden: false

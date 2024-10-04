@@ -139,6 +139,7 @@ export class ChannelsService {
           {
             channelId: { '$nin': notIds },
             participantsCount: { $gt: 1000 },
+            username: {$ne: null},
             canSendMsgs: true,
             restricted: false,
             forbidden: false
