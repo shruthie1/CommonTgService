@@ -29,7 +29,7 @@ export declare class BufferClientService {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClient[]>;
     removeFromBufferMap(key: string): void;
     clearBufferMap(): void;
-    joinchannelForBufferClients(): Promise<string>;
+    joinchannelForBufferClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;
     setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;
