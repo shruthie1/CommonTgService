@@ -124,18 +124,17 @@ export class BufferClientService {
         this.joinChannelMap.clear()
     }
 
-    async joinchannelForBufferClients(): Promise<string> {
+    async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
         if (!this.telegramService.getActiveClientSetup()) {
             console.log("Joining Channel Started")
             await this.telegramService.disconnectAll();
             this.clearJoinChannelInterval();
             await sleep(2000);
-            const existingkeys = Array.from(this.joinChannelMap.keys())
+            const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
             // const today = (new Date(Date.now())).toISOString().split('T')[0];
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
             for (const document of clients) {
                 try {
-                    if (!this.joinChannelMap.has(document.mobile)) {
                         const client = await this.telegramService.createClient(document.mobile, false, false);
                         console.log("Started Joining for : ", document.mobile)
                         const channels = await client.channelInfo(true);
@@ -156,7 +155,6 @@ export class BufferClientService {
                         // console.log("DbChannelsLen: ", result.length);
                         // let resp = '';
                         // this.telegramService.joinChannels(document.mobile, result);
-                    }
                 } catch (error) {
                     await this.telegramService.deleteClient(document.mobile);
                     parseError(error)
@@ -213,7 +211,7 @@ export class BufferClientService {
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             setTimeout(() => {
-                this.joinchannelForBufferClients()
+                this.joinchannelForBufferClients(false)
             }, 30000);
         }
     }
