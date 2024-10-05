@@ -175,47 +175,53 @@ export class PromoteClientService {
     }
 
     async joinChannelQueue() {
-        this.joinChannelIntervalId = setInterval(async () => {
-            const keys = Array.from(this.joinChannelMap.keys());
-            if (keys.length > 0) {
-                console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
-                for (const mobile of keys) {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (channels && channels.length > 0) {
-                        const channel = channels.shift();
-                        console.log(mobile, " Pending Channels: ", channels.length);
-                        this.joinChannelMap.set(mobile, channels);
+        const existingkeys = Array.from(this.joinChannelMap.keys())
+        if (existingkeys.length > 0) {
+            this.joinChannelIntervalId = setInterval(async () => {
+                const keys = Array.from(this.joinChannelMap.keys());
+                if (keys.length > 0) {
+                    console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
+                    for (const mobile of keys) {
+                        const channels = this.joinChannelMap.get(mobile);
+                        if (channels && channels.length > 0) {
+                            const channel = channels.shift();
+                            console.log(mobile, " Pending Channels: ", channels.length);
+                            this.joinChannelMap.set(mobile, channels);
 
-                        try {
-                            await this.telegramService.createClient(mobile, false, false);
-                            console.log(mobile, " Trying to join: ", channel.username);
-                            await this.telegramService.tryJoiningChannel(mobile, channel);
-                        } catch (error) {
-                            const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `);
-                            console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
-                            if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                                console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
-                                this.removeFromPromoteMap(mobile);
-                                const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                                await this.update(mobile, { channels: channelsInfo.ids.length });
+                            try {
+                                await this.telegramService.createClient(mobile, false, false);
+                                console.log(mobile, " Trying to join: ", channel.username);
+                                await this.telegramService.tryJoiningChannel(mobile, channel);
+                            } catch (error) {
+                                const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
+                                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                                    console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
+                                    this.removeFromPromoteMap(mobile);
+                                    const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                                    await this.update(mobile, { channels: channelsInfo.ids.length });
+                                }
+                            } finally {
+                                await this.telegramService.deleteClient(mobile);
                             }
-                        } finally {
-                            await this.telegramService.deleteClient(mobile);
+                        } else {
+                            this.joinChannelMap.delete(mobile);
                         }
-                    } else {
-                        this.joinChannelMap.delete(mobile);
                     }
+                } else {
+                    this.clearJoinChannelInterval();
                 }
-            } else {
-                this.clearJoinChannelInterval();
-            }
-        }, 4 * 60 * 1000);
+            }, 4 * 60 * 1000);
+        }
     }
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
+            setTimeout(() => {
+                this.joinchannelForPromoteClients()
+            }, 30000);
         }
     }
 
