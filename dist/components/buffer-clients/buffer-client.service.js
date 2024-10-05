@@ -155,46 +155,52 @@ let BufferClientService = class BufferClientService {
         }
     }
     async joinChannelQueue() {
-        this.joinChannelIntervalId = setInterval(async () => {
-            const keys = Array.from(this.joinChannelMap.keys());
-            if (keys.length > 0) {
-                console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
-                for (const mobile of keys) {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (channels && channels.length > 0) {
-                        const channel = channels.shift();
-                        console.log(mobile, " Pending Channels :", channels.length);
-                        this.joinChannelMap.set(mobile, channels);
-                        try {
-                            await this.telegramService.createClient(mobile, false, false);
-                            console.log(mobile, " Trying to join :", channel.username);
-                            await this.telegramService.tryJoiningChannel(mobile, channel);
-                        }
-                        catch (error) {
-                            await this.telegramService.deleteClient(mobile);
-                            const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
-                            if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
-                                this.removeFromBufferMap(mobile);
-                                const channels = await this.telegramService.getChannelInfo(mobile, true);
-                                await this.update(mobile, { channels: channels.ids.length });
+        const existingkeys = Array.from(this.joinChannelMap.keys());
+        if (existingkeys.length > 0) {
+            this.joinChannelIntervalId = setInterval(async () => {
+                const keys = Array.from(this.joinChannelMap.keys());
+                if (keys.length > 0) {
+                    console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
+                    for (const mobile of keys) {
+                        const channels = this.joinChannelMap.get(mobile);
+                        if (channels && channels.length > 0) {
+                            const channel = channels.shift();
+                            console.log(mobile, " Pending Channels :", channels.length);
+                            this.joinChannelMap.set(mobile, channels);
+                            try {
+                                await this.telegramService.createClient(mobile, false, false);
+                                console.log(mobile, " Trying to join :", channel.username);
+                                await this.telegramService.tryJoiningChannel(mobile, channel);
                             }
+                            catch (error) {
+                                await this.telegramService.deleteClient(mobile);
+                                const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
+                                    this.removeFromBufferMap(mobile);
+                                    const channels = await this.telegramService.getChannelInfo(mobile, true);
+                                    await this.update(mobile, { channels: channels.ids.length });
+                                }
+                            }
+                            await this.telegramService.deleteClient(mobile);
                         }
-                        await this.telegramService.deleteClient(mobile);
-                    }
-                    else {
-                        this.joinChannelMap.delete(mobile);
+                        else {
+                            this.joinChannelMap.delete(mobile);
+                        }
                     }
                 }
-            }
-            else {
-                this.clearJoinChannelInterval();
-            }
-        }, 4 * 60 * 1000);
+                else {
+                    this.clearJoinChannelInterval();
+                }
+            }, 4 * 60 * 1000);
+        }
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
+            setTimeout(() => {
+                this.joinchannelForBufferClients();
+            }, 30000);
         }
     }
     async setAsBufferClient(mobile, availableDate = (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0]) {
