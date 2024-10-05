@@ -31,7 +31,7 @@ export class BufferClientService {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,
-    ) { }
+    ) {}
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
         const newUser = new this.bufferClientModel(bufferClient);
@@ -128,9 +128,11 @@ export class BufferClientService {
         if (!this.telegramService.getActiveClientSetup()) {
             console.log("Joining Channel Started")
             await this.telegramService.disconnectAll();
+            this.clearJoinChannelInterval();
             await sleep(2000);
+            const existingkeys = Array.from(this.joinChannelMap.keys())
             // const today = (new Date(Date.now())).toISOString().split('T')[0];
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 } }).sort({ channels: 1 }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
             for (const document of clients) {
                 try {
                     if (!this.joinChannelMap.has(document.mobile)) {
