@@ -187,7 +187,7 @@ let BufferClientService = class BufferClientService {
             else {
                 this.clearJoinChannelInterval();
             }
-        }, 4 * 60 * 1000);
+        }, 3 * 60 * 1000);
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
