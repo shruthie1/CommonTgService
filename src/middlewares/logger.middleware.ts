@@ -1,6 +1,6 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { fetchWithTimeout, ppplbot } from 'src/utils';
+import { fetchWithTimeout, parseError, ppplbot } from 'src/utils';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -29,6 +29,10 @@ export class LoggerMiddleware implements NestMiddleware {
                     this.logger.log(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 }
             });
+            res.on('error', (error) => {
+                const errorDetails = parseError(error, process.env.clientId);
+                fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+            })
         } else {
             if (originalUrl.includes('Video')) {
                 this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
