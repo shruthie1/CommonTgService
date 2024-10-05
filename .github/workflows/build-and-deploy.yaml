@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch the entire history and all branches
 
       - name: Install Node.js
         uses: actions/setup-node@v2
@@ -33,8 +35,8 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
-          git add dist/
-          git commit -m "Build and deploy dist files" || echo "No changes to commit"  # Commit if there are changes
+          git add .  # Stage all changes, including package-lock.json and dist folder
+          git commit -m "Build and deploy dist files" || echo "No changes to commit"
           git push origin HEAD:${{ steps.branch_name.outputs.branch }}
 
       - name: Commit and push src and dist to master
@@ -42,9 +44,10 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Actions"
-          git checkout master
-          git pull origin master  # Pull the latest master branch
-          git merge ${{ steps.branch_name.outputs.branch }}  # Merge the changes from the branch to master
-          git add src/ dist/
+          git fetch origin master  # Ensure the master branch is fetched
+          git checkout master  # Switch to the master branch
+          git pull origin master  # Pull the latest changes from master
+          git merge ${{ steps.branch_name.outputs.branch }}  # Merge changes from the current branch into master
+          git add src/ dist/  # Stage the src and dist changes
           git commit -m "Merge src and dist from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
-          git push origin master
+          git push origin master  # Push changes to master
