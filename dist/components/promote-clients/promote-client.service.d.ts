@@ -29,7 +29,7 @@ export declare class PromoteClientService {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
-    joinchannelForPromoteClients(): Promise<string>;
+    joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
