@@ -200,7 +200,7 @@ export class BufferClientService {
             } else {
                 this.clearJoinChannelInterval()
             }
-        }, 3 * 60 * 1000);
+        }, 4 * 60 * 1000);
     }
 
     clearJoinChannelInterval() {
