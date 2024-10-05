@@ -38,6 +38,10 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.log(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
                 }
             });
+            res.on('error', (error) => {
+                const errorDetails = (0, utils_1.parseError)(error, process.env.clientId);
+                (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+            });
         }
         else {
             if (originalUrl.includes('Video')) {
