@@ -487,6 +487,17 @@ class TelegramManager {
             console.error('Failed to delete dialog:', error);
         }
     }
+    async blockUser(chatId) {
+        try {
+            await this.client?.invoke(new tl_1.Api.contacts.Block({
+                id: chatId,
+            }));
+            console.log(`User with ID ${chatId} has been blocked.`);
+        }
+        catch (error) {
+            console.error('Failed to block user:', error);
+        }
+    }
     downloadWithTimeout(promise, timeout) {
         return Promise.race([
             promise,
