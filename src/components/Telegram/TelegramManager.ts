@@ -570,7 +570,7 @@ class TelegramManager {
             await this.client.invoke(new Api.messages.DeleteHistory({
                 justClear: false,
                 peer: chatId,
-                revoke: false,
+                revoke: true,
             }));
             console.log(`Dialog with ID ${chatId} has been deleted.`);
         } catch (error) {
