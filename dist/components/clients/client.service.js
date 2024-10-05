@@ -44,7 +44,6 @@ let ClientService = class ClientService {
     }
     async findAll() {
         const clientMapLength = this.clientsMap.size;
-        console.log(clientMapLength);
         if (clientMapLength < 20) {
             const results = await this.clientModel.find({}).lean();
             for (const client of results) {
