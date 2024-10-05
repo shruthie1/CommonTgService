@@ -34,7 +34,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
           git add dist/
-          git commit -m "Build and deploy dist files"
+          git commit -m "Build and deploy dist files" || echo "No changes to commit"  # Commit if there are changes
           git push origin HEAD:${{ steps.branch_name.outputs.branch }}
 
       - name: Commit and push src and dist to master
