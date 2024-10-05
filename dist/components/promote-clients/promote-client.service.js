@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
+    return function (target, key) { decorator(target, key, paramIndex); };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoteClientService = void 0;
@@ -25,7 +25,7 @@ const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
 const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
 let PromoteClientService = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
+    constructor (promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -190,8 +190,7 @@ let PromoteClientService = class PromoteClientService {
                         finally {
                             await this.telegramService.deleteClient(mobile);
                         }
-                    }
-                    else {
+                    } else {
                         this.joinChannelMap.delete(mobile);
                     }
                 }
@@ -380,11 +379,11 @@ exports.PromoteClientService = PromoteClientService = __decorate([
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        Telegram_service_1.TelegramService,
-        users_service_1.UsersService,
-        active_channels_service_1.ActiveChannelsService,
-        client_service_1.ClientService,
-        channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService])
+    Telegram_service_1.TelegramService,
+    users_service_1.UsersService,
+    active_channels_service_1.ActiveChannelsService,
+    client_service_1.ClientService,
+    channels_service_1.ChannelsService,
+    buffer_client_service_1.BufferClientService])
 ], PromoteClientService);
 //# sourceMappingURL=promote-client.service.js.map
