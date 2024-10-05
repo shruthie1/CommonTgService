@@ -39,7 +39,7 @@ jobs:
           git commit -m "Build and deploy dist files" || echo "No changes to commit"
           git push origin HEAD:${{ steps.branch_name.outputs.branch }}
 
-      - name: Commit and push src and dist to master
+      - name: Commit and push only dist and src to master
         if: ${{ github.ref != 'refs/heads/master' }}  # Only run if not already on master
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -47,7 +47,10 @@ jobs:
           git fetch origin master  # Ensure the master branch is fetched
           git checkout master  # Switch to the master branch
           git pull origin master  # Pull the latest changes from master
-          git merge ${{ steps.branch_name.outputs.branch }}  # Merge changes from the current branch into master
-          git add src/ dist/  # Stage the src and dist changes
-          git commit -m "Merge src and dist from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
-          git push origin master  # Push changes to master
+
+          # Merge only dist and src directories into master
+          git checkout ${{ steps.branch_name.outputs.branch }} -- src dist  # Checkout only src and dist from the branch
+          git add src dist  # Stage only src and dist changes
+          
+          git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
+          git push origin master  # Push only the changes in dist and src to master
