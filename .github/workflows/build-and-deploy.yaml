@@ -28,10 +28,23 @@ jobs:
         id: branch_name
         run: echo "::set-output name=branch::$(echo $GITHUB_REF | awk -F'/' '{print $3}')"
 
-      - name: Commit and push built files
+      - name: Pull current branch and push built files to it
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add .
+          git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
+          git add dist/
           git commit -m "Build and deploy dist files"
           git push origin HEAD:${{ steps.branch_name.outputs.branch }}
+
+      - name: Commit and push src and dist to master
+        if: ${{ github.ref != 'refs/heads/master' }}  # Only run if not already on master
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
+          git checkout master
+          git pull origin master  # Pull the latest master branch
+          git merge ${{ steps.branch_name.outputs.branch }}  # Merge the changes from the branch to master
+          git add src/ dist/
+          git commit -m "Merge src and dist from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
+          git push origin master
