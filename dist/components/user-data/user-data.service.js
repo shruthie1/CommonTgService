@@ -38,6 +38,7 @@ let UserDataService = class UserDataService {
     }
     async update(profile, chatId, updateUserDataDto) {
         delete updateUserDataDto['_id'];
+        console.log(updateUserDataDto);
         const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             console.warn(`UserData with ID "${chatId}" not found`);
