@@ -109,38 +109,36 @@ let PromoteClientService = class PromoteClientService {
         console.log("PromoteMap cleared");
         this.joinChannelMap.clear();
     }
-    async joinchannelForPromoteClients() {
+    async joinchannelForPromoteClients(skipExisting = true) {
         if (!this.telegramService.getActiveClientSetup()) {
             console.log("Joining Channel Started");
             this.clearJoinChannelInterval();
             try {
-                const existingkeys = Array.from(this.joinChannelMap.keys());
+                const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
                 await this.telegramService.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
                 const clients = await this.promoteClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
                 for (const document of clients) {
                     try {
-                        if (!this.joinChannelMap.has(document.mobile)) {
-                            const client = await this.telegramService.createClient(document.mobile, false, false);
-                            console.log("Started Joining for : ", document.mobile);
-                            const channels = await client.channelInfo(true);
-                            console.log("Existing Channels Length : ", channels.ids.length);
-                            await this.update(document.mobile, { channels: channels.ids.length });
-                            let result = [];
-                            if (channels.canSendFalseCount < 50) {
-                                if (channels.ids.length < 220) {
-                                    result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
-                                }
-                                else {
-                                    result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
-                                }
-                                this.joinChannelMap.set(document.mobile, result);
+                        const client = await this.telegramService.createClient(document.mobile, false, false);
+                        console.log("Started Joining for : ", document.mobile);
+                        const channels = await client.channelInfo(true);
+                        console.log("Existing Channels Length : ", channels.ids.length);
+                        await this.update(document.mobile, { channels: channels.ids.length });
+                        let result = [];
+                        if (channels.canSendFalseCount < 50) {
+                            if (channels.ids.length < 220) {
+                                result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
                             }
                             else {
-                                await client.leaveChannels(channels.canSendFalseChats);
+                                result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
                             }
-                            await this.telegramService.deleteClient(document.mobile);
+                            this.joinChannelMap.set(document.mobile, result);
                         }
+                        else {
+                            await client.leaveChannels(channels.canSendFalseChats);
+                        }
+                        await this.telegramService.deleteClient(document.mobile);
                     }
                     catch (error) {
                         const parsedError = (0, utils_1.parseError)(error);
@@ -209,7 +207,7 @@ let PromoteClientService = class PromoteClientService {
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             setTimeout(() => {
-                this.joinchannelForPromoteClients();
+                this.joinchannelForPromoteClients(false);
             }, 30000);
         }
     }
