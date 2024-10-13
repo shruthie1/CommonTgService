@@ -182,7 +182,8 @@ export class TelegramController {
     //@apiresponse({ status: 400, description: 'Bad request' })
     async leaveChannels(@Param('mobile') mobile: string) {
         await this.connectToTelegram(mobile);
-        return await this.telegramService.leaveChannels(mobile);
+        this.telegramService.leaveChannels(mobile);
+        return "Started Leaving Channels"
     }
 
     @Get('auths/:mobile')
