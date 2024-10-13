@@ -84,6 +84,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getChannelInfo(mobile, sendIds);
     }
+    async leaveChannels(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.leaveChannels(mobile);
+    }
     async getAuths(mobile) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getAuths(mobile);
@@ -284,6 +288,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChannelInfo", null);
+__decorate([
+    (0, common_1.Get)('leaveChannels/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get channel info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "leaveChannels", null);
 __decorate([
     (0, common_1.Get)('auths/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get authorizations' }),

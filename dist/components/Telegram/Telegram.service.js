@@ -308,6 +308,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.forwardMessage(chatId, messageId);
     }
+    async leaveChannels(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        const channelinfo = await telegramClient.channelInfo(false);
+        const leaveChannelIds = channelinfo.canSendFalseChats;
+        return await telegramClient.leaveChannels(leaveChannelIds);
+    }
     async deleteChat(mobile, chatId) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.deleteChat(chatId);
