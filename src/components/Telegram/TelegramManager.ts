@@ -158,7 +158,7 @@ class TelegramManager {
     }
     async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[], canSendFalseChats: string[] }> {
         if (!this.client) throw new Error('Client is not initialized');
-        const chats = await this.client.getDialogs({ limit: 600 });
+        const chats = await this.client.getDialogs({ limit: 1500 });
         let canSendTrueCount = 0;
         let canSendFalseCount = 0;
         let totalCount = 0;
