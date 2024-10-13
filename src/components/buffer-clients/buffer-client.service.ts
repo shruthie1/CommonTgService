@@ -133,8 +133,9 @@ export class BufferClientService {
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
             // const today = (new Date(Date.now())).toISOString().split('T')[0];
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
-            for (const document of clients) {
-                try {
+            if (clients.length > 0) {
+                for (const document of clients) {
+                    try {
                         const client = await this.telegramService.createClient(document.mobile, false, false);
                         console.log("Started Joining for : ", document.mobile)
                         const channels = await client.channelInfo(true);
@@ -155,14 +156,15 @@ export class BufferClientService {
                         // console.log("DbChannelsLen: ", result.length);
                         // let resp = '';
                         // this.telegramService.joinChannels(document.mobile, result);
-                } catch (error) {
-                    await this.telegramService.deleteClient(document.mobile);
-                    parseError(error)
+                    } catch (error) {
+                        await this.telegramService.deleteClient(document.mobile);
+                        parseError(error)
+                    }
                 }
+                this.joinChannelQueue();
             }
-            this.joinChannelQueue();
             console.log("Joining Channel Triggered Succesfully for ", clients.length);
-            return "Initiated Joining channels"
+            return `Initiated Joining channels ${clients.length}`
         } else {
             console.log("ignored active check buffer channels as active client setup exists")
         }
