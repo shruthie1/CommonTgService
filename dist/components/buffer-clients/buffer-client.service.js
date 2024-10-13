@@ -117,36 +117,38 @@ let BufferClientService = class BufferClientService {
             await (0, Helpers_1.sleep)(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
-            for (const document of clients) {
-                try {
-                    const client = await this.telegramService.createClient(document.mobile, false, false);
-                    console.log("Started Joining for : ", document.mobile);
-                    const channels = await client.channelInfo(true);
-                    console.log("Existing Channels Length : ", channels.ids.length);
-                    await this.update(document.mobile, { channels: channels.ids.length });
-                    let result = [];
-                    if (channels.canSendFalseCount < 50) {
-                        if (channels.ids.length < 220) {
-                            result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+            if (clients.length > 0) {
+                for (const document of clients) {
+                    try {
+                        const client = await this.telegramService.createClient(document.mobile, false, false);
+                        console.log("Started Joining for : ", document.mobile);
+                        const channels = await client.channelInfo(true);
+                        console.log("Existing Channels Length : ", channels.ids.length);
+                        await this.update(document.mobile, { channels: channels.ids.length });
+                        let result = [];
+                        if (channels.canSendFalseCount < 50) {
+                            if (channels.ids.length < 220) {
+                                result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                            }
+                            else {
+                                result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                            }
+                            this.joinChannelMap.set(document.mobile, result);
+                            await this.telegramService.deleteClient(document.mobile);
                         }
                         else {
-                            result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                            client.leaveChannels(channels.canSendFalseChats);
                         }
-                        this.joinChannelMap.set(document.mobile, result);
+                    }
+                    catch (error) {
                         await this.telegramService.deleteClient(document.mobile);
-                    }
-                    else {
-                        client.leaveChannels(channels.canSendFalseChats);
+                        (0, utils_1.parseError)(error);
                     }
                 }
-                catch (error) {
-                    await this.telegramService.deleteClient(document.mobile);
-                    (0, utils_1.parseError)(error);
-                }
+                this.joinChannelQueue();
             }
-            this.joinChannelQueue();
             console.log("Joining Channel Triggered Succesfully for ", clients.length);
-            return "Initiated Joining channels";
+            return `Initiated Joining channels ${clients.length}`;
         }
         else {
             console.log("ignored active check buffer channels as active client setup exists");
