@@ -175,6 +175,16 @@ export class TelegramController {
         return await this.telegramService.getChannelInfo(mobile, sendIds);
     }
 
+    @Get('leaveChannels/:mobile')
+    @ApiOperation({ summary: 'Get channel info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Channel info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async leaveChannels(@Param('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.leaveChannels(mobile);
+    }
+
     @Get('auths/:mobile')
     @ApiOperation({ summary: 'Get authorizations' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })

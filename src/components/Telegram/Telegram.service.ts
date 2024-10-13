@@ -371,6 +371,13 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.forwardMessage(chatId, messageId);
     }
 
+    async leaveChannels(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        const channelinfo = await telegramClient.channelInfo(false);
+        const leaveChannelIds = channelinfo.canSendFalseChats
+        return await telegramClient.leaveChannels(leaveChannelIds);
+    }
+
     async deleteChat(mobile: string, chatId: string) {
         const telegramClient = await this.getClient(mobile)
         return await telegramClient.deleteChat(chatId);
