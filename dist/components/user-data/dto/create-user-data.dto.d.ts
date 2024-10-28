@@ -18,4 +18,5 @@ export declare class CreateUserDataDto {
     secondShow: boolean;
     profile: string;
     picsSent: boolean;
+    videos: number[];
 }
