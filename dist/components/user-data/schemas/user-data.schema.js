@@ -94,6 +94,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], UserData.prototype, "callTime", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: [] }),
+    __metadata("design:type", Array)
+], UserData.prototype, "videos", void 0);
 exports.UserData = UserData = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,

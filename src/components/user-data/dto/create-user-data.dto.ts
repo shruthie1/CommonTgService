@@ -57,4 +57,7 @@ export class CreateUserDataDto {
 
     @ApiProperty({ example: false, description: 'Pics Sent status' })
     picsSent: boolean;
+
+    @ApiProperty({ example: [], description: 'videos' })
+    videos: number[];
 }

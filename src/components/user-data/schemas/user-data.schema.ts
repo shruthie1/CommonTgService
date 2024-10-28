@@ -72,6 +72,9 @@ export class UserData {
 
     @Prop({ required: true })
     callTime: number;
+
+    @Prop({ required: false, default:[] })
+    videos: number[];
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);

@@ -21,6 +21,7 @@ export declare class UserData {
     highestPayAmount: number;
     cheatCount: number;
     callTime: number;
+    videos: number[];
 }
 export declare const UserDataSchema: import("mongoose").Schema<UserData, import("mongoose").Model<UserData, any, any, any, Document<unknown, any, UserData> & UserData & {
     _id: import("mongoose").Types.ObjectId;
