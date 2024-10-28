@@ -86,7 +86,8 @@ let TelegramController = class TelegramController {
     }
     async leaveChannels(mobile) {
         await this.connectToTelegram(mobile);
-        return await this.telegramService.leaveChannels(mobile);
+        this.telegramService.leaveChannels(mobile);
+        return "Started Leaving Channels";
     }
     async getAuths(mobile) {
         await this.connectToTelegram(mobile);

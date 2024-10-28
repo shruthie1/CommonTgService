@@ -39,7 +39,7 @@ export declare class TelegramController {
         ids: string[];
         canSendFalseChats: string[];
     }>;
-    leaveChannels(mobile: string): Promise<void>;
+    leaveChannels(mobile: string): Promise<string>;
     getAuths(mobile: string): Promise<any>;
     set2Fa(mobile: string): Promise<string>;
     setProfilePic(mobile: string, name: string): Promise<string>;
