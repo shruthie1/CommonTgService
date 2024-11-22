@@ -27,13 +27,13 @@ __decorate([
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "issue", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Description of issue reported by the user.' }),
+    __metadata("design:type", String)
+], CreateTransactionDto.prototype, "description", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Refund method selected by the user.' }),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "refundMethod", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Image URL for transaction proof.', required: false }),
-    __metadata("design:type", String)
-], CreateTransactionDto.prototype, "transactionImage", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'User profile ID.' }),
     __metadata("design:type", String)
