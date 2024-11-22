@@ -3,8 +3,8 @@ export declare class Transaction extends Document {
     transactionId: string;
     amount: number;
     issue: string;
+    description: string;
     refundMethod: string;
-    transactionImageUrl: string;
     profile: string;
     chatId: string;
     ipAddress: string;

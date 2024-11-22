@@ -9,12 +9,12 @@ export class CreateTransactionDto {
 
   @ApiProperty({ description: 'Issue type reported by the user.' })
   issue: string;
+  
+  @ApiProperty({ description: 'Description of issue reported by the user.' })
+  description: string;
 
   @ApiProperty({ description: 'Refund method selected by the user.' })
   refundMethod: string;
-
-  @ApiProperty({ description: 'Image URL for transaction proof.', required: false })
-  transactionImage?: string;
 
   @ApiProperty({ description: 'User profile ID.' })
   profile: string;

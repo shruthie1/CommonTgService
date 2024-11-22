@@ -3,28 +3,28 @@ import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Transaction extends Document {
-  @Prop({ required: true })
+  @Prop({ required: false })
   transactionId: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   amount: number;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   issue: string;
+
+  @Prop({ required: false })
+  description: string;
 
   @Prop()
   refundMethod: string;
 
-  @Prop()
-  transactionImageUrl: string;
-
-  @Prop({ required: true })
+  @Prop({ required: false })
   profile: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   chatId: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   ipAddress: string;
 }
 
