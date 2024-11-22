@@ -17,43 +17,55 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const transaction_schema_1 = require("./schemas/transaction.schema");
-const axios_1 = require("axios");
 let TransactionService = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
     }
     async create(createTransactionDto) {
-        const transaction = new this.transactionModel(createTransactionDto);
-        await transaction.save();
-        const message = this.formatMessage(createTransactionDto);
-        await this.sendToTelegram(message, createTransactionDto.transactionImageUrl);
+        const newTransaction = new this.transactionModel(createTransactionDto);
+        return await newTransaction.save();
+    }
+    async findOne(id) {
+        const transaction = await this.transactionModel.findById(id).exec();
+        if (!transaction) {
+            throw new common_1.NotFoundException('Transaction not found');
+        }
         return transaction;
     }
-    formatMessage(data) {
-        return `🚨 *Transaction Issue Report* 🚨\n\n` +
-            `*Transaction ID:* ${data.transactionId}\n` +
-            `*Amount:* ₹${data.amount}\n` +
-            `*Issue:* ${data.issue}\n` +
-            `*Profile:* ${data.profile}\n` +
-            `*Chat ID:* ${data.chatId}\n` +
-            `*IP Address:* ${data.ipAddress}`;
+    async findAll(search, limit = 10, offset = 0) {
+        const query = search
+            ? {
+                $or: [
+                    { transactionId: { $regex: search, $options: 'i' } },
+                    { issue: { $regex: search, $options: 'i' } },
+                    { profile: { $regex: search, $options: 'i' } },
+                    { chatId: { $regex: search, $options: 'i' } },
+                ],
+            }
+            : {};
+        const transactions = await this.transactionModel
+            .find(query)
+            .skip(offset)
+            .limit(limit)
+            .exec();
+        const total = await this.transactionModel.countDocuments(query).exec();
+        return { transactions, total };
     }
-    async sendToTelegram(message, imageUrl) {
-        const telegramBotToken = '6735591051:AAELwIkSHegcBIVv5pf484Pn09WNQj1Nl54';
-        const tgChatId = '-1001972065816';
-        const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
-        await axios_1.default.post(url, {
-            chat_id: tgChatId,
-            text: message,
-            parse_mode: 'Markdown',
-        });
-        if (imageUrl) {
-            const photoUrl = `https://api.telegram.org/bot${telegramBotToken}/sendPhoto`;
-            await axios_1.default.post(photoUrl, {
-                chat_id: tgChatId,
-                photo: imageUrl,
-            });
+    async update(id, updateTransactionDto) {
+        const updatedTransaction = await this.transactionModel
+            .findByIdAndUpdate(id, updateTransactionDto, { new: true })
+            .exec();
+        if (!updatedTransaction) {
+            throw new common_1.NotFoundException('Transaction not found');
         }
+        return updatedTransaction;
+    }
+    async delete(id) {
+        const deletedTransaction = await this.transactionModel.findByIdAndDelete(id).exec();
+        if (!deletedTransaction) {
+            throw new common_1.NotFoundException('Transaction not found');
+        }
+        return deletedTransaction;
     }
 };
 exports.TransactionService = TransactionService;
