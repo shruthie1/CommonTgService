@@ -24,7 +24,7 @@ exports.TransactionModule = TransactionModule = __decorate([
         ],
         controllers: [transaction_controller_1.TransactionController],
         providers: [transaction_service_1.TransactionService],
-        exports: [transaction_controller_1.TransactionController, transaction_service_1.TransactionService]
+        exports: [transaction_service_1.TransactionService]
     })
 ], TransactionModule);
 //# sourceMappingURL=transaction.module.js.map
