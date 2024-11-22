@@ -1,3 +1,5 @@
+import { TransactionService } from './components/transactions/transaction.service';
+import { TransactionModule } from './components/transactions/transaction.module';
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { PromoteClientService } from './components/promote-clients/promote-client.service';
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
@@ -66,6 +68,8 @@ export {
     PromoteStatService,
     PromoteClientModule,
     PromoteClientService,
+    TransactionModule,
+    TransactionService,
     fetchWithTimeout,
     sleep,
     parseError,
