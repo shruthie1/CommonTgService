@@ -21,6 +21,7 @@ const utils_1 = require("../../utils");
 let UserDataService = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
+        this.callCounts = new Map();
     }
     async create(createUserDataDto) {
         const createdUser = new this.userDataModel(createUserDataDto);
@@ -34,7 +35,19 @@ let UserDataService = class UserDataService {
         if (!user) {
             console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
-        return user;
+        const currentCount = this.callCounts.get(chatId) || 0;
+        this.callCounts.set(chatId, currentCount + 1);
+        return { ...user, count: this.callCounts.get(chatId) };
+    }
+    clearCount(chatId) {
+        if (chatId) {
+            this.callCounts.delete(chatId);
+            return `Count cleared for chatId: ${chatId}`;
+        }
+        else {
+            this.callCounts.clear();
+            return 'All counts cleared.';
+        }
     }
     async update(profile, chatId, updateUserDataDto) {
         delete updateUserDataDto['_id'];

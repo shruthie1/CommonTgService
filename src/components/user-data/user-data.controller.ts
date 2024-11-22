@@ -9,7 +9,7 @@ import { UpdateUserDataDto } from './dto/update-user-data.dto';
 @ApiTags('UserData of TG clients')
 @Controller('userData')
 export class UserDataController {
-  constructor(private readonly userDataService: UserDataService) { }
+  constructor(private readonly userDataService: UserDataService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create user data' })
@@ -53,6 +53,11 @@ export class UserDataController {
   @ApiOperation({ summary: 'Delete user data by ID' })
   async remove(@Param('profile') profile: string, @Param('chatId') chatId: string): Promise<UserData> {
     return this.userDataService.remove(profile, chatId);
+  }
+
+  @Get('clear-count')
+  clearCount(@Query('chatId') chatId?: string) {
+    return this.userDataService.clearCount(chatId);
   }
 
   @Post('query')
