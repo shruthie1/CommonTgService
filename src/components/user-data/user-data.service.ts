@@ -8,7 +8,8 @@ import { parseError } from '../../utils';
 
 @Injectable()
 export class UserDataService {
-    constructor(@InjectModel(UserData.name) private userDataModel: Model<UserDataDocument>) { }
+    private callCounts: Map<string, number> = new Map();
+    constructor(@InjectModel(UserData.name) private userDataModel: Model<UserDataDocument>) {}
 
     async create(createUserDataDto: CreateUserDataDto): Promise<UserData> {
         const createdUser = new this.userDataModel(createUserDataDto);
@@ -19,12 +20,26 @@ export class UserDataService {
         return await this.userDataModel.find().exec();
     }
 
-    async findOne(profile: string, chatId: string): Promise<UserData> {
+    async findOne(profile: string, chatId: string): Promise<UserData & { count?: number }> {
         const user = (await this.userDataModel.findOne({ profile, chatId }).exec())?.toJSON();
         if (!user) {
             console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
-        return user;
+        const currentCount = this.callCounts.get(chatId) || 0;
+        this.callCounts.set(chatId, currentCount + 1);
+
+        // Return user with appended call count
+        return { ...user, count: this.callCounts.get(chatId) };
+    }
+
+    clearCount(chatId?: string): string {
+        if (chatId) {
+            this.callCounts.delete(chatId);
+            return `Count cleared for chatId: ${chatId}`;
+        } else {
+            this.callCounts.clear();
+            return 'All counts cleared.';
+        }
     }
 
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
