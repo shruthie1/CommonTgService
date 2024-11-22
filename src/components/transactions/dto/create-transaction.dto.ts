@@ -1,35 +1,27 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateTransactionDto {
-  @IsNotEmpty()
-  @IsString()
+  @ApiProperty({ description: 'Unique transaction ID (UTR).' })
   transactionId: string;
 
-  @IsNotEmpty()
-  @IsNumber()
+  @ApiProperty({ description: 'Amount involved in the transaction.' })
   amount: number;
 
-  @IsNotEmpty()
-  @IsString()
+  @ApiProperty({ description: 'Issue type reported by the user.' })
   issue: string;
 
-  @IsOptional()
-  @IsString()
-  refundMethod?: string;
+  @ApiProperty({ description: 'Refund method selected by the user.' })
+  refundMethod: string;
 
-  @IsOptional()
-  @IsString()
-  transactionImageUrl?: string;
+  @ApiProperty({ description: 'Image URL for transaction proof.', required: false })
+  transactionImage?: string;
 
-  @IsNotEmpty()
-  @IsString()
+  @ApiProperty({ description: 'User profile ID.' })
   profile: string;
 
-  @IsNotEmpty()
-  @IsString()
+  @ApiProperty({ description: 'User chat ID.' })
   chatId: string;
 
-  @IsNotEmpty()
-  @IsString()
-  ipAddress: string;
+  @ApiProperty({ description: 'IP address of the user.' })
+  ip: string;
 }
