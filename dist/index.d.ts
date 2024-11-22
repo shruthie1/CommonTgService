@@ -1,3 +1,5 @@
+import { TransactionService } from './components/transactions/transaction.service';
+import { TransactionModule } from './components/transactions/transaction.module';
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { PromoteClientService } from './components/promote-clients/promote-client.service';
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
@@ -32,4 +34,4 @@ import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, ppplbot, sleep, defaultMessages, defaultReactions, fetchNumbersFromString } from './utils';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
-export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, UpiIdModule, UpiIdService, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, PromoteMsgModule, PromoteMsgsService, TgSignupModule, Stat2Module, Stat2Service, StatModule, StatService, PromoteStatModule, PromoteStatService, PromoteClientModule, PromoteClientService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
+export { AppModule, TelegramModule, ActiveChannelsModule, ClientModule, UserDataModule, BuildModule, UsersModule, BufferClientModule, ArchivedClientModule, UpiIdModule, UpiIdService, TelegramService, ActiveChannelsService, ClientService, UserDataService, UsersService, BufferClientService, ArchivedClientService, BuildService, ChannelsModule, ChannelsService, PromoteMsgModule, PromoteMsgsService, TgSignupModule, Stat2Module, Stat2Service, StatModule, StatService, PromoteStatModule, PromoteStatService, PromoteClientModule, PromoteClientService, TransactionModule, TransactionService, fetchWithTimeout, sleep, parseError, contains, fetchNumbersFromString, ppplbot, defaultMessages, defaultReactions, LoggerMiddleware };
