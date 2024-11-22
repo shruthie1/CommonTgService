@@ -19,6 +19,7 @@ import { Stat2Module } from './components/stats2/stat2.module';
 import { PromoteStatModule } from './components/promote-stats/promote-stat.module';
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
+import { TransactionModule } from './components/transactions/transaction.module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { TgSignupModule } from './components/TgSignup/TgSignup.module';
     PromoteStatModule,
     StatModule,
     Stat2Module,
-    TgSignupModule
+    TgSignupModule,
+    TransactionModule
   ],
   controllers:[AppController],
   providers:[AppService],
@@ -52,7 +54,8 @@ import { TgSignupModule } from './components/TgSignup/TgSignup.module';
     ArchivedClientModule,
     ChannelsModule,
     PromoteClientModule,
-    TgSignupModule
+    TgSignupModule,
+    TransactionModule
   ]
 })
 export class AppModule implements NestModule {
