@@ -44,6 +44,9 @@ let UserDataController = class UserDataController {
     async remove(profile, chatId) {
         return this.userDataService.remove(profile, chatId);
     }
+    clearCount(chatId) {
+        return this.userDataService.clearCount(chatId);
+    }
     async executeQuery(requestBody) {
         try {
             const { query, sort, limit, skip } = requestBody;
@@ -115,6 +118,13 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Get)('clear-count'),
+    __param(0, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], UserDataController.prototype, "clearCount", null);
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
