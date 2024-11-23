@@ -280,7 +280,7 @@ let PromoteClientService = class PromoteClientService {
                             await this.telegramService.updateUsername(document.mobile, '');
                         }
                         if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
                         }
                         const hasPassword = await cli.hasPassword();
                         if (!hasPassword && badIds.length < 4) {
