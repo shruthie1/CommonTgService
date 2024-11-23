@@ -13,5 +13,6 @@ export declare class UserDataController {
     findOne(profile: string, chatId: string): Promise<UserData>;
     update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData>;
     remove(profile: string, chatId: string): Promise<UserData>;
+    clearCount(chatId?: string): string;
     executeQuery(requestBody: any): Promise<any>;
 }
