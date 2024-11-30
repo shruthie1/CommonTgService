@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
 import { TelegramService } from './Telegram.service';
+import * as fs from 'fs';
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
@@ -280,6 +281,38 @@ export class TelegramController {
         await this.connectToTelegram(mobile);
         await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
+
+    @Get('downloadProfilePic')
+    async downloadProfilePic(
+        @Query('mobile') mobile: string,
+        @Query('index') index: number,
+        @Res() res: any
+    ) {
+        await this.connectToTelegram(mobile);
+        try {
+            const filePath = await this.telegramService.downloadProfilePic(mobile,index);
+            if (!filePath) {
+                return res.status(404).send('Profile photo not found.');
+            }
+    
+            res.download(filePath, 'profile_pic.jpg', (err) => {
+                if (err) {
+                    console.error('Error sending the file:', err);
+                    res.status(500).send('Error downloading the file.');
+                }
+    
+                fs.unlink(filePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting the file:', err);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Error in endpoint:', error);
+            res.status(500).send('An error occurred.');
+        }
+    }
+
 
     @Get('forward/:mobile/:chatId/:messageId')
     @ApiOperation({ summary: 'Create new session' })

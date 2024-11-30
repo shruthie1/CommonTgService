@@ -344,6 +344,18 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
+    async downloadProfilePic(
+        mobile: string, index: number
+    ) {
+        const telegramClient = await this.getClient(mobile)
+        try {
+            return await telegramClient.downloadProfilePic(index)
+        } catch (error) {
+            console.log("Some Error: ", parseError(error), error);
+            throw new Error("Failed to update username");
+        }
+    }
+
     async updateUsername(
         mobile: string, username: string,
     ) {
