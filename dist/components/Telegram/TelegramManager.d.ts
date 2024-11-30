@@ -74,6 +74,7 @@ declare class TelegramManager {
     handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
+    downloadProfilePic(photoIndex: number): Promise<string>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
     deleteChat(chatId: string): Promise<void>;

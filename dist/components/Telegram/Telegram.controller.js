@@ -16,6 +16,7 @@ exports.TelegramController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const Telegram_service_1 = require("./Telegram.service");
+const fs = require("fs");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -124,6 +125,30 @@ let TelegramController = class TelegramController {
     async downloadMediaFile(mobile, messageId, chatId, res) {
         await this.connectToTelegram(mobile);
         await this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
+    }
+    async downloadProfilePic(mobile, index, res) {
+        await this.connectToTelegram(mobile);
+        try {
+            const filePath = await this.telegramService.downloadProfilePic(mobile, index);
+            if (!filePath) {
+                return res.status(404).send('Profile photo not found.');
+            }
+            res.download(filePath, 'profile_pic.jpg', (err) => {
+                if (err) {
+                    console.error('Error sending the file:', err);
+                    res.status(500).send('Error downloading the file.');
+                }
+                fs.unlink(filePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting the file:', err);
+                    }
+                });
+            });
+        }
+        catch (error) {
+            console.error('Error in endpoint:', error);
+            res.status(500).send('An error occurred.');
+        }
     }
     async forrward(mobile, chatId, messageId) {
         await this.connectToTelegram(mobile);
@@ -389,6 +414,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Number, String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "downloadMediaFile", null);
+__decorate([
+    (0, common_1.Get)('downloadProfilePic'),
+    __param(0, (0, common_1.Query)('mobile')),
+    __param(1, (0, common_1.Query)('index')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "downloadProfilePic", null);
 __decorate([
     (0, common_1.Get)('forward/:mobile/:chatId/:messageId'),
     (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
