@@ -29,6 +29,17 @@ let ActiveChannelsService = class ActiveChannelsService {
         const createdChannel = new this.activeChannelModel(createActiveChannelDto);
         return createdChannel.save();
     }
+    async createMultiple(createChannelDtos) {
+        const bulkOps = createChannelDtos.map((dto) => ({
+            updateOne: {
+                filter: { channelId: dto.channelId },
+                update: { $set: dto },
+                upsert: true
+            }
+        }));
+        await this.activeChannelModel.bulkWrite(bulkOps, { ordered: false });
+        return 'Channels Saved';
+    }
     async findAll() {
         return this.activeChannelModel.find().exec();
     }

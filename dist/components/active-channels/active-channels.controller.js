@@ -26,6 +26,9 @@ let ActiveChannelsController = class ActiveChannelsController {
     async create(createActiveChannelDto) {
         return this.activeChannelsService.create(createActiveChannelDto);
     }
+    async createMultiple(createChannelDtos) {
+        return this.activeChannelsService.createMultiple(createChannelDtos);
+    }
     search(query) {
         console.log(query);
         return this.activeChannelsService.search(query);
@@ -67,6 +70,15 @@ __decorate([
     __metadata("design:paramtypes", [create_active_channel_dto_1.CreateActiveChannelDto]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('createMultiple'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create multiple channels' }),
+    (0, swagger_1.ApiBody)({ type: [create_active_channel_dto_1.CreateActiveChannelDto] }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Array]),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "createMultiple", null);
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search channels by filters' }),

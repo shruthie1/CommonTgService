@@ -3,7 +3,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, NotFoundException, Q
 import { ActiveChannelsService } from './active-channels.service';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { ActiveChannel } from './schemas/active-channel.schema';
 import { AddReactionDto } from './dto/add-reaction.dto';
 
@@ -17,6 +17,14 @@ export class ActiveChannelsController {
   async create(@Body() createActiveChannelDto: CreateActiveChannelDto) {
     return this.activeChannelsService.create(createActiveChannelDto);
   }
+
+  @Post('createMultiple')
+  @ApiOperation({ summary: 'Create multiple channels' })
+  @ApiBody({ type: [CreateActiveChannelDto] })
+  async createMultiple(@Body() createChannelDtos: CreateActiveChannelDto[]): Promise<string> {
+    return this.activeChannelsService.createMultiple(createChannelDtos);
+  }
+
   @Get('search')
   @ApiOperation({ summary: 'Search channels by filters' })
   @ApiQuery({ name: 'channelId', required: false, type: String })
