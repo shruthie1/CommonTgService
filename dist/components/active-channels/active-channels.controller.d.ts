@@ -7,6 +7,7 @@ export declare class ActiveChannelsController {
     private readonly activeChannelsService;
     constructor(activeChannelsService: ActiveChannelsService);
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
+    createMultiple(createChannelDtos: CreateActiveChannelDto[]): Promise<string>;
     search(query: any): Promise<ActiveChannel[]>;
     findAll(): Promise<ActiveChannel[]>;
     findOne(channelId: string): Promise<ActiveChannel>;
