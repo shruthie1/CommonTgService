@@ -286,6 +286,16 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
         }
     }
+    async downloadProfilePic(mobile, index) {
+        const telegramClient = await this.getClient(mobile);
+        try {
+            return await telegramClient.downloadProfilePic(index);
+        }
+        catch (error) {
+            console.log("Some Error: ", (0, utils_1.parseError)(error), error);
+            throw new Error("Failed to update username");
+        }
+    }
     async updateUsername(mobile, username) {
         const telegramClient = await this.getClient(mobile);
         try {
