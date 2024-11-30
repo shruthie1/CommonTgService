@@ -540,6 +540,55 @@ class TelegramManager {
         }
     }
 
+    async downloadProfilePic(photoIndex: number) {
+        try {
+            const photos = await this.client.invoke(
+                new Api.photos.GetUserPhotos({
+                    userId: 'me',
+                    offset: 0,
+                })
+            );
+
+            if (photos.photos.length > 0) {
+                console.log(`You have ${photos.photos.length} profile photos.`);
+
+                // Choose the photo index (0-based)
+                if (photoIndex < photos.photos.length) {
+                    const selectedPhoto = <Api.Photo>photos.photos[photoIndex];
+
+                    // Extract the largest photo file (e.g., highest resolution)
+                    const index = Math.max(selectedPhoto.sizes.length - 2, 0)
+                    const photoFileSize = selectedPhoto.sizes[index];
+
+                    // Download the file
+                    const photoBuffer = await this.client.downloadFile(
+                        new Api.InputPhotoFileLocation({
+                            id: selectedPhoto.id,
+                            accessHash: selectedPhoto.accessHash,
+                            fileReference: selectedPhoto.fileReference,
+                            thumbSize: photoFileSize.type
+                        }), {
+                        dcId: selectedPhoto.dcId, // Data center ID
+                    });
+
+                    if (photoBuffer) {
+                        const outputPath = `profile_picture_${photoIndex + 1}.jpg`;
+                        fs.writeFileSync(outputPath, photoBuffer);
+                        console.log(`Profile picture downloaded as '${outputPath}'`);
+                        return outputPath;
+                    } else {
+                        console.log("Failed to download the photo.");
+                    }
+                } else {
+                    console.log(`Photo index ${photoIndex} is out of range.`);
+                }
+            } else {
+                console.log("No profile photos found.");
+            }
+        } catch (err) {
+            console.error("Error:", err);
+        }
+    }
     async getLastActiveTime() {
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
         let latest = 0
@@ -577,8 +626,8 @@ class TelegramManager {
             console.error('Failed to delete dialog:', error);
         }
     }
-    
-    async  blockUser(chatId: string) {
+
+    async blockUser(chatId: string) {
         try {
             await this.client?.invoke(new Api.contacts.Block({
                 id: chatId,
