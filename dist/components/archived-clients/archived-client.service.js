@@ -106,7 +106,7 @@ let ArchivedClientService = class ArchivedClientService {
                 try {
                     await this.telegramService.createClient(document.mobile, true, false);
                     await this.telegramService.updateUsername(document.mobile, '');
-                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account');
+                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
                     await this.telegramService.deleteClient(document.mobile);
                     await (0, Helpers_1.sleep)(2000);
                 }
