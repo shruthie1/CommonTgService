@@ -277,8 +277,8 @@ export class PromoteClientService {
             const promoteclients = await this.findAll();
             let goodIds: string[] = [];
             let badIds: string[] = [];
-            if (promoteclients.length < 70) {
-                for (let i = 0; i < 70 - promoteclients.length && badIds.length < 4; i++) {
+            if (promoteclients.length < 80) {
+                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 4; i++) {
                     badIds.push(i.toString())
                 }
             }
