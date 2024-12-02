@@ -295,10 +295,13 @@ export class PromoteClientService {
                         const me = await cli.getMe();
                         if (me.username) {
                             await this.telegramService.updateUsername(document.mobile, '');
+                            await sleep(2000);
                         }
                         if (me.firstName !== "Deleted Account") {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                            await sleep(2000);
                         }
+                        await this.telegramService.deleteProfilePhotos(document.mobile);
                         const hasPassword = await cli.hasPassword();
                         if (!hasPassword && badIds.length < 4) {
                             console.log("Client does not have password");
