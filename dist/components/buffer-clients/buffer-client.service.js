@@ -272,7 +272,6 @@ let BufferClientService = class BufferClientService {
                         }
                         if (me.firstName !== "Deleted Account") {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await this.telegramService.updatePrivacyforDeletedAccount(document.mobile);
                             await (0, Helpers_1.sleep)(2000);
                         }
                         await this.telegramService.deleteProfilePhotos(document.mobile);
