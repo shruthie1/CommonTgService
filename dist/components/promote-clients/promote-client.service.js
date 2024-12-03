@@ -283,7 +283,6 @@ let PromoteClientService = class PromoteClientService {
                         if (me.firstName !== "Deleted Account") {
                             await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
                             await (0, Helpers_1.sleep)(2000);
-                            await this.telegramService.updatePrivacyforDeletedAccount(document.mobile);
                         }
                         await this.telegramService.deleteProfilePhotos(document.mobile);
                         const hasPassword = await cli.hasPassword();
