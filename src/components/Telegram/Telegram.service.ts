@@ -123,7 +123,7 @@ export class TelegramService implements OnModuleDestroy {
                 const errorDetails = parseError(error);
                 if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                     console.log("Deleting User: ", user.mobile);
-                    await this.usersService.update(user.tgId, { expired: true });
+                    await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
                 } else {
                     console.log('Not Deleting user');
                 }

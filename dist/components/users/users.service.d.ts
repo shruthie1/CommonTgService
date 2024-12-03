@@ -14,6 +14,7 @@ export declare class UsersService {
     findAll(): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, user: UpdateUserDto): Promise<number>;
+    updateByFilter(filter: any, user: UpdateUserDto): Promise<number>;
     delete(tgId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<User[]>;
