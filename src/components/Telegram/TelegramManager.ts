@@ -17,7 +17,7 @@ import { disconnectAll } from '../TgSignup/TgSignup.service';
 class TelegramManager {
     private session: StringSession;
     public phoneNumber: string;
-    private client: TelegramClient | null;
+    public client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
 
