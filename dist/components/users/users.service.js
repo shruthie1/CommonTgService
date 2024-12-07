@@ -57,6 +57,14 @@ let UsersService = class UsersService {
         }
         return result.modifiedCount;
     }
+    async updateByFilter(filter, user) {
+        delete user['_id'];
+        const result = await this.userModel.updateMany(filter, { $set: user }, { new: true, upsert: true }).exec();
+        if (result.matchedCount === 0) {
+            throw new common_1.NotFoundException(`Users with tgId ${JSON.stringify(filter)} not found`);
+        }
+        return result.modifiedCount;
+    }
     async delete(tgId) {
         const result = await this.userModel.deleteOne({ tgId }).exec();
         if (result.deletedCount === 0) {
