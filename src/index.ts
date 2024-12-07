@@ -34,6 +34,7 @@ import { UserDataService } from './components/user-data/user-data.service';
 import { UsersService } from './components/users/users.service';
 import { contains, fetchWithTimeout, parseError, ppplbot, sleep, defaultMessages, defaultReactions, fetchNumbersFromString } from './utils';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
+import TelegramManager from './components/Telegram/TelegramManager';
 
 export {
     AppModule,
@@ -50,6 +51,7 @@ export {
     TelegramService,
     ActiveChannelsService,
     ClientService,
+    TelegramManager,
     UserDataService,
     UsersService,
     BufferClientService,
