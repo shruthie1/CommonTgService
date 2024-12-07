@@ -56,7 +56,7 @@ class TelegramManager {
             console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
         }
     }
-    async createClient(handler = true) {
+    async createClient(handler = true, handlerFn) {
         this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
@@ -67,7 +67,12 @@ class TelegramManager {
         console.log("Connected Client : ", me.phone);
         if (handler && this.client) {
             console.log("Adding event Handler");
-            this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new events_1.NewMessage());
+            if (handlerFn) {
+                this.client.addEventHandler(async (event) => { await handlerFn(event); }, new events_1.NewMessage());
+            }
+            else {
+                this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new events_1.NewMessage());
+            }
         }
         return this.client;
     }
