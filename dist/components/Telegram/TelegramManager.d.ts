@@ -7,7 +7,7 @@ import { IterDialogsParams } from 'telegram/client/dialogs';
 declare class TelegramManager {
     private session;
     phoneNumber: string;
-    private client;
+    client: TelegramClient | null;
     private channelArray;
     private static activeClientSetup;
     constructor(sessionString: string, phoneNumber: string);
