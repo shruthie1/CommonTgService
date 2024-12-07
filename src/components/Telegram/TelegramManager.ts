@@ -60,10 +60,11 @@ class TelegramManager {
     }
 
     async errorHandler(error) {
+        parseError(error)
         if (error.message && error.message == 'TIMEOUT') {
-            await this.client.disconnect();
-            await this.client.destroy();
-            await disconnectAll()
+            // await this.client.disconnect();
+            // await this.client.destroy();
+            // await disconnectAll()
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
             console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
