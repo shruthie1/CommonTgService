@@ -31,7 +31,7 @@ declare class TelegramManager {
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
-    createClient(handler?: boolean): Promise<TelegramClient>;
+    createClient(handler?: boolean, handlerFn?: Function): Promise<TelegramClient>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
