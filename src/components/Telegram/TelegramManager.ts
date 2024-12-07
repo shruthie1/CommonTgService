@@ -71,7 +71,7 @@ class TelegramManager {
         }
     }
 
-    async createClient(handler = true): Promise<TelegramClient> {
+    async createClient(handler = true, handlerFn?: Function): Promise<TelegramClient> {
         this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
@@ -82,7 +82,11 @@ class TelegramManager {
         console.log("Connected Client : ", me.phone);
         if (handler && this.client) {
             console.log("Adding event Handler")
-            this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
+            if (handlerFn) {
+                this.client.addEventHandler(async (event) => { await handlerFn(event); }, new NewMessage());
+            } else {
+                this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
+            }
         }
         return this.client
     }
