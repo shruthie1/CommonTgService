@@ -348,4 +348,20 @@ export class ClientService {
             throw new InternalServerErrorException(error.message);
         }
     }
+
+    async addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
+        return this.clientModel.findOneAndUpdate(
+            { clientId }, // Filter by clientId
+            { $addToSet: { promoteMobile: mobileNumber } }, // Add only if it doesn't already exist
+            { new: true } // Return the updated document
+        ).exec();
+    }
+
+    async removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
+        return this.clientModel.findOneAndUpdate(
+            { clientId }, // Filter by clientId
+            { $pull: { promoteMobile: mobileNumber } }, // Remove the specified number
+            { new: true } // Return the updated document
+        ).exec();
+    }
 }

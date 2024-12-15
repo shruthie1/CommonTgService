@@ -70,9 +70,9 @@ export class Client {
     @Prop({ required: true })
     product: string;
 
-    @ApiProperty({ example: '916265240911', description: 'Promote mobile number of the user' })
-    @Prop({ required: false })
-    promoteMobile: string;
+    @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user' })
+    @Prop({ required: false, type: [String] })
+    promoteMobile: string[];
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

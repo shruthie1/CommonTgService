@@ -86,9 +86,9 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Promote mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: false }),
-    __metadata("design:type", String)
+    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user' }),
+    (0, mongoose_1.Prop)({ required: false, type: [String] }),
+    __metadata("design:type", Array)
 ], Client.prototype, "promoteMobile", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({

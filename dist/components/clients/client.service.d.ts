@@ -42,4 +42,6 @@ export declare class ClientService {
     updateClients(): Promise<void>;
     generateNewSession(phoneNumber: string, attempt?: number): Promise<void>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]>;
+    addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
+    removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
 }

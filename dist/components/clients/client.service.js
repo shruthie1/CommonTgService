@@ -331,6 +331,12 @@ let ClientService = class ClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async addPromoteMobile(clientId, mobileNumber) {
+        return this.clientModel.findOneAndUpdate({ clientId }, { $addToSet: { promoteMobile: mobileNumber } }, { new: true }).exec();
+    }
+    async removePromoteMobile(clientId, mobileNumber) {
+        return this.clientModel.findOneAndUpdate({ clientId }, { $pull: { promoteMobile: mobileNumber } }, { new: true }).exec();
+    }
 };
 exports.ClientService = ClientService;
 exports.ClientService = ClientService = __decorate([
