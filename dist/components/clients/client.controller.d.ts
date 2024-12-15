@@ -22,9 +22,10 @@ export declare class ClientController {
         product: string;
     }[]>;
     findAll(): Promise<Client[]>;
-    updateClient(clientId: string): Promise<void>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     executeQuery(requestBody: any): Promise<any>;
+    addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
+    removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
 }

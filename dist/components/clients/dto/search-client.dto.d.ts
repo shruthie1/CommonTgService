@@ -12,4 +12,5 @@ export declare class SearchClientDto {
     deployKey?: string;
     mainAccount?: string;
     product?: string;
+    promoteMobile?: string[];
 }

@@ -13,4 +13,5 @@ export declare class CreateClientDto {
     readonly deployKey: string;
     readonly mainAccount: string;
     readonly product: string;
+    readonly promoteMobile?: string[];
 }

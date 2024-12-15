@@ -70,4 +70,8 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "product", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "promoteMobile", void 0);
 //# sourceMappingURL=create-client.dto.js.map
