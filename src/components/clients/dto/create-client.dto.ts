@@ -42,4 +42,7 @@ export class CreateClientDto {
 
     @ApiProperty({ example: 'booklet_10', description: 'Product associated with the user' })
     readonly product: string;
+
+    @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] })
+    readonly promoteMobile?: string[];
 }

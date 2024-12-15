@@ -228,7 +228,7 @@ export class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.map(client => client?.promoteMobile);
+        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
         if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await this.telegramService.createClient(mobile)
