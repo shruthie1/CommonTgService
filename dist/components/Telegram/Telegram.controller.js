@@ -158,6 +158,10 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.deleteChat(mobile, chatId);
     }
+    async deleteProfilePics(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.deleteProfilePhotos(mobile);
+    }
 };
 exports.TelegramController = TelegramController;
 __decorate([
@@ -447,6 +451,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "deleteChat", null);
+__decorate([
+    (0, common_1.Get)('deleteProfilePics/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "deleteProfilePics", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

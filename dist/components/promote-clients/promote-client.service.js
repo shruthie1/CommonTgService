@@ -268,7 +268,7 @@ let PromoteClientService = class PromoteClientService {
             }
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientIds = clients.map(client => client.mobile);
+            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile); })];
             const bufferClientIds = bufferClients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of promoteclients) {
@@ -296,6 +296,7 @@ let PromoteClientService = class PromoteClientService {
                         }
                         await this.telegramService.deleteClient(document.mobile);
                         await (0, Helpers_1.sleep)(2000);
+                        await this.telegramService.removeOtherAuths(document.mobile);
                     }
                     catch (error) {
                         (0, utils_1.parseError)(error);
