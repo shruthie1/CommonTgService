@@ -339,4 +339,14 @@ export class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.deleteChat(mobile, chatId)
     }
+    
+    @Get('deleteProfilePics/:mobile')
+    @ApiOperation({ summary: 'Create new session' })
+    @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+    async deleteProfilePics(
+        @Param('mobile') mobile: string,
+    ) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.deleteProfilePhotos(mobile)
+    }
 }

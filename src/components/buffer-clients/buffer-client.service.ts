@@ -275,7 +275,7 @@ export class BufferClientService {
             }
             const clients = await this.clientService.findAll();
             const promoteclients = await this.promoteClientService.findAll();
-            const clientIds = clients.map(client => client.mobile);
+            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile) })]
             const promoteclientIds = promoteclients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of bufferclients) {
@@ -349,6 +349,8 @@ export class BufferClientService {
                         await client.updateProfile("Deleted Account", "Deleted Account");
                         await sleep(3000)
                         await client.deleteProfilePhotos();
+                        await sleep(2000);
+                        await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true)
                         console.log("Inserting Document");
                         const bufferClient = {
