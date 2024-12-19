@@ -40,6 +40,14 @@ export class ClientController {
     }
   }
 
+  @Get('updateClient/:clientId')
+  @ApiOperation({ summary: 'Get user data by ID' })
+  //@apiresponse({ status: 200, description: 'Return the user data.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async updateClient(@Param('clientId') clientId: string) {
+    return this.clientService.updateClient(clientId);
+  }
+  
   /**
    * Get all clients with masked sensitive fields
    */
