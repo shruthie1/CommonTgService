@@ -39,6 +39,9 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
+    async updateClient(clientId) {
+        return this.clientService.updateClient(clientId);
+    }
     async findAllMasked(query) {
         try {
             return await this.clientService.findAllMasked(query);
@@ -125,6 +128,14 @@ __decorate([
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('updateClient/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "updateClient", null);
 __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
