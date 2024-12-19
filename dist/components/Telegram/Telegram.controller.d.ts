@@ -52,4 +52,5 @@ export declare class TelegramController {
     downloadProfilePic(mobile: string, index: number, res: any): Promise<any>;
     forrward(mobile: string, chatId: string, messageId: number): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
+    deleteProfilePics(mobile: string): Promise<void>;
 }
