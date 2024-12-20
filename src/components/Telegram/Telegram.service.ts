@@ -9,6 +9,7 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
+import { EntityLike } from 'telegram/define';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -242,6 +243,23 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
+    async getGrpMembers(mobile: string, entity: EntityLike) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.getGrpMembers(entity)
+        } catch (err) {
+            console.error("Error fetching group members:", err);
+        }
+    }
+
+    async addContacts(mobile: string, phoneNumbers:string[], prefix: string) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.addContacts(phoneNumbers, prefix)
+        } catch (err) {
+            console.error("Error fetching adding Contacts:", err);
+        }
+    }
 
     async removeOtherAuths(mobile: string) {
         const telegramClient = await this.getClient(mobile)
