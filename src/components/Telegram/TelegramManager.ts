@@ -20,14 +20,12 @@ class TelegramManager {
     public client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
-
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
     }
-
 
     public static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;

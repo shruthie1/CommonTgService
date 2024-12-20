@@ -76,7 +76,7 @@ export class UsersService {
       filter.twoFA = filter.twoFA as any === 'true' || filter.twoFA as any === '1' || filter.twoFA === true;
     }
     console.log(filter)
-    return this.userModel.find(filter).exec();
+    return this.userModel.find(filter).sort({ updatedAt: -1 }).exec();
   }
 
   async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<User[]> {
