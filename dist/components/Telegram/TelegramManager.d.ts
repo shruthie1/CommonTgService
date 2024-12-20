@@ -4,6 +4,7 @@ import { Api } from 'telegram/tl';
 import { TotalList } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import { IterDialogsParams } from 'telegram/client/dialogs';
+import { EntityLike } from 'telegram/define';
 declare class TelegramManager {
     private session;
     phoneNumber: string;
@@ -32,6 +33,7 @@ declare class TelegramManager {
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean, handlerFn?: Function): Promise<TelegramClient>;
+    getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
@@ -52,6 +54,7 @@ declare class TelegramManager {
         ids: string[];
         canSendFalseChats: string[];
     }>;
+    addContacts(mobiles: string[], namePrefix: string): Promise<void>;
     leaveChannels(chats: string[]): Promise<void>;
     getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
     joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates>;

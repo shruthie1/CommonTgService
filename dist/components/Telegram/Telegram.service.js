@@ -200,6 +200,24 @@ let TelegramService = TelegramService_1 = class TelegramService {
             await this.activeChannelsService.update(channelId, { private: true });
         }
     }
+    async getGrpMembers(mobile, entity) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.getGrpMembers(entity);
+        }
+        catch (err) {
+            console.error("Error fetching group members:", err);
+        }
+    }
+    async addContacts(mobile, phoneNumbers, prefix) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.addContacts(phoneNumbers, prefix);
+        }
+        catch (err) {
+            console.error("Error fetching adding Contacts:", err);
+        }
+    }
     async removeOtherAuths(mobile) {
         const telegramClient = await this.getClient(mobile);
         await telegramClient.removeOtherAuths();

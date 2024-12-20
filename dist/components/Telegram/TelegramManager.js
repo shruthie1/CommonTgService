@@ -73,6 +73,47 @@ class TelegramManager {
         }
         return this.client;
     }
+    async getGrpMembers(entity) {
+        try {
+            const result = [];
+            const chat = await this.client.getEntity(entity);
+            if (!(chat instanceof tl_1.Api.Chat || chat instanceof tl_1.Api.Channel)) {
+                console.log("Invalid group or channel!");
+                return;
+            }
+            console.log(`Fetching members of ${chat.title || chat.username}...`);
+            const participants = await this.client.invoke(new tl_1.Api.channels.GetParticipants({
+                channel: chat,
+                filter: new tl_1.Api.ChannelParticipantsRecent(),
+                offset: 0,
+                limit: 100,
+                hash: bigInt(0),
+            }));
+            if (participants instanceof tl_1.Api.channels.ChannelParticipants) {
+                const users = participants.participants;
+                console.log("Members:");
+                for (const user of users) {
+                    const userInfo = user instanceof tl_1.Api.ChannelParticipant ? user.userId : null;
+                    if (userInfo) {
+                        const userDetails = await this.client.getEntity(userInfo);
+                        console.log(`ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""}, Username: ${userDetails.username || ""}`);
+                        result.push({
+                            tgId: userDetails.id,
+                            name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
+                            username: `${userDetails.username || ""}`
+                        });
+                    }
+                }
+            }
+            else {
+                console.log("No members found or invalid group.");
+            }
+            return result;
+        }
+        catch (err) {
+            console.error("Error fetching group members:", err);
+        }
+    }
     async getMessages(entityLike, limit = 8) {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
@@ -172,6 +213,31 @@ class TelegramManager {
             ids: sendIds ? this.channelArray : [],
             canSendFalseChats
         };
+    }
+    async addContacts(mobiles, namePrefix) {
+        try {
+            const inputContacts = [];
+            for (let i = 0; i < mobiles.length; i++) {
+                const user = mobiles[i];
+                const firstName = `${namePrefix}${i + 1}`;
+                const lastName = "";
+                const clientId = bigInt((i << 16 | 0).toString(10));
+                inputContacts.push(new tl_1.Api.InputPhoneContact({
+                    clientId: clientId,
+                    phone: user,
+                    firstName: firstName,
+                    lastName: lastName
+                }));
+            }
+            const result = await this.client.invoke(new tl_1.Api.contacts.ImportContacts({
+                contacts: inputContacts,
+            }));
+            console.log("Imported Contacts Result:", result);
+        }
+        catch (error) {
+            console.error("Error adding contacts:", error);
+            (0, utils_1.parseError)(error, `Failed to save contacts`);
+        }
     }
     async leaveChannels(chats) {
         console.log("Leaving Channels: initaied!!");
