@@ -290,6 +290,7 @@ let BufferClientService = class BufferClientService {
                     catch (error) {
                         (0, utils_1.parseError)(error);
                         badIds.push(document.mobile);
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${document.mobile}`)}`);
                         this.remove(document.mobile);
                         await this.telegramService.deleteClient(document.mobile);
                     }
