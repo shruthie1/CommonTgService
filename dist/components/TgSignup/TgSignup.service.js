@@ -381,6 +381,7 @@ class TgSignupService {
     }
     async processLogin(result, passowrd = undefined) {
         console.log(this.client.session.save());
+        await this.client.getMe();
         let photoCount = 0;
         let videoCount = 0;
         let movieCount = 0;
