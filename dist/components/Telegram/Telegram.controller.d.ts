@@ -1,4 +1,5 @@
 import { TelegramService } from './Telegram.service';
+import { AddContactsDto } from './dto/addContacts.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -45,6 +46,8 @@ export declare class TelegramController {
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
+    getGrpMembers(mobile: string, username: string): Promise<any[]>;
+    addContacts(addContactsDto: AddContactsDto): Promise<void>;
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
     getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;

@@ -13,6 +13,7 @@ import { MailReader } from '../../IMap/IMap';
 import * as bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { disconnectAll } from '../TgSignup/TgSignup.service';
+import { EntityLike } from 'telegram/define';
 
 class TelegramManager {
     private session: StringSession;
@@ -90,6 +91,57 @@ class TelegramManager {
         return this.client
     }
 
+    async getGrpMembers(entity: EntityLike) {
+        try {
+            const result = []
+            // Fetch the group entity
+            const chat = await this.client.getEntity(entity);
+
+            if (!(chat instanceof Api.Chat || chat instanceof Api.Channel)) {
+                console.log("Invalid group or channel!");
+                return;
+            }
+
+            console.log(`Fetching members of ${chat.title || (chat as Api.Channel).username}...`);
+
+            // Fetch members
+            const participants = await this.client.invoke(
+                new Api.channels.GetParticipants({
+                    channel: chat,
+                    filter: new Api.ChannelParticipantsRecent(),
+                    offset: 0,
+                    limit: 100, // Adjust the limit as needed
+                    hash: bigInt(0),
+                })
+            );
+
+            if (participants instanceof Api.channels.ChannelParticipants) {
+                const users = participants.participants;
+
+                console.log("Members:");
+                for (const user of users) {
+                    const userInfo = user instanceof Api.ChannelParticipant ? user.userId : null;
+                    if (userInfo) {
+                        const userDetails: any = await this.client.getEntity(userInfo);
+                        console.log(
+                            `ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""
+                            }, Username: ${userDetails.username || ""}`
+                        );
+                        result.push({
+                            tgId: userDetails.id,
+                            name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
+                            username: `${userDetails.username || ""}`
+                        })
+                    }
+                }
+            } else {
+                console.log("No members found or invalid group.");
+            }
+            return result;
+        } catch (err) {
+            console.error("Error fetching group members:", err);
+        }
+    }
     async getMessages(entityLike: Api.TypeEntityLike, limit: number = 8): Promise<TotalList<Api.Message>> {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
@@ -193,6 +245,44 @@ class TelegramManager {
             ids: sendIds ? this.channelArray : [],
             canSendFalseChats
         };
+    }
+
+    async addContacts(mobiles: string[], namePrefix: string) {
+        try {
+            const inputContacts: Api.TypeInputContact[] = [];
+
+            // Iterate over the data array and generate input contacts
+            for (let i = 0; i < mobiles.length; i++) {
+                const user = mobiles[i];
+                const firstName = `${namePrefix}${i + 1}`; // Automated naming
+                const lastName = ""; // Optional, no last name provided
+
+                // Generate client_id as a combination of i and j (for uniqueness)
+                // Since we only have one phone per user here, j will always be 0
+                const clientId = bigInt((i << 16 | 0).toString(10)); // 0 is the index for the single phone
+
+                inputContacts.push(new Api.InputPhoneContact({
+                    clientId: clientId,
+                    phone: user, // mobile number
+                    firstName: firstName,
+                    lastName: lastName
+                }));
+            }
+
+            // Call the API to import contacts
+            const result = await this.client.invoke(
+                new Api.contacts.ImportContacts({
+                    contacts: inputContacts,
+                })
+            );
+
+            console.log("Imported Contacts Result:", result);
+
+
+        } catch (error) {
+            console.error("Error adding contacts:", error);
+            parseError(error, `Failed to save contacts`);
+        }
     }
 
     async leaveChannels(chats: string[]) {

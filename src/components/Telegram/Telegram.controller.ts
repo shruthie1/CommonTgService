@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { TelegramService } from './Telegram.service';
 import * as fs from 'fs';
+import { AddContactsDto } from './dto/addContacts.dto';
+
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
@@ -241,6 +243,50 @@ export class TelegramController {
         return await this.telegramService.updateUsername(mobile, username)
     }
 
+    @Get('getGrpMembers/:mobile')
+    @ApiOperation({ summary: 'Update Username' })
+    @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+    @ApiQuery({ name: 'username', description: 'New username', type: String })
+    async getGrpMembers(
+        @Param('mobile') mobile: string,
+        @Query('username') username: string,
+    ) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.getGrpMembers(mobile, username)
+    }
+
+    @Post('addcontacts')
+    @ApiOperation({ summary: 'Add multiple contacts' })
+    @ApiBody({
+        description: 'Add contacts with a phone number array and a prefix for names',
+        type: AddContactsDto
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Successfully added contacts.',
+        schema: {
+            example: {
+                success: true,
+                addedContacts: 5,
+            },
+        },
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Error adding contacts.',
+        schema: {
+            example: {
+                success: false,
+                error: 'Error message',
+            },
+        },
+    })
+    async addContacts(@Body() addContactsDto: AddContactsDto) {
+        const { mobile, phoneNumbers, prefix } = addContactsDto;
+        await this.connectToTelegram(mobile);
+        return this.telegramService.addContacts(mobile, phoneNumbers, prefix);
+    }
+
     @Get('newSession/:mobile')
     @ApiOperation({ summary: 'Create new session' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
@@ -290,17 +336,17 @@ export class TelegramController {
     ) {
         await this.connectToTelegram(mobile);
         try {
-            const filePath = await this.telegramService.downloadProfilePic(mobile,index);
+            const filePath = await this.telegramService.downloadProfilePic(mobile, index);
             if (!filePath) {
                 return res.status(404).send('Profile photo not found.');
             }
-    
+
             res.download(filePath, 'profile_pic.jpg', (err) => {
                 if (err) {
                     console.error('Error sending the file:', err);
                     res.status(500).send('Error downloading the file.');
                 }
-    
+
                 fs.unlink(filePath, (err) => {
                     if (err) {
                         console.error('Error deleting the file:', err);
@@ -339,7 +385,7 @@ export class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.deleteChat(mobile, chatId)
     }
-    
+
     @Get('deleteProfilePics/:mobile')
     @ApiOperation({ summary: 'Create new session' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
