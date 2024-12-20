@@ -9,7 +9,7 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
-import { parseError } from '../../utils';
+import { fetchWithTimeout, parseError, ppplbot } from '../../utils';
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
@@ -309,6 +309,7 @@ export class BufferClientService {
                     } catch (error) {
                         parseError(error);
                         badIds.push(document.mobile);
+                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${document.mobile}`)}`);
                         this.remove(document.mobile)
                         await this.telegramService.deleteClient(document.mobile)
                     }

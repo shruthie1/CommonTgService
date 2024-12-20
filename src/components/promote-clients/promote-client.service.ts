@@ -9,7 +9,7 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
-import { parseError } from '../../utils';
+import { fetchWithTimeout, parseError, ppplbot } from '../../utils';
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
@@ -286,7 +286,6 @@ export class PromoteClientService {
             const bufferClients = await this.bufferClientService.findAll();
             const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile) })]
             const bufferClientIds = bufferClients.map(client => client.mobile);
-
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of promoteclients) {
                 if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
@@ -314,13 +313,14 @@ export class PromoteClientService {
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile)
                         }
-                        await this.telegramService.deleteClient(document.mobile)
-                        await sleep(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
+                        await sleep(2000);
+                        await this.telegramService.deleteClient(document.mobile)
                     } catch (error) {
                         parseError(error);
                         badIds.push(document.mobile);
-                        this.remove(document.mobile)
+                        this.remove(document.mobile);
+                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile}`)}`);
                         await this.telegramService.deleteClient(document.mobile)
                     }
                 } else {

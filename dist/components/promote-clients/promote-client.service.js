@@ -294,14 +294,15 @@ let PromoteClientService = class PromoteClientService {
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile);
                         }
-                        await this.telegramService.deleteClient(document.mobile);
-                        await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
+                        await (0, Helpers_1.sleep)(2000);
+                        await this.telegramService.deleteClient(document.mobile);
                     }
                     catch (error) {
                         (0, utils_1.parseError)(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile}`)}`);
                         await this.telegramService.deleteClient(document.mobile);
                     }
                 }
