@@ -970,6 +970,16 @@ class TelegramManager {
 
             await this.client.invoke(
                 new Api.account.SetPrivacy({
+                    key: new Api.InputPrivacyKeyForwards(),
+                    rules: [
+                        new Api.InputPrivacyValueAllowAll()
+                    ],
+                })
+            );
+            console.log("forwards Updated")
+
+            await this.client.invoke(
+                new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyPhoneNumber(),
                     rules: [
                         new Api.InputPrivacyValueDisallowAll()

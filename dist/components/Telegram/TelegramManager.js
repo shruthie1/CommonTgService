@@ -813,6 +813,13 @@ class TelegramManager {
             }));
             console.log("PP Updated");
             await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                key: new tl_1.Api.InputPrivacyKeyForwards(),
+                rules: [
+                    new tl_1.Api.InputPrivacyValueAllowAll()
+                ],
+            }));
+            console.log("forwards Updated");
+            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
                 key: new tl_1.Api.InputPrivacyKeyPhoneNumber(),
                 rules: [
                     new tl_1.Api.InputPrivacyValueDisallowAll()
