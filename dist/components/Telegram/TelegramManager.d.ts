@@ -54,6 +54,10 @@ declare class TelegramManager {
         ids: string[];
         canSendFalseChats: string[];
     }>;
+    addContact(data: {
+        mobile: string;
+        tgId: string;
+    }[], namePrefix: string): Promise<void>;
     addContacts(mobiles: string[], namePrefix: string): Promise<void>;
     leaveChannels(chats: string[]): Promise<void>;
     getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
