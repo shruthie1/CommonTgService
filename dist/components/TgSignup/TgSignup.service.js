@@ -44,9 +44,13 @@ let creds = [
         apiHash: "a3a0a2e895f893e2067dae111b20f2d9"
     },
     {
-        apiId: 23195238,
-        apiHash: "15a8b085da74163f158eabc71c55b000"
+        apiId: 27586636,
+        apiHash: "f020539b6bb5b945186d39b3ff1dd998"
     },
+    {
+        apiId: 29210552,
+        apiHash: "f3dbae7e628b312c829e1bd341f1e9a9"
+    }
 ];
 async function restAcc(phoneNumber) {
     await (0, Helpers_1.sleep)(1000);

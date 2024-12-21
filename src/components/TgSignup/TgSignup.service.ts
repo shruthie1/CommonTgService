@@ -35,10 +35,18 @@ let creds = [
         apiId: 27565391,
         apiHash: "a3a0a2e895f893e2067dae111b20f2d9"
     },
+    // {
+    //     apiId: 23195238,
+    //     apiHash: "15a8b085da74163f158eabc71c55b000"
+    // },
     {
-        apiId: 23195238,
-        apiHash: "15a8b085da74163f158eabc71c55b000"
+        apiId: 27586636,
+        apiHash: "f020539b6bb5b945186d39b3ff1dd998"
     },
+    {
+        apiId: 29210552,
+        apiHash: "f3dbae7e628b312c829e1bd341f1e9a9"
+    }
 ]
 
 // const apiId = 24559917 || parseInt(process.env.API_ID);
@@ -104,7 +112,7 @@ export async function createClient(number) {
             const cli: TgSignupService = clients.get(number);
             setTimeout(async () => {
                 await restAcc(number)
-            },120000);
+            }, 120000);
             return (await cli.sendCode(false));
         } else {
             const randomIndex = Math.floor(Math.random() * creds.length);
