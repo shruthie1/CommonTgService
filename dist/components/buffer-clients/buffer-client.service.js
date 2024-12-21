@@ -208,6 +208,10 @@ let BufferClientService = class BufferClientService {
         if (!user) {
             throw new common_1.BadRequestException('user not found');
         }
+        const isExist = await this.findOne(mobile);
+        if (!isExist) {
+            throw new common_1.ConflictException('user already exist');
+        }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
         const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);

@@ -86,28 +86,34 @@ class TelegramManager {
                 channel: chat,
                 filter: new tl_1.Api.ChannelParticipantsRecent(),
                 offset: 0,
-                limit: 100,
+                limit: 200,
                 hash: bigInt(0),
             }));
             if (participants instanceof tl_1.Api.channels.ChannelParticipants) {
                 const users = participants.participants;
-                console.log("Members:");
+                console.log(`Members: ${users.length}`);
                 for (const user of users) {
                     const userInfo = user instanceof tl_1.Api.ChannelParticipant ? user.userId : null;
                     if (userInfo) {
                         const userDetails = await this.client.getEntity(userInfo);
-                        console.log(`ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""}, Username: ${userDetails.username || ""}`);
                         result.push({
                             tgId: userDetails.id,
                             name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
-                            username: `${userDetails.username || ""}`
+                            username: `${userDetails.username || ""}`,
                         });
+                        if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
+                            console.log(JSON.stringify(userDetails.id));
+                        }
+                    }
+                    else {
+                        console.log(JSON.stringify(user?.userId));
                     }
                 }
             }
             else {
                 console.log("No members found or invalid group.");
             }
+            console.log(result.length);
             return result;
         }
         catch (err) {
@@ -213,6 +219,30 @@ class TelegramManager {
             ids: sendIds ? this.channelArray : [],
             canSendFalseChats
         };
+    }
+    async addContact(data, namePrefix) {
+        try {
+            for (let i = 0; i < data.length; i++) {
+                const user = data[i];
+                const firstName = `${namePrefix}${i + 1}`;
+                const lastName = "";
+                try {
+                    await this.client.invoke(new tl_1.Api.contacts.AddContact({
+                        firstName,
+                        lastName,
+                        phone: user.mobile,
+                        id: user.tgId
+                    }));
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+        }
+        catch (error) {
+            console.error("Error adding contacts:", error);
+            (0, utils_1.parseError)(error, `Failed to save contacts`);
+        }
     }
     async addContacts(mobiles, namePrefix) {
         try {
@@ -490,7 +520,7 @@ class TelegramManager {
             await this.client.invoke(new tl_1.Api.account.SetPrivacy({
                 key: new tl_1.Api.InputPrivacyKeyStatusTimestamp(),
                 rules: [
-                    new tl_1.Api.InputPrivacyValueDisallowAll()
+                    new tl_1.Api.InputPrivacyValueDisallowAll(),
                 ],
             }));
             await this.client.invoke(new tl_1.Api.account.SetPrivacy({

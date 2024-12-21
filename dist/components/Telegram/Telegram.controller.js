@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const Telegram_service_1 = require("./Telegram.service");
 const fs = require("fs");
 const addContacts_dto_1 = require("./dto/addContacts.dto");
+const addContact_dto_1 = require("./dto/addContact.dto");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -114,6 +115,11 @@ let TelegramController = class TelegramController {
     async getGrpMembers(mobile, username) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getGrpMembers(mobile, username);
+    }
+    async addContact(addContactDto) {
+        const { mobile, data, prefix } = addContactDto;
+        await this.connectToTelegram(mobile);
+        return this.telegramService.addContact(mobile, data, prefix);
     }
     async addContacts(addContactsDto) {
         const { mobile, phoneNumbers, prefix } = addContactsDto;
@@ -379,7 +385,7 @@ __decorate([
     (0, common_1.Get)('UpdateUsername/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update Username' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiQuery)({ name: 'username', description: 'New username', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'username', description: 'New username', type: String, required: false }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('username')),
     __metadata("design:type", Function),
@@ -397,6 +403,38 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getGrpMembers", null);
+__decorate([
+    (0, common_1.Post)('addcontact'),
+    (0, swagger_1.ApiOperation)({ summary: 'Add multiple contacts' }),
+    (0, swagger_1.ApiBody)({
+        description: 'Add contacts with a phone number array and a prefix for names',
+        type: addContact_dto_1.AddContactDto
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Successfully added contacts.',
+        schema: {
+            example: {
+                success: true,
+                addedContacts: 5,
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Error adding contacts.',
+        schema: {
+            example: {
+                success: false,
+                error: 'Error message',
+            },
+        },
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [addContact_dto_1.AddContactDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "addContact", null);
 __decorate([
     (0, common_1.Post)('addcontacts'),
     (0, swagger_1.ApiOperation)({ summary: 'Add multiple contacts' }),

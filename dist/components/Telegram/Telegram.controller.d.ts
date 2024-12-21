@@ -1,5 +1,6 @@
 import { TelegramService } from './Telegram.service';
 import { AddContactsDto } from './dto/addContacts.dto';
+import { AddContactDto } from './dto/addContact.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -47,6 +48,7 @@ export declare class TelegramController {
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
     getGrpMembers(mobile: string, username: string): Promise<any[]>;
+    addContact(addContactDto: AddContactDto): Promise<void>;
     addContacts(addContactsDto: AddContactsDto): Promise<void>;
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
