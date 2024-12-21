@@ -260,7 +260,7 @@ export class ClientService {
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await sleep(2000)
             const me = await telegramClient.getMe();
-            if (me.username !== client.username) {
+            if (me.username !== client.username || !me.username.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
                 const userCaps = username[0].toUpperCase() + username.slice(1);
                 let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId);

@@ -1,6 +1,6 @@
 import { ChannelsService } from './../channels/channels.service';
 import { Channel } from './../channels/schemas/channel.schema';
-import { BadRequestException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
@@ -225,6 +225,10 @@ export class BufferClientService {
         const user = (await this.usersService.search({ mobile }))[0];
         if (!user) {
             throw new BadRequestException('user not found');
+        }
+        const isExist = await this.findOne(mobile)
+        if (!isExist) {
+            throw new ConflictException('user already exist');
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);

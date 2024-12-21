@@ -110,7 +110,7 @@ class TelegramManager {
                     channel: chat,
                     filter: new Api.ChannelParticipantsRecent(),
                     offset: 0,
-                    limit: 100, // Adjust the limit as needed
+                    limit: 200, // Adjust the limit as needed
                     hash: bigInt(0),
                 })
             );
@@ -118,25 +118,33 @@ class TelegramManager {
             if (participants instanceof Api.channels.ChannelParticipants) {
                 const users = participants.participants;
 
-                console.log("Members:");
+                console.log(`Members: ${users.length}`);
                 for (const user of users) {
                     const userInfo = user instanceof Api.ChannelParticipant ? user.userId : null;
                     if (userInfo) {
-                        const userDetails: any = await this.client.getEntity(userInfo);
-                        console.log(
-                            `ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""
-                            }, Username: ${userDetails.username || ""}`
-                        );
+                        const userDetails = <Api.User>await this.client.getEntity(userInfo);
+                        // console.log(
+                        //     `ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""
+                        //     }, Username: ${userDetails.username || ""}`
+                        // );
+                       
                         result.push({
                             tgId: userDetails.id,
                             name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
-                            username: `${userDetails.username || ""}`
+                            username: `${userDetails.username || ""}`,
                         })
+                        if (userDetails.firstName == 'Deleted Account' && !userDetails.username){
+                            console.log(JSON.stringify(userDetails.id))
+                        }
+                    } else {
+                        console.log(JSON.stringify((user as any)?.userId))
+                        // console.log(`could not find enitity for : ${JSON.stringify(user)}`)
                     }
                 }
             } else {
                 console.log("No members found or invalid group.");
             }
+            console.log(result.length)
             return result;
         } catch (err) {
             console.error("Error fetching group members:", err);
@@ -246,6 +254,32 @@ class TelegramManager {
             canSendFalseChats
         };
     }
+
+    async addContact(data: { mobile: string, tgId: string }[], namePrefix: string) {
+        try {
+            for (let i = 0; i < data.length; i++) {
+                const user = data[i];
+                const firstName = `${namePrefix}${i + 1}`; // Automated naming
+                const lastName = "";
+                try {
+                    await this.client.invoke(
+                        new Api.contacts.AddContact({
+                            firstName,
+                            lastName,
+                            phone: user.mobile,
+                            id: user.tgId
+                        })
+                    );
+                } catch (e) {
+                    console.log(e)
+                }
+            }
+        } catch (error) {
+            console.error("Error adding contacts:", error);
+            parseError(error, `Failed to save contacts`);
+        }
+    }
+
 
     async addContacts(mobiles: string[], namePrefix: string) {
         try {
@@ -594,7 +628,7 @@ class TelegramManager {
                 new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyStatusTimestamp(),
                     rules: [
-                        new Api.InputPrivacyValueDisallowAll()
+                        new Api.InputPrivacyValueDisallowAll(),
                     ],
                 })
             );

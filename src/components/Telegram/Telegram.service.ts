@@ -252,7 +252,17 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async addContacts(mobile: string, phoneNumbers:string[], prefix: string) {
+    async addContact(mobile: string, data: { mobile: string, tgId: string }[], prefix: string) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.addContact(data, prefix)
+        } catch (err) {
+            console.error("Error fetching adding Contacts:", err);
+        }
+    }
+
+
+    async addContacts(mobile: string, phoneNumbers: string[], prefix: string) {
         try {
             const telegramClient = await this.getClient(mobile);
             return await telegramClient.addContacts(phoneNumbers, prefix)

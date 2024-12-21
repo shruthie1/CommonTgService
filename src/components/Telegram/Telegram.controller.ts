@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse } from 
 import { TelegramService } from './Telegram.service';
 import * as fs from 'fs';
 import { AddContactsDto } from './dto/addContacts.dto';
+import { AddContactDto } from './dto/addContact.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -234,7 +235,7 @@ export class TelegramController {
     @Get('UpdateUsername/:mobile')
     @ApiOperation({ summary: 'Update Username' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
-    @ApiQuery({ name: 'username', description: 'New username', type: String })
+    @ApiQuery({ name: 'username', description: 'New username', type: String,  required: false})
     async updateUsername(
         @Param('mobile') mobile: string,
         @Query('username') username: string,
@@ -254,6 +255,40 @@ export class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getGrpMembers(mobile, username)
     }
+
+    
+    @Post('addcontact')
+    @ApiOperation({ summary: 'Add multiple contacts' })
+    @ApiBody({
+        description: 'Add contacts with a phone number array and a prefix for names',
+        type: AddContactDto
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Successfully added contacts.',
+        schema: {
+            example: {
+                success: true,
+                addedContacts: 5,
+            },
+        },
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Error adding contacts.',
+        schema: {
+            example: {
+                success: false,
+                error: 'Error message',
+            },
+        },
+    })
+    async addContact(@Body() addContactDto: AddContactDto) {
+        const { mobile, data, prefix } = addContactDto;
+        await this.connectToTelegram(mobile);
+        return this.telegramService.addContact(mobile, data, prefix);
+    }
+
 
     @Post('addcontacts')
     @ApiOperation({ summary: 'Add multiple contacts' })
