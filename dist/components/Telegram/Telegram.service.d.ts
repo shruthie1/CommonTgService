@@ -6,6 +6,7 @@ import { Api } from 'telegram';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
+import { EntityLike } from 'telegram/define';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private bufferClientService;
@@ -42,6 +43,8 @@ export declare class TelegramService implements OnModuleDestroy {
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
+    getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
+    addContacts(mobile: string, phoneNumbers: string[], prefix: string): Promise<void>;
     removeOtherAuths(mobile: string): Promise<string>;
     getSelfMsgsInfo(mobile: string): Promise<{
         photoCount: number;
