@@ -209,6 +209,15 @@ let TelegramService = TelegramService_1 = class TelegramService {
             console.error("Error fetching group members:", err);
         }
     }
+    async addContact(mobile, data, prefix) {
+        try {
+            const telegramClient = await this.getClient(mobile);
+            return await telegramClient.addContact(data, prefix);
+        }
+        catch (err) {
+            console.error("Error fetching adding Contacts:", err);
+        }
+    }
     async addContacts(mobile, phoneNumbers, prefix) {
         try {
             const telegramClient = await this.getClient(mobile);

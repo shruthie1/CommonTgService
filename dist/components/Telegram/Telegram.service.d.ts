@@ -44,6 +44,10 @@ export declare class TelegramService implements OnModuleDestroy {
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
     getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
+    addContact(mobile: string, data: {
+        mobile: string;
+        tgId: string;
+    }[], prefix: string): Promise<void>;
     addContacts(mobile: string, phoneNumbers: string[], prefix: string): Promise<void>;
     removeOtherAuths(mobile: string): Promise<string>;
     getSelfMsgsInfo(mobile: string): Promise<{
