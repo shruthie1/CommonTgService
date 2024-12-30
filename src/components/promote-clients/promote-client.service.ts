@@ -201,7 +201,7 @@ export class PromoteClientService {
                                     console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
                                     this.removeFromPromoteMap(mobile);
                                     const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                                    await this.update(mobile, { channels: channelsInfo.ids.length });
+                                    // await this.update(mobile, { channels: channelsInfo.ids.length });
                                 }
                             } finally {
                                 await this.telegramService.deleteClient(mobile);
@@ -251,14 +251,14 @@ export class PromoteClientService {
                 await sleep(3000)
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true)
-                const promoteClient = {
-                    tgId: user.tgId,
-                    lastActive: "default",
-                    mobile: user.mobile,
-                    availableDate,
-                    channels: channels.ids.length,
-                }
-                await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                // const promoteClient = {
+                //     tgId: user.tgId,
+                //     lastActive: "default",
+                //     mobile: user.mobile,
+                //     availableDate,
+                //     channels: channels.ids.length,
+                // }
+                // await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
                 throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
@@ -338,8 +338,8 @@ export class PromoteClientService {
     }
 
     async addNewUserstoPromoteClients(badIds: string[], goodIds: string[]) {
-        const sixMonthsAgo = (new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, expired: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 150 } }, { tgId: 1 }, badIds.length + 3);
+        const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, expired: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 350 } }, { tgId: 1 }, badIds.length + 3);
         console.log("New promote documents to be added: ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();

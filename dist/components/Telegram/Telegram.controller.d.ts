@@ -34,13 +34,7 @@ export declare class TelegramController {
     }>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
     getMedia(mobile: string): Promise<import("telegram").Api.messages.Messages>;
-    getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
-        chatsArrayLength: number;
-        canSendTrueCount: number;
-        canSendFalseCount: number;
-        ids: string[];
-        canSendFalseChats: string[];
-    }>;
+    getChannelInfo(mobile: string, sendIds?: boolean): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
     getAuths(mobile: string): Promise<any>;
     set2Fa(mobile: string): Promise<string>;
