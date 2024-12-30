@@ -246,7 +246,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async getChannelInfo(mobile, sendIds = false) {
         const telegramClient = await this.getClient(mobile);
-        return await telegramClient.channelInfo(sendIds);
+        const result = await telegramClient.getDialogs({ limit: 10, archived: false });
+        console.log(result);
     }
     async getAuths(mobile) {
         const telegramClient = await this.getClient(mobile);
