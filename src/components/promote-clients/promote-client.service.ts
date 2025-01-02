@@ -320,7 +320,7 @@ export class PromoteClientService {
                         parseError(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
-                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile}`)}`);
+                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile} : ${error.errorMessage}`)}`);
                         await this.telegramService.deleteClient(document.mobile)
                     }
                 } else {
