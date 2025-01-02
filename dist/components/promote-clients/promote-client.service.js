@@ -68,6 +68,7 @@ let PromoteClientService = class PromoteClientService {
         }
     }
     async remove(mobile) {
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -293,7 +294,6 @@ let PromoteClientService = class PromoteClientService {
                         (0, utils_1.parseError)(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
-                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile} : ${error.errorMessage}`)}`);
                         await this.telegramService.deleteClient(document.mobile);
                     }
                 }
