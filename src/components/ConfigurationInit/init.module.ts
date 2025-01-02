@@ -1,10 +1,11 @@
-import { Module, Global, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Module, Global, OnModuleDestroy, Inject, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MongooseModule, getConnectionToken} from '@nestjs/mongoose';
+import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { ConfigurationService } from './init.service';
 import { ConfigurationSchema } from './configuration.schema';
 import { ConfigurationController } from './init.controller';
 import { Connection } from 'mongoose';
+import { fetchWithTimeout, ppplbot } from 'src/utils';
 
 @Global()
 @Module({
@@ -17,17 +18,22 @@ import { Connection } from 'mongoose';
     }),
     MongooseModule.forFeature([{
       name: 'configurationModule', collection: 'configuration', schema: ConfigurationSchema
-  }])
+    }])
   ],
-  providers:[ConfigurationService],
-  controllers:[ConfigurationController],
+  providers: [ConfigurationService],
+  controllers: [ConfigurationController],
   exports: [ConfigModule, MongooseModule],
 })
-export class initModule implements OnModuleDestroy {
+export class initModule implements OnModuleDestroy, OnModuleInit {
   constructor(@Inject(getConnectionToken()) private readonly connection: Connection) {}
+  async onModuleInit() {
+    console.log(`Started :: ${process.env.clientId}`)
+    await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+  }
 
-  onModuleDestroy() {
+  async onModuleDestroy() {
     console.log("Init Module Destroying")
+    await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
     this.closeConnection();
   }
 
