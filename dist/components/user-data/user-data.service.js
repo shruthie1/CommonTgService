@@ -37,7 +37,12 @@ let UserDataService = class UserDataService {
         }
         const currentCount = this.callCounts.get(chatId) || 0;
         this.callCounts.set(chatId, currentCount + 1);
-        return { ...user, count: this.callCounts.get(chatId) };
+        if (user) {
+            return { ...user, count: this.callCounts.get(chatId) };
+        }
+        else {
+            return undefined;
+        }
     }
     clearCount(chatId) {
         if (chatId) {
