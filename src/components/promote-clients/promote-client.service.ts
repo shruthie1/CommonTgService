@@ -77,6 +77,7 @@ export class PromoteClientService {
     }
 
     async remove(mobile: string): Promise<void> {
+        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -320,7 +321,6 @@ export class PromoteClientService {
                         parseError(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
-                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile} : ${error.errorMessage}`)}`);
                         await this.telegramService.deleteClient(document.mobile)
                     }
                 } else {
