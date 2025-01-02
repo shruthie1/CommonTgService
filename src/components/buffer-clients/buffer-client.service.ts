@@ -77,6 +77,7 @@ export class BufferClientService {
     }
 
     async remove(mobile: string): Promise<void> {
+        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
         const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -313,7 +314,6 @@ export class BufferClientService {
                     } catch (error) {
                         parseError(error);
                         badIds.push(document.mobile);
-                        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${document.mobile}: ${error.errorMessage}`)}`);
                         this.remove(document.mobile)
                         await this.telegramService.deleteClient(document.mobile)
                     }
