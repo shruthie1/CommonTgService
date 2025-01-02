@@ -20,12 +20,18 @@ const init_service_1 = require("./init.service");
 const configuration_schema_1 = require("./configuration.schema");
 const init_controller_1 = require("./init.controller");
 const mongoose_2 = require("mongoose");
+const utils_1 = require("../../utils");
 let initModule = class initModule {
     constructor(connection) {
         this.connection = connection;
     }
-    onModuleDestroy() {
+    async onModuleInit() {
+        console.log(`Started :: ${process.env.clientId}`);
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+    }
+    async onModuleDestroy() {
         console.log("Init Module Destroying");
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
         this.closeConnection();
     }
     closeConnection() {
