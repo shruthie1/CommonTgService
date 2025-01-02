@@ -29,7 +29,11 @@ export class UserDataService {
         this.callCounts.set(chatId, currentCount + 1);
 
         // Return user with appended call count
-        return { ...user, count: this.callCounts.get(chatId) };
+        if (user) {
+            return { ...user, count: this.callCounts.get(chatId) };
+        } else {
+            return undefined
+        }
     }
 
     clearCount(chatId?: string): string {
