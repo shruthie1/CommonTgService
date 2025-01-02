@@ -293,7 +293,7 @@ let PromoteClientService = class PromoteClientService {
                         (0, utils_1.parseError)(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
-                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile}`)}`);
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${document.mobile} : ${error.errorMessage}`)}`);
                         await this.telegramService.deleteClient(document.mobile);
                     }
                 }
