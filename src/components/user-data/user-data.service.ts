@@ -27,8 +27,6 @@ export class UserDataService {
         }
         const currentCount = this.callCounts.get(chatId) || 0;
         this.callCounts.set(chatId, currentCount + 1);
-
-        // Return user with appended call count
         if (user) {
             return { ...user, count: this.callCounts.get(chatId) };
         } else {
