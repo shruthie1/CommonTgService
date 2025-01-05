@@ -67,7 +67,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async addReactions(channelId, reactions) {
         const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-            $addToSet: { availableMsgs: reactions }
+            $addToSet: { reactions: reactions }
         });
         return channel;
     }
