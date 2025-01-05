@@ -73,7 +73,7 @@ export class ActiveChannelsService {
 
   async addReactions(channelId: string, reactions: string[]): Promise<ActiveChannel> {
     const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-      $addToSet: { availableMsgs: reactions }
+      $addToSet: { reactions: reactions }
     })
     return channel;
   }
