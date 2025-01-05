@@ -92,7 +92,7 @@ export class ActiveChannelsService {
 
   async removeReaction(channelId: string, reaction: string): Promise<ActiveChannel> {
     const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-      $pull: { reactions: reaction }
+      $pull: { reactions: reaction },
     })
     return channel;
   }
