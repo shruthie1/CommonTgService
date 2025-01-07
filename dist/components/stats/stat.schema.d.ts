@@ -17,9 +17,9 @@ export declare class Stat {
 export declare const StatSchema: import("mongoose").Schema<Stat, import("mongoose").Model<Stat, any, any, any, Document<unknown, any, Stat> & Stat & {
     _id: import("mongoose").Types.ObjectId;
 } & {
-    __v?: number;
+    __v: number;
 }, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Stat, Document<unknown, {}, import("mongoose").FlatRecord<Stat>> & import("mongoose").FlatRecord<Stat> & {
     _id: import("mongoose").Types.ObjectId;
 } & {
-    __v?: number;
+    __v: number;
 }>;
