@@ -161,8 +161,8 @@ export class TgSignupService {
 
     async disconnect() {
         await this.client?.disconnect();
-        // await this.client?.destroy();
-        // await this.session.delete();
+        await this.client?.destroy();
+        await this.session.delete();
         this.client = null
     }
 
