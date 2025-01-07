@@ -15,12 +15,12 @@ export declare class ActiveChannelsService {
     removeFromAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
         _id: unknown;
     }> & {
-        __v?: number;
+        __v: number;
     }>;
     addToAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
         _id: unknown;
     }> & {
-        __v?: number;
+        __v: number;
     }>;
     remove(channelId: string): Promise<void>;
     search(filter: any): Promise<ActiveChannel[]>;
