@@ -39,7 +39,7 @@ class TelegramManager {
     async disconnect(): Promise<void> {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber)
-            await this.client.destroy();
+            // await this.client.destroy();
             this.client._destroyed = true
             await this.client.disconnect();
             this.client = null;
@@ -1210,7 +1210,7 @@ class TelegramManager {
 
         const session = <string><unknown>newClient.session.save();
         await newClient.disconnect();
-        await newClient.destroy();
+        // await newClient.destroy();
         console.log("New Session: ", session)
         return session
     }
