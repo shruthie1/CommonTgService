@@ -14,7 +14,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import * as path from 'path';
-import { CloudinaryService } from 'src/cloudinary';
+import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
 let settingupClient = Date.now() - 250000;
 @Injectable()

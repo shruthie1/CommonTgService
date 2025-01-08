@@ -92,7 +92,7 @@ let ClientService = class ClientService {
         if (updateClientDto._doc) {
             delete updateClientDto._doc['_id'];
         }
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating the Existing client: ${clientId} || ${JSON.stringify(updateClientDto)}`);
+        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating the Existing client: ${clientId}`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
