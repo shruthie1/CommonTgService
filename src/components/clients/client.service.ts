@@ -95,7 +95,7 @@ export class ClientService {
         if ((<any>updateClientDto)._doc) {
             delete (<any>updateClientDto)._doc['_id']
         }
-        await fetchWithTimeout(`${ppplbot()}&text=Updating the Existing client`);
+        await fetchWithTimeout(`${ppplbot()}&text=Updating the Existing client: ${clientId} || ${JSON.stringify(updateClientDto)}`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
