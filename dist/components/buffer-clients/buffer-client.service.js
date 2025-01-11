@@ -217,7 +217,7 @@ let BufferClientService = class BufferClientService {
         const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
         if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
-                const telegramClient = await this.telegramService.createClient(mobile);
+                const telegramClient = await this.telegramService.createClient(mobile, false);
                 await telegramClient.set2fa();
                 await (0, Helpers_1.sleep)(15000);
                 await telegramClient.updateUsername('');
@@ -309,7 +309,7 @@ let BufferClientService = class BufferClientService {
             const document = documents.shift();
             try {
                 try {
-                    const client = await this.telegramService.createClient(document.mobile);
+                    const client = await this.telegramService.createClient(document.mobile, false);
                     const hasPassword = await client.hasPassword();
                     console.log("hasPassword: ", hasPassword);
                     if (!hasPassword) {
