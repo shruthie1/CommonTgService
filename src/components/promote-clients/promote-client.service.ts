@@ -252,14 +252,14 @@ export class PromoteClientService {
                 await sleep(3000)
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true)
-                // const promoteClient = {
-                //     tgId: user.tgId,
-                //     lastActive: "default",
-                //     mobile: user.mobile,
-                //     availableDate,
-                //     channels: channels.ids.length,
-                // }
-                // await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                const promoteClient = {
+                    tgId: user.tgId,
+                    lastActive: "default",
+                    mobile: user.mobile,
+                    availableDate,
+                    channels: channels.ids.length,
+                }
+                await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
                 throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
