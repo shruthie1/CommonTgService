@@ -222,7 +222,7 @@ let PromoteClientService = class PromoteClientService {
         const clientMobiles = clients.map(client => client?.mobile);
         const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
         if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
-            const telegramClient = await this.telegramService.createClient(mobile);
+            const telegramClient = await this.telegramService.createClient(mobile, false);
             try {
                 await telegramClient.set2fa();
                 await (0, Helpers_1.sleep)(15000);
@@ -319,7 +319,7 @@ let PromoteClientService = class PromoteClientService {
             const document = documents.shift();
             try {
                 try {
-                    const client = await this.telegramService.createClient(document.mobile);
+                    const client = await this.telegramService.createClient(document.mobile, false);
                     const hasPassword = await client.hasPassword();
                     console.log("hasPassword: ", hasPassword);
                     if (!hasPassword) {
