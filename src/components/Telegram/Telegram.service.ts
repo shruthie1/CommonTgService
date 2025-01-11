@@ -296,8 +296,8 @@ export class TelegramService implements OnModuleDestroy {
     async getChannelInfo(mobile: string, sendIds: boolean = false) {
         const telegramClient = await this.getClient(mobile)
         const result = await telegramClient.getDialogs({ limit: 10, archived: false })
-        console.log(result)
-        // return await telegramClient.channelInfo(sendIds);
+        // console.log(result)
+        return await telegramClient.channelInfo(sendIds);
     }
 
     async getAuths(mobile: string) {
