@@ -20,6 +20,7 @@ import { PromoteStatModule } from './components/promote-stats/promote-stat.modul
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
+import { NpointModule } from './components/n-point/npoint.module';
 
 @Module({
   imports: [
@@ -40,7 +41,8 @@ import { TransactionModule } from './components/transactions/transaction.module'
     StatModule,
     Stat2Module,
     TgSignupModule,
-    TransactionModule
+    TransactionModule,
+    NpointModule,
   ],
   controllers:[AppController],
   providers:[AppService],

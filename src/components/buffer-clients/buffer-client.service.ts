@@ -42,9 +42,9 @@ export class BufferClientService {
         return this.bufferClientModel.find().exec();
     }
 
-    async findOne(mobile: string): Promise<BufferClient> {
+    async findOne(mobile: string, throwErr: boolean = true): Promise<BufferClient> {
         const user = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (!user) {
+        if (!user && throwErr) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
         return user;
@@ -227,9 +227,9 @@ export class BufferClientService {
         if (!user) {
             throw new BadRequestException('user not found');
         }
-        const isExist = await this.findOne(mobile)
-        if (!isExist) {
-            throw new ConflictException('user already exist');
+        const isExist = await this.findOne(mobile, false)
+        if (isExist) {
+            throw new ConflictException('BufferClient already exist');
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);

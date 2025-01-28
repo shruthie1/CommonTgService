@@ -1,6 +1,6 @@
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
-import { BadRequestException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
@@ -42,9 +42,9 @@ export class PromoteClientService {
         return this.promoteClientModel.find().exec();
     }
 
-    async findOne(mobile: string): Promise<PromoteClient> {
+    async findOne(mobile: string, throwErr: boolean = true): Promise<PromoteClient> {
         const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (!user) {
+        if (!user && throwErr) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
         return user;
@@ -235,6 +235,10 @@ export class PromoteClientService {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new BadRequestException('user not found');
+        }
+        const isExist = await this.findOne(mobile, false)
+        if (isExist) {
+            throw new ConflictException('PromoteClient already exist');
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);

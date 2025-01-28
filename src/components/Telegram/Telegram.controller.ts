@@ -138,6 +138,46 @@ export class TelegramController {
         return await this.telegramService.getSelfMsgsInfo(mobile);
     }
 
+    @Get('createGroup/:mobile')
+    @ApiOperation({ summary: 'Get self messages info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Self messages info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async createGroup(@Param('mobile') mobile: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.createGroup(mobile);
+    }
+
+    @Get('forwardSecrets/:mobile/:fromId')
+    @ApiOperation({ summary: 'Get self messages info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Self messages info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async forwardSecrets(@Param('mobile') mobile: string, @Param('fromId') fromId: string) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.forwardSecrets(mobile, fromId);
+    }
+
+    @Get('joinChannelAndForward/:mobile/:fromId/:channel')
+    @ApiOperation({ summary: 'Get self messages info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Self messages info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async joinChannelAndForward(@Param('mobile') mobile: string, @Param('fromId') fromId: string, @Param('channel') channel: string) {
+        await this.telegramService.createClient(mobile, false, false);
+        return await this.telegramService.joinChannelAndForward(mobile, fromId, channel);
+    }
+    @Get('leaveChannel/:mobile/:channel')
+    @ApiOperation({ summary: 'Get channel info' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    //@apiresponse({ status: 200, description: 'Channel info fetched successfully' })
+    //@apiresponse({ status: 400, description: 'Bad request' })
+    async leaveChannel(@Param('mobile') mobile: string, @Param('channel') channel: string) {
+        await this.connectToTelegram(mobile);
+        this.telegramService.leaveChannel(mobile, channel);
+        return "Started Leaving Channels"
+    }
+
     @Get('getCallLog/:mobile')
     @ApiOperation({ summary: 'Get CallLog  info' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -235,7 +275,7 @@ export class TelegramController {
     @Get('UpdateUsername/:mobile')
     @ApiOperation({ summary: 'Update Username' })
     @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
-    @ApiQuery({ name: 'username', description: 'New username', type: String,  required: false})
+    @ApiQuery({ name: 'username', description: 'New username', type: String, required: false })
     async updateUsername(
         @Param('mobile') mobile: string,
         @Query('username') username: string,
@@ -257,6 +297,7 @@ export class TelegramController {
     }
 
     
+
     @Post('addcontact')
     @ApiOperation({ summary: 'Add multiple contacts' })
     @ApiBody({

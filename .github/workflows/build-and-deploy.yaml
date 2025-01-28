@@ -1,0 +1,56 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - '*'  # Trigger on all branches
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch the entire history and all branches
+
+      - name: Install Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build NestJS app
+        run: npm run build
+
+      - name: Determine branch name
+        id: branch_name
+        run: echo "::set-output name=branch::$(echo $GITHUB_REF | awk -F'/' '{print $3}')"
+
+      - name: Pull current branch and push built files to it
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
+          git add .  # Stage all changes, including package-lock.json and dist folder
+          git commit -m "Build and deploy dist files" || echo "No changes to commit"
+          git push origin HEAD:${{ steps.branch_name.outputs.branch }}
+
+      - name: Commit and push only dist and src to master
+        if: ${{ github.ref != 'refs/heads/master' }}  # Only run if not already on master
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
+          git fetch origin master  # Ensure the master branch is fetched
+          git checkout master  # Switch to the master branch
+          git pull origin master  # Pull the latest changes from master
+
+          # Merge only dist and src directories into master
+          git checkout ${{ steps.branch_name.outputs.branch }} -- src dist  # Checkout only src and dist from the branch
+          git add src dist  # Stage only src and dist changes
+          
+          git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
+          git push origin master  # Push only the changes in dist and src to master
