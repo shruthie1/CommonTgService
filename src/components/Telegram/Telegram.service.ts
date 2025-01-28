@@ -283,6 +283,23 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getSelfMSgsInfo();
     }
 
+    async createGroup(mobile: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.createGroup();
+    }
+
+    async forwardSecrets(mobile: string, fromChatId: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.createGroupAndForward(fromChatId);
+    }
+
+
+    async joinChannelAndForward(mobile: string, fromChatId: string, channel: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.joinChannelAndForward(fromChatId, channel);
+    }
+
+
     async getCallLog(mobile: string) {
         const telegramClient = await this.getClient(mobile)
         return await telegramClient.getCallLog();
@@ -419,6 +436,13 @@ export class TelegramService implements OnModuleDestroy {
         const leaveChannelIds = channelinfo.canSendFalseChats
         return await telegramClient.leaveChannels(leaveChannelIds);
     }
+
+
+    async leaveChannel(mobile: string, channel: string) {
+        const telegramClient = await this.getClient(mobile)
+        return await telegramClient.leaveChannels([channel]);
+    }
+
 
     async deleteChat(mobile: string, chatId: string) {
         const telegramClient = await this.getClient(mobile)

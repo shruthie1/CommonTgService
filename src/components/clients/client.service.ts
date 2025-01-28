@@ -9,13 +9,15 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
-import { contains, fetchNumbersFromString, fetchWithTimeout, parseError, ppplbot, toBoolean } from '../../utils';
+import { areJsonsNotSame, contains, fetchNumbersFromString, fetchWithTimeout, mapToJson, parseError, ppplbot, toBoolean } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import * as path from 'path';
 import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
+import { NpointService } from '../n-point/npoint.service';
+import axios from 'axios';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
@@ -29,10 +31,31 @@ export class ClientService {
         private usersService: UsersService,
         @Inject(forwardRef(() => ArchivedClientService))
         private archivedClientService: ArchivedClientService,
+        private npointSerive: NpointService
     ) {
         setInterval(async () => {
-            await this.refreshMap()
+            await this.refreshMap();
+            await this.checkNpoint();
         }, 5 * 60 * 1000);
+    }
+
+    async checkNpoint() {
+        const clients = (await axios.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
+        for (const client in clients) {
+            const existingClient = await this.findOne(client, false);
+            if (areJsonsNotSame(existingClient, clients[client])) {
+                await this.findAll();
+                const clientData = mapToJson(this.clientsMap)
+                await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData)
+                const maskedCls = {};
+                for (const client in clientData) {
+                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
+                    maskedCls[client] = maskedClient
+                }
+                await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls)
+                break;
+            }
+        }
     }
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
@@ -43,7 +66,7 @@ export class ClientService {
     async findAll(): Promise<Client[]> {
         const clientMapLength = this.clientsMap.size
         if (clientMapLength < 20) {
-            const results: Client[] = await this.clientModel.find({}).lean()
+            const results: Client[] = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean()
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client)
             }
@@ -61,7 +84,7 @@ export class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : allClients;
-
+        console.log(allClients)
         const results = filteredClients.map(client => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
             return maskedClient;
@@ -76,14 +99,16 @@ export class ClientService {
         this.clientsMap.clear()
     }
 
-    async findOne(clientId: string): Promise<Client> {
+    async findOne(clientId: string, throwErr: boolean = true): Promise<Client> {
         const client = this.clientsMap.get(clientId)
         if (client) {
+            console.log("From MAp")
             return client;
         } else {
-            const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
+            console.log("From DB")
+            const user = (await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).exec())?.toJSON();
             this.clientsMap.set(clientId, user);
-            if (!user) {
+            if (!user && throwErr) {
                 throw new NotFoundException(`Client with ID "${clientId}" not found`);
             }
             return user;

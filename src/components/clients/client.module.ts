@@ -8,6 +8,7 @@ import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
 import { ArchivedClientModule } from '../archived-clients/archived-client.module';
 import { initModule } from '../ConfigurationInit/init.module';
+import { NpointModule } from '../n-point/npoint.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { initModule } from '../ConfigurationInit/init.module';
     forwardRef(()=>BufferClientModule),
     forwardRef(()=>UsersModule),
     forwardRef(()=>ArchivedClientModule),
+    NpointModule
   ],
   controllers: [ClientController],
   providers: [ClientService],
