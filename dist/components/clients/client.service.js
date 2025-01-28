@@ -97,11 +97,9 @@ let ClientService = class ClientService {
     async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
         if (client) {
-            console.log("From MAp");
             return client;
         }
         else {
-            console.log("From DB");
             const user = (await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).exec())?.toJSON();
             this.clientsMap.set(clientId, user);
             if (!user && throwErr) {
