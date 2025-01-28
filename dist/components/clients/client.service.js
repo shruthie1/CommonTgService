@@ -93,7 +93,6 @@ let ClientService = class ClientService {
     async refreshMap() {
         console.log("Refreshed Clients");
         this.clientsMap.clear();
-        await this.checkNpoint();
     }
     async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
