@@ -10,7 +10,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NpointService = void 0;
 const common_1 = require("@nestjs/common");
 const axios_1 = require("axios");
-const cheerio = require("cheerio");
 let NpointService = NpointService_1 = class NpointService {
     constructor() {
         this.logger = new common_1.Logger(NpointService_1.name);
@@ -136,11 +135,11 @@ let NpointService = NpointService_1 = class NpointService {
     }
     async fetchCsrfTokenFromHtml(data) {
         try {
-            const $ = cheerio.load(data);
-            const csrfToken = $('meta[name="csrf-token"]').attr('content');
-            if (!csrfToken) {
+            const csrfTokenMatch = data.match(/<meta name="csrf-token" content="([^"]+)"/);
+            if (!csrfTokenMatch || !csrfTokenMatch[1]) {
                 throw new Error('CSRF token not found in the HTML response.');
             }
+            const csrfToken = csrfTokenMatch[1];
             console.log('CSRF Token:', csrfToken);
             return csrfToken;
         }

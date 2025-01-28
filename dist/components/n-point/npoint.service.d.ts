@@ -10,5 +10,5 @@ export declare class NpointService {
     postDocument(document: any): Promise<any>;
     updateDocument(documentId: string, updatedDocument: any): Promise<any>;
     fetchAllDocuments(): Promise<any[]>;
-    fetchCsrfTokenFromHtml(data: any): Promise<string>;
+    fetchCsrfTokenFromHtml(data: any): Promise<any>;
 }

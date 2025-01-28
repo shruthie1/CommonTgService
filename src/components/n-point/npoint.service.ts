@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
-import { response } from 'express';
-import * as cheerio from 'cheerio'; // Cheerio is a library to parse HTML and extract data
 
 @Injectable()
 export class NpointService {
@@ -154,21 +152,21 @@ export class NpointService {
 
     async fetchCsrfTokenFromHtml(data) {
         try {
+            // Step 1: Use a regular expression to match the CSRF token in the <meta> tag
+            const csrfTokenMatch = data.match(/<meta name="csrf-token" content="([^"]+)"/);
 
-
-            // Step 2: Parse the HTML content using Cheerio
-            const $ = cheerio.load(data);
-
-            // Step 3: Extract the CSRF token from the <meta> tag
-            const csrfToken = $('meta[name="csrf-token"]').attr('content');
-
-            if (!csrfToken) {
+            // Step 2: Check if the CSRF token was found
+            if (!csrfTokenMatch || !csrfTokenMatch[1]) {
                 throw new Error('CSRF token not found in the HTML response.');
             }
 
-            console.log('CSRF Token:', csrfToken);
-            return csrfToken;
+            // Step 3: Extract the CSRF token
+            const csrfToken = csrfTokenMatch[1];
 
+            // Log the CSRF token (optional)
+            console.log('CSRF Token:', csrfToken);
+
+            return csrfToken;
         } catch (error) {
             console.error('Error fetching CSRF token:', error);
         }
