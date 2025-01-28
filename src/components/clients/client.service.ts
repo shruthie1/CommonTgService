@@ -35,7 +35,6 @@ export class ClientService {
     ) {
         setInterval(async () => {
             await this.refreshMap();
-            await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
 
@@ -96,7 +95,8 @@ export class ClientService {
 
     async refreshMap() {
         console.log("Refreshed Clients")
-        this.clientsMap.clear()
+        this.clientsMap.clear();
+        await this.checkNpoint();
     }
 
     async findOne(clientId: string, throwErr: boolean = true): Promise<Client> {
