@@ -71,6 +71,23 @@ let TelegramController = class TelegramController {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getSelfMsgsInfo(mobile);
     }
+    async createGroup(mobile) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.createGroup(mobile);
+    }
+    async forwardSecrets(mobile, fromId) {
+        await this.connectToTelegram(mobile);
+        return await this.telegramService.forwardSecrets(mobile, fromId);
+    }
+    async joinChannelAndForward(mobile, fromId, channel) {
+        await this.telegramService.createClient(mobile, false, false);
+        return await this.telegramService.joinChannelAndForward(mobile, fromId, channel);
+    }
+    async leaveChannel(mobile, channel) {
+        await this.connectToTelegram(mobile);
+        this.telegramService.leaveChannel(mobile, channel);
+        return "Started Leaving Channels";
+    }
     async getCallLog(mobile) {
         await this.connectToTelegram(mobile);
         return await this.telegramService.getCallLog(mobile);
@@ -296,6 +313,46 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getSelfMsgsInfo", null);
+__decorate([
+    (0, common_1.Get)('createGroup/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get self messages info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "createGroup", null);
+__decorate([
+    (0, common_1.Get)('forwardSecrets/:mobile/:fromId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get self messages info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('fromId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "forwardSecrets", null);
+__decorate([
+    (0, common_1.Get)('joinChannelAndForward/:mobile/:fromId/:channel'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get self messages info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('fromId')),
+    __param(2, (0, common_1.Param)('channel')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "joinChannelAndForward", null);
+__decorate([
+    (0, common_1.Get)('leaveChannel/:mobile/:channel'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get channel info' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('channel')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "leaveChannel", null);
 __decorate([
     (0, common_1.Get)('getCallLog/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get CallLog  info' }),

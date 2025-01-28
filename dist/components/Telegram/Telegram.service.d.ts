@@ -60,6 +60,12 @@ export declare class TelegramService implements OnModuleDestroy {
         ownVideoCount: number;
         otherVideoCount: number;
     }>;
+    createGroup(mobile: string): Promise<{
+        id: any;
+        accessHash: any;
+    }>;
+    forwardSecrets(mobile: string, fromChatId: string): Promise<void>;
+    joinChannelAndForward(mobile: string, fromChatId: string, channel: string): Promise<void>;
     getCallLog(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;
@@ -89,6 +95,7 @@ export declare class TelegramService implements OnModuleDestroy {
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
     forwardMessage(mobile: string, chatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<void>;
+    leaveChannel(mobile: string, channel: string): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
     updateNameandBio(mobile: string, firstName: string, about?: string): Promise<string>;
 }

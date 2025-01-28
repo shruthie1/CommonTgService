@@ -42,9 +42,9 @@ let PromoteClientService = class PromoteClientService {
     async findAll() {
         return this.promoteClientModel.find().exec();
     }
-    async findOne(mobile) {
+    async findOne(mobile, throwErr = true) {
         const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (!user) {
+        if (!user && throwErr) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
         return user;
@@ -217,6 +217,10 @@ let PromoteClientService = class PromoteClientService {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
+        }
+        const isExist = await this.findOne(mobile, false);
+        if (isExist) {
+            throw new common_1.ConflictException('PromoteClient already exist');
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);

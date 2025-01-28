@@ -25,18 +25,39 @@ const archived_client_service_1 = require("../archived-clients/archived-client.s
 const utils_1 = require("../../utils");
 const path = require("path");
 const cloudinary_1 = require("../../cloudinary");
+const npoint_service_1 = require("../n-point/npoint.service");
+const axios_1 = require("axios");
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService) {
+    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
         this.clientModel = clientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
+        this.npointSerive = npointSerive;
         this.clientsMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
         }, 5 * 60 * 1000);
+    }
+    async checkNpoint() {
+        const clients = (await axios_1.default.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
+        for (const client in clients) {
+            const existingClient = await this.findOne(client, false);
+            if ((0, utils_1.areJsonsNotSame)(existingClient, clients[client])) {
+                await this.findAll();
+                const clientData = (0, utils_1.mapToJson)(this.clientsMap);
+                await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData);
+                const maskedCls = {};
+                for (const client in clientData) {
+                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
+                    maskedCls[client] = maskedClient;
+                }
+                await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls);
+                break;
+            }
+        }
     }
     async create(createClientDto) {
         const createdUser = new this.clientModel(createClientDto);
@@ -45,7 +66,7 @@ let ClientService = class ClientService {
     async findAll() {
         const clientMapLength = this.clientsMap.size;
         if (clientMapLength < 20) {
-            const results = await this.clientModel.find({}).lean();
+            const results = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean();
             for (const client of results) {
                 this.clientsMap.set(client.clientId, client);
             }
@@ -63,6 +84,7 @@ let ClientService = class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : allClients;
+        console.log(allClients);
         const results = filteredClients.map(client => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
             return maskedClient;
@@ -72,16 +94,19 @@ let ClientService = class ClientService {
     async refreshMap() {
         console.log("Refreshed Clients");
         this.clientsMap.clear();
+        await this.checkNpoint();
     }
-    async findOne(clientId) {
+    async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
         if (client) {
+            console.log("From MAp");
             return client;
         }
         else {
-            const user = (await this.clientModel.findOne({ clientId }, { _id: 0 }).exec())?.toJSON();
+            console.log("From DB");
+            const user = (await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).exec())?.toJSON();
             this.clientsMap.set(clientId, user);
-            if (!user) {
+            if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
             }
             return user;
@@ -350,6 +375,7 @@ exports.ClientService = ClientService = __decorate([
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
-        archived_client_service_1.ArchivedClientService])
+        archived_client_service_1.ArchivedClientService,
+        npoint_service_1.NpointService])
 ], ClientService);
 //# sourceMappingURL=client.service.js.map

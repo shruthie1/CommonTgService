@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const build_service_1 = require("./build.service");
 const build_controller_1 = require("./build.controller");
 const builds_schema_1 = require("./builds.schema");
+const npoint_module_1 = require("../n-point/npoint.module");
 let BuildModule = class BuildModule {
 };
 exports.BuildModule = BuildModule;
@@ -21,6 +22,7 @@ exports.BuildModule = BuildModule = __decorate([
         imports: [
             BuildModule,
             mongoose_1.MongooseModule.forFeature([{ name: 'buildModule', collection: 'builds', schema: builds_schema_1.BuildSchema }]),
+            npoint_module_1.NpointModule,
         ],
         providers: [build_service_1.BuildService],
         controllers: [build_controller_1.BuildController],

@@ -16,9 +16,11 @@ exports.BuildService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const npoint_service_1 = require("../n-point/npoint.service");
 let BuildService = class BuildService {
-    constructor(buildModel) {
+    constructor(buildModel, npointSerive) {
         this.buildModel = buildModel;
+        this.npointSerive = npointSerive;
     }
     async OnModuleInit() {
         console.log("Config Module Inited");
@@ -33,6 +35,13 @@ let BuildService = class BuildService {
     async update(updateClientDto) {
         delete updateClientDto['_id'];
         const updatedUser = await this.buildModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
+        try {
+            await this.npointSerive.updateDocument("3375d15db1eece560188", updatedUser);
+            console.log("Updated document successfully in npoint");
+        }
+        catch (error) {
+            console.log(error);
+        }
         if (!updatedUser) {
             throw new common_1.NotFoundException(`buildModel not found`);
         }
@@ -43,6 +52,7 @@ exports.BuildService = BuildService;
 exports.BuildService = BuildService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('buildModule')),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        npoint_service_1.NpointService])
 ], BuildService);
 //# sourceMappingURL=build.service.js.map

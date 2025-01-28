@@ -25,6 +25,13 @@ export declare class TelegramController {
         ownVideoCount: number;
         otherVideoCount: number;
     }>;
+    createGroup(mobile: string): Promise<{
+        id: any;
+        accessHash: any;
+    }>;
+    forwardSecrets(mobile: string, fromId: string): Promise<void>;
+    joinChannelAndForward(mobile: string, fromId: string, channel: string): Promise<void>;
+    leaveChannel(mobile: string, channel: string): Promise<string>;
     getCallLog(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;

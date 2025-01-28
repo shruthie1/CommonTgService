@@ -21,7 +21,7 @@ export declare class BufferClientService {
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService);
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
-    findOne(mobile: string): Promise<BufferClient>;
+    findOne(mobile: string, throwErr?: boolean): Promise<BufferClient>;
     update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient>;
     remove(mobile: string): Promise<void>;

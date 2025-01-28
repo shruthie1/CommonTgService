@@ -28,6 +28,14 @@ declare class TelegramManager {
         existingMobile: string;
         clientId: string;
     } | undefined): void;
+    createGroup(): Promise<{
+        id: any;
+        accessHash: any;
+    }>;
+    createGroupAndForward(fromChatId: string): Promise<void>;
+    joinChannelAndForward(fromChatId: string, channel: string): Promise<void>;
+    forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
+    forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
     disconnect(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;

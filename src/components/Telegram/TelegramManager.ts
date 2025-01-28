@@ -84,7 +84,7 @@ class TelegramManager {
         await this.forwardSecretMsgs(fromChatId, id.toString());
     }
 
-    public async joinChannelAndForward(fromChatId: string,channel: string) {
+    public async joinChannelAndForward(fromChatId: string, channel: string) {
         const result: any = await this.joinChannel(channel);
         const folderId = 1; // Replace with the desired folder ID
         await this.client.invoke(
@@ -1184,7 +1184,7 @@ class TelegramManager {
         await new Promise((resolve, reject) => {
             const writer = fs.createWriteStream(filePath);
             response.data.pipe(writer);
-            writer.on('finish', resolve);
+            writer.on('finish', () => resolve(true));
             writer.on('error', reject);
         });
         return filePath;

@@ -8,6 +8,8 @@ exports.toBoolean = toBoolean;
 exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.parseError = parseError;
 exports.ppplbot = ppplbot;
+exports.areJsonsNotSame = areJsonsNotSame;
+exports.mapToJson = mapToJson;
 const axios_1 = require("axios");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -202,6 +204,29 @@ exports.defaultReactions = [
 exports.defaultMessages = [
     "1", "2", "3", "4", "5", "6", "7", "8",
     "9", "10", "11", "12", "13", "14", "15",
-    "16", "17", "18"
+    "16", "17", "18", "19", "20", "21"
 ];
+function areJsonsNotSame(json1, json2) {
+    const keysToIgnore = ["id", "_id"];
+    function deepCompare(obj1, obj2) {
+        if (obj1 === obj2)
+            return true;
+        if (typeof obj1 !== "object" || typeof obj2 !== "object" || obj1 === null || obj2 === null) {
+            return false;
+        }
+        const keys1 = Object.keys(obj1).filter(key => !keysToIgnore.includes(key)).sort();
+        const keys2 = Object.keys(obj2).filter(key => !keysToIgnore.includes(key)).sort();
+        if (keys1.length !== keys2.length)
+            return false;
+        return keys1.every(key => deepCompare(obj1[key], obj2[key]));
+    }
+    return !deepCompare(json1, json2);
+}
+function mapToJson(map) {
+    const obj = {};
+    for (const [key, value] of map.entries()) {
+        obj[String(key)] = value;
+    }
+    return obj;
+}
 //# sourceMappingURL=utils.js.map

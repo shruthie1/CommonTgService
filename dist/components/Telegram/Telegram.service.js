@@ -236,6 +236,18 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getSelfMSgsInfo();
     }
+    async createGroup(mobile) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.createGroup();
+    }
+    async forwardSecrets(mobile, fromChatId) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.createGroupAndForward(fromChatId);
+    }
+    async joinChannelAndForward(mobile, fromChatId, channel) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.joinChannelAndForward(fromChatId, channel);
+    }
     async getCallLog(mobile) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getCallLog();
@@ -351,6 +363,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const channelinfo = await telegramClient.channelInfo(false);
         const leaveChannelIds = channelinfo.canSendFalseChats;
         return await telegramClient.leaveChannels(leaveChannelIds);
+    }
+    async leaveChannel(mobile, channel) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.leaveChannels([channel]);
     }
     async deleteChat(mobile, chatId) {
         const telegramClient = await this.getClient(mobile);

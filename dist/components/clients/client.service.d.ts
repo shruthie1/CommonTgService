@@ -8,14 +8,17 @@ import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
+import { NpointService } from '../n-point/npoint.service';
 export declare class ClientService {
     private clientModel;
     private telegramService;
     private bufferClientService;
     private usersService;
     private archivedClientService;
+    private npointSerive;
     private clientsMap;
-    constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService);
+    constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, npointSerive: NpointService);
+    checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findAllMasked(query?: SearchClientDto): Promise<{
@@ -32,7 +35,7 @@ export declare class ClientService {
         product: string;
     }[]>;
     refreshMap(): Promise<void>;
-    findOne(clientId: string): Promise<Client>;
+    findOne(clientId: string, throwErr?: boolean): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;

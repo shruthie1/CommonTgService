@@ -12,3 +12,5 @@ export declare function parseError(err: any, prefix?: string): {
 export declare function ppplbot(chatId?: string, botToken?: string): string;
 export declare const defaultReactions: string[];
 export declare const defaultMessages: string[];
+export declare function areJsonsNotSame(json1: any, json2: any): boolean;
+export declare function mapToJson(map: Map<any, any>): Record<string, any>;

