@@ -84,7 +84,6 @@ let ClientService = class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : allClients;
-        console.log(allClients);
         const results = filteredClients.map(client => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
             return maskedClient;
