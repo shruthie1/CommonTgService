@@ -73,6 +73,8 @@ declare class TelegramManager {
     connected(): boolean;
     connect(): Promise<boolean>;
     removeOtherAuths(): Promise<void>;
+    private isAuthMine;
+    private resetAuthorization;
     getAuths(): Promise<any>;
     getAllChats(): Promise<any[]>;
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<any>;
