@@ -25,17 +25,17 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
                     (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
-                    this.logger.error(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
+                    this.logger.error(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 400) {
                     (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
-                    this.logger.warn(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
+                    this.logger.warn(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 300) {
-                    this.logger.verbose(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
+                    this.logger.verbose(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else {
-                    this.logger.log(`${method} ${originalUrl} || StatusCode : ${statusCode}`);
+                    this.logger.log(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
             });
             res.on('error', (error) => {
