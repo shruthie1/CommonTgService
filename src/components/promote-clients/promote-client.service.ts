@@ -133,7 +133,7 @@ export class PromoteClientService {
                 const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
                 await this.telegramService.disconnectAll();
                 await sleep(2000);
-                const clients = await this.promoteClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
+                const clients = await this.promoteClientModel.find({ channels: { "$lt": 250 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
 
                 if (clients.length > 0) {
                     for (const document of clients) {
@@ -343,7 +343,7 @@ export class PromoteClientService {
 
     async addNewUserstoPromoteClients(badIds: string[], goodIds: string[]) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, expired: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 350 } }, { tgId: 1 }, badIds.length + 3);
+        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, expired: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 250 } }, { tgId: 1 }, badIds.length + 3);
         console.log("New promote documents to be added: ", documents.length)
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
