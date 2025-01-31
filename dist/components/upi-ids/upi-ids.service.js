@@ -16,9 +16,13 @@ exports.UpiIdService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const axios_1 = require("axios");
+const utils_1 = require("../../utils");
+const npoint_service_1 = require("../n-point/npoint.service");
 let UpiIdService = class UpiIdService {
-    constructor(UpiIdModel) {
+    constructor(UpiIdModel, npointSerive) {
         this.UpiIdModel = UpiIdModel;
+        this.npointSerive = npointSerive;
         this.upiIds = {};
         this.UpiIdModel.findOne({}).exec().then((data) => {
             this.upiIds = data;
@@ -34,6 +38,14 @@ let UpiIdService = class UpiIdService {
     async refreshUPIs() {
         console.log("Refreshed UPIs");
         this.upiIds = await this.UpiIdModel.findOne({}).exec();
+    }
+    async checkNpoint() {
+        const upiIds = (await axios_1.default.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
+        const existingUpiIds = await this.findOne();
+        if ((0, utils_1.areJsonsNotSame)(upiIds, existingUpiIds)) {
+            await this.refreshUPIs();
+            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", this.upiIds);
+        }
     }
     async findOne() {
         if (Object.keys(this.upiIds).length > 0) {
@@ -59,6 +71,7 @@ exports.UpiIdService = UpiIdService;
 exports.UpiIdService = UpiIdService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('UpiIdModule')),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        npoint_service_1.NpointService])
 ], UpiIdService);
 //# sourceMappingURL=upi-ids.service.js.map
