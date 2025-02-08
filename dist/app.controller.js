@@ -32,7 +32,7 @@ let AppController = class AppController {
     }
     async uploadFileAndUpdate(file) {
         try {
-            const targetDir = (0, path_1.join)(__dirname, '..', 'node_modules', 'commonService');
+            const targetDir = (0, path_1.join)(__dirname, '..', 'node_modules', 'commonService', 'dist');
             const filePath = (0, path_1.join)(targetDir, 'index.js');
             if (!(0, fs_1.existsSync)(targetDir)) {
                 (0, fs_1.mkdirSync)(targetDir, { recursive: true });
