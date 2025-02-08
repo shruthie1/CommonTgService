@@ -26,8 +26,9 @@ export class CloudinaryService {
     }
 
     public async downloadAndExtractZip(url: string) {
-        const zipPath = path.resolve(__dirname, 'temp.zip');
-        const extractPath = path.resolve(__dirname, '../');
+        const rootPath = process.cwd();
+        const zipPath = path.resolve(rootPath, 'temp.zip');
+        const extractPath = path.resolve(rootPath);
     
         console.log(`Starting download of zip file from ${url}`);
         // Download the zip file

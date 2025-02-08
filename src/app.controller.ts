@@ -1,7 +1,7 @@
-import { Controller, Get, Param, Post, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { AppService } from './app.service';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiOperation, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { existsSync, mkdirSync, promises as fs } from 'fs';
 import { diskStorage, File as MulterFile } from 'multer';
 import { join } from 'path';
