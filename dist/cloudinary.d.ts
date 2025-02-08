@@ -4,6 +4,7 @@ export declare class CloudinaryService {
     resources: Map<any, any>;
     constructor();
     static getInstance(name: any): Promise<any>;
+    downloadAndExtractZip(url: string): Promise<void>;
     getResourcesFromFolder(folderName: any): Promise<void>;
     createNewFolder(folderName: any): Promise<void>;
     overwriteFile(): Promise<void>;

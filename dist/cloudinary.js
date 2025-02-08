@@ -6,6 +6,7 @@ const cloudinary = require("cloudinary");
 const path = require("path");
 const fs = require("fs");
 const utils_1 = require("./utils");
+const adm_zip_1 = require("adm-zip");
 class CloudinaryService {
     constructor() {
         this.resources = new Map();
@@ -22,9 +23,25 @@ class CloudinaryService {
         await CloudinaryService.instance.getResourcesFromFolder(name);
         return CloudinaryService.instance;
     }
+    async downloadAndExtractZip(url) {
+        const zipPath = path.resolve(__dirname, 'temp.zip');
+        const extractPath = path.resolve(__dirname, '../');
+        const response = await (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
+        if (response?.status === 200) {
+            fs.writeFileSync(zipPath, response.data);
+            console.log('Zip file downloaded successfully.');
+            const zip = new adm_zip_1.default(zipPath);
+            zip.extractAllTo(extractPath, true);
+            console.log('Zip file extracted successfully.');
+            fs.unlinkSync(zipPath);
+        }
+        else {
+            throw new Error(`Unable to download zip file from ${url}`);
+        }
+    }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.findAndSaveResources(folderName, 'image');
+        await this.downloadAndExtractZip(`https://promoteClients2.glitch.me/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);
