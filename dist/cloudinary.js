@@ -60,8 +60,9 @@ class CloudinaryService {
         return CloudinaryService.instance;
     }
     async downloadAndExtractZip(url) {
-        const zipPath = path.resolve(__dirname, 'temp.zip');
-        const extractPath = path.resolve(__dirname, '../');
+        const rootPath = process.cwd();
+        const zipPath = path.resolve(rootPath, 'temp.zip');
+        const extractPath = path.resolve(rootPath);
         console.log(`Starting download of zip file from ${url}`);
         const response = await (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
         if (response?.status === 200) {
