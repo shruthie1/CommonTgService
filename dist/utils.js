@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.defaultMessages = exports.defaultReactions = void 0;
 exports.sleep = sleep;
@@ -10,7 +13,7 @@ exports.parseError = parseError;
 exports.ppplbot = ppplbot;
 exports.areJsonsNotSame = areJsonsNotSame;
 exports.mapToJson = mapToJson;
-const axios_1 = require("axios");
+const axios_1 = __importDefault(require("axios"));
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }

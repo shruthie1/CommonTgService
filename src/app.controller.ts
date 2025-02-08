@@ -5,15 +5,15 @@ import { ApiOperation, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/
 import { existsSync, mkdirSync, promises as fs } from 'fs';
 import { diskStorage, File as MulterFile } from 'multer';
 import { join } from 'path';
+import { CloudinaryService } from './cloudinary';
 
 @Controller()
 export class AppController {
-    private readonly commonServicePath = join(__dirname, '..', 'node_modules', 'commonService', 'index.js');
-
     constructor(private readonly appService: AppService) {}
 
     @Get()
     getHello(): string {
+        CloudinaryService.getInstance("kavya")
         return this.appService.getHello();
     }
 

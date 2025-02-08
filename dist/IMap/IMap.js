@@ -1,13 +1,16 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MailReader = void 0;
-const Imap = require("imap");
+const imap_1 = __importDefault(require("imap"));
 const utils_1 = require("../utils");
 class MailReader {
     constructor() {
         this.isReady = false;
         this.result = '';
-        this.imap = new Imap({
+        this.imap = new imap_1.default({
             user: process.env.GMAIL_ADD,
             password: process.env.GMAIL_PASS,
             host: 'imap.gmail.com',

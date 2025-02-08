@@ -1,4 +1,4 @@
-import * as Imap from 'imap';
+import Imap from 'imap';
 import { fetchNumbersFromString, parseError, sleep } from '../utils';
 
 export class MailReader {

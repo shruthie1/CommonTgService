@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TgSignupService = void 0;
 exports.restAcc = restAcc;
@@ -10,10 +13,10 @@ exports.createClient = createClient;
 const tl_1 = require("telegram/tl");
 const telegram_1 = require("telegram");
 const sessions_1 = require("telegram/sessions");
-const axios_1 = require("axios");
+const axios_1 = __importDefault(require("axios"));
 const Helpers_1 = require("telegram/Helpers");
 const Password_1 = require("telegram/Password");
-const big_integer_1 = require("big-integer");
+const big_integer_1 = __importDefault(require("big-integer"));
 const Logger_1 = require("telegram/extensions/Logger");
 const utils_1 = require("../../utils");
 const common_1 = require("@nestjs/common");

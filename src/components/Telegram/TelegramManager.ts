@@ -10,7 +10,7 @@ import { TotalList, sleep } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
-import * as bigInt from 'big-integer';
+import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { disconnectAll } from '../TgSignup/TgSignup.service';
 import { EntityLike } from 'telegram/define';

@@ -3,7 +3,7 @@ import * as cloudinary from 'cloudinary';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fetchWithTimeout, parseError } from './utils';
-import * as AdmZip from 'adm-zip';
+import AdmZip from 'adm-zip';
 
 export class CloudinaryService {
     static instance;
