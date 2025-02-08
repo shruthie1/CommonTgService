@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
 import axios from 'axios';
-import { areJsonsNotSame, mapToJson } from 'src/utils';
+import { areJsonsNotSame, mapToJson } from '../../utils';
 import { NpointService } from '../n-point/npoint.service';
 
 @Injectable()

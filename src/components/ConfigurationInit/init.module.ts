@@ -5,7 +5,7 @@ import { ConfigurationService } from './init.service';
 import { ConfigurationSchema } from './configuration.schema';
 import { ConfigurationController } from './init.controller';
 import { Connection } from 'mongoose';
-import { fetchWithTimeout, ppplbot } from 'src/utils';
+import { fetchWithTimeout, ppplbot } from '../../utils';
 
 @Global()
 @Module({
