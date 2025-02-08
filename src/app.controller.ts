@@ -50,7 +50,7 @@ export class AppController {
     })
     async uploadFileAndUpdate(@UploadedFile() file: MulterFile): Promise<{ message: string }> {
         try {
-            const targetDir = join(__dirname, '..', 'node_modules', 'commonService');
+            const targetDir = join(__dirname, '..', 'node_modules', 'commonService', 'dist');
             const filePath = join(targetDir, 'index.js');
 
             // Ensure the target directory exists
