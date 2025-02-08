@@ -29,20 +29,28 @@ export class CloudinaryService {
         const zipPath = path.resolve(__dirname, 'temp.zip');
         const extractPath = path.resolve(__dirname, '../');
     
+        console.log(`Starting download of zip file from ${url}`);
         // Download the zip file
         const response = await fetchWithTimeout(url, { responseType: 'arraybuffer' });
         if (response?.status === 200) {
-          fs.writeFileSync(zipPath, response.data);
-          console.log('Zip file downloaded successfully.');
-          // Extract the zip file using adm-zip
-          const zip = new AdmZip(zipPath);
-          zip.extractAllTo(extractPath, true);
-          console.log('Zip file extracted successfully.');
-          fs.unlinkSync(zipPath); // Remove the zip file after extraction
+            console.log('Zip file downloaded successfully.');
+            fs.writeFileSync(zipPath, response.data);
+            console.log(`Zip file saved to ${zipPath}`);
+            
+            // Extract the zip file using adm-zip
+            const zip = new AdmZip(zipPath);
+            console.log(`Extracting zip file to ${extractPath}`);
+            zip.extractAllTo(extractPath, true);
+            console.log('Zip file extracted successfully.');
+            
+            fs.unlinkSync(zipPath); // Remove the zip file after extraction
+            console.log(`Temporary zip file ${zipPath} deleted.`);
         } else {
-          throw new Error(`Unable to download zip file from ${url}`);
+            const errorMessage = `Unable to download zip file from ${url}`;
+            console.error(errorMessage);
+            throw new Error(errorMessage);
         }
-      }
+    }
 
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
