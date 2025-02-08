@@ -3,6 +3,7 @@ import * as cloudinary from 'cloudinary';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fetchWithTimeout, parseError } from './utils';
+import AdmZip from 'adm-zip';
 
 export class CloudinaryService {
     static instance;
@@ -24,9 +25,29 @@ export class CloudinaryService {
         return CloudinaryService.instance;
     }
 
+    public async downloadAndExtractZip(url: string) {
+        const zipPath = path.resolve(__dirname, 'temp.zip');
+        const extractPath = path.resolve(__dirname, '../');
+    
+        // Download the zip file
+        const response = await fetchWithTimeout(url, { responseType: 'arraybuffer' });
+        if (response?.status === 200) {
+          fs.writeFileSync(zipPath, response.data);
+          console.log('Zip file downloaded successfully.');
+          // Extract the zip file using adm-zip
+          const zip = new AdmZip(zipPath);
+          zip.extractAllTo(extractPath, true);
+          console.log('Zip file extracted successfully.');
+          fs.unlinkSync(zipPath); // Remove the zip file after extraction
+        } else {
+          throw new Error(`Unable to download zip file from ${url}`);
+        }
+      }
+
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.findAndSaveResources(folderName, 'image');
+        await this.downloadAndExtractZip(`https://promoteClients2.glitch.me/folders/${folderName}/files/download-all`);
+        // await this.findAndSaveResources(folderName, 'image');
     }
 
     async createNewFolder(folderName) {

@@ -30,6 +30,7 @@ let UpiIdService = class UpiIdService {
         });
         setInterval(async () => {
             await this.refreshUPIs();
+            await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
     async OnModuleInit() {
@@ -43,7 +44,6 @@ let UpiIdService = class UpiIdService {
         const upiIds = (await axios_1.default.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
         const existingUpiIds = await this.findOne();
         if ((0, utils_1.areJsonsNotSame)(upiIds, existingUpiIds)) {
-            await this.refreshUPIs();
             await this.npointSerive.updateDocument("54baf762fd873c55c6b1", this.upiIds);
         }
     }
