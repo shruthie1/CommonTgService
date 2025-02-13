@@ -40,7 +40,8 @@ let ClientController = class ClientController {
         }
     }
     async updateClient(clientId) {
-        return this.clientService.updateClient(clientId);
+        this.clientService.updateClient(clientId);
+        return "Update client initiated";
     }
     async findAllMasked(query) {
         try {
