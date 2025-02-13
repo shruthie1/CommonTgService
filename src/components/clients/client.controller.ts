@@ -45,7 +45,8 @@ export class ClientController {
   //@apiresponse({ status: 200, description: 'Return the user data.' })
   //@apiresponse({ status: 404, description: 'User data not found.' })
   async updateClient(@Param('clientId') clientId: string) {
-    return this.clientService.updateClient(clientId);
+    this.clientService.updateClient(clientId);
+    return "Update client initiated";
   }
   
   /**
