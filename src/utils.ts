@@ -1,4 +1,4 @@
-import axios, { AddressFamily, AxiosRequestConfig } from 'axios';
+import axios, { AddressFamily, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -13,60 +13,110 @@ export function contains(str, arr) {
 };
 
 
-export async function fetchWithTimeout(resource: string, options: AxiosRequestConfig = {}, maxRetries = 1) {
+type FetchResponse = AxiosResponse | { status: number; shouldTryBypass: boolean };
+
+export async function fetchWithTimeout(
+  resource: string, 
+  options: AxiosRequestConfig & { bypassUrl?: string; enableBypass?: boolean } = {}, 
+  maxRetries = 1
+) {
   options.timeout = options.timeout || 50000;
   options.method = options.method || 'GET';
+  options.enableBypass = options.enableBypass ?? true; // Default to true
+  options.bypassUrl = options.bypassUrl || process.env.bypassURL; // Use default bypass URL if not provided
 
-  const fetchWithProtocol = async (url: string, version: AddressFamily) => {
-    const source = axios.CancelToken.source();
-    const id = setTimeout(() => {
-      source.cancel(`Request timed out after ${options.timeout}ms`);
-    }, options.timeout);
+  const tryOriginalRequest = async () => {
+    for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+      try {
+        const responseIPv4 = await fetchWithProtocol(resource, 4, options);
+        if (responseIPv4) {
+          // If response is 403 and bypass is enabled, let the caller know to try bypass
+          if ('status' in responseIPv4 && responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
+            return { status: 403, shouldTryBypass: true } as FetchResponse;
+          }
+          return responseIPv4;
+        }
 
-    try {
-      const response = await axios({
-        ...options,
-        url,
-        headers: { 'Content-Type': 'application/json' },
-        cancelToken: source.token,
-        family: version
-      });
-      clearTimeout(id);
-      return response;
-    } catch (error) {
-      clearTimeout(id);
-      console.log(`Error at URL (IPv${version}): `, url);
-      parseError(error);
-      if (axios.isCancel(error)) {
-        console.log('Request canceled:', error.message, url);
-        return undefined;
-      }
-      throw error; // Rethrow the error to handle retry logic outside
-    }
-  };
-
-  for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
-    try {
-      // First try with IPv4
-      const responseIPv4 = await fetchWithProtocol(resource, 4);
-      if (responseIPv4) return responseIPv4;
-
-      // If IPv4 fails, try with IPv6
-      const responseIPv6 = await fetchWithProtocol(resource, 6);
-      if (responseIPv6) return responseIPv6;
-    } catch (error) {
-      console.log("Error at URL : ", resource)
-      const errorDetails = parseError(error)
-      if (retryCount < maxRetries && error.code !== 'ERR_NETWORK' && error.code !== "ECONNABORTED" && error.code !== "ETIMEDOUT" && !errorDetails.message.toLowerCase().includes('too many requests') && !axios.isCancel(error)) {
-        console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds delay
-      } else {
-        console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-        return undefined;
+        const responseIPv6 = await fetchWithProtocol(resource, 6, options);
+        if (responseIPv6) {
+          // If response is 403 and bypass is enabled, let the caller know to try bypass
+          if ('status' in responseIPv6 && responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
+            return { status: 403, shouldTryBypass: true } as FetchResponse;
+          }
+          return responseIPv6;
+        }
+      } catch (error) {
+        console.log("Error at URL : ", resource)
+        const errorDetails = parseError(error)
+        if (retryCount < maxRetries && error.code !== 'ERR_NETWORK' && error.code !== "ECONNABORTED" && error.code !== "ETIMEDOUT" && !errorDetails.message.toLowerCase().includes('too many requests') && !axios.isCancel(error)) {
+          console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+          return undefined;
+        }
       }
     }
   }
+
+  // First try the original request
+  const originalResponse = await tryOriginalRequest();
+  
+  // If we got a 403 and bypass is enabled, try the bypass URL
+  if (originalResponse && 'shouldTryBypass' in originalResponse && originalResponse.shouldTryBypass) {
+    try {
+      const bypassResponse = await axios({
+        url: options.bypassUrl,
+        method: 'POST',
+        data: {
+          url: resource,
+          method: options.method,
+          headers: options.headers,
+          data: options.data,
+          params: options.params
+        },
+        timeout: options.timeout,
+        validateStatus: () => true // Accept all status codes
+      });
+      
+      return bypassResponse;
+    } catch (error) {
+      console.log("Bypass request failed");
+      parseError(error);
+      return originalResponse; // Return the original 403 response if bypass fails
+    }
+  }
+
+  return originalResponse;
 }
+
+const fetchWithProtocol = async (url: string, version: AddressFamily, options: AxiosRequestConfig) => {
+  const source = axios.CancelToken.source();
+  const id = setTimeout(() => {
+    source.cancel(`Request timed out after ${options.timeout}ms`);
+  }, options.timeout);
+
+  try {
+    const response = await axios({
+      ...options,
+      url,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      cancelToken: source.token,
+      family: version
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    console.log(`Error at URL (IPv${version}): `, url);
+    parseError(error);
+    if (axios.isCancel(error)) {
+      console.log('Request canceled:', error.message, url);
+      return undefined;
+    }
+    throw error;
+  }
+};
 
 export function toBoolean(value: string | number | boolean): boolean {
   if (typeof value === 'string') {
@@ -212,7 +262,7 @@ export function areJsonsNotSame(json1: any, json2: any): boolean {
       return false;
     }
 
-    const keys1 = Object.keys(obj1).filter(key => !keysToIgnore.includes(key)).sort();
+    const keys1 = Object.keys(obj1).filter(key => !keysToIgnore.includes(key)). sort();
     const keys2 = Object.keys(obj2).filter(key => !keysToIgnore.includes(key)).sort();
 
     if (keys1.length !== keys2.length) return false;
