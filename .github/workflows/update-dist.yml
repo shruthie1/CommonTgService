@@ -3,9 +3,9 @@ name: Build and Update Dist Branch
 on:
   push:
     branches:
-      - main
-    paths-ignore:
-      - 'dist/**'
+      - '*'
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build-and-push-dist:
