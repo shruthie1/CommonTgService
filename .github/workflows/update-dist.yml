@@ -27,41 +27,36 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Create dist branch if not exists
-      run: |
-        git ls-remote --heads origin dist | grep -q dist || git push origin `git rev-parse --short HEAD`:refs/heads/dist
-
-    - name: Push dist and package.json
+    - name: Prepare dist directory
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
+
+        # Create a temporary directory outside the git context
+        mkdir -p /tmp/dist_temp
+
+        # Checkout the commit that triggered the workflow and copy dist and package.json to the temp directory
+        git checkout "$GITHUB_SHA" -- dist/ package.json
+        cp -r dist /tmp/dist_temp/
+        cp package.json /tmp/dist_temp/
+
+        # Fetch the dist branch if it exists, otherwise create an orphan branch
+        git fetch origin dist:dist --depth=1 || git checkout --orphan dist
         
-        # Create dist branch if it doesn't exist
-        git fetch origin dist:dist --depth=1 || true
-        git checkout dist || git checkout --orphan dist
+        # Checkout the dist branch
+        git checkout dist
+
+        # Remove all files in the dist branch
+        rm -rf *
         
-        # Debug: List files before removing
-        ls -la
+        # Copy the files from the temporary directory to the root of the dist branch
+        cp -r /tmp/dist_temp/dist/* .
+        cp /tmp/dist_temp/package.json .
         
-        # Remove existing files before copying
-        rm -rf * ./*
-        
-        # Debug: List files after removing
-        ls -la
-        
-        # Copy dist folder and package.json from source branch
-        echo "GITHUB_SHA: $GITHUB_SHA"
-        git checkout "$GITHUB_SHA" -- dist/ package.json || true
-        
-        # Debug: Check the result of the checkout command
-        echo "Result of git checkout: $?"
-        
-        # Debug: List files after copying
-        ls -la
-        
-        # Stage and commit
-        git add dist package.json -f
+        # Remove the temporary directory
+        rm -rf /tmp/dist_temp
+
+        # Add, commit, and push
+        git add .
         git commit -m "chore: update dist folder and package.json [skip ci]"
-        
-        # Push to dist branch
         git push origin dist --force
