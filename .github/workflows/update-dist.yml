@@ -6,6 +6,9 @@ on:
       - '*'
   pull_request:
     branches: [ "main" ]
+  push:
+    tags:
+      - '*'
 
 jobs:
   update-dist:
@@ -33,16 +36,14 @@ jobs:
         git config --local user.name "github-actions[bot]"
         
         # Create dist branch if it doesn't exist
-        if ! git show-ref --quiet refs/remotes/origin/dist; then
-          git checkout --orphan dist
-          git rm -rf .
-          git clean -fdx
-        else
-          git checkout dist || git checkout -b dist
-        fi
+        git fetch origin dist:dist --depth=1 || true
+        git checkout dist || git checkout --orphan dist
         
-        # Copy dist folder and package.json from main branch
-        git checkout main -- dist/ package.json
+        # Remove existing files before copying
+        rm -rf dist package.json
+        
+        # Copy dist folder and package.json from source branch
+        git checkout "$GITHUB_SHA" -- dist/ package.json || true
         
         # Stage and commit
         git add dist package.json -f
