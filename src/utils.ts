@@ -12,82 +12,98 @@ export function contains(str, arr) {
   }))
 };
 
-
-type FetchResponse = AxiosResponse | { status: number; shouldTryBypass: boolean };
-
 export async function fetchWithTimeout(
   resource: string, 
   options: AxiosRequestConfig & { bypassUrl?: string; enableBypass?: boolean } = {}, 
   maxRetries = 1
-) {
+): Promise<AxiosResponse> {
   options.timeout = options.timeout || 50000;
   options.method = options.method || 'GET';
-  options.enableBypass = options.enableBypass ?? true; // Default to true
-  options.bypassUrl = options.bypassUrl || process.env.bypassURL; // Use default bypass URL if not provided
+  options.enableBypass = options.enableBypass ?? true;
+  options.bypassUrl = options.bypassUrl || process.env.bypassURL;
 
-  const tryOriginalRequest = async () => {
+  const tryOriginalRequest = async (): Promise<AxiosResponse> => {
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
       try {
         const responseIPv4 = await fetchWithProtocol(resource, 4, options);
         if (responseIPv4) {
-          // If response is 403 and bypass is enabled, let the caller know to try bypass
-          if ('status' in responseIPv4 && responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
-            return { status: 403, shouldTryBypass: true } as FetchResponse;
+          // If response is 403 and bypass is enabled, try bypass immediately
+          if (responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
+            try {
+              const bypassResponse = await axios({
+                url: options.bypassUrl,
+                method: 'POST',
+                data: {
+                  url: resource,
+                  method: options.method,
+                  headers: options.headers,
+                  data: options.data,
+                  params: options.params
+                },
+                timeout: options.timeout,
+                validateStatus: () => true
+              });
+              return bypassResponse;
+            } catch (bypassError) {
+              console.log("Bypass request failed");
+              parseError(bypassError);
+              return responseIPv4; // Return original 403 response if bypass fails
+            }
           }
           return responseIPv4;
         }
 
         const responseIPv6 = await fetchWithProtocol(resource, 6, options);
         if (responseIPv6) {
-          // If response is 403 and bypass is enabled, let the caller know to try bypass
-          if ('status' in responseIPv6 && responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
-            return { status: 403, shouldTryBypass: true } as FetchResponse;
+          // Handle bypass for IPv6 response similarly
+          if (responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
+            try {
+              const bypassResponse = await axios({
+                url: options.bypassUrl,
+                method: 'POST',
+                data: {
+                  url: resource,
+                  method: options.method,
+                  headers: options.headers,
+                  data: options.data,
+                  params: options.params
+                },
+                timeout: options.timeout,
+                validateStatus: () => true
+              });
+              return bypassResponse;
+            } catch (bypassError) {
+              console.log("Bypass request failed");
+              parseError(bypassError);
+              return responseIPv6;
+            }
           }
           return responseIPv6;
         }
       } catch (error) {
-        console.log("Error at URL : ", resource)
-        const errorDetails = parseError(error)
-        if (retryCount < maxRetries && error.code !== 'ERR_NETWORK' && error.code !== "ECONNABORTED" && error.code !== "ETIMEDOUT" && !errorDetails.message.toLowerCase().includes('too many requests') && !axios.isCancel(error)) {
+        console.log("Error at URL : ", resource);
+        const errorDetails = parseError(error);
+        if (retryCount < maxRetries && 
+            error.code !== 'ERR_NETWORK' && 
+            error.code !== "ECONNABORTED" && 
+            error.code !== "ETIMEDOUT" && 
+            !errorDetails.message.toLowerCase().includes('too many requests') && 
+            !axios.isCancel(error)) {
           console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-          return undefined;
+          continue;
         }
+        console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+        // If all retries fail, throw the last error to be handled by the caller
+        throw error;
       }
     }
-  }
+    // If we get here with no successful response, throw an error
+    throw new Error(`Failed to get response after ${maxRetries + 1} attempts`);
+  };
 
-  // First try the original request
-  const originalResponse = await tryOriginalRequest();
-  
-  // If we got a 403 and bypass is enabled, try the bypass URL
-  if (originalResponse && 'shouldTryBypass' in originalResponse && originalResponse.shouldTryBypass) {
-    try {
-      const bypassResponse = await axios({
-        url: options.bypassUrl,
-        method: 'POST',
-        data: {
-          url: resource,
-          method: options.method,
-          headers: options.headers,
-          data: options.data,
-          params: options.params
-        },
-        timeout: options.timeout,
-        validateStatus: () => true // Accept all status codes
-      });
-      
-      return bypassResponse;
-    } catch (error) {
-      console.log("Bypass request failed");
-      parseError(error);
-      return originalResponse; // Return the original 403 response if bypass fails
-    }
-  }
-
-  return originalResponse;
+  // Try the request and return the response
+  return await tryOriginalRequest();
 }
 
 const fetchWithProtocol = async (url: string, version: AddressFamily, options: AxiosRequestConfig) => {

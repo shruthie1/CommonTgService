@@ -1,7 +1,10 @@
-import { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig, AxiosResponse } from 'axios';
 export declare function sleep(ms: any): Promise<unknown>;
 export declare function contains(str: any, arr: any): any;
-export declare function fetchWithTimeout(resource: string, options?: AxiosRequestConfig, maxRetries?: number): Promise<import("axios").AxiosResponse<any, any>>;
+export declare function fetchWithTimeout(resource: string, options?: AxiosRequestConfig & {
+    bypassUrl?: string;
+    enableBypass?: boolean;
+}, maxRetries?: number): Promise<AxiosResponse>;
 export declare function toBoolean(value: string | number | boolean): boolean;
 export declare function fetchNumbersFromString(inputString: any): any;
 export declare function parseError(err: any, prefix?: string): {
