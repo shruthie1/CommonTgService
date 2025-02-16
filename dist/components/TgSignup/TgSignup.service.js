@@ -297,6 +297,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             return {
                 status: 200,
                 message: 'Registration successful',
+                session: sessionString,
             };
         }
         catch (error) {

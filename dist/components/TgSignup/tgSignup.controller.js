@@ -67,6 +67,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             return {
                 status: common_1.HttpStatus.OK,
                 message: result.message,
+                session: result.session,
                 requires2FA: result.requires2FA
             };
         }
