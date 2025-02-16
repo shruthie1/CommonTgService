@@ -4,12 +4,12 @@
   "description": "Common Telegram service for NestJS applications",
   "author": "",
   "private": false,
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "dist/src/**/*.js",
-    "dist/src/**/*.d.ts",
-    "dist/src/**/*.js.map"
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.js.map"
   ],
   "scripts": {
     "prebuild": "rm -rf dist",
