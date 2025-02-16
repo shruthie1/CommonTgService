@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - '*'
+      - '!master'
   pull_request:
     branches: [ "main" ]
 
@@ -27,6 +28,10 @@ jobs:
     - name: Build
       run: npm run build
 
+    - name: Create dist branch if not exists
+      run: |
+        git ls-remote --heads origin dist | grep -q dist || git push origin `git rev-parse --short HEAD`:refs/heads/dist
+
     - name: Push dist and package.json
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -37,7 +42,7 @@ jobs:
         git checkout dist || git checkout --orphan dist
         
         # Remove existing files before copying
-        rm -rf dist package.json
+        rm -rf * ./*
         
         # Copy dist folder and package.json from source branch
         git checkout "$GITHUB_SHA" -- dist/ package.json || true
