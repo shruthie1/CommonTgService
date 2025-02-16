@@ -27,60 +27,28 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Prepare dist directory
+    - name: Push dist and package.json
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-
-        mkdir -p /tmp/dist_temp
-        echo "Created temporary directory: /tmp/dist_temp"
-
-        # Checkout the commit that triggered the workflow and copy dist and package.json to the temp directory
-        echo "Checking out commit: $GITHUB_SHA"
-        git checkout "$GITHUB_SHA" -- package.json
         
-        # Create dist directory if it doesn't exist
-        echo "Creating dist directory if it doesn't exist"
-        mkdir -p dist
-        echo "Checking out dist directory from commit: $GITHUB_SHA"
-        git checkout "$GITHUB_SHA" -- dist
-        echo "Creating dist directory in temporary directory"
-        mkdir -p /tmp/dist_temp/dist
-        echo "Copying files from dist to temporary directory"
-        cp -r dist/* /tmp/dist_temp/dist/
-        echo "Copying package.json to temporary directory"
-        cp package.json /tmp/dist_temp/
-
-        # Fetch the dist branch if it exists, otherwise create an orphan branch
-        echo "Fetching dist branch"
-        git fetch origin dist:dist --depth=1 || git checkout --orphan dist
+        # Create dist branch if it doesn't exist
+        if ! git show-ref --quiet refs/remotes/origin/dist; then
+          git checkout --orphan dist
+          git rm -rf .
+          git clean -fdx
+        else
+          git checkout dist || git checkout -b dist
+        fi
         
-        # Checkout the dist branch
-        echo "Checking out dist branch"
-        git checkout dist
-
-        # Remove all files in the dist branch
-        echo "Removing all files in dist branch"
-        rm -rf *
-
-        # Create dist directory if it doesn't exist
-        echo "Creating dist directory if it doesn't exist"
-        mkdir -p dist
-  
-        # Copy the files from the temporary directory to the root of the dist branch
-        echo "Copying files from temporary directory to dist branch"
-        cp -r /tmp/dist_temp/dist/* ./dist
-        echo "Copying package.json to dist branch"
-        cp /tmp/dist_temp/package.json .
+        # Copy dist folder and package.json from main branch
+        git checkout main -- dist/ package.json
         
-        # Remove the temporary directory
-        echo "Removing temporary directory"
-        rm -rf /tmp/dist_temp
-
-        # Add, commit, and push
-        echo "Adding files to git"
-        git add .
-        echo "Committing changes"
-        git commit -m "chore: update dist folder and package.json [skip ci]"
-        echo "Pushing changes to dist branch"
-        git push origin dist --force
+        # Check if there are any changes
+        if git status --porcelain | grep .; then
+          git add dist package.json -f
+          git commit -m "chore: update dist folder and package.json [skip ci]"
+          git push origin dist --force
+        else
+          echo "No changes to commit"
+        fi
