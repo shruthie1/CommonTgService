@@ -50,8 +50,7 @@ jobs:
         rm -rf *
         
         # Copy the files from the temporary directory to the root of the dist branch
-        cp -r /tmp/dist_temp/dist/* .
-        cp /tmp/dist_temp/package.json .
+        cp -r /tmp/dist_temp/* ./
         
         # Remove the temporary directory
         rm -rf /tmp/dist_temp
