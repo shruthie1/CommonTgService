@@ -21,12 +21,42 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
+
+    - name: Validate package.json
+      run: |
+        if [ ! -f "package.json" ]; then
+          echo "package.json not found"
+          exit 1
+        fi
+        if ! jq empty package.json 2>/dev/null; then
+          echo "package.json is not valid JSON"
+          exit 1
+        fi
         
     - name: Install dependencies
-      run: npm ci
+      run: |
+        # Check if node_modules exists and is not corrupted
+        if [ -d "node_modules" ]; then
+          rm -rf node_modules
+        fi
+        npm ci
+        if [ $? -ne 0 ]; then
+          echo "npm ci failed, retrying with clean install..."
+          rm -rf node_modules package-lock.json
+          npm install
+        fi
       
     - name: Build
-      run: npm run build
+      run: |
+        # Clean dist directory if it exists
+        if [ -d "dist" ]; then
+          rm -rf dist
+        fi
+        npm run build
+        if [ $? -ne 0 ]; then
+          echo "Build failed"
+          exit 1
+        fi
       
     - name: Validate dist directory
       run: |
@@ -34,31 +64,87 @@ jobs:
           echo "dist directory does not exist after build"
           exit 1
         fi
+        # Check if dist directory is not empty
+        if [ -z "$(ls -A dist/)" ]; then
+          echo "dist directory is empty"
+          exit 1
+        fi
 
     - name: Configure Git
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
+        # Ensure we have clean state
+        git reset --hard
+        git clean -fdx
 
     - name: Ensure dist branch exists or create it
       run: |
+        # Fetch all branches to ensure we have latest state
+        git fetch origin --force --prune
+        
         if ! git show-ref --quiet refs/remotes/origin/dist; then
+          echo "Creating new dist branch..."
           git checkout --orphan dist
           git rm -rf .
           git clean -fdx
         else
+          echo "Switching to existing dist branch..."
           git checkout dist || git checkout -b dist
+          if [ $? -ne 0 ]; then
+            echo "Failed to checkout dist branch"
+            exit 1
+          fi
         fi
+        # Force reset to current branch state
         git reset --hard origin/${{ github.ref_name }}
+        if [ $? -ne 0 ]; then
+          echo "Failed to reset to current branch"
+          exit 1
+        fi
     
     - name: Push to dist branch
       run: |
-        if [ -d "dist" ] && [ -f "package.json" ]; then
-          git add -f dist/
-          git add -f package.json
-          git commit -m "chore: update dist files [skip ci]" --allow-empty
-          git push origin HEAD:dist -f
-        else
+        # Double check files exist before pushing
+        if [ ! -d "dist" ] || [ ! -f "package.json" ]; then
           echo "Required files/directories not found"
+          exit 1
+        fi
+        
+        # Verify dist directory is not empty again
+        if [ -z "$(ls -A dist/)" ]; then
+          echo "dist directory is empty before push"
+          exit 1
+        fi
+        
+        # Stage files
+        git add -f dist/
+        git add -f package.json
+        
+        # Verify staged files
+        if ! git diff --staged --quiet; then
+          git commit -m "chore: update dist files [skip ci]"
+        else
+          git commit -m "chore: update dist files [skip ci]" --allow-empty
+        fi
+        
+        # Try push with retries
+        max_retries=3
+        retry_count=0
+        while [ $retry_count -lt $max_retries ]; do
+          if git push origin HEAD:dist -f; then
+            echo "Successfully pushed to dist branch"
+            exit 0
+          fi
+          retry_count=$((retry_count+1))
+          if [ $retry_count -lt $max_retries ]; then
+            echo "Push failed, retrying in 5 seconds..."
+            sleep 5
+            git fetch origin --force
+          fi
+        done
+        
+        if [ $retry_count -eq $max_retries ]; then
+          echo "Failed to push after $max_retries attempts"
           exit 1
         fi
