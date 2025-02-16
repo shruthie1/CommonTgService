@@ -45,7 +45,7 @@ export * from './components/promote-msgs/promote-msgs.module';
 export * from './components/promote-stats/promote-stat.module';
 export * from './components/stats/stat.module';
 export * from './components/users/users.module';
-export * from './components/Telegram/telegram.module';
+export * from './components/Telegram/Telegram.module';
 export * from './components/active-channels/active-channels.service';
 export * from './components/channels/channels.service';
 export * from './components/clients/client.service';
