@@ -22,26 +22,40 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+# Common Telegram Service for NestJS
 
 ## Installation
 
-Add this package as a dependency in your NestJS project's package.json:
+Add this package as a dependency in your NestJS project's package.json, using the `dist` branch:
 
 ```json
 {
   "dependencies": {
-    "common-tg-service": "github:your-username/common-tg-service#branch-name"
+    "common-tg-service": "github:your-username/common-tg-service#dist"
   }
 }
 ```
 
-Then run:
-```bash
-npm install
+This will only download the compiled dist files and package.json, making updates much faster.
+
+## Prerequisites
+
+Make sure your project has the following peer dependencies:
+```json
+{
+  "@nestjs/common": "^10.0.0",
+  "@nestjs/config": "^3.0.0",
+  "@nestjs/core": "^10.0.0",
+  "@nestjs/mongoose": "^10.0.0",
+  "@nestjs/platform-express": "^10.0.0",
+  "@nestjs/swagger": "^8.0.0",
+  "mongoose": "^8.0.0",
+  "rxjs": "^7.0.0",
+  "telegram": "^2.0.0"
+}
 ```
+
+These dependencies should already be in your NestJS project, so no additional installation is needed.
 
 ## Running the app
 
@@ -72,6 +86,15 @@ import { TelegramModule, ChannelsModule /* other modules */ } from 'common-tg-se
 })
 export class AppModule {}
 ```
+
+## Updating
+
+To update the package, simply run:
+```bash
+npm update common-tg-service
+```
+
+This will only update the compiled dist files from the dist branch, without re-downloading dependencies.
 
 ## Test
 

@@ -1,0 +1,48 @@
+name: Build and Update Dist Branch
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'dist/**'
+
+jobs:
+  build-and-push-dist:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version:  [18.x]
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build
+      
+    - name: Configure Git
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+    
+    - name: Create and Update Dist Branch
+      run: |
+        # Create or switch to dist branch
+        git checkout dist 2>/dev/null || git checkout -b dist
+        
+        # Remove everything except dist and package.json
+        find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name 'dist' ! -name 'package.json' -exec rm -rf {} +
+        
+        # Update the files
+        git add -A
+        git commit -m "chore: update dist files" || echo "No changes to commit"
+        
+        # Force push to dist branch
+        git push origin dist --force
