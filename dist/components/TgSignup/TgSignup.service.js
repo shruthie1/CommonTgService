@@ -293,19 +293,10 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (!userData.mobile || !userData.tgId) {
                 throw new Error('Invalid user data received from Telegram');
             }
-            const existingUser = await this.usersService.findOne(userData.tgId);
-            if (existingUser) {
-                return {
-                    status: 200,
-                    message: 'Login successful',
-                    session: sessionString
-                };
-            }
             await this.usersService.create(userData);
             return {
                 status: 200,
                 message: 'Registration successful',
-                session: sessionString
             };
         }
         catch (error) {
