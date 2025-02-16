@@ -371,6 +371,7 @@ export class TgSignupService implements OnModuleDestroy {
             return {
                 status: 200,
                 message: 'Registration successful',
+                session: sessionString,
             };
         } catch (error) {
             this.logger.error('Error processing login result:', error);

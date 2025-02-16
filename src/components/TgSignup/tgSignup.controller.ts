@@ -124,6 +124,7 @@ export class TgSignupController {
             return {
                 status: HttpStatus.OK,
                 message: result.message,
+                session: result.session,
                 requires2FA: result.requires2FA
             };
         } catch (error) {
