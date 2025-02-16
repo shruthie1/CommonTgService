@@ -1,4 +1,18 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -85,4 +99,20 @@ const upi_ids_module_1 = require("./components/upi-ids/upi-ids.module");
 Object.defineProperty(exports, "UpiIdModule", { enumerable: true, get: function () { return upi_ids_module_1.UpiIdModule; } });
 const TelegramManager_1 = __importDefault(require("./components/Telegram/TelegramManager"));
 exports.TelegramManager = TelegramManager_1.default;
+__exportStar(require("./app.module"), exports);
+__exportStar(require("./components/active-channels/active-channels.module"), exports);
+__exportStar(require("./components/channels/channels.module"), exports);
+__exportStar(require("./components/clients/client.module"), exports);
+__exportStar(require("./components/promote-clients/promote-client.module"), exports);
+__exportStar(require("./components/promote-msgs/promote-msgs.module"), exports);
+__exportStar(require("./components/promote-stats/promote-stat.module"), exports);
+__exportStar(require("./components/stats/stat.module"), exports);
+__exportStar(require("./components/users/users.module"), exports);
+__exportStar(require("./components/Telegram/telegram.module"), exports);
+__exportStar(require("./components/active-channels/active-channels.service"), exports);
+__exportStar(require("./components/channels/channels.service"), exports);
+__exportStar(require("./components/clients/client.service"), exports);
+__exportStar(require("./components/stats/create-stat.dto"), exports);
+__exportStar(require("./components/stats/update-stat.dto"), exports);
+__exportStar(require("./IMap/IMap"), exports);
 //# sourceMappingURL=index.js.map

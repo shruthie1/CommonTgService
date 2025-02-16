@@ -28,8 +28,19 @@
 
 ## Installation
 
+Add this package as a dependency in your NestJS project's package.json:
+
+```json
+{
+  "dependencies": {
+    "common-tg-service": "github:your-username/common-tg-service#branch-name"
+  }
+}
+```
+
+Then run:
 ```bash
-$ npm install
+npm install
 ```
 
 ## Running the app
@@ -43,6 +54,23 @@ $ npm run start:dev
 
 # production mode
 $ npm run start:prod
+```
+
+## Usage
+
+Import the modules you need in your NestJS application:
+
+```typescript
+import { TelegramModule, ChannelsModule /* other modules */ } from 'common-tg-service';
+
+@Module({
+  imports: [
+    TelegramModule,
+    ChannelsModule,
+    // ... other modules you need
+  ],
+})
+export class AppModule {}
 ```
 
 ## Test
