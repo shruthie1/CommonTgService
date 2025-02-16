@@ -5,7 +5,7 @@ on:
     branches:
       - '*'
   pull_request:
-    branches: [ "main" ]
+    branches: [ "source" ]
 
 jobs:
   update-dist:
@@ -32,6 +32,9 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
+        # Store current branch name
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        
         # Create dist branch if it doesn't exist
         if ! git show-ref --quiet refs/remotes/origin/dist; then
           git checkout --orphan dist
@@ -41,8 +44,8 @@ jobs:
           git checkout dist || git checkout -b dist
         fi
         
-        # Copy dist folder and package.json from main branch
-        git checkout main -- dist/ package.json
+        # Copy dist folder and package.json from current branch
+        git checkout $CURRENT_BRANCH -- dist/ package.json
         
         # Check if there are any changes
         if git status --porcelain | grep .; then
