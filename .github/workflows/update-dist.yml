@@ -46,6 +46,9 @@ jobs:
         # Checkout the dist branch
         git checkout dist
 
+        # Create dist directory if it doesn't exist
+        mkdir -p dist
+
         # Remove all files in the dist branch
         rm -rf *
         
