@@ -60,14 +60,14 @@ jobs:
         echo "Checking out dist branch"
         git checkout dist
 
-        # Create dist directory if it doesn't exist
-        echo "Creating dist directory if it doesn't exist"
-        mkdir -p dist
-
         # Remove all files in the dist branch
         echo "Removing all files in dist branch"
         rm -rf *
-        
+
+        # Create dist directory if it doesn't exist
+        echo "Creating dist directory if it doesn't exist"
+        mkdir -p dist
+  
         # Copy the files from the temporary directory to the root of the dist branch
         echo "Copying files from temporary directory to dist branch"
         cp -r /tmp/dist_temp/dist/* ./dist
