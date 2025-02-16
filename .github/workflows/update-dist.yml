@@ -40,11 +40,24 @@ jobs:
         git fetch origin dist:dist --depth=1 || true
         git checkout dist || git checkout --orphan dist
         
+        # Debug: List files before removing
+        ls -la
+        
         # Remove existing files before copying
         rm -rf * ./*
         
+        # Debug: List files after removing
+        ls -la
+        
         # Copy dist folder and package.json from source branch
+        echo "GITHUB_SHA: $GITHUB_SHA"
         git checkout "$GITHUB_SHA" -- dist/ package.json || true
+        
+        # Debug: Check the result of the checkout command
+        echo "Result of git checkout: $?"
+        
+        # Debug: List files after copying
+        ls -la
         
         # Stage and commit
         git add dist package.json -f
