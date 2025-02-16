@@ -60,6 +60,7 @@ async function bootstrap() {
     });
     await app.init();
     await app.listen(8000);
+    console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

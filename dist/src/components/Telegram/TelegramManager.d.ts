@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
 import { Api } from 'telegram/tl';

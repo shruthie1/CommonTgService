@@ -3,20 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultMessages = exports.defaultReactions = void 0;
-exports.sleep = sleep;
-exports.contains = contains;
-exports.fetchWithTimeout = fetchWithTimeout;
-exports.toBoolean = toBoolean;
-exports.fetchNumbersFromString = fetchNumbersFromString;
-exports.parseError = parseError;
-exports.ppplbot = ppplbot;
-exports.areJsonsNotSame = areJsonsNotSame;
-exports.mapToJson = mapToJson;
+exports.mapToJson = exports.areJsonsNotSame = exports.defaultMessages = exports.defaultReactions = exports.ppplbot = exports.parseError = exports.fetchNumbersFromString = exports.toBoolean = exports.fetchWithTimeout = exports.contains = exports.sleep = void 0;
 const axios_1 = __importDefault(require("axios"));
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+exports.sleep = sleep;
 function contains(str, arr) {
     return (arr.some(element => {
         if (str?.includes(element)) {
@@ -25,6 +17,7 @@ function contains(str, arr) {
         return false;
     }));
 }
+exports.contains = contains;
 ;
 async function fetchWithTimeout(resource, options = {}, maxRetries = 1) {
     options.timeout = options.timeout || 50000;
@@ -79,6 +72,7 @@ async function fetchWithTimeout(resource, options = {}, maxRetries = 1) {
         }
     }
 }
+exports.fetchWithTimeout = fetchWithTimeout;
 function toBoolean(value) {
     if (typeof value === 'string') {
         return value.toLowerCase() === 'true';
@@ -88,6 +82,7 @@ function toBoolean(value) {
     }
     return value;
 }
+exports.toBoolean = toBoolean;
 function fetchNumbersFromString(inputString) {
     const regex = /\d+/g;
     const matches = inputString.match(regex);
@@ -99,6 +94,7 @@ function fetchNumbersFromString(inputString) {
         return '';
     }
 }
+exports.fetchNumbersFromString = fetchNumbersFromString;
 function parseError(err, prefix = 'TgCms') {
     let status = 'UNKNOWN';
     let message = 'An unknown error occurred';
@@ -177,6 +173,7 @@ function parseError(err, prefix = 'TgCms') {
     console.log(resp.error == 'RPCError' ? resp.message : resp);
     return resp;
 }
+exports.parseError = parseError;
 let botCount = 0;
 function ppplbot(chatId, botToken) {
     let token = botToken;
@@ -193,6 +190,7 @@ function ppplbot(chatId, botToken) {
     const apiUrl = `https://api.telegram.org/${token}/sendMessage?chat_id=${targetChatId}`;
     return apiUrl;
 }
+exports.ppplbot = ppplbot;
 ;
 exports.defaultReactions = [
     '❤', '🔥', '👏', '🥰', '😁', '🤔',
@@ -225,6 +223,7 @@ function areJsonsNotSame(json1, json2) {
     }
     return !deepCompare(json1, json2);
 }
+exports.areJsonsNotSame = areJsonsNotSame;
 function mapToJson(map) {
     const obj = {};
     for (const [key, value] of map.entries()) {
@@ -232,4 +231,5 @@ function mapToJson(map) {
     }
     return obj;
 }
+exports.mapToJson = mapToJson;
 //# sourceMappingURL=utils.js.map
