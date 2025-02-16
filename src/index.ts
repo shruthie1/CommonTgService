@@ -82,3 +82,25 @@ export {
     defaultReactions,
     LoggerMiddleware
 }
+
+export * from './app.module';
+export * from './components/active-channels/active-channels.module';
+export * from './components/channels/channels.module';
+export * from './components/clients/client.module';
+export * from './components/promote-clients/promote-client.module';
+export * from './components/promote-msgs/promote-msgs.module';
+export * from './components/promote-stats/promote-stat.module';
+export * from './components/stats/stat.module';
+export * from './components/users/users.module';
+export * from './components/Telegram/telegram.module';
+
+// Export services if they need to be used directly
+export * from './components/active-channels/active-channels.service';
+export * from './components/channels/channels.service';
+export * from './components/clients/client.service';
+// ... add other services as needed
+
+// Export DTOs and interfaces
+export * from './components/stats/create-stat.dto';
+export * from './components/stats/update-stat.dto';
+export * from './IMap/IMap';

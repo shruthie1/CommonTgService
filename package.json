@@ -1,11 +1,14 @@
 {
-  "name": "common-tg-service",
+  "name": "@your-org/common-tg-service",
   "version": "0.0.2",
-  "description": "",
+  "description": "Common Telegram service for NestJS applications",
   "author": "",
-  "private": true,
-  "main": "dist/index",
-  "license": "UNLICENSED",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
