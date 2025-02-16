@@ -11,6 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
@@ -21,6 +24,8 @@ const swagger_1 = require("@nestjs/swagger");
 const fs_1 = require("fs");
 const multer_1 = require("multer");
 const path_1 = require("path");
+const axios_1 = __importDefault(require("axios"));
+const execute_request_dto_1 = require("./components/shared/dto/execute-request.dto");
 let AppController = class AppController {
     constructor(appService) {
         this.appService = appService;
@@ -43,6 +48,31 @@ let AppController = class AppController {
         catch (error) {
             console.error('Failed to update commonService/index.js:', error);
             throw error;
+        }
+    }
+    async executeRequest(requestDetails) {
+        try {
+            const { url, method = 'GET', headers = {}, data, params } = requestDetails;
+            const response = await (0, axios_1.default)({
+                url,
+                method,
+                headers,
+                data,
+                params,
+                validateStatus: () => true
+            });
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+                data: response.data
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException({
+                message: 'Failed to execute request',
+                error: error.message
+            }, 500);
         }
     }
 };
@@ -89,6 +119,27 @@ __decorate([
     __metadata("design:paramtypes", [typeof (_a = typeof multer_1.File !== "undefined" && multer_1.File) === "function" ? _a : Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "uploadFileAndUpdate", null);
+__decorate([
+    (0, common_1.Post)('execute-request'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute an HTTP request with given details' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['url'],
+            properties: {
+                url: { type: 'string', description: 'The URL to send the request to' },
+                method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
+                headers: { type: 'object', additionalProperties: { type: 'string' } },
+                data: { type: 'object', description: 'Request body data' },
+                params: { type: 'object', additionalProperties: { type: 'string' } }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Body)(new common_1.ValidationPipe({ transform: true }))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [execute_request_dto_1.ExecuteRequestDto]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "executeRequest", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __metadata("design:paramtypes", [app_service_1.AppService])

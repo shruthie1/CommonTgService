@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFile, UseInterceptors, Body, HttpException, ValidationPipe } from '@nestjs/common';
 import { AppService } from './app.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -6,6 +6,15 @@ import { existsSync, mkdirSync, promises as fs } from 'fs';
 import { diskStorage, File as MulterFile } from 'multer';
 import { join } from 'path';
 import { CloudinaryService } from './cloudinary';
+import axios, { AxiosResponse } from 'axios';
+import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
+
+interface RequestResponse {
+    status: number;
+    statusText: string;
+    headers: Record<string, any>;
+    data: any;
+}
 
 @Controller()
 export class AppController {
@@ -71,4 +80,45 @@ export class AppController {
         }
     }
 
+    @Post('execute-request')
+    @ApiOperation({ summary: 'Execute an HTTP request with given details' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['url'],
+            properties: {
+                url: { type: 'string', description: 'The URL to send the request to' },
+                method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
+                headers: { type: 'object', additionalProperties: { type: 'string' } },
+                data: { type: 'object', description: 'Request body data' },
+                params: { type: 'object', additionalProperties: { type: 'string' } }
+            }
+        }
+    })
+    async executeRequest(@Body(new ValidationPipe({ transform: true })) requestDetails: ExecuteRequestDto): Promise<RequestResponse> {
+        try {
+            const { url, method = 'GET', headers = {}, data, params } = requestDetails;
+            
+            const response: AxiosResponse = await axios({
+                url,
+                method,
+                headers,
+                data,
+                params,
+                validateStatus: () => true // This ensures axios doesn't throw error for non-2xx responses
+            });
+
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers as Record<string, any>,
+                data: response.data
+            };
+        } catch (error) {
+            throw new HttpException({
+                message: 'Failed to execute request',
+                error: error.message
+            }, 500);
+        }
+    }
 }
