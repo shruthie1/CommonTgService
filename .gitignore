@@ -1,6 +1,9 @@
-# compiled output
-/node_modules
-/out
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
 
 # Logs
 logs
@@ -11,8 +14,20 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # OS
 .DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # Tests
 /coverage
@@ -53,3 +68,6 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# TypeScript cache
+*.tsbuildinfo
