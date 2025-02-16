@@ -1,5 +1,5 @@
 {
-  "name": "@your-org/common-tg-service",
+  "name": "common-tg-service",
   "version": "0.0.2",
   "description": "Common Telegram service for NestJS applications",
   "author": "",
