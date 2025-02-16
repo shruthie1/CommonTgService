@@ -59,7 +59,7 @@ async function bootstrap() {
         await shutdown('SIGQUIT');
     });
     await app.init();
-    await app.listen(8000);
+    await app.listen(process.env.PORT || 9000);
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

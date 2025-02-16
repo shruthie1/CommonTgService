@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "prebuild": "rm -rf dist",
-    "build": "nest build",
+    "build": "npm i && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "NODE_OPTIONS='--max-old-space-size=1024' nest start",
     "start:dev": "nest start --watch",
