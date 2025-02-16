@@ -11,65 +11,156 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var TgSignupController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TgSignupController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const TgSignup_service_1 = require("./TgSignup.service");
-let TgSignupController = class TgSignupController {
-    constructor() { }
-    async sendCode(phone) {
-        console.log(phone);
-        const result = await (0, TgSignup_service_1.createClient)(phone);
-        if (result?.isCodeViaApp) {
-            console.log('OTP SENT!! - ', phone);
-            return result;
+const tg_signup_dto_1 = require("./dto/tg-signup.dto");
+const utils_1 = require("../../utils");
+let TgSignupController = TgSignupController_1 = class TgSignupController {
+    constructor(tgSignupService) {
+        this.tgSignupService = tgSignupService;
+        this.logger = new common_1.Logger(TgSignupController_1.name);
+    }
+    async sendCode(sendCodeDto) {
+        try {
+            this.logger.debug(`[SEND_CODE] Request received for phone: ${sendCodeDto.phone}`);
+            const result = await this.tgSignupService.sendCode(sendCodeDto.phone);
+            this.logger.debug(`[SEND_CODE] Success for phone: ${sendCodeDto.phone}`, {
+                isCodeViaApp: result.isCodeViaApp,
+                hasPhoneCodeHash: !!result.phoneCodeHash
+            });
+            return {
+                status: common_1.HttpStatus.CREATED,
+                message: 'Verification code sent successfully',
+                phoneCodeHash: result.phoneCodeHash,
+                isCodeViaApp: result.isCodeViaApp
+            };
         }
-        else {
-            throw new common_1.BadRequestException("Failed to send OTP");
+        catch (error) {
+            const parsedError = (0, utils_1.parseError)(error);
+            this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
+                error: parsedError,
+                stack: error.stack,
+                errorType: error.constructor.name
+            });
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(parsedError.message || 'Failed to send verification code');
         }
     }
-    async verifyCode(phone, code, password) {
-        const cli = await (0, TgSignup_service_1.getClient)(phone);
-        if (cli) {
-            console.log(cli?.phoneCodeHash, cli?.phoneNumber);
-            const result = await cli?.login(code, password);
-            if (result && result.status === 200) {
-                return ({ mesaage: result.message });
-            }
-            else {
-                throw new common_1.HttpException(result.message, result.status);
-            }
+    async verifyCode(verifyCodeDto) {
+        try {
+            this.logger.debug(`[VERIFY_CODE] Request received`, {
+                phone: verifyCodeDto.phone,
+                hasPassword: !!verifyCodeDto.password
+            });
+            const result = await this.tgSignupService.verifyCode(verifyCodeDto.phone, verifyCodeDto.code, verifyCodeDto.password);
+            this.logger.debug(`[VERIFY_CODE] Success for phone: ${verifyCodeDto.phone}`, {
+                status: result.status,
+                requires2FA: result.requires2FA,
+                hasSession: !!result.session
+            });
+            return {
+                status: common_1.HttpStatus.OK,
+                message: result.message,
+                session: result.session,
+                requires2FA: result.requires2FA
+            };
         }
-        else {
-            throw new common_1.BadRequestException("Failed to Verify OTP");
+        catch (error) {
+            const parsedError = (0, utils_1.parseError)(error);
+            this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
+                error: parsedError,
+                stack: error.stack,
+                errorType: error.constructor.name,
+                code: verifyCodeDto.code?.length || 0
+            });
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(parsedError.message || 'Verification failed');
         }
     }
 };
 exports.TgSignupController = TgSignupController;
 __decorate([
-    (0, common_1.Get)('login'),
-    (0, swagger_1.ApiQuery)({ name: 'phone', required: true }),
-    __param(0, (0, common_1.Query)('phone')),
+    (0, common_1.Post)('send-code'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send verification code to phone number',
+        description: 'Initiates the signup process by sending a verification code via Telegram'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.CREATED,
+        type: tg_signup_dto_1.TgSignupResponse,
+        description: 'Code sent successfully'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.BAD_REQUEST,
+        description: 'Invalid phone number or failed to send code',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: { type: 'string', example: 'Invalid phone number format' },
+                error: { type: 'string', example: 'Bad Request' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.TOO_MANY_REQUESTS,
+        description: 'Rate limit exceeded'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.INTERNAL_SERVER_ERROR,
+        description: 'Internal server error occurred'
+    }),
+    __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [tg_signup_dto_1.SendCodeDto]),
     __metadata("design:returntype", Promise)
 ], TgSignupController.prototype, "sendCode", null);
 __decorate([
-    (0, common_1.Get)('otp'),
-    (0, swagger_1.ApiQuery)({ name: 'phone', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'code', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'password', required: false }),
-    __param(0, (0, common_1.Query)('phone')),
-    __param(1, (0, common_1.Query)('code')),
-    __param(2, (0, common_1.Query)('password')),
+    (0, common_1.Post)('verify'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Verify code and complete signup/login',
+        description: 'Verifies the code sent to phone and completes the signup/login process'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.OK,
+        type: tg_signup_dto_1.TgSignupResponse,
+        description: 'Verification successful'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.BAD_REQUEST,
+        description: 'Invalid code or verification failed'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.TOO_MANY_REQUESTS,
+        description: 'Rate limit exceeded'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: common_1.HttpStatus.INTERNAL_SERVER_ERROR,
+        description: 'Internal server error occurred'
+    }),
+    __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [tg_signup_dto_1.VerifyCodeDto]),
     __metadata("design:returntype", Promise)
 ], TgSignupController.prototype, "verifyCode", null);
-exports.TgSignupController = TgSignupController = __decorate([
+exports.TgSignupController = TgSignupController = TgSignupController_1 = __decorate([
     (0, common_1.Controller)('tgsignup'),
     (0, swagger_1.ApiTags)('tgsignup'),
-    __metadata("design:paramtypes", [])
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transformOptions: { enableImplicitConversion: true }
+    })),
+    (0, swagger_1.ApiExtraModels)(tg_signup_dto_1.SendCodeDto, tg_signup_dto_1.VerifyCodeDto, tg_signup_dto_1.TgSignupResponse),
+    __metadata("design:paramtypes", [TgSignup_service_1.TgSignupService])
 ], TgSignupController);
 //# sourceMappingURL=tgSignup.controller.js.map

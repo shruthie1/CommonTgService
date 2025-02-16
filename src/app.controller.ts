@@ -13,7 +13,6 @@ export class AppController {
 
     @Get()
     getHello(): string {
-        CloudinaryService.getInstance("kavya")
         return this.appService.getHello();
     }
 

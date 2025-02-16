@@ -1,40 +1,24 @@
-import { Api } from "telegram/tl";
-import { TelegramClient } from "telegram";
-export declare function restAcc(phoneNumber: any): Promise<void>;
-export declare function getClient(number: any): TgSignupService;
-export declare function hasClient(number: any): Promise<boolean>;
-export declare function deleteClient(number: any): Promise<boolean>;
-export declare function disconnectAll(): Promise<void>;
-export declare function createClient(number: any): Promise<{
-    phoneCodeHash: string;
-    isCodeViaApp: boolean;
-}>;
-export declare class TgSignupService {
-    session: any;
-    phoneNumber: any;
-    client: TelegramClient;
-    phoneCodeHash: any;
-    apiId: number;
-    apiHash: string;
-    constructor(number: any, apiId: number, apiHash: string);
-    getLastActiveTime(): Promise<number>;
-    disconnect(): Promise<void>;
-    createClient(): Promise<void>;
-    deleteMessages(): Promise<void>;
-    sendCode(forceSMS?: boolean): Promise<{
-        phoneCodeHash: string;
-        isCodeViaApp: boolean;
-    }>;
-    login(phoneCode: any, passowrd?: any): Promise<Api.User | Api.UserEmpty | {
-        status: number;
-        message: any;
-    }>;
-    getCallLogs(): Promise<{
-        outgoing: number;
-        incoming: number;
-        video: number;
-        chatCallCounts: {};
-        totalCalls: number;
-    }>;
-    processLogin(result: any, passowrd?: any): Promise<void>;
+import { OnModuleDestroy } from "@nestjs/common";
+import { UsersService } from "../users/users.service";
+import { TgSignupResponse } from "./dto/tg-signup.dto";
+export declare class TgSignupService implements OnModuleDestroy {
+    private readonly usersService;
+    private readonly logger;
+    private static readonly LOGIN_TIMEOUT;
+    private static readonly SESSION_CLEANUP_INTERVAL;
+    private static readonly PHONE_PREFIX;
+    private readonly cleanupInterval;
+    private static readonly activeClients;
+    private static readonly API_CREDENTIALS;
+    constructor(usersService: UsersService);
+    onModuleDestroy(): Promise<void>;
+    private getRandomCredentials;
+    private cleanupStaleSessions;
+    private validatePhoneNumber;
+    private disconnectClient;
+    sendCode(phone: string): Promise<Pick<TgSignupResponse, 'phoneCodeHash' | 'isCodeViaApp'>>;
+    verifyCode(phone: string, code: string, password?: string): Promise<TgSignupResponse>;
+    private handle2FALogin;
+    private handleNewUserRegistration;
+    private processLoginResult;
 }

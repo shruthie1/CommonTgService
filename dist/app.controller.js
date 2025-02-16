@@ -21,13 +21,11 @@ const swagger_1 = require("@nestjs/swagger");
 const fs_1 = require("fs");
 const multer_1 = require("multer");
 const path_1 = require("path");
-const cloudinary_1 = require("./cloudinary");
 let AppController = class AppController {
     constructor(appService) {
         this.appService = appService;
     }
     getHello() {
-        cloudinary_1.CloudinaryService.getInstance("kavya");
         return this.appService.getHello();
     }
     async uploadFileAndUpdate(file) {

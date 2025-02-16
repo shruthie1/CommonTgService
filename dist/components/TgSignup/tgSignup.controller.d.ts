@@ -1,10 +1,9 @@
+import { TgSignupService } from './TgSignup.service';
+import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
 export declare class TgSignupController {
-    constructor();
-    sendCode(phone: string): Promise<{
-        phoneCodeHash: string;
-        isCodeViaApp: boolean;
-    }>;
-    verifyCode(phone: string, code: string, password: string): Promise<{
-        mesaage: any;
-    }>;
+    private readonly tgSignupService;
+    private readonly logger;
+    constructor(tgSignupService: TgSignupService);
+    sendCode(sendCodeDto: SendCodeDto): Promise<TgSignupResponse>;
+    verifyCode(verifyCodeDto: VerifyCodeDto): Promise<TgSignupResponse>;
 }
