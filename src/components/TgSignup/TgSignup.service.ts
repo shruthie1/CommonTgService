@@ -102,13 +102,10 @@ export class TgSignupService implements OnModuleDestroy {
 
     async sendCode(phone: string): Promise<Pick<TgSignupResponse, 'phoneCodeHash' | 'isCodeViaApp'>> {
         try {
-            this.logger.debug(`Validating phone number: ${phone}`);
             phone = this.validatePhoneNumber(phone);
 
-            this.logger.debug(`Disconnecting any existing client for: ${phone}`);
             await this.disconnectClient(phone);
 
-            this.logger.debug(`Fetching random credentials for API ID and API Hash`);
             const { apiId, apiHash } = this.getRandomCredentials();
             const session = new StringSession('');
             const client = new TelegramClient(session, apiId, apiHash, {
@@ -118,13 +115,10 @@ export class TgSignupService implements OnModuleDestroy {
                 timeout: 30000
             });
 
-            this.logger.debug(`Setting log level to ERROR for TelegramClient`);
             await client.setLogLevel(LogLevel.ERROR);
 
-            this.logger.debug(`Connecting to Telegram server`);
             await client.connect();
 
-            this.logger.debug(`Invoking API to send code to: ${phone}`);
             const sendResult = await client.invoke(
                 new Api.auth.SendCode({
                     phoneNumber: phone,
@@ -137,17 +131,12 @@ export class TgSignupService implements OnModuleDestroy {
                 })
             );
 
-            this.logger.debug(`Received send code result for ${phone}: ${JSON.stringify(sendResult)}`);
-
             if (sendResult instanceof Api.auth.SentCodeSuccess) {
                 this.logger.error(`Unexpected immediate login for ${phone}`);
                 throw new BadRequestException('Unexpected immediate login');
             }
-
-            this.logger.debug(`Setting up session timeout for ${phone}`);
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService.LOGIN_TIMEOUT);
 
-            this.logger.debug(`Storing client session for ${phone}`);
             TgSignupService.activeClients.set(phone, {
                 client,
                 phoneCodeHash: sendResult.phoneCodeHash,
@@ -168,17 +157,14 @@ export class TgSignupService implements OnModuleDestroy {
 
     async verifyCode(phone: string, code: string, password?: string): Promise<TgSignupResponse> {
         try {
-            this.logger.debug(`Validating phone number for verification: ${phone}`);
             phone = this.validatePhoneNumber(phone);
 
-            this.logger.debug(`Fetching active session for ${phone}`);
             const session = TgSignupService.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
                 throw new BadRequestException('No active signup session found. Please request a new code.');
             }
 
-            this.logger.debug(`Checking session age for ${phone}`);
             if (Date.now() - session.createdAt > TgSignupService.LOGIN_TIMEOUT) {
                 await this.disconnectClient(phone);
                 this.logger.warn(`Verification code expired for ${phone}`);
@@ -191,7 +177,6 @@ export class TgSignupService implements OnModuleDestroy {
                 throw new BadRequestException('Connection lost. Please request a new code.');
             }
 
-            this.logger.debug(`Invoking SignIn API for ${phone}`);
             const { client, phoneCodeHash } = session;
 
             try {
@@ -208,8 +193,6 @@ export class TgSignupService implements OnModuleDestroy {
                     throw new BadRequestException('Invalid response from Telegram server');
                 }
 
-                this.logger.debug(`SignIn result for ${phone}: ${JSON.stringify(signInResult)}`);
-
                 if (signInResult instanceof Api.auth.AuthorizationSignUpRequired) {
                     this.logger.log(`New user registration required for ${phone}`);
                     const result = await this.handleNewUserRegistration(phone, client, phoneCodeHash);
@@ -223,7 +206,6 @@ export class TgSignupService implements OnModuleDestroy {
                     throw new Error('Failed to generate session string');
                 }
 
-                this.logger.log(`User login successful for ${phone}`);
                 const userData = await this.processLoginResult(signInResult.user, sessionString, password);
                 await this.disconnectClient(phone);
                 return userData;
