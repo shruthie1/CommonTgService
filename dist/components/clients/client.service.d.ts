@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { TelegramService } from './../Telegram/Telegram.service';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
@@ -41,6 +42,7 @@ export declare class ClientService {
     private archivedClientService;
     private npointSerive;
     private clientsMap;
+    private lastUpdateMap;
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, npointSerive: NpointService);
     checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;

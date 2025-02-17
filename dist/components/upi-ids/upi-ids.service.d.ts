@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
 import { NpointService } from '../n-point/npoint.service';

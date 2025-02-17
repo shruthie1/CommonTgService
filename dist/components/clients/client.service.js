@@ -63,6 +63,7 @@ let ClientService = class ClientService {
         this.archivedClientService = archivedClientService;
         this.npointSerive = npointSerive;
         this.clientsMap = new Map();
+        this.lastUpdateMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
         }, 5 * 60 * 1000);
@@ -288,8 +289,16 @@ let ClientService = class ClientService {
         }
     }
     async updateClient(clientId) {
+        const now = Date.now();
+        const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
+        const cooldownPeriod = 5 * 60 * 1000;
+        if (now - lastUpdate < cooldownPeriod) {
+            console.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
+            return;
+        }
         const client = await this.findOne(clientId);
         try {
+            this.lastUpdateMap.set(clientId, now);
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await (0, Helpers_1.sleep)(2000);
@@ -320,6 +329,7 @@ let ClientService = class ClientService {
             await this.telegramService.deleteClient(client.mobile);
         }
         catch (error) {
+            this.lastUpdateMap.delete(clientId);
             (0, utils_1.parseError)(error);
         }
     }

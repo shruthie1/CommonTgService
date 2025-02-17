@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Connection } from 'mongoose';
 export declare class initModule implements OnModuleDestroy, OnModuleInit {

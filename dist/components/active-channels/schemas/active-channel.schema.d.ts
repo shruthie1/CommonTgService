@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 export type ActiveChannelDocument = ActiveChannel & Document;
@@ -46,6 +47,10 @@ export declare class ActiveChannel {
 }
 export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel> & ActiveChannel & {
     _id: mongoose.Types.ObjectId;
+} & {
+    __v: number;
 }, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>> & mongoose.FlatRecord<ActiveChannel> & {
     _id: mongoose.Types.ObjectId;
+} & {
+    __v: number;
 }>;

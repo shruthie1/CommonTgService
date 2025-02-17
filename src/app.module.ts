@@ -21,6 +21,7 @@ import { PromoteClientModule } from './components/promote-clients/promote-client
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
 import { NpointModule } from './components/n-point/npoint.module';
+import { ThrottleMiddleware } from './middlewares/throttle.middleware';
 
 @Module({
   imports: [
@@ -63,5 +64,6 @@ import { NpointModule } from './components/n-point/npoint.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
+    consumer.apply(ThrottleMiddleware).forRoutes('*');
   }
 }

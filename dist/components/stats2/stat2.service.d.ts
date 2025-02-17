@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { Model } from 'mongoose';
 import { CreateStatDto } from './create-stat2.dto';
 import { UpdateStatDto } from './update-stat2.dto';

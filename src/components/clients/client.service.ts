@@ -22,6 +22,7 @@ let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
     private clientsMap: Map<string, Client> = new Map();
+    private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
     constructor(@InjectModel(Client.name) private clientModel: Model<ClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
@@ -273,8 +274,18 @@ export class ClientService {
     }
 
     async updateClient(clientId: string) {
+        const now = Date.now();
+        const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
+        const cooldownPeriod = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+        if (now - lastUpdate < cooldownPeriod) {
+            console.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
+            return;
+        }
+
         const client = await this.findOne(clientId);
         try {
+            this.lastUpdateMap.set(clientId, now);
             await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
             await sleep(2000)
@@ -304,10 +315,11 @@ export class ClientService {
             await sleep(2000);
             await this.telegramService.deleteClient(client.mobile)
         } catch (error) {
+            // Remove the cooldown on error so it can be retried
+            this.lastUpdateMap.delete(clientId);
             parseError(error)
         }
     }
-
 
     async updateClients() {
         const clients = await this.findAll();
