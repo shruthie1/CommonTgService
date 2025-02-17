@@ -16,6 +16,7 @@ let ThrottleMiddleware = class ThrottleMiddleware {
         const lastCall = requestTimestamps.get(key) || 0;
         const THROTTLE_TIME = 1000;
         if (now - lastCall < THROTTLE_TIME) {
+            console.error(`Too many requests for ${key}. Please wait.`);
             return res.status(429).json({ message: 'Too many requests. Please wait.' });
         }
         requestTimestamps.set(key, now);
