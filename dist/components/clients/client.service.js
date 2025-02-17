@@ -320,6 +320,7 @@ let ClientService = class ClientService {
             await telegramClient.updatePrivacy();
             await (0, Helpers_1.sleep)(1000);
             const rootPath = process.cwd();
+            console.log(rootPath, "trying to update dp");
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
