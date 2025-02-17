@@ -276,8 +276,7 @@ export class ClientService {
     async updateClient(clientId: string) {
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
-        const cooldownPeriod = 5 * 60 * 1000; // 5 minutes in milliseconds
-
+        const cooldownPeriod = 30000;
         if (now - lastUpdate < cooldownPeriod) {
             console.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
             return;
@@ -297,22 +296,22 @@ export class ClientService {
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername })
             }
-            await sleep(2000)
+            await sleep(1000)
             if (me.firstName !== client.name) {
                 await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             }
-            await sleep(3000)
+            await sleep(1000)
             await telegramClient.deleteProfilePhotos();
-            await sleep(3000)
+            await sleep(1000)
             await telegramClient.updatePrivacy();
-            await sleep(3000)
+            await sleep(1000)
             const rootPath = process.cwd();
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
-            await sleep(3000);
+            await sleep(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
-            await sleep(3000);
+            await sleep(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
-            await sleep(2000);
+            await sleep(1000);
             await this.telegramService.deleteClient(client.mobile)
         } catch (error) {
             // Remove the cooldown on error so it can be retried
