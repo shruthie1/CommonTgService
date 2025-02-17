@@ -50,8 +50,7 @@
     "adm-zip": "0.5.12",
     "cloudinary": "2.0.3",
     "imap": "0.8.19",
-    "https": "1.0.0",
-    "libphonenumber-js": "1.10.58"
+    "https": "1.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "10.4.0",
