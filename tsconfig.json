@@ -20,7 +20,7 @@
     "noFallthroughCasesInSwitch": false
   },
   "include": [
-    "src",
-    "dist/src"
+    "src/**/*",
+    "dist/**/*"
   ]
 }
