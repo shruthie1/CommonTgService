@@ -105,7 +105,7 @@ class TelegramManager {
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
         let offset = 0;
-        let limit = 100;
+        const limit = 100;
         let totalMessages = 0;
         let forwardedCount = 0;
         let messages = [];
@@ -146,7 +146,7 @@ class TelegramManager {
         for (let i = 0; i < totalMessages; i += chunkSize) {
             const chunk = messageIds.slice(i, i + chunkSize);
             try {
-                const result = await this.client.forwardMessages(toChatId, {
+                await this.client.forwardMessages(toChatId, {
                     messages: chunk,
                     fromPeer: fromChatId,
                 });
@@ -162,12 +162,20 @@ class TelegramManager {
     }
     async disconnect() {
         if (this.client) {
-            console.log("Destroying Client: ", this.phoneNumber);
-            this.client._destroyed = true;
-            await this.client.disconnect();
-            this.client = null;
+            try {
+                console.log("Destroying Client: ", this.phoneNumber);
+                this.client.removeEventHandler(this.handleEvents, new events_1.NewMessage({}));
+                await this.client.destroy();
+                await this.client.disconnect();
+                this.client = null;
+                this.session.delete();
+                this.channelArray = [];
+            }
+            catch (error) {
+                console.error("Error during disconnect:", error);
+                throw error;
+            }
         }
-        this.session.delete();
     }
     async getchatId(username) {
         if (!this.client)
@@ -405,9 +413,9 @@ class TelegramManager {
     async leaveChannels(chats) {
         console.log("Leaving Channels: initaied!!");
         console.log("ChatsLength: ", chats);
-        for (let id of chats) {
+        for (const id of chats) {
             try {
-                const joinResult = await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
+                await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
                     channel: id
                 }));
                 console.log("Left channel :", id);
@@ -928,7 +936,7 @@ class TelegramManager {
         let increment = 0;
         if (username === '') {
             try {
-                const res = await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
+                await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
                 console.log(`Removed Username successfully.`);
             }
             catch (error) {
@@ -941,7 +949,7 @@ class TelegramManager {
                     const result = await this.client.invoke(new tl_1.Api.account.CheckUsername({ username }));
                     console.log(result, " - ", username);
                     if (result) {
-                        const res = await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
+                        await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
                         console.log(`Username '${username}' updated successfully.`);
                         newUserName = username;
                         break;

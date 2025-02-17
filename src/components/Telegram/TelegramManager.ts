@@ -105,7 +105,7 @@ class TelegramManager {
 
     public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
         let offset = 0;
-        let limit = 100;
+        const limit = 100;
         let totalMessages = 0;
         let forwardedCount = 0;
         let messages: any = [];
@@ -150,7 +150,7 @@ class TelegramManager {
         for (let i = 0; i < totalMessages; i += chunkSize) {
             const chunk = messageIds.slice(i, i + chunkSize);
             try {
-                const result = await this.client.forwardMessages(toChatId, {
+                await this.client.forwardMessages(toChatId, {
                     messages: chunk,
                     fromPeer: fromChatId,
                 });
@@ -168,13 +168,31 @@ class TelegramManager {
 
     async disconnect(): Promise<void> {
         if (this.client) {
-            console.log("Destroying Client: ", this.phoneNumber)
-            // await this.client.destroy();
-            this.client._destroyed = true
-            await this.client.disconnect();
-            this.client = null;
+            try {
+                console.log("Destroying Client: ", this.phoneNumber);
+                
+                // Remove event handler with proper parameters
+                this.client.removeEventHandler(this.handleEvents, new NewMessage({}));
+                
+                // Destroy the connection first
+                await this.client.destroy();
+                
+                // Then disconnect the client
+                await this.client.disconnect();
+                
+                // Clear the client instance
+                this.client = null;
+                
+                // Delete the session
+                this.session.delete();
+                
+                // Clear the channel array
+                this.channelArray = [];
+            } catch (error) {
+                console.error("Error during disconnect:", error);
+                throw error;
+            }
         }
-        this.session.delete();
     }
 
     async getchatId(username: string): Promise<any> {
@@ -201,7 +219,7 @@ class TelegramManager {
         }
     }
 
-    async createClient(handler = true, handlerFn?: Function): Promise<TelegramClient> {
+    async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
         this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
@@ -409,7 +427,6 @@ class TelegramManager {
         }
     }
 
-
     async addContacts(mobiles: string[], namePrefix: string) {
         try {
             const inputContacts: Api.TypeInputContact[] = [];
@@ -451,9 +468,9 @@ class TelegramManager {
     async leaveChannels(chats: string[]) {
         console.log("Leaving Channels: initaied!!");
         console.log("ChatsLength: ", chats)
-        for (let id of chats) {
+        for (const id of chats) {
             try {
-                const joinResult = await this.client.invoke(
+                await this.client.invoke(
                     new Api.channels.LeaveChannel({
                         channel: id
                     })
@@ -1078,7 +1095,7 @@ class TelegramManager {
         let increment = 0;
         if (username === '') {
             try {
-                const res = await this.client.invoke(new Api.account.UpdateUsername({ username }));
+                await this.client.invoke(new Api.account.UpdateUsername({ username }));
                 console.log(`Removed Username successfully.`);
             } catch (error) {
                 console.log(error)
@@ -1091,7 +1108,7 @@ class TelegramManager {
                     );
                     console.log(result, " - ", username)
                     if (result) {
-                        const res = await this.client.invoke(new Api.account.UpdateUsername({ username }));
+                        await this.client.invoke(new Api.account.UpdateUsername({ username }));
                         console.log(`Username '${username}' updated successfully.`);
                         newUserName = username
                         break;
