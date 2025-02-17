@@ -35,8 +35,6 @@ export class UpiIdService {
     async checkNpoint() {
         const upiIds = (await axios.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
         const existingUpiIds = await this.findOne();
-        console.log("npoint: ", upiIds);
-        console.log("existing: ", existingUpiIds)
         if (areJsonsNotSame(upiIds, existingUpiIds)) {
             await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds)
         }
