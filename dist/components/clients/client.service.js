@@ -65,8 +65,7 @@ let ClientService = class ClientService {
         this.clientsMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
-            await this.checkNpoint();
-        }, 5000);
+        }, 5 * 60 * 1000);
     }
     async checkNpoint() {
         const clients = (await axios_1.default.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
