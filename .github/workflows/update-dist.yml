@@ -1,89 +1,56 @@
-name: Update Dist Branch
+name: Build and Push to Master
 
 on:
   push:
     branches:
-      - '*'
-  pull_request:
-    branches: [ "main" ]
+      - '*'  # Trigger on all branches
 
 jobs:
-  update-dist:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Fetch the entire history and all branches
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm install
 
-    - name: Build
-      run: npm run build
+      - name: Build NestJS app
+        run: npm run build
 
-    - name: Prepare dist directory
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
+      - name: Determine branch name
+        id: branch_name
+        run: echo "::set-output name=branch::$(echo $GITHUB_REF | awk -F'/' '{print $3}')"
 
-        # Create a temporary directory outside the git context
-        mkdir -p /tmp/dist_temp
-        echo "Created temporary directory: /tmp/dist_temp"
+      - name: Pull current branch and push built files to it
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
+          git add .  # Stage all changes, including package-lock.json and dist folder
+          git commit -m "Build and deploy dist files" || echo "No changes to commit"
+          git push origin HEAD:${{ steps.branch_name.outputs.branch }}
 
-        # Checkout the commit that triggered the workflow and copy dist and package.json to the temp directory
-        echo "Checking out commit: $GITHUB_SHA"
-        git checkout "$GITHUB_SHA" -- package.json
-        
-        echo "Checking out dist directory from commit: $GITHUB_SHA"
-        git checkout "$GITHUB_SHA" -- dist
-        echo "Creating dist directory in temporary directory"
-        mkdir -p /tmp/dist_temp/dist
-        echo "Copying files from dist to temporary directory"
-        cp -r dist/* /tmp/dist_temp/dist/
-        echo "Copying package.json to temporary directory"
-        cp package.json /tmp/dist_temp/
+      - name: Commit and push only dist and src to master
+        if: ${{ github.ref != 'refs/heads/master' }}  # Only run if not already on master
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
+          git fetch origin master  # Ensure the master branch is fetched
+          git checkout master  # Switch to the master branch
+          git pull origin master  # Pull the latest changes from master
 
-        # Fetch the dist branch if it exists, otherwise create an orphan branch
-        echo "Fetching dist branch"
-        git fetch origin dist:dist --depth=1 || git checkout --orphan dist
-        
-        # Checkout the dist branch
-        echo "Checking out dist branch"
-        git checkout dist
-
-        # Remove all files in the dist branch
-        echo "Removing all files in dist branch"
-        rm -rf *
-
-        # Create dist directory if it doesn't exist
-        echo "Creating dist directory if it doesn't exist"
-        mkdir -p dist
-  
-        # Copy the files from the temporary directory to the root of the dist branch
-        echo "Copying files from temporary directory to dist branch"
-        cp -r /tmp/dist_temp/dist/* ./dist
-        echo "Copying package.json to dist branch"
-        cp /tmp/dist_temp/package.json .
-        
-        # Remove the temporary directory
-        echo "Removing temporary directory"
-        rm -rf /tmp/dist_temp
-
-        # Add, commit, and push
-        echo "Adding files to git"
-       
-        if git status --porcelain | grep .; then
-          git add .
-          echo "Committing changes"
-          git commit -m "chore: update dist folder and package.json [skip ci]"
-          echo "Pushing changes to dist branch"
-          git push origin dist --force
-        else
-          echo "No changes to commit"
-        fi
+          # Merge only dist and src directories into master
+          git checkout ${{ steps.branch_name.outputs.branch }} -- src dist  # Checkout only src and dist from the branch
+          git add src dist  # Stage only src and dist changes
+          
+          git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
+          git push origin master  # Push only the changes in dist and src to master
