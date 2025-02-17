@@ -38,6 +38,34 @@ Add this package as a dependency in your NestJS project's package.json, using th
 
 This will only download the compiled dist files and package.json, making updates much faster.
 
+## Peer Dependencies
+
+This package uses peer dependencies to avoid duplicate node_modules in your project. Make sure your project has the following dependencies installed:
+
+```json
+{
+  "@nestjs/common": "^10.0.0",
+  "@nestjs/config": "^3.0.0",
+  "@nestjs/core": "^10.0.0",
+  "@nestjs/mongoose": "^10.0.0",
+  "@nestjs/platform-express": "^10.0.0",
+  "@nestjs/swagger": "^8.0.0",
+  "mongoose": "^8.0.0",
+  "rxjs": "^7.0.0",
+  "telegram": "^2.19.0",
+  "class-transformer": "^0.5.0",
+  "class-validator": "^0.14.0",
+  "axios": "^1.6.0",
+  "node-fetch": "^2.7.0",
+  "swagger-jsdoc": "^6.2.0",
+  "swagger-ui-express": "^5.0.0",
+  "adm-zip": "^0.5.0",
+  "cloudinary": "^2.0.0",
+  "imap": "^0.8.0",
+  "https": "^1.0.0"
+}
+```
+
 ## Prerequisites
 
 Make sure your project has the following peer dependencies:
