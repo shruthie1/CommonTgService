@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { Document } from 'mongoose';
 export type BufferClientDocument = BufferClient & Document;
 export declare class BufferClient {
@@ -33,6 +34,10 @@ export declare class BufferClient {
 }
 export declare const BufferClientSchema: import("mongoose").Schema<BufferClient, import("mongoose").Model<BufferClient, any, any, any, Document<unknown, any, BufferClient> & BufferClient & {
     _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
 }, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, BufferClient, Document<unknown, {}, import("mongoose").FlatRecord<BufferClient>> & import("mongoose").FlatRecord<BufferClient> & {
     _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
 }>;

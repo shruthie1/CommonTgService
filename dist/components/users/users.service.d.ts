@@ -22,6 +22,7 @@
 /// <reference types="mongoose/types/validation" />
 /// <reference types="mongoose/types/virtuals" />
 /// <reference types="mongoose/types/inferschematype" />
+/// <reference types="mongoose/types/inferrawdoctype" />
 import { TelegramService } from './../Telegram/Telegram.service';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
