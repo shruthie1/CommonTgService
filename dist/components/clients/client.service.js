@@ -65,7 +65,8 @@ let ClientService = class ClientService {
         this.clientsMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
-        }, 5 * 60 * 1000);
+            await this.checkNpoint();
+        }, 5000);
     }
     async checkNpoint() {
         const clients = (await axios_1.default.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
@@ -126,7 +127,7 @@ let ClientService = class ClientService {
             return client;
         }
         else {
-            const user = (await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).exec())?.toJSON();
+            const user = await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).lean().exec();
             this.clientsMap.set(clientId, user);
             if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);

@@ -10,103 +10,111 @@ function sleep(ms) {
 }
 exports.sleep = sleep;
 function contains(str, arr) {
-    return (arr.some(element => {
-        if (str?.includes(element)) {
-            return true;
-        }
+    if (!str || !Array.isArray(arr))
         return false;
-    }));
+    return arr.some(element => element && str.includes(element));
 }
 exports.contains = contains;
-;
+const requestQueue = new Map();
+const MAX_CONCURRENT_REQUESTS = 10;
 async function fetchWithTimeout(resource, options = {}, maxRetries = 1) {
-    options.timeout = options.timeout || 50000;
-    options.method = options.method || 'GET';
-    options.enableBypass = options.enableBypass ?? true;
-    options.bypassUrl = options.bypassUrl || process.env.bypassURL;
-    const tryOriginalRequest = async () => {
-        for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
-            try {
-                const responseIPv4 = await fetchWithProtocol(resource, 4, options);
-                if (responseIPv4) {
-                    if (responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
-                        try {
-                            const bypassResponse = await (0, axios_1.default)({
-                                url: options.bypassUrl,
-                                method: 'POST',
-                                data: {
-                                    url: resource,
-                                    method: options.method,
-                                    headers: options.headers,
-                                    data: options.data,
-                                    params: options.params
-                                },
-                                timeout: options.timeout,
-                                validateStatus: () => true
-                            });
-                            return bypassResponse;
-                        }
-                        catch (bypassError) {
-                            console.log("Bypass request failed");
-                            parseError(bypassError);
+    if (!resource)
+        throw new Error('Resource URL is required');
+    const queueKey = options.queueKey || resource;
+    while (requestQueue.size >= MAX_CONCURRENT_REQUESTS) {
+        await Promise.race(requestQueue.values());
+    }
+    const requestPromise = (async () => {
+        try {
+            options.timeout = options.timeout || 50000;
+            options.method = options.method || 'GET';
+            options.enableBypass = options.enableBypass ?? true;
+            options.bypassUrl = options.bypassUrl || process.env.bypassURL;
+            const tryOriginalRequest = async () => {
+                let lastError = null;
+                for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+                    try {
+                        const responseIPv4 = await fetchWithProtocol(resource, 4, options);
+                        if (responseIPv4) {
+                            if (responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
+                                try {
+                                    return await makeBypassRequest(resource, options);
+                                }
+                                catch (bypassError) {
+                                    console.log("Bypass request failed");
+                                    parseError(bypassError);
+                                    return responseIPv4;
+                                }
+                            }
                             return responseIPv4;
                         }
-                    }
-                    return responseIPv4;
-                }
-                const responseIPv6 = await fetchWithProtocol(resource, 6, options);
-                if (responseIPv6) {
-                    if (responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
-                        try {
-                            const bypassResponse = await (0, axios_1.default)({
-                                url: options.bypassUrl,
-                                method: 'POST',
-                                data: {
-                                    url: resource,
-                                    method: options.method,
-                                    headers: options.headers,
-                                    data: options.data,
-                                    params: options.params
-                                },
-                                timeout: options.timeout,
-                                validateStatus: () => true
-                            });
-                            return bypassResponse;
-                        }
-                        catch (bypassError) {
-                            console.log("Bypass request failed");
-                            parseError(bypassError);
+                        const responseIPv6 = await fetchWithProtocol(resource, 6, options);
+                        if (responseIPv6) {
+                            if (responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
+                                try {
+                                    return await makeBypassRequest(resource, options);
+                                }
+                                catch (bypassError) {
+                                    console.log("Bypass request failed");
+                                    parseError(bypassError);
+                                    return responseIPv6;
+                                }
+                            }
                             return responseIPv6;
                         }
                     }
-                    return responseIPv6;
+                    catch (error) {
+                        console.log("Error at URL : ", resource);
+                        const errorDetails = parseError(error);
+                        lastError = error;
+                        const shouldRetry = retryCount < maxRetries &&
+                            error.code !== 'ERR_NETWORK' &&
+                            error.code !== "ECONNABORTED" &&
+                            error.code !== "ETIMEDOUT" &&
+                            !errorDetails.message.toLowerCase().includes('too many requests') &&
+                            !axios_1.default.isCancel(error);
+                        if (shouldRetry) {
+                            const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 10000);
+                            console.log(`Retrying... (${retryCount + 1}/${maxRetries}) after ${backoffTime}ms`);
+                            await sleep(backoffTime);
+                            continue;
+                        }
+                        console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+                        throw error;
+                    }
                 }
-            }
-            catch (error) {
-                console.log("Error at URL : ", resource);
-                const errorDetails = parseError(error);
-                if (retryCount < maxRetries &&
-                    error.code !== 'ERR_NETWORK' &&
-                    error.code !== "ECONNABORTED" &&
-                    error.code !== "ETIMEDOUT" &&
-                    !errorDetails.message.toLowerCase().includes('too many requests') &&
-                    !axios_1.default.isCancel(error)) {
-                    console.log(`Retrying... (${retryCount + 1}/${maxRetries})`);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    continue;
-                }
-                console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
-                throw error;
-            }
+                throw lastError || new Error(`Failed to get response after ${maxRetries + 1} attempts`);
+            };
+            return await tryOriginalRequest();
         }
-        throw new Error(`Failed to get response after ${maxRetries + 1} attempts`);
-    };
-    return await tryOriginalRequest();
+        finally {
+            requestQueue.delete(queueKey);
+        }
+    })();
+    requestQueue.set(queueKey, requestPromise);
+    return requestPromise;
 }
 exports.fetchWithTimeout = fetchWithTimeout;
+async function makeBypassRequest(resource, options) {
+    if (!options.bypassUrl)
+        throw new Error('Bypass URL is required');
+    return await (0, axios_1.default)({
+        url: options.bypassUrl,
+        method: 'POST',
+        data: {
+            url: resource,
+            method: options.method,
+            headers: options.headers,
+            data: options.data,
+            params: options.params
+        },
+        timeout: options.timeout,
+        validateStatus: () => true
+    });
+}
 const fetchWithProtocol = async (url, version, options) => {
     const source = axios_1.default.CancelToken.source();
-    const id = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
         source.cancel(`Request timed out after ${options.timeout}ms`);
     }, options.timeout);
     try {
@@ -115,42 +123,43 @@ const fetchWithProtocol = async (url, version, options) => {
             url,
             headers: { 'Content-Type': 'application/json', ...options.headers },
             cancelToken: source.token,
-            family: version
+            family: version,
+            validateStatus: (status) => status >= 200 && status < 600
         });
-        clearTimeout(id);
         return response;
     }
     catch (error) {
-        clearTimeout(id);
-        console.log(`Error at URL (IPv${version}): `, url);
-        parseError(error);
         if (axios_1.default.isCancel(error)) {
             console.log('Request canceled:', error.message, url);
             return undefined;
         }
+        console.log(`Error at URL (IPv${version}): `, url);
+        parseError(error);
         throw error;
+    }
+    finally {
+        clearTimeout(timeoutId);
     }
 };
 function toBoolean(value) {
+    if (value === null || value === undefined)
+        return false;
     if (typeof value === 'string') {
-        return value.toLowerCase() === 'true';
+        const normalizedValue = value.toLowerCase().trim();
+        return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
     }
     if (typeof value === 'number') {
-        return value === 1;
+        return value !== 0;
     }
     return value;
 }
 exports.toBoolean = toBoolean;
 function fetchNumbersFromString(inputString) {
+    if (!inputString)
+        return '';
     const regex = /\d+/g;
     const matches = inputString.match(regex);
-    if (matches) {
-        const result = matches.join('');
-        return result;
-    }
-    else {
-        return '';
-    }
+    return matches ? matches.join('') : '';
 }
 exports.fetchNumbersFromString = fetchNumbersFromString;
 function parseError(err, prefix = 'TgCms') {
@@ -158,99 +167,95 @@ function parseError(err, prefix = 'TgCms') {
     let message = 'An unknown error occurred';
     let error = 'UnknownError';
     const extractMessage = (data) => {
+        if (!data)
+            return '';
         if (Array.isArray(data)) {
-            const messages = data.map((item) => extractMessage(item));
-            return messages.filter((message) => message !== undefined).join(', ');
+            return data
+                .map((item) => extractMessage(item))
+                .filter(Boolean)
+                .join(', ');
         }
-        else if (typeof data === 'string') {
+        if (typeof data === 'string') {
             return data;
         }
-        else if (typeof data === 'object' && data !== null) {
-            let resultString = '';
-            for (const key in data) {
-                const value = data[key];
-                if (Array.isArray(data[key]) && data[key].every(item => typeof item === 'string')) {
-                    resultString = resultString + data[key].join(', ');
-                }
-                else {
-                    const result = extractMessage(value);
-                    if (result) {
-                        resultString = resultString + result;
-                    }
-                }
-            }
-            return resultString;
+        if (typeof data === 'object') {
+            return Object.values(data)
+                .map(value => extractMessage(value))
+                .filter(Boolean)
+                .join(', ') || JSON.stringify(data);
         }
-        return JSON.stringify(data);
+        return String(data);
     };
     if (err.response) {
         const response = err.response;
-        status =
-            response.data?.status ||
-                response.status ||
-                err.status ||
-                'UNKNOWN';
-        message =
-            response.data?.message ||
-                response.data?.errors ||
-                response.errorMessage ||
-                response.message ||
-                response.statusText ||
-                response.data ||
-                err.message ||
-                'An error occurred';
-        error =
-            response.data?.error ||
-                response.error ||
-                err.name ||
-                err.code ||
-                'Error';
+        status = String(response.data?.status ||
+            response.status ||
+            err.status ||
+            'UNKNOWN');
+        message = extractMessage(response.data?.message ||
+            response.data?.errors ||
+            response.errorMessage ||
+            response.message ||
+            response.statusText ||
+            response.data ||
+            err.message) || 'An error occurred';
+        error = String(response.data?.error ||
+            response.error ||
+            err.name ||
+            err.code ||
+            'Error');
     }
     else if (err.request) {
-        status = err.status || 'NO_RESPONSE';
-        message = err.data?.message ||
+        status = String(err.status || 'NO_RESPONSE');
+        message = extractMessage(err.data?.message ||
             err.data?.errors ||
             err.message ||
             err.statusText ||
-            err.data ||
-            err.message || 'The request was triggered but no response was received';
-        error = err.name || err.code || 'NoResponseError';
+            err.data) || 'The request was triggered but no response was received';
+        error = String(err.name || err.code || 'NoResponseError');
     }
-    else if (err.message) {
-        status = err.status || 'UNKNOWN';
-        message = err.message;
-        error = err.name || err.code || 'Error';
+    else {
+        status = String(err.status || 'UNKNOWN');
+        message = err.message || err.errorMessage || 'Unknown error occurred';
+        error = String(err.name || err.code || 'Error');
     }
-    else if (err.errorMessage) {
-        status = err.status || 'UNKNOWN';
-        message = err.errorMessage;
-        error = err.name || err.code || 'Error';
-    }
-    const msg = `${prefix ? `${prefix} ::` : ""} ${extractMessage(message)} `;
-    const resp = { status, message: err.errorMessage || msg, error };
-    console.log(resp.error == 'RPCError' ? resp.message : resp);
-    return resp;
+    const formattedMessage = `${prefix ? `${prefix} :: ` : ''}${message}`;
+    const response = {
+        status,
+        message: err.errorMessage || formattedMessage,
+        error
+    };
+    console.log(response.error === 'RPCError' ? response.message : response);
+    return response;
 }
 exports.parseError = parseError;
+const BOT_TOKENS = Object.freeze([
+    'bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY',
+    'bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA'
+]);
 let botCount = 0;
 function ppplbot(chatId, botToken) {
-    let token = botToken;
-    if (!token) {
-        if (botCount % 2 === 1) {
-            token = 'bot6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY';
-        }
-        else {
-            token = 'bot6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA';
-        }
-        botCount++;
+    if (botCount > 1000000)
+        botCount = 0;
+    const token = botToken || BOT_TOKENS[botCount++ % BOT_TOKENS.length];
+    if (!botToken && !token.match(/^bot\d+:[A-Za-z0-9_-]+$/)) {
+        throw new Error('Invalid bot token format');
     }
-    const targetChatId = chatId || '-1001801844217';
-    const apiUrl = `https://api.telegram.org/${token}/sendMessage?chat_id=${targetChatId}`;
-    return apiUrl;
+    const targetChatId = chatId?.trim() || '-1001801844217';
+    if (!targetChatId.match(/^-?\d+$/)) {
+        throw new Error('Invalid chat ID format');
+    }
+    try {
+        const url = new URL(`https://api.telegram.org/${token}/sendMessage`);
+        url.searchParams.set('chat_id', targetChatId);
+        return url.toString();
+    }
+    catch (error) {
+        throw new Error('Failed to construct Telegram API URL');
+    }
 }
 exports.ppplbot = ppplbot;
-;
-exports.defaultReactions = [
+exports.defaultReactions = Object.freeze([
     '❤', '🔥', '👏', '🥰', '😁', '🤔',
     '🤯', '😱', '🤬', '😢', '🎉', '🤩',
     '🤮', '💩', '🙏', '👌', '🕊', '🤡',
@@ -259,30 +264,42 @@ exports.defaultReactions = [
     '🌚', '⚡', '🍌', '😐', '💋', '👻',
     '👀', '🙈', '🤝', '🤗', '🆒',
     '🗿', '🙉', '🙊', '🤷', '👎'
-];
-exports.defaultMessages = [
+]);
+exports.defaultMessages = Object.freeze([
     "1", "2", "3", "4", "5", "6", "7", "8",
     "9", "10", "11", "12", "13", "14", "15",
     "16", "17", "18", "19", "20", "21"
-];
+]);
 function areJsonsNotSame(json1, json2) {
-    const keysToIgnore = ["id", "_id"];
-    function deepCompare(obj1, obj2) {
-        if (obj1 === obj2)
-            return true;
-        if (typeof obj1 !== "object" || typeof obj2 !== "object" || obj1 === null || obj2 === null) {
-            return false;
+    const keysToIgnore = ['id', '_id'];
+    console.log('[areJsonsNotSame] Starting comparison...');
+    function normalizeObject(obj) {
+        if (obj === null || obj === undefined)
+            return obj;
+        if (typeof obj !== 'object')
+            return obj;
+        if (Array.isArray(obj))
+            return obj.map(normalizeObject);
+        const normalized = {};
+        const sortedKeys = Object.keys(obj)
+            .filter(key => !keysToIgnore.includes(key))
+            .sort();
+        for (const key of sortedKeys) {
+            normalized[key] = normalizeObject(obj[key]);
         }
-        const keys1 = Object.keys(obj1).filter(key => !keysToIgnore.includes(key)).sort();
-        const keys2 = Object.keys(obj2).filter(key => !keysToIgnore.includes(key)).sort();
-        if (keys1.length !== keys2.length)
-            return false;
-        return keys1.every(key => deepCompare(obj1[key], obj2[key]));
+        return normalized;
     }
-    return !deepCompare(json1, json2);
+    const normalized1 = normalizeObject(json1);
+    const normalized2 = normalizeObject(json2);
+    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
+    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
+    return result;
 }
 exports.areJsonsNotSame = areJsonsNotSame;
 function mapToJson(map) {
+    if (!(map instanceof Map)) {
+        throw new Error('Input must be a Map instance');
+    }
     const obj = {};
     for (const [key, value] of map.entries()) {
         obj[String(key)] = value;

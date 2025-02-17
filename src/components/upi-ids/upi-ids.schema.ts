@@ -4,9 +4,11 @@ import mongoose, { Document } from 'mongoose';
 export type UpiIdDocument = UpiId & Document;
 
 @Schema({
-  versionKey: false, autoIndex: true, strict: false, timestamps: true,
+  versionKey: false,
+  autoIndex: true,
+  timestamps: false,
   toJSON: {
-    virtuals: true,
+    virtuals: false,
     transform: (doc, ret) => {
       delete ret._id;
     },

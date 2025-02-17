@@ -17,9 +17,11 @@ let UpiId = class UpiId {
 exports.UpiId = UpiId;
 exports.UpiId = UpiId = __decorate([
     (0, mongoose_1.Schema)({
-        versionKey: false, autoIndex: true, strict: false, timestamps: true,
+        versionKey: false,
+        autoIndex: true,
+        timestamps: false,
         toJSON: {
-            virtuals: true,
+            virtuals: false,
             transform: (doc, ret) => {
                 delete ret._id;
             },

@@ -27,46 +27,51 @@ let UpiIdService = class UpiIdService {
         this.UpiIdModel = UpiIdModel;
         this.npointSerive = npointSerive;
         this.upiIds = {};
-        this.UpiIdModel.findOne({}).exec().then((data) => {
-            this.upiIds = data;
-            console.log("Refreshed UPIs");
+        this.findOne().then(() => {
+            setInterval(async () => {
+                await this.refreshUPIs();
+                await this.checkNpoint();
+            }, 5 * 60000);
         });
-        setInterval(async () => {
-            await this.refreshUPIs();
-            await this.checkNpoint();
-        }, 5 * 60 * 1000);
     }
     async OnModuleInit() {
         console.log("Config Module Inited");
     }
     async refreshUPIs() {
-        console.log("Refreshed UPIs");
-        this.upiIds = await this.UpiIdModel.findOne({}).exec();
+        console.log("Refreshing UPIs");
+        const result = await this.UpiIdModel.findOne({}).lean().exec();
+        if (result) {
+            this.upiIds = result;
+        }
     }
     async checkNpoint() {
         const upiIds = (await axios_1.default.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
         const existingUpiIds = await this.findOne();
+        console.log("npoint: ", upiIds);
+        console.log("existing: ", existingUpiIds);
         if ((0, utils_1.areJsonsNotSame)(upiIds, existingUpiIds)) {
-            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", this.upiIds);
+            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds);
         }
     }
     async findOne() {
         if (Object.keys(this.upiIds).length > 0) {
             return this.upiIds;
         }
-        const result = await this.UpiIdModel.findOne({}).exec();
+        const result = await this.UpiIdModel.findOne({}).lean().exec();
+        if (!result)
+            return null;
         this.upiIds = result;
         console.log("Refreshed UPIs");
         return result;
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
-        const updatedUser = await this.UpiIdModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
-        this.upiIds = updatedUser;
-        console.log("Refreshed UPIs");
+        const updatedUser = await this.UpiIdModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true, lean: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UpiIdModel not found`);
         }
+        this.upiIds = updatedUser;
+        console.log("Refreshed UPIs");
         return updatedUser;
     }
 };
