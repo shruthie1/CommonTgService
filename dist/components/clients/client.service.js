@@ -291,7 +291,7 @@ let ClientService = class ClientService {
     async updateClient(clientId) {
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
-        const cooldownPeriod = 5 * 60 * 1000;
+        const cooldownPeriod = 30000;
         if (now - lastUpdate < cooldownPeriod) {
             console.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
             return;
@@ -310,22 +310,22 @@ let ClientService = class ClientService {
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername });
             }
-            await (0, Helpers_1.sleep)(2000);
+            await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
                 await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
             }
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(1000);
             await telegramClient.deleteProfilePhotos();
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(1000);
             await telegramClient.updatePrivacy();
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(1000);
             const rootPath = process.cwd();
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
-            await (0, Helpers_1.sleep)(2000);
+            await (0, Helpers_1.sleep)(1000);
             await this.telegramService.deleteClient(client.mobile);
         }
         catch (error) {

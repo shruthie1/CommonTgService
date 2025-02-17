@@ -75,11 +75,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     }
     async sendCode(phone) {
         try {
-            this.logger.debug(`Validating phone number: ${phone}`);
             phone = this.validatePhoneNumber(phone);
-            this.logger.debug(`Disconnecting any existing client for: ${phone}`);
             await this.disconnectClient(phone);
-            this.logger.debug(`Fetching random credentials for API ID and API Hash`);
             const { apiId, apiHash } = this.getRandomCredentials();
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
@@ -88,11 +85,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 useWSS: true,
                 timeout: 30000
             });
-            this.logger.debug(`Setting log level to ERROR for TelegramClient`);
             await client.setLogLevel(Logger_1.LogLevel.ERROR);
-            this.logger.debug(`Connecting to Telegram server`);
             await client.connect();
-            this.logger.debug(`Invoking API to send code to: ${phone}`);
             const sendResult = await client.invoke(new tl_1.Api.auth.SendCode({
                 phoneNumber: phone,
                 apiId,
@@ -102,14 +96,11 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                     allowAppHash: true,
                 }),
             }));
-            this.logger.debug(`Received send code result for ${phone}: ${JSON.stringify(sendResult)}`);
             if (sendResult instanceof tl_1.Api.auth.SentCodeSuccess) {
                 this.logger.error(`Unexpected immediate login for ${phone}`);
                 throw new common_1.BadRequestException('Unexpected immediate login');
             }
-            this.logger.debug(`Setting up session timeout for ${phone}`);
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            this.logger.debug(`Storing client session for ${phone}`);
             TgSignupService_1.activeClients.set(phone, {
                 client,
                 phoneCodeHash: sendResult.phoneCodeHash,
@@ -129,15 +120,12 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     }
     async verifyCode(phone, code, password) {
         try {
-            this.logger.debug(`Validating phone number for verification: ${phone}`);
             phone = this.validatePhoneNumber(phone);
-            this.logger.debug(`Fetching active session for ${phone}`);
             const session = TgSignupService_1.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
                 throw new common_1.BadRequestException('No active signup session found. Please request a new code.');
             }
-            this.logger.debug(`Checking session age for ${phone}`);
             if (Date.now() - session.createdAt > TgSignupService_1.LOGIN_TIMEOUT) {
                 await this.disconnectClient(phone);
                 this.logger.warn(`Verification code expired for ${phone}`);
@@ -148,7 +136,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 this.logger.warn(`Client connection lost for ${phone}`);
                 throw new common_1.BadRequestException('Connection lost. Please request a new code.');
             }
-            this.logger.debug(`Invoking SignIn API for ${phone}`);
             const { client, phoneCodeHash } = session;
             try {
                 this.logger.debug(`Attempting to sign in with code for ${phone}`);
@@ -160,7 +147,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 if (!signInResult) {
                     throw new common_1.BadRequestException('Invalid response from Telegram server');
                 }
-                this.logger.debug(`SignIn result for ${phone}: ${JSON.stringify(signInResult)}`);
                 if (signInResult instanceof tl_1.Api.auth.AuthorizationSignUpRequired) {
                     this.logger.log(`New user registration required for ${phone}`);
                     const result = await this.handleNewUserRegistration(phone, client, phoneCodeHash);
@@ -171,7 +157,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 if (!sessionString) {
                     throw new Error('Failed to generate session string');
                 }
-                this.logger.log(`User login successful for ${phone}`);
                 const userData = await this.processLoginResult(signInResult.user, sessionString, password);
                 await this.disconnectClient(phone);
                 return userData;
