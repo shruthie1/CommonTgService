@@ -12,7 +12,8 @@ export class ThrottleMiddleware implements NestMiddleware {
     const THROTTLE_TIME = 1000; // 5 seconds
 
     if (now - lastCall < THROTTLE_TIME) {
-      return res.status(429).json({ message: 'Too many requests. Please wait.' });
+        console.error(`Too many requests for ${key}. Please wait.`);
+        return res.status(429).json({ message: 'Too many requests. Please wait.' });
     }
 
     requestTimestamps.set(key, now);
