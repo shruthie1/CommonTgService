@@ -5,11 +5,12 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './schemas/client.schema';
 import { SearchClientDto } from './dto/search-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { SetupClientQueryDto } from './dto/setup-client.dto';
 
 @ApiTags('Clients')
 @Controller('clients')
 export class ClientController {
-  constructor(private readonly clientService: ClientService) {}
+  constructor(private readonly clientService: ClientService) { }
 
   /**
    * Create a new client
@@ -48,7 +49,7 @@ export class ClientController {
     this.clientService.updateClient(clientId);
     return "Update client initiated";
   }
-  
+
   /**
    * Get all clients with masked sensitive fields
    */
@@ -120,6 +121,15 @@ export class ClientController {
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.NOT_FOUND);
     }
+  }
+
+  @Get('setupClient/:clientId')
+  @ApiOperation({ summary: 'SetUp Client data' })
+  //@apiresponse({ status: 200, description: 'Return the user data.' })
+  //@apiresponse({ status: 404, description: 'User data not found.' })
+  async setupClient(@Param('clientId') clientId: string, @Query() setupClientQueryDto: SetupClientQueryDto) {
+    this.clientService.setupClient(clientId, setupClientQueryDto);
+    return `Started Client Seup for ${clientId}`
   }
 
   /**
