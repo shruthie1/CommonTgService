@@ -40,7 +40,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             };
         }
         catch (error) {
-            const parsedError = (0, parseError_1.parseError)(error);
+            const parsedError = (0, parseError_1.parseError)(error, "tgsignup", false);
             this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
                 error: parsedError,
                 stack: error.stack,
@@ -72,7 +72,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             };
         }
         catch (error) {
-            const parsedError = (0, parseError_1.parseError)(error);
+            const parsedError = (0, parseError_1.parseError)(error, "tgverify", false);
             this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
                 error: parsedError,
                 stack: error.stack,
