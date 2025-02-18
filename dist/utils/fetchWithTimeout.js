@@ -40,7 +40,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
             notify(`Attempt ${attempt} failed`, parsedError);
-            if (parsedError.status === 403 && options.bypassUrl) {
+            if (parsedError.status === 403) {
                 notify(`403 error encountered. Attempting bypass`, parsedError);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
@@ -82,7 +82,7 @@ function shouldRetry(error, parsedError) {
         ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code));
 }
 function notify(prefix, errorDetails) {
-    console.log(prefix, errorDetails);
+    console.log(prefix, errorDetails.message);
     if (errorDetails.status === 429)
         return;
     try {
