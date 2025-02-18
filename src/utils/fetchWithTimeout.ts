@@ -38,14 +38,14 @@ export async function fetchWithTimeout(
             }
             lastError = error;
             const parsedError = parseError(error, url, false);
-            notify(`Attempt ${attempt} failed`, { message: parsedError.status });
+            notify(`Attempt ${attempt} failed: `, { message: parsedError.status });
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403) {
-                notify(`403 error encountered. Attempting bypass`, url);
+                notify(`Attempting bypass for`, url);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully Excuted 403 request`, { message: extractMessage(bypassResponse.data) });
+                    notify(`Successfully Excuted 403 Request`, { message: extractMessage(bypassResponse.data) });
                     return bypassResponse;
                 } catch (bypassError) {
                     notify(`Bypass attempt failed`, parseError(bypassError, url, false));
