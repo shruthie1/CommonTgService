@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { UsersModule } from './components/users/users.module';
 import { UserDataModule } from './components/user-data/user-data.module';
 import { ClientModule } from './components/clients/client.module';
@@ -64,6 +64,6 @@ import { ThrottleMiddleware } from './middlewares/throttle.middleware';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
-    consumer.apply(ThrottleMiddleware).forRoutes('*');
+    consumer.apply(ThrottleMiddleware).exclude({ path: 'execute-request', method: RequestMethod.ALL }).forRoutes('*');
   }
 }

@@ -15,6 +15,7 @@ import { UpiIdService } from './components/upi-ids/upi-ids.service';
 import { BuildService } from './components/builds/build.service';
 import { BuildModule } from './components/builds/build.module';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
+import { ThrottleMiddleware } from './middlewares/throttle.middleware';
 import { ChannelsService } from './components/channels/channels.service';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppModule } from './app.module';
@@ -86,6 +87,7 @@ export {
 
     // Utilities
     LoggerMiddleware,
+    ThrottleMiddleware,
     contains,
     defaultMessages,
     defaultReactions,
