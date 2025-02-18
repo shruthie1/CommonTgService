@@ -231,7 +231,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             return await this.processLoginResult(signUpResult.user, sessionString);
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, "TGSIGNUP", false);
             this.logger.error(`Failed to register new user: ${errorDetails.message}`);
             throw new common_1.BadRequestException(errorDetails.message || 'Failed to register new user');
         }
