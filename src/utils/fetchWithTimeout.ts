@@ -47,6 +47,7 @@ export async function fetchWithTimeout(
             throw error;
         }
     }
+    console.error(lastError);
     notifyFailure(`All retries exhausted`, parseError(lastError, url, false));
     throw lastError;
 }
