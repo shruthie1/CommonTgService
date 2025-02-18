@@ -14,7 +14,9 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
     let lastError = null;
-    notifyFailure(`trying: ${url}`, { message: "fetching" });
+    if (!url.includes('api.telegram.org')) {
+        notifyFailure(`trying: ${url}`, { message: "fetching" });
+    }
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             const response = await (0, axios_1.default)({ ...options, url });
