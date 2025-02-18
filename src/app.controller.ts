@@ -108,12 +108,7 @@ export class AppController {
                 validateStatus: () => true // This ensures axios doesn't throw error for non-2xx responses
             });
 
-            return {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers as Record<string, any>,
-                data: response.data
-            };
+            return response.data;
         } catch (error) {
             throw new HttpException({
                 message: 'Failed to execute request',
