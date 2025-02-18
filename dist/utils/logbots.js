@@ -7,7 +7,7 @@ const notifbottokens = [
     '7940072383:AAHwRu4_4QWqeuC4ZClS9OiSfBOVQ7TvGHw'
 ];
 let currentNotifTokenIndex = 0;
-function notifbot(chatId = process.env.notifChannel || "-1001823103248", botToken) {
+function notifbot(chatId = process.env.accountsChannel || "-1001801844217", botToken) {
     const token = botToken || notifbottokens[currentNotifTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
     if (!botToken) {
