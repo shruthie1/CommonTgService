@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseError = void 0;
+exports.parseError = exports.extractMessage = void 0;
 const fetchWithTimeout_1 = require("./fetchWithTimeout");
 const logbots_1 = require("./logbots");
 const extractMessage = (data) => {
     if (Array.isArray(data)) {
-        return `${data.map((item) => extractMessage(item)).join(', ')}`;
+        return `${data.map((item) => (0, exports.extractMessage)(item)).join(', ')}`;
     }
     if (typeof data === 'string' ||
         typeof data === 'number' ||
@@ -18,7 +18,7 @@ const extractMessage = (data) => {
             const value = data[key];
             const newPrefix = key;
             if (Array.isArray(value)) {
-                messages.push(`${newPrefix}=${value.map((item) => extractMessage(item)).join(', ')}`);
+                messages.push(`${newPrefix}=${value.map((item) => (0, exports.extractMessage)(item)).join(', ')}`);
             }
             else if (typeof value === 'string' ||
                 typeof value === 'number' ||
@@ -26,13 +26,14 @@ const extractMessage = (data) => {
                 messages.push(`${newPrefix}=${value}`);
             }
             else if (typeof value === 'object' && value !== null) {
-                messages.push(String(extractMessage(value)));
+                messages.push(String((0, exports.extractMessage)(value)));
             }
         }
         return messages.length > 0 ? messages.join(', ') : '';
     }
     return '';
 };
+exports.extractMessage = extractMessage;
 function parseError(err, prefix, sendErr = true) {
     const clientId = process.env.clientId || 'UnknownClient';
     const notifChannel = process.env.notifChannel || 'UnknownChannel';
@@ -86,7 +87,7 @@ function parseError(err, prefix, sendErr = true) {
         message = err.message;
         error = err.name || err.code || 'Error';
     }
-    const fullMessage = `${prefixStr} ${extractMessage(message)}`;
+    const fullMessage = `${prefixStr} ${(0, exports.extractMessage)(message)}`;
     const response = { status, message: String(fullMessage), error };
     console.log(response);
     if (sendErr) {
