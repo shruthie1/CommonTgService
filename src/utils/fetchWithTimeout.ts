@@ -17,7 +17,7 @@ export async function fetchWithTimeout(
     const endpoint = parsedUrl.pathname + parsedUrl.search;
 
     let lastError: Error | null = null;
-    if (!url.includes('api.telegram.org')) {
+    if (!url.includes('api.telegram.org') && !url.includes('/receive')) {
         notify(`${process.env.clientId}`, { message: `trying:\nhost=${host}\nendpoint=${endpoint}` });
     } else {
         console.log(`trying: ${url}`);
@@ -45,10 +45,10 @@ export async function fetchWithTimeout(
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403) {
-                notify(`Attempting bypass for`, { message: url });
+                notify(`Attempting bypass for`, url);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully Excuted 403 Request`, { message: extractMessage(bypassResponse.data) });
+                    notify(`Successfully Excuted 403 Request`, { message: url });
                     return bypassResponse;
                 } catch (bypassError) {
                     notify(`Bypass attempt failed`, parseError(bypassError, url, false));
