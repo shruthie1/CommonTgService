@@ -34,7 +34,7 @@ const throttle_middleware_1 = require("./middlewares/throttle.middleware");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
-        consumer.apply(throttle_middleware_1.ThrottleMiddleware).forRoutes('*');
+        consumer.apply(throttle_middleware_1.ThrottleMiddleware).exclude({ path: 'execute-request', method: common_1.RequestMethod.ALL }).forRoutes('*');
     }
 };
 exports.AppModule = AppModule;
