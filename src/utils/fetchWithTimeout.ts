@@ -12,7 +12,6 @@ export async function fetchWithTimeout(
 
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
-    options.bypassUrl = options.bypassUrl
 
     let lastError: Error | null = null;
 
