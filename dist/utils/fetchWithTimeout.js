@@ -13,9 +13,12 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
         throw new Error("URL is required");
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
+    const parsedUrl = new URL(url);
+    const host = parsedUrl.host;
+    const endpoint = parsedUrl.pathname + parsedUrl.search;
     let lastError = null;
     if (!url.includes('api.telegram.org')) {
-        notify(`${process.env.clientId}`, { message: `trying: ${url}` });
+        notify(`${process.env.clientId}`, { message: `trying:\nhost=${host}\nendpoint=${endpoint}` });
     }
     else {
         console.log(`trying: ${url}`);
