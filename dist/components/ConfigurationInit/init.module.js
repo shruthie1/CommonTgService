@@ -28,11 +28,11 @@ let initModule = class initModule {
     }
     async onModuleInit() {
         console.log(`Started :: ${process.env.clientId}`);
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
     }
     async onModuleDestroy() {
         console.log("Init Module Destroying");
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
         this.closeConnection();
     }
     closeConnection() {

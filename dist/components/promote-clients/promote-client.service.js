@@ -70,7 +70,7 @@ let PromoteClientService = class PromoteClientService {
         }
     }
     async remove(mobile) {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);

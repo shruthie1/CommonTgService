@@ -4,12 +4,12 @@ import { TransactionService } from './transaction.service';
 export declare class TransactionController {
     private readonly transactionService;
     constructor(transactionService: TransactionService);
-    create(createTransactionDto: CreateTransactionDto): Promise<import("./schemas/transaction.schema").Transaction>;
-    findOne(id: string): Promise<import("./schemas/transaction.schema").Transaction>;
+    create(createTransactionDto: CreateTransactionDto): Promise<import("src/components/transactions/schemas/transaction.schema").Transaction>;
+    findOne(id: string): Promise<import("src/components/transactions/schemas/transaction.schema").Transaction>;
     findAll(search?: string, limit?: number, offset?: number): Promise<{
-        transactions: import("./schemas/transaction.schema").Transaction[];
+        transactions: import("src/components/transactions/schemas/transaction.schema").Transaction[];
         total: number;
     }>;
-    update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<import("./schemas/transaction.schema").Transaction>;
-    delete(id: string): Promise<import("./schemas/transaction.schema").Transaction>;
+    update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<import("src/components/transactions/schemas/transaction.schema").Transaction>;
+    delete(id: string): Promise<import("src/components/transactions/schemas/transaction.schema").Transaction>;
 }

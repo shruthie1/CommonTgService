@@ -153,7 +153,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     async resetWordRestrictions() {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for Reset Available Msgs`);
         try {
             await this.activeChannelModel.updateMany({
                 banned: false
@@ -169,7 +169,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     async resetAvailableMsgs() {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for Reset Available Msgs`);
         try {
             const data = await this.promoteMsgsService.findOne();
             const keys = Object.keys(data);
@@ -191,7 +191,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     async updateBannedChannels() {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for update banned Channels`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for update banned Channels`);
         await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
             $set: {
                 "wordRestriction": 0,

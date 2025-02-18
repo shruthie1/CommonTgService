@@ -20,7 +20,7 @@ import { NpointService } from '../n-point/npoint.service';
 import axios from 'axios';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot, notifbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 
 let settingupClient = Date.now() - 250000;
 @Injectable()

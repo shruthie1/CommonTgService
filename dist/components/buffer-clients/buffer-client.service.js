@@ -70,7 +70,7 @@ let BufferClientService = class BufferClientService {
         }
     }
     async remove(mobile) {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
         const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
