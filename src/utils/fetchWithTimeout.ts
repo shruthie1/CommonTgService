@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
 import { sleep } from "telegram/Helpers";
-import { parseError } from "./parseError";
+import { extractMessage, parseError } from "./parseError";
 import { ppplbot } from "./logbots";
 
 export async function fetchWithTimeout(
@@ -15,7 +15,7 @@ export async function fetchWithTimeout(
 
     let lastError: Error | null = null;
     if (!url.includes('api.telegram.org')) {
-        notify(`trying`, { message: url });
+        notify(`${process.env.clientId}:\ntrying`, { message: url });
     } else {
         console.log(`trying: ${url}`);
     }
@@ -90,7 +90,7 @@ function notify(prefix: string, errorDetails: any) {
     console.log(prefix, errorDetails.message);
     if(errorDetails.status === 429) return;
     try {
-        axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${errorDetails?.message}`)}`);
+        axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${extractMessage(errorDetails?.message)}`)}`);
     } catch (error) {
         console.error("Failed to notify failure:", error);
     }
