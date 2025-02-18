@@ -8,7 +8,7 @@ import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 
 @Injectable()
 export class ActiveChannelsService {
@@ -169,7 +169,7 @@ export class ActiveChannelsService {
   }
 
   async resetWordRestrictions() {
-    await fetchWithTimeout(`${ppplbot()}&text=Request Received for Reset Available Msgs`);
+    await fetchWithTimeout(`${notifbot()}&text=Request Received for Reset Available Msgs`);
     try {
       await this.activeChannelModel.updateMany({
         banned: false
@@ -185,7 +185,7 @@ export class ActiveChannelsService {
   }
 
   async resetAvailableMsgs() {
-    await fetchWithTimeout(`${ppplbot()}&text=Request Received for Reset Available Msgs`);
+    await fetchWithTimeout(`${notifbot()}&text=Request Received for Reset Available Msgs`);
     try {
       const data = await this.promoteMsgsService.findOne();
       const keys = Object.keys(data);
@@ -210,7 +210,7 @@ export class ActiveChannelsService {
   }
 
   async updateBannedChannels() {
-    await fetchWithTimeout(`${ppplbot()}&text=Request Received for update banned Channels`);
+    await fetchWithTimeout(`${notifbot()}&text=Request Received for update banned Channels`);
     await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
       $set: {
         "wordRestriction": 0,

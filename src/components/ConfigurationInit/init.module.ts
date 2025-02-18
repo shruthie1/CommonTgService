@@ -6,7 +6,7 @@ import { ConfigurationSchema } from './configuration.schema';
 import { ConfigurationController } from './init.controller';
 import { Connection } from 'mongoose';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 @Global()
 @Module({
   imports: [
@@ -28,12 +28,12 @@ export class initModule implements OnModuleDestroy, OnModuleInit {
   constructor(@Inject(getConnectionToken()) private readonly connection: Connection) {}
   async onModuleInit() {
     console.log(`Started :: ${process.env.clientId}`)
-    await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+    await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
   }
 
   async onModuleDestroy() {
     console.log("Init Module Destroying")
-    await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
+    await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
     this.closeConnection();
   }
 

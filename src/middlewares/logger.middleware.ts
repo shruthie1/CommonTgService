@@ -2,7 +2,7 @@ import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { parseError } from '../utils/parseError';
-import { ppplbot } from '../utils/logbots';
+import { notifbot } from '../utils/logbots';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -20,10 +20,10 @@ export class LoggerMiddleware implements NestMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
-                    fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.error(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 } else if (statusCode >= 400) {
-                    fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.warn(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 } else if (statusCode >= 300) {
                     this.logger.verbose(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
@@ -33,7 +33,7 @@ export class LoggerMiddleware implements NestMiddleware {
             });
             res.on('error', (error) => {
                 const errorDetails = parseError(error, process.env.clientId);
-                fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+                fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
             })
         } else {
             if (originalUrl.includes('Video')) {

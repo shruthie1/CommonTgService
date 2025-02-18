@@ -14,7 +14,7 @@ import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 @Injectable()
 export class PromoteClientService {
     private joinChannelMap: Map<string, Channel[]> = new Map();
@@ -78,7 +78,7 @@ export class PromoteClientService {
     }
 
     async remove(mobile: string): Promise<void> {
-        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
+        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);

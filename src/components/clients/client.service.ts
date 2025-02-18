@@ -20,7 +20,7 @@ import { NpointService } from '../n-point/npoint.service';
 import axios from 'axios';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot, notifbot } from '../../utils/logbots';
 
 let settingupClient = Date.now() - 250000;
 @Injectable()
@@ -119,7 +119,7 @@ export class ClientService {
         if ((<any>updateClientDto)._doc) {
             delete (<any>updateClientDto)._doc['_id']
         }
-        await fetchWithTimeout(`${ppplbot()}&text=Updating the Existing client: ${clientId}`);
+        await fetchWithTimeout(`${notifbot()}&text=Updating the Existing client: ${clientId}`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
@@ -154,7 +154,7 @@ export class ClientService {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile
-            await fetchWithTimeout(`${ppplbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
+            await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log(setupClientQueryDto);
             await this.telegramService.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
@@ -169,13 +169,13 @@ export class ClientService {
                     await this.telegramService.deleteClient(newBufferClient.mobile)
                     await this.updateClientSession(newSession)
                 } else {
-                    await fetchWithTimeout(`${ppplbot()}&text=Buffer Clients not available`);
+                    await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available`);
                     console.log("Buffer Clients not available")
                 }
 
                 // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
                 // if (archivedClient) {
-                //     await fetchWithTimeout(`${ppplbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
+                //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
                 //     await this.updateClientSession(archivedClient.session)
                 // } else {
                 //     await this.telegramService.createClient(newBufferClient.mobile, false, true);
@@ -206,7 +206,7 @@ export class ClientService {
             const userCaps = username[0].toUpperCase() + username.slice(1);
             let baseUsername = `${userCaps}_Red` + fetchNumbersFromString(clientId)
             updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
-            await fetchWithTimeout(`${ppplbot()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
+            await fetchWithTimeout(`${notifbot()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await this.telegramService.deleteClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             const existingClient = await this.findOne(clientId);
@@ -229,7 +229,7 @@ export class ClientService {
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             console.log("Formalities finished");
                             await this.telegramService.deleteClient(existingMobile);
-                            await fetchWithTimeout(`${ppplbot()}&text=Formalities finished`);
+                            await fetchWithTimeout(`${notifbot()}&text=Formalities finished`);
                         } else {
                             console.log("Formalities skipped")
                         }
@@ -245,10 +245,10 @@ export class ClientService {
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             // await this.archivedClientService.update(existingMobile, existingClient);
                             console.log("client Archived: ", updatedBufferClient);
-                            await fetchWithTimeout(`${ppplbot()}&text=Client Archived`);
+                            await fetchWithTimeout(`${notifbot()}&text=Client Archived`);
                         } else {
                             console.log("Client Archive Skipped")
-                            await fetchWithTimeout(`${ppplbot()}&text=Client Archive Skipped`);
+                            await fetchWithTimeout(`${notifbot()}&text=Client Archive Skipped`);
                         }
                     } catch (error) {
                         console.log("Cannot Archive Old Client");
@@ -268,7 +268,7 @@ export class ClientService {
             this.telegramService.setActiveClientSetup(undefined)
 
             console.log("Update finished Exitting Exiiting TG Service");
-            await fetchWithTimeout(`${ppplbot()}&text=Update finished`);
+            await fetchWithTimeout(`${notifbot()}&text=Update finished`);
             await this.telegramService.disconnectAll();
 
         } catch (e) {
@@ -335,15 +335,15 @@ export class ClientService {
     async generateNewSession(phoneNumber: string, attempt: number = 1) {
         try {
             console.log("String Generation started");
-            await fetchWithTimeout(`${ppplbot()}&text=String Generation started for NewNumber:${phoneNumber}`);
+            await fetchWithTimeout(`${notifbot()}&text=String Generation started for NewNumber:${phoneNumber}`);
             await sleep(1000);
             const response = await fetchWithTimeout(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
             if (response) {
                 console.log(`Code Sent successfully`, response.data);
-                await fetchWithTimeout(`${ppplbot()}&text=Code Sent successfully`);
+                await fetchWithTimeout(`${notifbot()}&text=Code Sent successfully`);
                 await this.bufferClientService.update(phoneNumber, { availableDate: (new Date(Date.now() + (24 * 60 * 60 * 1000))).toISOString().split('T')[0] })
             } else {
-                await fetchWithTimeout(`${ppplbot()}&text=Failed to send Code`);
+                await fetchWithTimeout(`${notifbot()}&text=Failed to send Code`);
                 console.log("Failed to send Code", response);
                 if (attempt < 2) {
                     await sleep(8000);

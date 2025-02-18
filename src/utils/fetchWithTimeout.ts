@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
 import { sleep } from "telegram/Helpers";
 import { extractMessage, parseError } from "./parseError";
 import { ppplbot } from "./logbots";
+import { message } from "telegram/client";
 
 export async function fetchWithTimeout(
     url: string,
@@ -38,14 +39,14 @@ export async function fetchWithTimeout(
             }
             lastError = error;
             const parsedError = parseError(error, url, false);
-            notify(`Attempt ${attempt} failed`, parsedError);
+            notify(`Attempt ${attempt} failed`, { message: parsedError.status });
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403) {
-                notify(`403 error encountered. Attempting bypass`, parsedError);
+                notify(`403 error encountered. Attempting bypass`, url);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully bypassed 403 error`, { message: bypassResponse.data });
+                    notify(`Successfully Excuted 403 request`, { message: extractMessage(bypassResponse.data) });
                     return bypassResponse;
                 } catch (bypassError) {
                     notify(`Bypass attempt failed`, parseError(bypassError, url, false));
@@ -88,7 +89,7 @@ function shouldRetry(error: any, parsedError: any): boolean {
 
 function notify(prefix: string, errorDetails: any) {
     console.log(prefix, errorDetails.message);
-    if(errorDetails.status === 429) return;
+    if (errorDetails.status === 429) return;
     try {
         axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${extractMessage(errorDetails?.message)}`)}`);
     } catch (error) {

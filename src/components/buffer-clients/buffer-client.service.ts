@@ -14,7 +14,7 @@ import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 @Injectable()
 export class BufferClientService {
     private joinChannelMap: Map<string, Channel[]> = new Map();
@@ -78,7 +78,7 @@ export class BufferClientService {
     }
 
     async remove(mobile: string): Promise<void> {
-        await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
+        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
         const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);

