@@ -5,7 +5,7 @@ const notifbottokens: string[] = [
 ];
 let currentNotifTokenIndex = 0;
 
-export function notifbot(chatId: string = process.env.notifChannel || "-1001823103248", botToken?: string): string {
+export function notifbot(chatId: string = process.env.accountsChannel || "-1001801844217", botToken?: string): string {
     const token = botToken || notifbottokens[currentNotifTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
 
