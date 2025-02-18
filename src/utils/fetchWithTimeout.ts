@@ -45,7 +45,7 @@ export async function fetchWithTimeout(
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403) {
-                notify(`Attempting bypass for`, url);
+                notify(`Attempting bypass for`, { message: url });
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
                     notify(`Successfully Excuted 403 Request`, { message: extractMessage(bypassResponse.data) });
