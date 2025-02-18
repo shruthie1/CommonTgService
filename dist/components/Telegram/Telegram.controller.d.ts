@@ -4,7 +4,7 @@ import { AddContactDto } from './dto/addContact.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connectToTelegram(mobile: string): Promise<import("src").TelegramManager>;
+    connectToTelegram(mobile: string): Promise<import("./TelegramManager").default>;
     connectClient(mobile: string): Promise<string>;
     disconnect(mobile: string): Promise<boolean>;
     disconnectAll(): Promise<string>;
