@@ -67,7 +67,7 @@ function shouldRetry(error, parsedError) {
 }
 function notifyFailure(message, errorDetails) {
     try {
-        axios_1.default.get(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
+        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
     }
     catch (error) {
         console.error("Failed to notify failure:", error);
