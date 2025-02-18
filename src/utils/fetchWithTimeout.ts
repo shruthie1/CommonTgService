@@ -14,7 +14,7 @@ export async function fetchWithTimeout(
     options.method = options.method || "GET";
 
     let lastError: Error | null = null;
-
+    notifyFailure(`trying: ${url}`, { message: "fetching" });
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             const response = await axios({ ...options, url });
@@ -70,6 +70,7 @@ function shouldRetry(error: any, parsedError: any): boolean {
 }
 
 function notifyFailure(message: string, errorDetails: any) {
+    console.error(message, errorDetails);
     try {
         axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
     } catch (error) {
