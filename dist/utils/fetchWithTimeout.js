@@ -15,7 +15,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     options.method = options.method || "GET";
     let lastError = null;
     if (!url.includes('api.telegram.org')) {
-        notify(`trying`, { message: url });
+        notify(`${process.env.clientId}:\ntrying`, { message: url });
     }
     else {
         console.log(`trying: ${url}`);
@@ -86,7 +86,7 @@ function notify(prefix, errorDetails) {
     if (errorDetails.status === 429)
         return;
     try {
-        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${errorDetails?.message}`)}`);
+        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${(0, parseError_1.extractMessage)(errorDetails?.message)}`)}`);
     }
     catch (error) {
         console.error("Failed to notify failure:", error);
