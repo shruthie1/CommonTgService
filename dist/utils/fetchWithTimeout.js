@@ -37,7 +37,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             if (axios_1.default.isAxiosError(error) && error.code === "ECONNABORTED") {
                 console.error(`Request timeout: ${url}`);
             }
-            console.error(error);
+            console.error("Error: ", error);
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
             notifyFailure(`Attempt ${attempt + 1} failed`, parsedError);

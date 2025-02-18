@@ -1,15 +1,11 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
 import { sleep } from "telegram/Helpers";
 import { parseError } from "./parseError";
 import { ppplbot } from "./logbots";
-import dns from "dns";
-import { promisify } from "util";
-
-const lookupAsync = promisify(dns.lookup);
 
 export async function fetchWithTimeout(
     url: string,
-    options: AxiosRequestConfig & { bypassUrl?: string; useIPv6?: boolean } = {},
+    options: AxiosRequestConfig & { bypassUrl?: string } = {},
     maxRetries = 1
 ): Promise<AxiosResponse> {
     if (!url) throw new Error("URL is required");
@@ -18,61 +14,49 @@ export async function fetchWithTimeout(
     options.method = options.method || "GET";
 
     let lastError: Error | null = null;
-    let resolvedUrl = url;
-    const useIPv6 = options.useIPv6 ?? process.env.USE_IPV6 === "true";
-
-    try {
-        const { address } = await lookupAsync(new URL(url).hostname, { family: useIPv6 ? 6 : 4 });
-        resolvedUrl = url.replace(new URL(url).hostname, address);
-    } catch (dnsError) {
-        console.error("DNS resolution failed, falling back to default URL:", dnsError);
-    }
-
     if (!url.includes('api.telegram.org')) {
-        notifyFailure(`trying: ${resolvedUrl}`, { message: "fetching" });
+        notifyFailure(`trying: ${url}`, { message: "fetching" });
     } else {
-        console.log(`trying: ${resolvedUrl}`);
+        console.log(`trying: ${url}`);
     }
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), options.timeout);
         try {
             const response = await axios({
                 ...options,
-                url: resolvedUrl,
+                url,
                 signal: controller.signal, // Attach the AbortController signal
             });
             clearTimeout(timeoutId);
             return response; // Success
         } catch (error) {
-            console.error("Error:", error);
             clearTimeout(timeoutId);
+            if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
+                console.error(`Request timeout: ${url}`);
+            }
+
+            console.error("Error: ",error);
             lastError = error;
-            const parsedError = parseError(error, resolvedUrl, false);
-            notifyFailure(`Attempt ${attempt + 1} failed`, parsedError);
+            const parsedError = parseError(error, url, false);
+            notifyFailure(`Attempt ${attempt} failed`, parsedError);
 
             // Handle 403 errors with bypass
-            if (axios.isAxiosError(error) && error.response?.status === 403 && options.bypassUrl) {
+            if (axios.isAxiosError(error) && error.response && error.response.status === 403 && options.bypassUrl) {
                 notifyFailure(`403 error encountered. Attempting bypass`, parsedError);
                 try {
-                    const bypassResponse = await makeBypassRequest(resolvedUrl, options);
+                    const bypassResponse = await makeBypassRequest(url, options);
                     notifyFailure(`Successfully bypassed 403 error`, { message: bypassResponse.data });
                     return bypassResponse;
                 } catch (bypassError) {
-                    notifyFailure(`Bypass attempt failed`, parseError(bypassError, resolvedUrl, false));
+                    notifyFailure(`Bypass attempt failed`, parseError(bypassError, url, false));
                     throw bypassError;
                 }
             }
 
-            // If IPv4 fails and IPv6 is available, try switching to IPv6
-            if (!useIPv6 && shouldRetry(error, parsedError) && attempt === 0) {
-                console.warn("Retrying with IPv6...");
-                return fetchWithTimeout(url, { ...options, useIPv6: true }, maxRetries - attempt);
-            }
-
             // Check if we should retry
-            if (attempt < maxRetries - 1 && shouldRetry(error, parsedError)) {
+            if (attempt < maxRetries && shouldRetry(error, parsedError)) {
                 const delay = Math.min(500 * (attempt + 1), 5000); // Exponential backoff (max 5s)
                 await sleep(delay);
                 continue;
@@ -80,7 +64,7 @@ export async function fetchWithTimeout(
             throw error;
         }
     }
-    notifyFailure(`All retries exhausted`, parseError(lastError, resolvedUrl, false));
+    notifyFailure(`All ${maxRetries} retries exhausted`, parseError(lastError, url, false));
     throw lastError;
 }
 
