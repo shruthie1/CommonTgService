@@ -21,14 +21,27 @@ export async function fetchWithTimeout(
     }
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), options.timeout);
         try {
-            const response = await axios({ ...options, url });
+            const response = await axios({
+                ...options,
+                url,
+                signal: controller.signal, // Attach the AbortController signal
+            });
+            clearTimeout(timeoutId);
             return response; // Success
         } catch (error) {
+            clearTimeout(timeoutId);
+            if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
+                console.error(`Request timeout: ${url}`);
+            }
+
             console.error(error);
             lastError = error;
             const parsedError = parseError(error, url, false);
             notifyFailure(`Attempt ${attempt + 1} failed`, parsedError);
+
             // Handle 403 errors with bypass
             if (axios.isAxiosError(error) && error.response && error.response.status === 403 && options.bypassUrl) {
                 notifyFailure(`403 error encountered. Attempting bypass`, parsedError);
