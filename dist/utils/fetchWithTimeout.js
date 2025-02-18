@@ -17,12 +17,16 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     if (!url.includes('api.telegram.org')) {
         notifyFailure(`trying: ${url}`, { message: "fetching" });
     }
+    else {
+        console.log(`trying: ${url}`);
+    }
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             const response = await (0, axios_1.default)({ ...options, url });
             return response;
         }
         catch (error) {
+            console.error(error);
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
             notifyFailure(`Attempt ${attempt + 1} failed`, parsedError);
@@ -46,7 +50,6 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             throw error;
         }
     }
-    console.error(lastError);
     notifyFailure(`All retries exhausted`, (0, parseError_1.parseError)(lastError, url, false));
     throw lastError;
 }
@@ -69,7 +72,7 @@ function shouldRetry(error, parsedError) {
         ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code));
 }
 function notifyFailure(message, errorDetails) {
-    console.error(message, errorDetails);
+    console.log(message, errorDetails);
     try {
         axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
     }
