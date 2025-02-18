@@ -41,7 +41,7 @@ export async function fetchWithTimeout(
             notify(`Attempt ${attempt} failed`, parsedError);
 
             // Handle 403 errors with bypass
-            if (parsedError.status === 403 && options.bypassUrl) {
+            if (parsedError.status === 403) {
                 notify(`403 error encountered. Attempting bypass`, parsedError);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
@@ -87,7 +87,7 @@ function shouldRetry(error: any, parsedError: any): boolean {
 }
 
 function notify(prefix: string, errorDetails: any) {
-    console.log(prefix, errorDetails);
+    console.log(prefix, errorDetails.message);
     if(errorDetails.status === 429) return;
     try {
         axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${errorDetails?.message}`)}`);
