@@ -295,7 +295,7 @@ export class TgSignupService implements OnModuleDestroy {
 
             return await this.processLoginResult(signUpResult.user, sessionString);
         } catch (error) {
-            const errorDetails = parseError(error);
+            const errorDetails = parseError(error,"TGSIGNUP", false);
             this.logger.error(`Failed to register new user: ${errorDetails.message}`);
             throw new BadRequestException(errorDetails.message || 'Failed to register new user');
         }
