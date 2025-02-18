@@ -61,12 +61,7 @@ let AppController = class AppController {
                 params,
                 validateStatus: () => true
             });
-            return {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers,
-                data: response.data
-            };
+            return response.data;
         }
         catch (error) {
             throw new common_1.HttpException({
