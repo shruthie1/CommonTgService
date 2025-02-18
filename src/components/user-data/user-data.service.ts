@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
-import { parseError } from '../../utils';
+import { parseError } from '../../utils/parseError';
 
 @Injectable()
 export class UserDataService {

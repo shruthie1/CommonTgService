@@ -8,7 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoggerMiddleware = void 0;
 const common_1 = require("@nestjs/common");
-const utils_1 = require("../utils");
+const fetchWithTimeout_1 = require("../utils/fetchWithTimeout");
+const parseError_1 = require("../utils/parseError");
+const logbots_1 = require("../utils/logbots");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new common_1.Logger('HTTP');
@@ -24,11 +26,11 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
-                    (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.error(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 400) {
-                    (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
                     this.logger.warn(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 300) {
@@ -39,8 +41,8 @@ let LoggerMiddleware = class LoggerMiddleware {
                 }
             });
             res.on('error', (error) => {
-                const errorDetails = (0, utils_1.parseError)(error, process.env.clientId);
-                (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+                const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
+                (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
             });
         }
         else {

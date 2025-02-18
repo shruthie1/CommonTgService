@@ -5,7 +5,6 @@ import { Api } from 'telegram/tl';
 import axios from 'axios';
 import * as fs from 'fs';
 import { CustomFile } from 'telegram/client/uploads';
-import { contains, fetchWithTimeout, parseError, ppplbot } from '../../utils';
 import { TotalList, sleep } from 'telegram/Helpers';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import { LogLevel } from 'telegram/extensions/Logger';
@@ -13,6 +12,10 @@ import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
+import { contains } from '../../utils';
+import { parseError } from '../../utils/parseError';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { ppplbot } from '../../utils/logbots';
 
 class TelegramManager {
     private session: StringSession;

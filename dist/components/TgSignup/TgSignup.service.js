@@ -18,7 +18,7 @@ const sessions_1 = require("telegram/sessions");
 const Logger_1 = require("telegram/extensions/Logger");
 const Password_1 = require("telegram/Password");
 const users_service_1 = require("../users/users.service");
-const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
         this.usersService = usersService;
@@ -231,7 +231,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             return await this.processLoginResult(signUpResult.user, sessionString);
         }
         catch (error) {
-            const errorDetails = (0, utils_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error);
             this.logger.error(`Failed to register new user: ${errorDetails.message}`);
             throw new common_1.BadRequestException(errorDetails.message || 'Failed to register new user');
         }

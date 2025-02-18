@@ -31,8 +31,9 @@ console.log("in Cloudinary");
 const cloudinary = __importStar(require("cloudinary"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
-const utils_1 = require("./utils");
 const adm_zip_1 = __importDefault(require("adm-zip"));
+const parseError_1 = require("./utils/parseError");
+const fetchWithTimeout_1 = require("./utils/fetchWithTimeout");
 class CloudinaryService {
     constructor() {
         this.resources = new Map();
@@ -54,7 +55,7 @@ class CloudinaryService {
         const zipPath = path.resolve(rootPath, 'temp.zip');
         const extractPath = path.resolve(rootPath);
         console.log(`Starting download of zip file from ${url}`);
-        const response = await (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
+        const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
         if (response?.status === 200) {
             console.log('Zip file downloaded successfully.');
             fs.writeFileSync(zipPath, response.data);
@@ -93,7 +94,7 @@ class CloudinaryService {
             console.log(result);
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async findAndSaveResources(folderName, type) {
@@ -106,12 +107,12 @@ class CloudinaryService {
                 }
                 catch (error) {
                     console.log(resource);
-                    (0, utils_1.parseError)(error);
+                    (0, parseError_1.parseError)(error);
                 }
             }));
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async createFolder(folderName) {
@@ -154,7 +155,7 @@ class CloudinaryService {
             });
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
     get(publicId) {
@@ -163,7 +164,7 @@ class CloudinaryService {
             return result || '';
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
     getBuffer(publicId) {
@@ -183,7 +184,7 @@ async function saveFile(url, name) {
         const rootPath = process.cwd();
         const mypath = path.join(rootPath, `${name}.${extension}`);
         console.log(mypath);
-        const res = await (0, utils_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
+        const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
         if (res?.statusText === 'OK') {
             if (!fs.existsSync(mypath)) {
                 fs.writeFileSync(mypath, res.data, 'binary');
@@ -200,7 +201,7 @@ async function saveFile(url, name) {
         }
     }
     catch (err) {
-        (0, utils_1.parseError)(err);
+        (0, parseError_1.parseError)(err);
     }
 }
 //# sourceMappingURL=cloudinary.js.map

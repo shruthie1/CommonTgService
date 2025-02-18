@@ -7,8 +7,7 @@ import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { ClientService } from '../clients/client.service';
-import { parseError } from '../../utils';
-
+import { parseError } from '../../utils/parseError';
 @Injectable()
 export class ArchivedClientService {
     constructor(@InjectModel('ArchivedArchivedClientsModule') private archivedclientModel: Model<ClientDocument>,

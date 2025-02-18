@@ -19,7 +19,7 @@ const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const client_service_1 = require("../clients/client.service");
-const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
 let ArchivedClientService = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
@@ -67,7 +67,7 @@ let ArchivedClientService = class ArchivedClientService {
             }
             catch (e) {
                 await this.telegramService.deleteClient(mobile);
-                throw new common_1.NotFoundException((0, utils_1.parseError)(e).message);
+                throw new common_1.NotFoundException((0, parseError_1.parseError)(e).message);
             }
         }
     }

@@ -2,7 +2,7 @@ import { Controller, Post, Body, BadRequestException, HttpException, UseGuards, 
 import { ApiTags, ApiOperation, ApiResponse, ApiExtraModels } from '@nestjs/swagger';
 import { TgSignupService } from './TgSignup.service';
 import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
-import { parseError } from '../../utils';
+import { parseError } from '../../utils/parseError';
 
 @Controller('tgsignup')
 @ApiTags('tgsignup')

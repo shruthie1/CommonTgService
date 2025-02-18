@@ -2,9 +2,9 @@ console.log("in Cloudinary");
 import * as cloudinary from 'cloudinary';
 import * as path from 'path';
 import * as fs from 'fs';
-import { fetchWithTimeout, parseError } from './utils';
 import AdmZip from 'adm-zip';
-
+import { parseError } from './utils/parseError';
+import { fetchWithTimeout } from './utils/fetchWithTimeout';
 export class CloudinaryService {
     static instance;
     resources = new Map();

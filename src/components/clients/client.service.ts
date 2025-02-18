@@ -9,7 +9,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
-import { areJsonsNotSame, contains, fetchNumbersFromString, fetchWithTimeout, mapToJson, parseError, ppplbot, toBoolean } from '../../utils';
+import { areJsonsNotSame, contains, fetchNumbersFromString, mapToJson,toBoolean } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
@@ -18,6 +18,10 @@ import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
 import axios from 'axios';
+import { parseError } from '../../utils/parseError';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { ppplbot } from '../../utils/logbots';
+
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {

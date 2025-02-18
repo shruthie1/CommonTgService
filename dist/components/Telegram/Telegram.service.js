@@ -49,6 +49,7 @@ const cloudinary_1 = require("../../cloudinary");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
 const path = __importStar(require("path"));
 const channels_service_1 = require("../channels/channels.service");
+const parseError_1 = require("../../utils/parseError");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, bufferClientService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -97,7 +98,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 console.log(`Client disconnected: ${phoneNumber}`);
             }
             catch (error) {
-                console.log((0, utils_1.parseError)(error));
+                console.log((0, parseError_1.parseError)(error));
                 console.log(`Failed to Disconnect : ${phoneNumber}`);
             }
         }
@@ -146,7 +147,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     telegramManager = null;
                     TelegramService_1.clientsMap.delete(mobile);
                 }
-                const errorDetails = (0, utils_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error);
                 if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                     console.log("Deleting User: ", user.mobile);
                     await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
@@ -307,8 +308,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return '2Fa set successfully';
         }
         catch (error) {
-            const errorDetails = (0, utils_1.parseError)(error);
-            throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
+            const errorDetails = (0, parseError_1.parseError)(error);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
     async updatePrivacyforDeletedAccount(mobile) {
@@ -337,8 +338,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return 'Profile pic set successfully';
         }
         catch (error) {
-            const errorDetails = (0, utils_1.parseError)(error);
-            throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
+            const errorDetails = (0, parseError_1.parseError)(error);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
     async updatePrivacy(mobile) {
@@ -348,8 +349,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return "Privacy updated successfully";
         }
         catch (error) {
-            const errorDetails = (0, utils_1.parseError)(error);
-            throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
+            const errorDetails = (0, parseError_1.parseError)(error);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
     async downloadProfilePic(mobile, index) {
@@ -358,7 +359,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return await telegramClient.downloadProfilePic(index);
         }
         catch (error) {
-            console.log("Some Error: ", (0, utils_1.parseError)(error), error);
+            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
             throw new Error("Failed to update username");
         }
     }
@@ -368,7 +369,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return await telegramClient.updateUsername(username);
         }
         catch (error) {
-            console.log("Some Error: ", (0, utils_1.parseError)(error), error);
+            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
             throw new Error("Failed to update username");
         }
     }
@@ -405,7 +406,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return "Username updated successfully";
         }
         catch (error) {
-            console.log("Some Error: ", (0, utils_1.parseError)(error), error);
+            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
             throw new Error("Failed to update username");
         }
     }

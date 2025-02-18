@@ -5,9 +5,10 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
-import { fetchWithTimeout, ppplbot } from '../../utils';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { ppplbot } from '../../utils/logbots';
 
 @Injectable()
 export class UsersService {

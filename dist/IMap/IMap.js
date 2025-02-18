@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MailReader = void 0;
 const imap_1 = __importDefault(require("imap"));
 const utils_1 = require("../utils");
+const parseError_1 = require("../utils/parseError");
 class MailReader {
     constructor() {
         this.isReady = false;
@@ -47,7 +48,7 @@ class MailReader {
             console.log('Connected to mail server');
         }
         catch (err) {
-            console.error('Error connecting to mail server:', (0, utils_1.parseError)(err));
+            console.error('Error connecting to mail server:', (0, parseError_1.parseError)(err));
             throw err;
         }
     }
@@ -59,7 +60,7 @@ class MailReader {
             console.log('Disconnected from mail server');
         }
         catch (err) {
-            console.error('Error disconnecting from mail server:', (0, utils_1.parseError)(err));
+            console.error('Error disconnecting from mail server:', (0, parseError_1.parseError)(err));
             throw err;
         }
     }
@@ -81,7 +82,7 @@ class MailReader {
             const results = await new Promise((resolve, reject) => {
                 this.imap.search(searchCriteria, (err, results) => {
                     if (err) {
-                        console.error('Search error:', (0, utils_1.parseError)(err));
+                        console.error('Search error:', (0, parseError_1.parseError)(err));
                         reject(err);
                     }
                     else {
@@ -144,7 +145,7 @@ class MailReader {
         await new Promise((resolve, reject) => {
             this.imap.openBox('INBOX', false, (err) => {
                 if (err) {
-                    console.error('Open Inbox error:', (0, utils_1.parseError)(err));
+                    console.error('Open Inbox error:', (0, parseError_1.parseError)(err));
                     reject(err);
                 }
                 else {

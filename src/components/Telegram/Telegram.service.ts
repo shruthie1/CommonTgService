@@ -1,6 +1,6 @@
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
-import { contains, parseError, sleep } from "../../utils";
+import { contains, sleep } from "../../utils";
 import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
@@ -10,6 +10,7 @@ import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
+import { parseError } from '../../utils/parseError';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -340,7 +341,7 @@ export class TelegramService implements OnModuleDestroy {
             return '2Fa set successfully'
         } catch (error) {
             const errorDetails = parseError(error)
-            throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
+            throw new HttpException(errorDetails.message, errorDetails.status)
         }
     }
 
@@ -374,7 +375,7 @@ export class TelegramService implements OnModuleDestroy {
             return 'Profile pic set successfully'
         } catch (error) {
             const errorDetails = parseError(error)
-            throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
+            throw new HttpException(errorDetails.message, errorDetails.status)
         }
     }
 
@@ -387,7 +388,7 @@ export class TelegramService implements OnModuleDestroy {
             return "Privacy updated successfully";
         } catch (error) {
             const errorDetails = parseError(error)
-            throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
+            throw new HttpException(errorDetails.message, errorDetails.status)
         }
     }
 

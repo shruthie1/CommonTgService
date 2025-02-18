@@ -9,11 +9,12 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
-import { fetchWithTimeout, parseError, ppplbot } from '../../utils';
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
-
+import { parseError } from '../../utils/parseError';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { ppplbot } from '../../utils/logbots';
 @Injectable()
 export class PromoteClientService {
     private joinChannelMap: Map<string, Channel[]> = new Map();
@@ -266,7 +267,7 @@ export class PromoteClientService {
                 await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
-                throw new HttpException(errorDetails.message, parseInt(errorDetails.status))
+                throw new HttpException(errorDetails.message, errorDetails.status)
             }
             await this.telegramService.deleteClient(mobile)
             return "Client set as promote successfully";

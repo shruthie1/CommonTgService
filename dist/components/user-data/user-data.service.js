@@ -17,7 +17,7 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_data_schema_1 = require("./schemas/user-data.schema");
-const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
 let UserDataService = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
@@ -118,7 +118,7 @@ let UserDataService = class UserDataService {
             });
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
 };

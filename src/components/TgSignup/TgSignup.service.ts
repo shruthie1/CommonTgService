@@ -7,8 +7,8 @@ import { computeCheck } from "telegram/Password";
 import { sleep } from "telegram/Helpers";
 import { UsersService } from "../users/users.service";
 import { TgSignupResponse } from "./dto/tg-signup.dto";
-import { fetchWithTimeout, parseError, ppplbot } from "../../utils";
 import { CreateUserDto } from "../users/dto/create-user.dto";
+import { parseError } from "../../utils/parseError";
 
 interface ITelegramCredentials {
     apiId: number;

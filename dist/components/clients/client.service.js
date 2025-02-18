@@ -53,6 +53,9 @@ const path = __importStar(require("path"));
 const cloudinary_1 = require("../../cloudinary");
 const npoint_service_1 = require("../n-point/npoint.service");
 const axios_1 = __importDefault(require("axios"));
+const parseError_1 = require("../../utils/parseError");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
@@ -140,14 +143,14 @@ let ClientService = class ClientService {
         if (updateClientDto._doc) {
             delete updateClientDto._doc['_id'];
         }
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating the Existing client: ${clientId}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Updating the Existing client: ${clientId}`);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
-        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
-        await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
         return updatedUser;
     }
@@ -172,7 +175,7 @@ let ClientService = class ClientService {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log(setupClientQueryDto);
             await this.telegramService.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
@@ -187,12 +190,12 @@ let ClientService = class ClientService {
                     await this.updateClientSession(newSession);
                 }
                 else {
-                    await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Buffer Clients not available`);
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Buffer Clients not available`);
                     console.log("Buffer Clients not available");
                 }
             }
             catch (error) {
-                (0, utils_1.parseError)(error);
+                (0, parseError_1.parseError)(error);
                 await this.telegramService.deleteClient(newBufferClient.mobile);
                 console.log("Removing buffer as error");
                 const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
@@ -216,12 +219,12 @@ let ClientService = class ClientService {
             const userCaps = username[0].toUpperCase() + username.slice(1);
             let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
             updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await this.telegramService.deleteClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             const existingClient = await this.findOne(clientId);
             this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
-            await (0, utils_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
                 await this.updateClient(clientId);
@@ -238,7 +241,7 @@ let ClientService = class ClientService {
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             console.log("Formalities finished");
                             await this.telegramService.deleteClient(existingMobile);
-                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Formalities finished`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Formalities finished`);
                         }
                         else {
                             console.log("Formalities skipped");
@@ -254,16 +257,16 @@ let ClientService = class ClientService {
                             };
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             console.log("client Archived: ", updatedBufferClient);
-                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archived`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Client Archived`);
                         }
                         else {
                             console.log("Client Archive Skipped");
-                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Client Archive Skipped`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Client Archive Skipped`);
                         }
                     }
                     catch (error) {
                         console.log("Cannot Archive Old Client");
-                        const errorDetails = (0, utils_1.parseError)(error);
+                        const errorDetails = (0, parseError_1.parseError)(error);
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
@@ -276,15 +279,15 @@ let ClientService = class ClientService {
                 }
             }
             catch (error) {
-                (0, utils_1.parseError)(error);
+                (0, parseError_1.parseError)(error);
             }
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Update finished`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Update finished`);
             await this.telegramService.disconnectAll();
         }
         catch (e) {
-            (0, utils_1.parseError)(e);
+            (0, parseError_1.parseError)(e);
             this.telegramService.setActiveClientSetup(undefined);
         }
     }
@@ -331,7 +334,7 @@ let ClientService = class ClientService {
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
-            (0, utils_1.parseError)(error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async updateClients() {
@@ -343,16 +346,16 @@ let ClientService = class ClientService {
     async generateNewSession(phoneNumber, attempt = 1) {
         try {
             console.log("String Generation started");
-            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=String Generation started for NewNumber:${phoneNumber}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=String Generation started for NewNumber:${phoneNumber}`);
             await (0, Helpers_1.sleep)(1000);
-            const response = await (0, utils_1.fetchWithTimeout)(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
             if (response) {
                 console.log(`Code Sent successfully`, response.data);
-                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Code Sent successfully`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Code Sent successfully`);
                 await this.bufferClientService.update(phoneNumber, { availableDate: (new Date(Date.now() + (24 * 60 * 60 * 1000))).toISOString().split('T')[0] });
             }
             else {
-                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Failed to send Code`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Failed to send Code`);
                 console.log("Failed to send Code", response);
                 if (attempt < 2) {
                     await (0, Helpers_1.sleep)(8000);

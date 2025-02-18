@@ -18,7 +18,9 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const active_channel_schema_1 = require("./schemas/active-channel.schema");
-const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let ActiveChannelsService = class ActiveChannelsService {
     constructor(activeChannelModel, promoteMsgsService) {
         this.activeChannelModel = activeChannelModel;
@@ -151,7 +153,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     async resetWordRestrictions() {
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
         try {
             await this.activeChannelModel.updateMany({
                 banned: false
@@ -163,11 +165,11 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, utils_1.parseError)(e));
+            console.log((0, parseError_1.parseError)(e));
         }
     }
     async resetAvailableMsgs() {
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for Reset Available Msgs`);
         try {
             const data = await this.promoteMsgsService.findOne();
             const keys = Object.keys(data);
@@ -185,11 +187,11 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, utils_1.parseError)(e));
+            console.log((0, parseError_1.parseError)(e));
         }
     }
     async updateBannedChannels() {
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Request Received for update banned Channels`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=Request Received for update banned Channels`);
         await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
             $set: {
                 "wordRestriction": 0,

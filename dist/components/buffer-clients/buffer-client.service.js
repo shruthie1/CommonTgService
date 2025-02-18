@@ -21,9 +21,11 @@ const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
-const utils_1 = require("../../utils");
 const client_service_1 = require("../clients/client.service");
 const promote_client_service_1 = require("../promote-clients/promote-client.service");
+const parseError_1 = require("../../utils/parseError");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let BufferClientService = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService) {
         this.bufferClientModel = bufferClientModel;
@@ -68,7 +70,7 @@ let BufferClientService = class BufferClientService {
         }
     }
     async remove(mobile) {
-        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.ppplbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
         const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -143,7 +145,7 @@ let BufferClientService = class BufferClientService {
                     }
                     catch (error) {
                         await this.telegramService.deleteClient(document.mobile);
-                        (0, utils_1.parseError)(error);
+                        (0, parseError_1.parseError)(error);
                     }
                 }
                 this.joinChannelQueue();
@@ -175,7 +177,7 @@ let BufferClientService = class BufferClientService {
                             }
                             catch (error) {
                                 await this.telegramService.deleteClient(mobile);
-                                const errorDetails = (0, utils_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
                                 if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                                     this.removeFromBufferMap(mobile);
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);
@@ -227,8 +229,8 @@ let BufferClientService = class BufferClientService {
                 await telegramClient.updateProfile("Deleted Account", "Deleted Account");
             }
             catch (error) {
-                const errorDetails = (0, utils_1.parseError)(error);
-                throw new common_1.HttpException(errorDetails.message, parseInt(errorDetails.status));
+                const errorDetails = (0, parseError_1.parseError)(error);
+                throw new common_1.HttpException(errorDetails.message, errorDetails.status);
             }
             await this.telegramService.deleteClient(mobile);
             return "Client set as buffer successfully";
@@ -281,7 +283,7 @@ let BufferClientService = class BufferClientService {
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (error) {
-                        (0, utils_1.parseError)(error);
+                        (0, parseError_1.parseError)(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
                         await this.telegramService.deleteClient(document.mobile);
@@ -348,12 +350,12 @@ let BufferClientService = class BufferClientService {
                     }
                 }
                 catch (error) {
-                    (0, utils_1.parseError)(error);
+                    (0, parseError_1.parseError)(error);
                     await this.telegramService.deleteClient(document.mobile);
                 }
             }
             catch (error) {
-                (0, utils_1.parseError)(error);
+                (0, parseError_1.parseError)(error);
                 console.error("An error occurred:", error);
             }
             await this.telegramService.deleteClient(document.mobile);

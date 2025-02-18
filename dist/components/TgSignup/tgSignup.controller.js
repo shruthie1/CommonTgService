@@ -18,7 +18,7 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const TgSignup_service_1 = require("./TgSignup.service");
 const tg_signup_dto_1 = require("./dto/tg-signup.dto");
-const utils_1 = require("../../utils");
+const parseError_1 = require("../../utils/parseError");
 let TgSignupController = TgSignupController_1 = class TgSignupController {
     constructor(tgSignupService) {
         this.tgSignupService = tgSignupService;
@@ -40,7 +40,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             };
         }
         catch (error) {
-            const parsedError = (0, utils_1.parseError)(error);
+            const parsedError = (0, parseError_1.parseError)(error);
             this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
                 error: parsedError,
                 stack: error.stack,
@@ -72,7 +72,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             };
         }
         catch (error) {
-            const parsedError = (0, utils_1.parseError)(error);
+            const parsedError = (0, parseError_1.parseError)(error);
             this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
                 error: parsedError,
                 stack: error.stack,

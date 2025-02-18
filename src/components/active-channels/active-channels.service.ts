@@ -6,7 +6,10 @@ import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
-import { defaultMessages, fetchWithTimeout, parseError, ppplbot } from '../../utils';
+import { parseError } from '../../utils/parseError';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { ppplbot } from '../../utils/logbots';
+
 @Injectable()
 export class ActiveChannelsService {
   constructor(

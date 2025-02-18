@@ -1,6 +1,8 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { fetchWithTimeout, parseError, ppplbot } from '../utils';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import { parseError } from '../utils/parseError';
+import { ppplbot } from '../utils/logbots';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
