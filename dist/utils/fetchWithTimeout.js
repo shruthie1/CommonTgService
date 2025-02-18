@@ -46,6 +46,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             throw error;
         }
     }
+    console.error(lastError);
     notifyFailure(`All retries exhausted`, (0, parseError_1.parseError)(lastError, url, false));
     throw lastError;
 }
