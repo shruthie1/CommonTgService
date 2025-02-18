@@ -9,152 +9,75 @@ export function contains(str: string | null | undefined, arr: string[]): boolean
   return arr.some(element => element && str.includes(element));
 }
 
-// Request queue to prevent too many concurrent requests
-const requestQueue = new Map<string, Promise<unknown>>();
-const MAX_CONCURRENT_REQUESTS = 10;
-
 export async function fetchWithTimeout(
-  resource: string, 
-  options: AxiosRequestConfig & { 
-    bypassUrl?: string; 
-    enableBypass?: boolean;
-    queueKey?: string; // Add ability to group requests by key
-  } = {}, 
-  maxRetries = 1
+    url: string,
+    options: AxiosRequestConfig & { bypassUrl?: string } = {},
+    sendErr = true,
+    maxRetries = 1
 ): Promise<AxiosResponse> {
-  if (!resource) throw new Error('Resource URL is required');
-  
-  const queueKey = options.queueKey || resource;
-  
-  // Queue management
-  while (requestQueue.size >= MAX_CONCURRENT_REQUESTS) {
-    await Promise.race(requestQueue.values());
-  }
+    if (!url) throw new Error("URL is required");
 
-  const requestPromise = (async () => {
-    try {
-      options.timeout = options.timeout || 50000;
-      options.method = options.method || 'GET';
-      options.enableBypass = options.enableBypass ?? true;
-      options.bypassUrl = options.bypassUrl || process.env.bypassURL;
+    options.timeout = options.timeout || 50000;
+    options.method = options.method || "GET";
 
-      const tryOriginalRequest = async (): Promise<AxiosResponse> => {
-        let lastError: Error | null = null;
+    let lastError: Error | null = null;
 
-        for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
-          try {
-            // Try IPv4 first
-            const responseIPv4 = await fetchWithProtocol(resource, 4, options);
-            if (responseIPv4) {
-              if (responseIPv4.status === 403 && options.enableBypass && options.bypassUrl) {
-                try {
-                  return await makeBypassRequest(resource, options);
-                } catch (bypassError) {
-                  console.log("Bypass request failed");
-                  parseError(bypassError);
-                  return responseIPv4;
-                }
-              }
-              return responseIPv4;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            const response = await axios({ ...options, url });
+
+            // Handle 403 errors with bypass
+            if (response.status === 403 && options.bypassUrl) {
+                return await makeBypassRequest(url, options);
             }
 
-            // Try IPv6 if IPv4 fails
-            const responseIPv6 = await fetchWithProtocol(resource, 6, options);
-            if (responseIPv6) {
-              if (responseIPv6.status === 403 && options.enableBypass && options.bypassUrl) {
-                try {
-                  return await makeBypassRequest(resource, options);
-                } catch (bypassError) {
-                  console.log("Bypass request failed");
-                  parseError(bypassError);
-                  return responseIPv6;
-                }
-              }
-              return responseIPv6;
-            }
-          } catch (error) {
-            console.log("Error at URL : ", resource);
-            const errorDetails = parseError(error);
+            return response; // Success
+        } catch (error) {
             lastError = error;
+            console.log("Error at URL : ", url);
+            const parsedError = parseError(error, url);
 
-            const shouldRetry = 
-              retryCount < maxRetries && 
-              error.code !== 'ERR_NETWORK' && 
-              error.code !== "ECONNABORTED" && 
-              error.code !== "ETIMEDOUT" && 
-              !errorDetails.message.toLowerCase().includes('too many requests') && 
-              !axios.isCancel(error);
-
-            if (shouldRetry) {
-              const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 10000);
-              console.log(`Retrying... (${retryCount + 1}/${maxRetries}) after ${backoffTime}ms`);
-              await sleep(backoffTime);
-              continue;
+            // Check if we should retry
+            if (attempt < maxRetries - 1 && shouldRetry(error, parsedError)) {
+                const delay = Math.min(500 * (attempt + 1), 5000); // Exponential backoff (max 5s)
+                console.log(`Retrying ${url} (Attempt ${attempt + 2}/${maxRetries}) after ${delay}ms...`);
+                await sleep(delay);
+                continue;
             }
-            
-            console.log(`All ${maxRetries + 1} retries failed for ${resource}`);
+
+            // Log failure if all retries fail
+            if (sendErr) {
+                notifyFailure(url, parsedError);
+            }
             throw error;
-          }
         }
-        throw lastError || new Error(`Failed to get response after ${maxRetries + 1} attempts`);
-      };
-
-      return await tryOriginalRequest();
-    } finally {
-      requestQueue.delete(queueKey);
     }
-  })();
-
-  requestQueue.set(queueKey, requestPromise);
-  return requestPromise as Promise<AxiosResponse>;
+    throw lastError;
 }
 
-async function makeBypassRequest(resource: string, options: AxiosRequestConfig & { bypassUrl?: string }): Promise<AxiosResponse> {
-  if (!options.bypassUrl) throw new Error('Bypass URL is required');
-  
-  return await axios({
-    url: options.bypassUrl,
-    method: 'POST',
-    data: {
-      url: resource,
-      method: options.method,
-      headers: options.headers,
-      data: options.data,
-      params: options.params
-    },
-    timeout: options.timeout,
-    validateStatus: () => true
-  });
-}
+async function makeBypassRequest(url: string, options: AxiosRequestConfig & { bypassUrl?: string }) {
+    if (!options.bypassUrl) throw new Error("Bypass URL is required");
 
-const fetchWithProtocol = async (url: string, version: AddressFamily, options: AxiosRequestConfig): Promise<AxiosResponse | undefined> => {
-  const source = axios.CancelToken.source();
-  const timeoutId = setTimeout(() => {
-    source.cancel(`Request timed out after ${options.timeout}ms`);
-  }, options.timeout);
-
-  try {
-    const response = await axios({
-      ...options,
-      url,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
-      cancelToken: source.token,
-      family: version,
-      validateStatus: (status) => status >= 200 && status < 600 // Allow handling of all status codes
+    return axios.post(options.bypassUrl, {
+        url,
+        method: options.method,
+        headers: options.headers,
+        data: options.data,
+        params: options.params,
     });
-    return response;
-  } catch (error) {
-    if (axios.isCancel(error)) {
-      console.log('Request canceled:', error.message, url);
-      return undefined;
-    }
-    console.log(`Error at URL (IPv${version}): `, url);
-    parseError(error);
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
+}
+
+function shouldRetry(error: any, parsedError: any): boolean {
+    return (
+        !axios.isCancel(error) &&
+        !parsedError.message.toLowerCase().includes("too many requests") &&
+        ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code)
+    );
+}
+
+function notifyFailure(url: string, errorDetails: any) {
+    axios.get(`${ppplbot()}&text=${encodeURIComponent(`${process.env.clientId} - Request failed: ${url}\n${errorDetails.message}`)}`);
+}
 
 export function toBoolean(value: string | number | boolean | null | undefined): boolean {
   if (value === null || value === undefined) return false;
