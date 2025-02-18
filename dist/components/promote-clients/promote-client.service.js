@@ -183,7 +183,7 @@ let PromoteClientService = class PromoteClientService {
                                 await this.telegramService.tryJoiningChannel(mobile, channel);
                             }
                             catch (error) {
-                                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
                                 console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
                                 if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                                     console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
