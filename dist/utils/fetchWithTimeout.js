@@ -15,7 +15,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     options.method = options.method || "GET";
     let lastError = null;
     if (!url.includes('api.telegram.org')) {
-        notifyFailure(`trying: ${url}`, { message: "fetching" });
+        notify(`trying`, { message: url });
     }
     else {
         console.log(`trying: ${url}`);
@@ -39,16 +39,16 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             }
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
-            notifyFailure(`Attempt ${attempt} failed`, parsedError);
+            notify(`Attempt ${attempt} failed`, parsedError);
             if (parsedError.status === 403 && options.bypassUrl) {
-                notifyFailure(`403 error encountered. Attempting bypass`, parsedError);
+                notify(`403 error encountered. Attempting bypass`, parsedError);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notifyFailure(`Successfully bypassed 403 error`, { message: bypassResponse.data });
+                    notify(`Successfully bypassed 403 error`, { message: bypassResponse.data });
                     return bypassResponse;
                 }
                 catch (bypassError) {
-                    notifyFailure(`Bypass attempt failed`, (0, parseError_1.parseError)(bypassError, url, false));
+                    notify(`Bypass attempt failed`, (0, parseError_1.parseError)(bypassError, url, false));
                     throw bypassError;
                 }
             }
@@ -60,7 +60,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             throw error;
         }
     }
-    notifyFailure(`All ${maxRetries} retries exhausted`, (0, parseError_1.parseError)(lastError, url, false));
+    notify(`All ${maxRetries} retries exhausted`, (0, parseError_1.parseError)(lastError, url, false));
     throw lastError;
 }
 exports.fetchWithTimeout = fetchWithTimeout;
@@ -81,10 +81,12 @@ function shouldRetry(error, parsedError) {
         !parsedError.message.toLowerCase().includes("too many requests") &&
         ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code));
 }
-function notifyFailure(message, errorDetails) {
-    console.log(message, errorDetails);
+function notify(prefix, errorDetails) {
+    console.log(prefix, errorDetails);
+    if (errorDetails.status === 429)
+        return;
     try {
-        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
+        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${errorDetails?.message}`)}`);
     }
     catch (error) {
         console.error("Failed to notify failure:", error);
