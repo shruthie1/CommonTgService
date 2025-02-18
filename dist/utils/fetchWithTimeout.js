@@ -44,7 +44,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
             const parsedError = (0, parseError_1.parseError)(error, url, false);
             notify(`Attempt ${attempt} failed: `, { message: parsedError.status });
             if (parsedError.status === 403) {
-                notify(`Attempting bypass for`, url);
+                notify(`Attempting bypass for`, { message: url });
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
                     notify(`Successfully Excuted 403 Request`, { message: (0, parseError_1.extractMessage)(bypassResponse.data) });
