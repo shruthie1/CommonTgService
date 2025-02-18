@@ -21,11 +21,22 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
         console.log(`trying: ${url}`);
     }
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), options.timeout);
         try {
-            const response = await (0, axios_1.default)({ ...options, url });
+            const response = await (0, axios_1.default)({
+                ...options,
+                url,
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
             return response;
         }
         catch (error) {
+            clearTimeout(timeoutId);
+            if (axios_1.default.isAxiosError(error) && error.code === "ECONNABORTED") {
+                console.error(`Request timeout: ${url}`);
+            }
             console.error(error);
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
