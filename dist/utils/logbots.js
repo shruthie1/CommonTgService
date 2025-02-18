@@ -7,10 +7,12 @@ const notifbottokens = [
     '7940072383:AAHwRu4_4QWqeuC4ZClS9OiSfBOVQ7TvGHw'
 ];
 let currentNotifTokenIndex = 0;
-function notifbot() {
-    const token = notifbottokens[currentNotifTokenIndex];
-    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${process.env.notifChannel}`;
-    currentNotifTokenIndex = (currentNotifTokenIndex + 1) % notifbottokens.length;
+function notifbot(chatId = process.env.notifChannel, botToken) {
+    const token = botToken || notifbottokens[currentNotifTokenIndex];
+    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
+    if (!botToken) {
+        currentNotifTokenIndex = (currentNotifTokenIndex + 1) % notifbottokens.length;
+    }
     return apiUrl;
 }
 exports.notifbot = notifbot;
@@ -22,10 +24,12 @@ const ppplbottokens = [
     '6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA'
 ];
 let currentPpplTokenIndex = 0;
-function ppplbot() {
-    const token = ppplbottokens[currentPpplTokenIndex];
-    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${process.env.updatesChannel}`;
-    currentPpplTokenIndex = (currentPpplTokenIndex + 1) % ppplbottokens.length;
+function ppplbot(chatId = process.env.updatesChannel, botToken) {
+    const token = botToken || ppplbottokens[currentPpplTokenIndex];
+    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
+    if (!botToken) {
+        currentPpplTokenIndex = (currentPpplTokenIndex + 1) % ppplbottokens.length;
+    }
     return apiUrl;
 }
 exports.ppplbot = ppplbot;
