@@ -14,6 +14,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
     let lastError = null;
+    notifyFailure(`trying: ${url}`, { message: "fetching" });
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             const response = await (0, axios_1.default)({ ...options, url });
@@ -65,6 +66,7 @@ function shouldRetry(error, parsedError) {
         ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code));
 }
 function notifyFailure(message, errorDetails) {
+    console.error(message, errorDetails);
     try {
         axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
     }
