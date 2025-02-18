@@ -13,7 +13,6 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
         throw new Error("URL is required");
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
-    options.bypassUrl = options.bypassUrl;
     let lastError = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
