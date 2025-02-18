@@ -32,7 +32,7 @@ export class BufferClientService {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,
-    ) {}
+    ) { }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
         const newUser = new this.bufferClientModel(bufferClient);
@@ -191,7 +191,7 @@ export class BufferClientService {
                                 await this.telegramService.tryJoiningChannel(mobile, channel);
                             } catch (error) {
                                 await this.telegramService.deleteClient(mobile);
-                                const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `);
+                                const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
                                 if (error.errorMessage == 'CHANNELS_TOO_MUCH' || errorDetails.error == 'FloodWaitError') {
                                     this.removeFromBufferMap(mobile)
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);

@@ -15,7 +15,7 @@ export async function fetchWithTimeout(
 
     let lastError: Error | null = null;
     if (!url.includes('api.telegram.org')) {
-        notifyFailure(`trying: ${url}`, { message: "fetching" });
+        notify(`trying`, { message: url });
     } else {
         console.log(`trying: ${url}`);
     }
@@ -38,17 +38,17 @@ export async function fetchWithTimeout(
             }
             lastError = error;
             const parsedError = parseError(error, url, false);
-            notifyFailure(`Attempt ${attempt} failed`, parsedError);
+            notify(`Attempt ${attempt} failed`, parsedError);
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403 && options.bypassUrl) {
-                notifyFailure(`403 error encountered. Attempting bypass`, parsedError);
+                notify(`403 error encountered. Attempting bypass`, parsedError);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notifyFailure(`Successfully bypassed 403 error`, { message: bypassResponse.data });
+                    notify(`Successfully bypassed 403 error`, { message: bypassResponse.data });
                     return bypassResponse;
                 } catch (bypassError) {
-                    notifyFailure(`Bypass attempt failed`, parseError(bypassError, url, false));
+                    notify(`Bypass attempt failed`, parseError(bypassError, url, false));
                     throw bypassError;
                 }
             }
@@ -62,7 +62,7 @@ export async function fetchWithTimeout(
             throw error;
         }
     }
-    notifyFailure(`All ${maxRetries} retries exhausted`, parseError(lastError, url, false));
+    notify(`All ${maxRetries} retries exhausted`, parseError(lastError, url, false));
     throw lastError;
 }
 
@@ -86,10 +86,11 @@ function shouldRetry(error: any, parsedError: any): boolean {
     );
 }
 
-function notifyFailure(message: string, errorDetails: any) {
-    console.log(message, errorDetails);
+function notify(prefix: string, errorDetails: any) {
+    console.log(prefix, errorDetails);
+    if(errorDetails.status === 429) return;
     try {
-        axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`Request failed:\n${errorDetails?.message}\n\nmsg: ${message}`)}`);
+        axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${errorDetails?.message}`)}`);
     } catch (error) {
         console.error("Failed to notify failure:", error);
     }
