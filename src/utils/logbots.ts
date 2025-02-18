@@ -5,14 +5,14 @@ const notifbottokens: string[] = [
 ];
 let currentNotifTokenIndex = 0;
 
-export function notifbot(chatId: string = process.env.notifChannel, botToken?: string): string {    
+export function notifbot(chatId: string = process.env.notifChannel || "-1001823103248", botToken?: string): string {
     const token = botToken || notifbottokens[currentNotifTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
-    
+
     if (!botToken) {
         currentNotifTokenIndex = (currentNotifTokenIndex + 1) % notifbottokens.length;
     }
-    
+
     return apiUrl;
 }
 
@@ -25,13 +25,13 @@ const ppplbottokens: string[] = [
 ];
 let currentPpplTokenIndex = 0;
 
-export function ppplbot(chatId: string = process.env.updatesChannel, botToken?: string): string {    
-    const token = botToken || ppplbottokens[currentPpplTokenIndex];    
+export function ppplbot(chatId: string = process.env.updatesChannel || '-1001972065816', botToken?: string): string {
+    const token = botToken || ppplbottokens[currentPpplTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
-    
+
     if (!botToken) {
         currentPpplTokenIndex = (currentPpplTokenIndex + 1) % ppplbottokens.length;
     }
-    
+
     return apiUrl;
 }
