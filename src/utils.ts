@@ -12,8 +12,8 @@ export function contains(str: string | null | undefined, arr: string[]): boolean
 export async function fetchWithTimeout(
     url: string,
     options: AxiosRequestConfig & { bypassUrl?: string } = {},
-    sendErr = true,
-    maxRetries = 1
+    maxRetries = 1,
+    sendErr = true
 ): Promise<AxiosResponse> {
     if (!url) throw new Error("URL is required");
 

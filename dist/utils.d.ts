@@ -1,11 +1,9 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
 export declare function sleep(ms: number): Promise<void>;
 export declare function contains(str: string | null | undefined, arr: string[]): boolean;
-export declare function fetchWithTimeout(resource: string, options?: AxiosRequestConfig & {
+export declare function fetchWithTimeout(url: string, options?: AxiosRequestConfig & {
     bypassUrl?: string;
-    enableBypass?: boolean;
-    queueKey?: string;
-}, maxRetries?: number): Promise<AxiosResponse>;
+}, maxRetries?: number, sendErr?: boolean): Promise<AxiosResponse>;
 export declare function toBoolean(value: string | number | boolean | null | undefined): boolean;
 export declare function fetchNumbersFromString(inputString: string | null | undefined): string;
 interface ErrorResponse {
