@@ -36,14 +36,12 @@ export async function fetchWithTimeout(
             if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
                 console.error(`Request timeout: ${url}`);
             }
-
-            console.error("Error: ",error);
             lastError = error;
             const parsedError = parseError(error, url, false);
             notifyFailure(`Attempt ${attempt} failed`, parsedError);
 
             // Handle 403 errors with bypass
-            if (axios.isAxiosError(error) && error.response && error.response.status === 403 && options.bypassUrl) {
+            if (parsedError.status === 403 && options.bypassUrl) {
                 notifyFailure(`403 error encountered. Attempting bypass`, parsedError);
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
