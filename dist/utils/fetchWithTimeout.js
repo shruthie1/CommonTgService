@@ -15,7 +15,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
     options.method = options.method || "GET";
     let lastError = null;
     if (!url.includes('api.telegram.org')) {
-        notify(`${process.env.clientId}:\ntrying`, { message: url });
+        notify(`${process.env.clientId}`, { message: `trying: ${url}` });
     }
     else {
         console.log(`trying: ${url}`);
