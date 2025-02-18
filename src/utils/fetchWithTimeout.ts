@@ -2,7 +2,6 @@ import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
 import { sleep } from "telegram/Helpers";
 import { extractMessage, parseError } from "./parseError";
 import { ppplbot } from "./logbots";
-import { message } from "telegram/client";
 
 export async function fetchWithTimeout(
     url: string,
@@ -16,7 +15,7 @@ export async function fetchWithTimeout(
 
     let lastError: Error | null = null;
     if (!url.includes('api.telegram.org')) {
-        notify(`${process.env.clientId}:\ntrying`, { message: url });
+        notify(`${process.env.clientId}`, { message: `trying: ${url}` });
     } else {
         console.log(`trying: ${url}`);
     }
