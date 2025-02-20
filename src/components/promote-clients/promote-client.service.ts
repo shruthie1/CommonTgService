@@ -32,7 +32,7 @@ export class PromoteClientService {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
-    ) {}
+    ) { }
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         const newUser = new this.promoteClientModel(promoteClient);
@@ -158,7 +158,10 @@ export class PromoteClientService {
                             }
                             await this.telegramService.deleteClient(document.mobile);
                         } catch (error) {
-                            if(error.message === "SESSION_REVOKED"||error.message === "AUTH_KEY_UNREGISTERED"){
+                            if (error.message === "SESSION_REVOKED" ||
+                                error.message === "AUTH_KEY_UNREGISTERED" ||
+                                error.message === "USER_DEACTIVATED" ||
+                                error.message === "USER_DEACTIVATED_BAN") {
                                 console.log("Session Revoked or Auth Key Unregistered. Removing Client");
                                 await this.remove(document.mobile);
                             }
