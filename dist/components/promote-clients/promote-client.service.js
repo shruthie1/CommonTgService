@@ -145,6 +145,11 @@ let PromoteClientService = class PromoteClientService {
                             await this.telegramService.deleteClient(document.mobile);
                         }
                         catch (error) {
+                            if (error.message === "SESSION_REVOKED" || error.message === "AUTH_KEY_UNREGISTERED") {
+                                console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                await this.remove(document.mobile);
+                            }
+                            await this.telegramService.deleteClient(document.mobile);
                             const parsedError = (0, parseError_1.parseError)(error);
                             console.error(`Error while joining channels for mobile: ${document.mobile}`, parsedError);
                         }
