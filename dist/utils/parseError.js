@@ -37,7 +37,7 @@ exports.extractMessage = extractMessage;
 function parseError(err, prefix, sendErr = true) {
     const clientId = process.env.clientId || 'UnknownClient';
     const notifChannel = process.env.notifChannel || 'UnknownChannel';
-    const prefixStr = `${clientId} - ${prefix || 'UnknownPrefix'}:: `;
+    const prefixStr = `${clientId} - ${prefix || ''}`;
     let status = 500;
     let message = 'An unknown error occurred';
     let error = 'UnknownError';
@@ -87,9 +87,9 @@ function parseError(err, prefix, sendErr = true) {
         message = err.message;
         error = err.name || err.code || 'Error';
     }
-    const fullMessage = `${prefixStr} ${(0, exports.extractMessage)(message)}`;
-    const response = { status, message: String(fullMessage), error };
-    console.log(response);
+    const fullMessage = `${prefixStr} :: ${(0, exports.extractMessage)(message)}`;
+    const response = { status, message: err.errorMessage ? err.errorMessage : String(fullMessage), error };
+    console.log("parsedErr: ", fullMessage);
     if (sendErr) {
         try {
             const shouldSend = !fullMessage.includes("INPUT_USER_DEACTIVATED") &&
