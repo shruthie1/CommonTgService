@@ -159,7 +159,11 @@ export class BufferClientService {
                         // let resp = '';
                         // this.telegramService.joinChannels(document.mobile, result);
                     } catch (error) {
-                        await this.telegramService.deleteClient(document.mobile);
+                        if(error.message === "SESSION_REVOKED"||error.message === "AUTH_KEY_UNREGISTERED"){
+                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            await this.remove(document.mobile);
+                            await this.telegramService.deleteClient(document.mobile);
+                        }
                         parseError(error)
                     }
                 }
