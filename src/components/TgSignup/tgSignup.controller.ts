@@ -53,30 +53,24 @@ export class TgSignupController {
             this.logger.debug(`[SEND_CODE] Request received for phone: ${sendCodeDto.phone}`);
             const result = await this.tgSignupService.sendCode(sendCodeDto.phone);
 
-            this.logger.debug(`[SEND_CODE] Success for phone: ${sendCodeDto.phone}`, {
-                isCodeViaApp: result.isCodeViaApp,
-                hasPhoneCodeHash: !!result.phoneCodeHash
-            });
-
             return {
                 status: HttpStatus.CREATED,
-                message: 'Verification code sent successfully',
+                message: 'Code sent to your Telegram app',
                 phoneCodeHash: result.phoneCodeHash,
                 isCodeViaApp: result.isCodeViaApp
             };
         } catch (error) {
-            const parsedError = parseError(error, "tgsignup", false);
             this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
-                error: parsedError,
-                stack: error.stack,
-                errorType: error.constructor.name
+                error,
+                stack: error.stack
             });
 
+            // Pass the error message directly without parsing
             if (error instanceof HttpException) {
                 throw error;
             }
 
-            throw new BadRequestException(parsedError.message || 'Failed to send verification code');
+            throw new BadRequestException(error.message || 'Unable to send verification code');
         }
     }
 
@@ -104,43 +98,32 @@ export class TgSignupController {
     })
     async verifyCode(@Body() verifyCodeDto: VerifyCodeDto): Promise<TgSignupResponse> {
         try {
-            this.logger.debug(`[VERIFY_CODE] Request received`, {
-                phone: verifyCodeDto.phone,
-                hasPassword: !!verifyCodeDto.password
-            });
-
+            this.logger.debug(`[VERIFY_CODE] Request received for phone: ${verifyCodeDto.phone}`);
+            
             const result = await this.tgSignupService.verifyCode(
                 verifyCodeDto.phone,
                 verifyCodeDto.code,
                 verifyCodeDto.password
             );
 
-            this.logger.debug(`[VERIFY_CODE] Success for phone: ${verifyCodeDto.phone}`, {
-                status: result.status,
-                requires2FA: result.requires2FA,
-                hasSession: !!result.session
-            });
-
             return {
-                status: HttpStatus.OK,
-                message: result.message,
+                status: result.requires2FA ? HttpStatus.BAD_REQUEST : HttpStatus.OK,
+                message: result.message || 'Successfully logged in',
                 session: result.session,
                 requires2FA: result.requires2FA
             };
         } catch (error) {
-            const parsedError = parseError(error, "tgverify", false);
             this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
-                error: parsedError,
-                stack: error.stack,
-                errorType: error.constructor.name,
-                code: verifyCodeDto.code?.length || 0
+                error,
+                stack: error.stack
             });
 
+            // Pass the error message directly without parsing
             if (error instanceof HttpException) {
                 throw error;
             }
 
-            throw new BadRequestException(parsedError.message || 'Verification failed');
+            throw new BadRequestException(error.message || 'Verification failed');
         }
     }
 }

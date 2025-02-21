@@ -18,8 +18,8 @@ interface ITelegramCredentials {
 @Injectable()
 export class TgSignupService implements OnModuleDestroy {
     private readonly logger = new Logger(TgSignupService.name);
-    private static readonly LOGIN_TIMEOUT = 150000; // 2.5 minutes
-    private static readonly SESSION_CLEANUP_INTERVAL = 120000; // 2 minutes
+    private static readonly LOGIN_TIMEOUT = 300000; // 10 minutes instead of 2.5
+    private static readonly SESSION_CLEANUP_INTERVAL = 300000; // 5 minutes instead of 2
     private static readonly PHONE_PREFIX = "+"; // Prefix for phone numbers
     private readonly cleanupInterval: NodeJS.Timeout;
 
@@ -60,11 +60,13 @@ export class TgSignupService implements OnModuleDestroy {
     private async cleanupStaleSessions() {
         for (const [phone, session] of TgSignupService.activeClients) {
             try {
-                if (session.client && !session.client.connected) {
+                // Only cleanup if session is truly stale (disconnected and timeout exceeded)
+                if (Date.now() - session.createdAt > TgSignupService.LOGIN_TIMEOUT &&
+                    (!session.client || !session.client.connected)) {
                     await this.disconnectClient(phone);
                 }
             } catch (error) {
-                this.logger.error(`Error cleaning up session for ${phone}: ${error.message}`);
+                this.logger.warn(`Error cleaning up session for ${phone}: ${error.message}`);
             }
         }
     }
@@ -75,7 +77,7 @@ export class TgSignupService implements OnModuleDestroy {
 
         // Validate phone number format
         if (!/^\d{10,15}$/.test(phone)) {
-            throw new BadRequestException('Invalid phone number format');
+            throw new BadRequestException('Please enter a valid phone number');
         }
 
         return phone;
@@ -104,7 +106,12 @@ export class TgSignupService implements OnModuleDestroy {
         try {
             phone = this.validatePhoneNumber(phone);
 
-            await this.disconnectClient(phone);
+            // Check if there's an existing active session that can be reused
+            const existingSession = TgSignupService.activeClients.get(phone);
+            if (existingSession && existingSession.client?.connected) {
+                // If session exists and is still valid, disconnect it before creating new one
+                await this.disconnectClient(phone);
+            }
 
             const { apiId, apiHash } = this.getRandomCredentials();
             const session = new StringSession('');
@@ -151,7 +158,18 @@ export class TgSignupService implements OnModuleDestroy {
         } catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
-            throw new BadRequestException(error.message || 'Failed to send verification code');
+            
+            if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
+                throw new BadRequestException('This phone number has been banned from Telegram');
+            }
+            if (error.errorMessage?.includes('PHONE_NUMBER_INVALID')) {
+                throw new BadRequestException('Please enter a valid phone number');
+            }
+            if (error.errorMessage?.includes('FLOOD_WAIT')) {
+                throw new BadRequestException('Please wait a few minutes before trying again');
+            }
+            
+            throw new BadRequestException('Unable to send OTP. Please try again');
         }
     }
 
@@ -165,16 +183,31 @@ export class TgSignupService implements OnModuleDestroy {
                 throw new BadRequestException('No active signup session found. Please request a new code.');
             }
 
-            if (Date.now() - session.createdAt > TgSignupService.LOGIN_TIMEOUT) {
-                await this.disconnectClient(phone);
-                this.logger.warn(`Verification code expired for ${phone}`);
-                throw new BadRequestException('Verification code expired. Please request a new code.');
-            }
+            // Always extend session timeout on verification attempt, regardless of success
+            clearTimeout(session.timeoutId);
+            session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService.LOGIN_TIMEOUT);
 
             if (!session.client?.connected) {
-                await this.disconnectClient(phone);
-                this.logger.warn(`Client connection lost for ${phone}`);
-                throw new BadRequestException('Connection lost. Please request a new code.');
+                try {
+                    await session.client?.connect();
+                } catch (error) {
+                    // Don't disconnect, just try to reconnect
+                    this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
+                    try {
+                        const { apiId, apiHash } = this.getRandomCredentials();
+                        const newSession = new StringSession('');
+                        const newClient = new TelegramClient(newSession, apiId, apiHash, {
+                            connectionRetries: 5,
+                            retryDelay: 2000,
+                            useWSS: true,
+                            timeout: 30000
+                        });
+                        await newClient.connect();
+                        session.client = newClient;
+                    } catch (reconnectError) {
+                        throw new BadRequestException('Connection failed. Please try verifying again.');
+                    }
+                }
             }
 
             const { client, phoneCodeHash } = session;
@@ -221,13 +254,24 @@ export class TgSignupService implements OnModuleDestroy {
                     }
                     return await this.handle2FALogin(phone, session.client, password);
                 }
+                if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
+                    error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
+                    throw new BadRequestException('Invalid or expired code. Please try again with the correct code.');
+                }
 
-                throw error;
+                this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
+                throw new BadRequestException('Verification failed. Please try again.');
             }
         } catch (error) {
-            this.logger.error(`Verification failed for ${phone}: ${error.message}`, error.stack);
-            await this.disconnectClient(phone);
-            throw new BadRequestException(error.message || 'Verification failed');
+            this.logger.error(`Verification error for ${phone}: ${error.message}`);
+
+            if (error.message?.includes('No active signup session') ||
+                error.message?.includes('Connection failed')) {
+                await this.disconnectClient(phone);
+            }
+
+            throw error instanceof BadRequestException ? error :
+                new BadRequestException(error.message || 'Verification failed, please try again');
         }
     }
 
