@@ -55,7 +55,7 @@ export class TgSignupController {
 
             return {
                 status: HttpStatus.CREATED,
-                message: 'Code sent to your Telegram app',
+                message: 'Code sent to your Telegram App',
                 phoneCodeHash: result.phoneCodeHash,
                 isCodeViaApp: result.isCodeViaApp
             };
