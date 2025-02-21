@@ -37,19 +37,20 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async cleanupStaleSessions() {
         for (const [phone, session] of TgSignupService_1.activeClients) {
             try {
-                if (session.client && !session.client.connected) {
+                if (Date.now() - session.createdAt > TgSignupService_1.LOGIN_TIMEOUT &&
+                    (!session.client || !session.client.connected)) {
                     await this.disconnectClient(phone);
                 }
             }
             catch (error) {
-                this.logger.error(`Error cleaning up session for ${phone}: ${error.message}`);
+                this.logger.warn(`Error cleaning up session for ${phone}: ${error.message}`);
             }
         }
     }
     validatePhoneNumber(phone) {
         phone = phone.replace(/^\+/, '');
         if (!/^\d{10,15}$/.test(phone)) {
-            throw new common_1.BadRequestException('Invalid phone number format');
+            throw new common_1.BadRequestException('Please enter a valid phone number');
         }
         return phone;
     }
@@ -76,7 +77,10 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async sendCode(phone) {
         try {
             phone = this.validatePhoneNumber(phone);
-            await this.disconnectClient(phone);
+            const existingSession = TgSignupService_1.activeClients.get(phone);
+            if (existingSession && existingSession.client?.connected) {
+                await this.disconnectClient(phone);
+            }
             const { apiId, apiHash } = this.getRandomCredentials();
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
@@ -115,7 +119,16 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
-            throw new common_1.BadRequestException(error.message || 'Failed to send verification code');
+            if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
+                throw new common_1.BadRequestException('This phone number has been banned from Telegram');
+            }
+            if (error.errorMessage?.includes('PHONE_NUMBER_INVALID')) {
+                throw new common_1.BadRequestException('Please enter a valid phone number');
+            }
+            if (error.errorMessage?.includes('FLOOD_WAIT')) {
+                throw new common_1.BadRequestException('Please wait a few minutes before trying again');
+            }
+            throw new common_1.BadRequestException('Unable to send OTP. Please try again');
         }
     }
     async verifyCode(phone, code, password) {
@@ -126,15 +139,30 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 this.logger.warn(`No active signup session found for ${phone}`);
                 throw new common_1.BadRequestException('No active signup session found. Please request a new code.');
             }
-            if (Date.now() - session.createdAt > TgSignupService_1.LOGIN_TIMEOUT) {
-                await this.disconnectClient(phone);
-                this.logger.warn(`Verification code expired for ${phone}`);
-                throw new common_1.BadRequestException('Verification code expired. Please request a new code.');
-            }
+            clearTimeout(session.timeoutId);
+            session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
             if (!session.client?.connected) {
-                await this.disconnectClient(phone);
-                this.logger.warn(`Client connection lost for ${phone}`);
-                throw new common_1.BadRequestException('Connection lost. Please request a new code.');
+                try {
+                    await session.client?.connect();
+                }
+                catch (error) {
+                    this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
+                    try {
+                        const { apiId, apiHash } = this.getRandomCredentials();
+                        const newSession = new sessions_1.StringSession('');
+                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
+                            connectionRetries: 5,
+                            retryDelay: 2000,
+                            useWSS: true,
+                            timeout: 30000
+                        });
+                        await newClient.connect();
+                        session.client = newClient;
+                    }
+                    catch (reconnectError) {
+                        throw new common_1.BadRequestException('Connection failed. Please try verifying again.');
+                    }
+                }
             }
             const { client, phoneCodeHash } = session;
             try {
@@ -173,13 +201,22 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                     }
                     return await this.handle2FALogin(phone, session.client, password);
                 }
-                throw error;
+                if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
+                    error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
+                    throw new common_1.BadRequestException('Invalid or expired code. Please try again with the correct code.');
+                }
+                this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
+                throw new common_1.BadRequestException('Verification failed. Please try again.');
             }
         }
         catch (error) {
-            this.logger.error(`Verification failed for ${phone}: ${error.message}`, error.stack);
-            await this.disconnectClient(phone);
-            throw new common_1.BadRequestException(error.message || 'Verification failed');
+            this.logger.error(`Verification error for ${phone}: ${error.message}`);
+            if (error.message?.includes('No active signup session') ||
+                error.message?.includes('Connection failed')) {
+                await this.disconnectClient(phone);
+            }
+            throw error instanceof common_1.BadRequestException ? error :
+                new common_1.BadRequestException(error.message || 'Verification failed, please try again');
         }
     }
     async handle2FALogin(phone, client, password) {
@@ -295,8 +332,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     }
 };
 exports.TgSignupService = TgSignupService;
-TgSignupService.LOGIN_TIMEOUT = 150000;
-TgSignupService.SESSION_CLEANUP_INTERVAL = 120000;
+TgSignupService.LOGIN_TIMEOUT = 300000;
+TgSignupService.SESSION_CLEANUP_INTERVAL = 300000;
 TgSignupService.PHONE_PREFIX = "+";
 TgSignupService.activeClients = new Map();
 TgSignupService.API_CREDENTIALS = [

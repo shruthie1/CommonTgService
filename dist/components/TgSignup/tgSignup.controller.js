@@ -18,7 +18,6 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const TgSignup_service_1 = require("./TgSignup.service");
 const tg_signup_dto_1 = require("./dto/tg-signup.dto");
-const parseError_1 = require("../../utils/parseError");
 let TgSignupController = TgSignupController_1 = class TgSignupController {
     constructor(tgSignupService) {
         this.tgSignupService = tgSignupService;
@@ -28,61 +27,44 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
         try {
             this.logger.debug(`[SEND_CODE] Request received for phone: ${sendCodeDto.phone}`);
             const result = await this.tgSignupService.sendCode(sendCodeDto.phone);
-            this.logger.debug(`[SEND_CODE] Success for phone: ${sendCodeDto.phone}`, {
-                isCodeViaApp: result.isCodeViaApp,
-                hasPhoneCodeHash: !!result.phoneCodeHash
-            });
             return {
                 status: common_1.HttpStatus.CREATED,
-                message: 'Verification code sent successfully',
+                message: 'Code sent to your Telegram app',
                 phoneCodeHash: result.phoneCodeHash,
                 isCodeViaApp: result.isCodeViaApp
             };
         }
         catch (error) {
-            const parsedError = (0, parseError_1.parseError)(error, "tgsignup", false);
             this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
-                error: parsedError,
-                stack: error.stack,
-                errorType: error.constructor.name
+                error,
+                stack: error.stack
             });
             if (error instanceof common_1.HttpException) {
                 throw error;
             }
-            throw new common_1.BadRequestException(parsedError.message || 'Failed to send verification code');
+            throw new common_1.BadRequestException(error.message || 'Unable to send verification code');
         }
     }
     async verifyCode(verifyCodeDto) {
         try {
-            this.logger.debug(`[VERIFY_CODE] Request received`, {
-                phone: verifyCodeDto.phone,
-                hasPassword: !!verifyCodeDto.password
-            });
+            this.logger.debug(`[VERIFY_CODE] Request received for phone: ${verifyCodeDto.phone}`);
             const result = await this.tgSignupService.verifyCode(verifyCodeDto.phone, verifyCodeDto.code, verifyCodeDto.password);
-            this.logger.debug(`[VERIFY_CODE] Success for phone: ${verifyCodeDto.phone}`, {
-                status: result.status,
-                requires2FA: result.requires2FA,
-                hasSession: !!result.session
-            });
             return {
-                status: common_1.HttpStatus.OK,
-                message: result.message,
+                status: result.requires2FA ? common_1.HttpStatus.BAD_REQUEST : common_1.HttpStatus.OK,
+                message: result.message || 'Successfully logged in',
                 session: result.session,
                 requires2FA: result.requires2FA
             };
         }
         catch (error) {
-            const parsedError = (0, parseError_1.parseError)(error, "tgverify", false);
             this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
-                error: parsedError,
-                stack: error.stack,
-                errorType: error.constructor.name,
-                code: verifyCodeDto.code?.length || 0
+                error,
+                stack: error.stack
             });
             if (error instanceof common_1.HttpException) {
                 throw error;
             }
-            throw new common_1.BadRequestException(parsedError.message || 'Verification failed');
+            throw new common_1.BadRequestException(error.message || 'Verification failed');
         }
     }
 };
