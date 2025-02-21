@@ -3,7 +3,7 @@ import { notifbot } from "./logbots";
 
 export const extractMessage = (data: any) => {
   if (Array.isArray(data)) {
-    return `${data.map((item) => extractMessage(item)).join(', ')}`;
+    return `${data.map((item) => extractMessage(item)).join('\n')}`;
   }
 
   if (
@@ -23,7 +23,7 @@ export const extractMessage = (data: any) => {
 
       if (Array.isArray(value)) {
         messages.push(
-          `${newPrefix}=${value.map((item) => extractMessage(item)).join(', ')}`,
+          `${newPrefix}=${value.map((item) => extractMessage(item)).join('\n')}`,
         );
       } else if (
         typeof value === 'string' ||
@@ -36,7 +36,7 @@ export const extractMessage = (data: any) => {
       }
     }
 
-    return messages.length > 0 ? messages.join(', ') : '';
+    return messages.length > 0 ? messages.join('\n') : '';
   }
 
   return ''; // Return empty string for null, undefined, and unhandled types

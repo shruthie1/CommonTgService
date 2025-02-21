@@ -13,7 +13,19 @@ export async function fetchWithTimeout(
     options.timeout = options.timeout || 50000;
     options.method = options.method || "GET";
     let lastError: Error | null = null;
+
+    // const parsedUrl = new URL(url);
+    // const host = parsedUrl.host;
+    // const endpoint = parsedUrl.pathname + parsedUrl.search;
+
+    // if (!url.includes('api.telegram.org') && !url.includes('/receive')) {
+    //     notify(`${process.env.clientId}`, { message: `trying:\nhost=${host}\nendpoint=${endpoint}` });
+    // } else {
+    //     console.log(`trying: ${url}`);
+    // }
+
     console.log(`trying: ${url}`);
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), options.timeout);
@@ -32,17 +44,23 @@ export async function fetchWithTimeout(
             }
             lastError = error;
             const parsedError = parseError(error, url, false);
-            notify(`Attempt ${attempt} failed: `, { message: parsedError.status });
+            const parsedUrl = new URL(url);
+            const host = parsedUrl.host;
+            const endpoint = parsedUrl.pathname + parsedUrl.search;
+
+            const message = extractMessage(parsedError);
+            notify(`Attempt ${attempt} failed: `, { message: `host=${host}\nendpoint=${endpoint}\n${message.length < 250 ? `msg: ${message}` : "msg: Message too long"}` });
 
             // Handle 403 errors with bypass
             if (parsedError.status === 403) {
-                notify(`Attempting bypass for`, url);
+                notify(`Attempting bypass for`, { message: `host=${host}\nendpoint=${endpoint}` });
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully Excuted 403 Request`, { message: url });
+                    notify(`Successfully Excuted 403 Request`, { message: `host=${host}\nendpoint=${endpoint}` });
                     return bypassResponse;
                 } catch (bypassError) {
-                    notify(`Bypass attempt failed`, parseError(bypassError, url, false));
+                    const errorDetails = extractMessage(parseError(bypassError, url, false));
+                    notify(`Bypass attempt failed`, `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}`);
                     throw bypassError;
                 }
             }
@@ -56,7 +74,8 @@ export async function fetchWithTimeout(
             throw error;
         }
     }
-    notify(`All ${maxRetries} retries exhausted`, parseError(lastError, url, false));
+    const errorData = extractMessage(parseError(lastError, url, false))
+    notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
     throw lastError;
 }
 
