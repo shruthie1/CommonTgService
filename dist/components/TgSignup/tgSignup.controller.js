@@ -29,7 +29,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
             const result = await this.tgSignupService.sendCode(sendCodeDto.phone);
             return {
                 status: common_1.HttpStatus.CREATED,
-                message: 'Code sent to your Telegram app',
+                message: 'Code sent to your Telegram App',
                 phoneCodeHash: result.phoneCodeHash,
                 isCodeViaApp: result.isCodeViaApp
             };
