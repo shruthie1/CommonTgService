@@ -256,7 +256,7 @@ export class TgSignupService implements OnModuleDestroy {
                 }
                 if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
                     error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
-                    throw new BadRequestException('Invalid or expired code. Please try again with the correct code.');
+                    throw new BadRequestException('Invalid code. Try again with correct OTP.');
                 }
 
                 this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
