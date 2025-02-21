@@ -203,7 +203,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 }
                 if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
                     error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
-                    throw new common_1.BadRequestException('Invalid or expired code. Please try again with the correct code.');
+                    throw new common_1.BadRequestException('Invalid code. Try again with correct OTP.');
                 }
                 this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
                 throw new common_1.BadRequestException('Verification failed. Please try again.');
