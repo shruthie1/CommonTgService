@@ -180,7 +180,7 @@ export class TgSignupService implements OnModuleDestroy {
             const session = TgSignupService.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
-                throw new BadRequestException('No active signup session found. Please request a new code.');
+                throw new BadRequestException('Session Expired. Please start again');
             }
 
             // Always extend session timeout on verification attempt, regardless of success
