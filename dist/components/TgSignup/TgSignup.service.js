@@ -49,7 +49,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     }
     validatePhoneNumber(phone) {
         phone = phone.replace(/^\+/, '');
-        if (!/^\d{10,15}$/.test(phone)) {
+        if (!/^\d{8,15}$/.test(phone)) {
             throw new common_1.BadRequestException('Please enter a valid phone number');
         }
         return phone;
@@ -203,7 +203,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 }
                 if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
                     error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
-                    throw new common_1.BadRequestException('Invalid OTP. Try again with correct OTP.');
+                    throw new common_1.BadRequestException('Invalid OTP,  Try again!');
                 }
                 this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
                 throw new common_1.BadRequestException('Verification failed. Please try again.');
