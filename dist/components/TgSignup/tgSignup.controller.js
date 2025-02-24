@@ -39,10 +39,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
                 error,
                 stack: error.stack
             });
-            if (error instanceof common_1.HttpException) {
-                throw error;
-            }
-            throw new common_1.BadRequestException(error.message || 'Unable to send verification code');
+            throw error;
         }
     }
     async verifyCode(verifyCodeDto) {
@@ -61,10 +58,7 @@ let TgSignupController = TgSignupController_1 = class TgSignupController {
                 error,
                 stack: error.stack
             });
-            if (error instanceof common_1.HttpException) {
-                throw error;
-            }
-            throw new common_1.BadRequestException(error.message || 'Verification failed');
+            throw error;
         }
     }
 };
