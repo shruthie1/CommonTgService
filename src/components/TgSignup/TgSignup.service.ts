@@ -76,7 +76,7 @@ export class TgSignupService implements OnModuleDestroy {
         phone = phone.replace(/^\+/, '');
 
         // Validate phone number format
-        if (!/^\d{10,15}$/.test(phone)) {
+        if (!/^\d{8,15}$/.test(phone)) {
             throw new BadRequestException('Please enter a valid phone number');
         }
 
