@@ -49,7 +49,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     }
     validatePhoneNumber(phone) {
         phone = phone.replace(/^\+/, '');
-        if (!/^\d{10,15}$/.test(phone)) {
+        if (!/^\d{8,15}$/.test(phone)) {
             throw new common_1.BadRequestException('Please enter a valid phone number');
         }
         return phone;
