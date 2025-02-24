@@ -4,7 +4,7 @@ import { AddContactDto } from './dto/addContact.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connectToTelegram(mobile: string): Promise<import("src").TelegramManager>;
+    connectToTelegram(mobile: string): Promise<import("./TelegramManager").default>;
     connectClient(mobile: string): Promise<string>;
     disconnect(mobile: string): Promise<boolean>;
     disconnectAll(): Promise<string>;
@@ -64,7 +64,7 @@ export declare class TelegramController {
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
     getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<{
-        data: import("src/interfaces/telegram").MediaMessageMetadata[];
+        data: import("../../interfaces/telegram").MediaMessageMetadata[];
         endOfMessages: boolean;
     }>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<void>;

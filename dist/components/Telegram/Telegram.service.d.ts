@@ -15,7 +15,7 @@ export declare class TelegramService implements OnModuleDestroy {
     private static clientsMap;
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
-    getActiveClientSetup(): import("src/interfaces/telegram").ActiveClientSetup;
+    getActiveClientSetup(): import("../../interfaces/telegram").ActiveClientSetup;
     setActiveClientSetup(data: {
         days?: number;
         archiveOld: boolean;
@@ -89,7 +89,7 @@ export declare class TelegramService implements OnModuleDestroy {
     downloadProfilePic(mobile: string, index: number): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
     getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<{
-        data: import("src/interfaces/telegram").MediaMessageMetadata[];
+        data: import("../../interfaces/telegram").MediaMessageMetadata[];
         endOfMessages: boolean;
     }>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
