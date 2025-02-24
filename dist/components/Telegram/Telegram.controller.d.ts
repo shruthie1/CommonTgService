@@ -26,8 +26,8 @@ export declare class TelegramController {
         otherVideoCount: number;
     }>;
     createGroup(mobile: string): Promise<{
-        id: string;
-        accessHash: string;
+        id: any;
+        accessHash: any;
     }>;
     forwardSecrets(mobile: string, fromId: string): Promise<void>;
     joinChannelAndForward(mobile: string, fromId: string, channel: string): Promise<void>;
@@ -49,24 +49,17 @@ export declare class TelegramController {
         canSendFalseChats: string[];
     }>;
     leaveChannels(mobile: string): Promise<string>;
-    getAuths(mobile: string): Promise<import("telegram").Api.account.Authorizations>;
+    getAuths(mobile: string): Promise<any>;
     set2Fa(mobile: string): Promise<string>;
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getGrpMembers(mobile: string, username: string): Promise<{
-        tgId: string;
-        name: string;
-        username: string;
-    }[]>;
+    getGrpMembers(mobile: string, username: string): Promise<any[]>;
     addContact(addContactDto: AddContactDto): Promise<void>;
     addContacts(addContactsDto: AddContactsDto): Promise<void>;
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<{
-        data: import("../../interfaces/telegram").MediaMessageMetadata[];
-        endOfMessages: boolean;
-    }>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<void>;
     downloadProfilePic(mobile: string, index: number, res: any): Promise<any>;
     forrward(mobile: string, chatId: string, messageId: number): Promise<void>;

@@ -15,7 +15,14 @@ export declare class TelegramService implements OnModuleDestroy {
     private static clientsMap;
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
-    getActiveClientSetup(): import("../../interfaces/telegram").ActiveClientSetup;
+    getActiveClientSetup(): {
+        days?: number;
+        archiveOld: boolean;
+        formalities: boolean;
+        newMobile: string;
+        existingMobile: string;
+        clientId: string;
+    };
     setActiveClientSetup(data: {
         days?: number;
         archiveOld: boolean;
@@ -36,11 +43,7 @@ export declare class TelegramService implements OnModuleDestroy {
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
-    getGrpMembers(mobile: string, entity: EntityLike): Promise<{
-        tgId: string;
-        name: string;
-        username: string;
-    }[]>;
+    getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
     addContact(mobile: string, data: {
         mobile: string;
         tgId: string;
@@ -58,8 +61,8 @@ export declare class TelegramService implements OnModuleDestroy {
         otherVideoCount: number;
     }>;
     createGroup(mobile: string): Promise<{
-        id: string;
-        accessHash: string;
+        id: any;
+        accessHash: any;
     }>;
     forwardSecrets(mobile: string, fromChatId: string): Promise<void>;
     joinChannelAndForward(mobile: string, fromChatId: string, channel: string): Promise<void>;
@@ -78,7 +81,7 @@ export declare class TelegramService implements OnModuleDestroy {
         ids: string[];
         canSendFalseChats: string[];
     }>;
-    getAuths(mobile: string): Promise<Api.account.Authorizations>;
+    getAuths(mobile: string): Promise<any>;
     getMe(mobile: string): Promise<Api.User>;
     createNewSession(mobile: string): Promise<string>;
     set2Fa(mobile: string): Promise<string>;
@@ -88,10 +91,7 @@ export declare class TelegramService implements OnModuleDestroy {
     updatePrivacy(mobile: string): Promise<string>;
     downloadProfilePic(mobile: string, index: number): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<{
-        data: import("../../interfaces/telegram").MediaMessageMetadata[];
-        endOfMessages: boolean;
-    }>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
     forwardMessage(mobile: string, chatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<void>;
