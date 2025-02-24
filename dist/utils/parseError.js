@@ -5,7 +5,7 @@ const fetchWithTimeout_1 = require("./fetchWithTimeout");
 const logbots_1 = require("./logbots");
 const extractMessage = (data) => {
     if (Array.isArray(data)) {
-        return `${data.map((item) => (0, exports.extractMessage)(item)).join(', ')}`;
+        return `${data.map((item) => (0, exports.extractMessage)(item)).join('\n')}`;
     }
     if (typeof data === 'string' ||
         typeof data === 'number' ||
@@ -18,7 +18,7 @@ const extractMessage = (data) => {
             const value = data[key];
             const newPrefix = key;
             if (Array.isArray(value)) {
-                messages.push(`${newPrefix}=${value.map((item) => (0, exports.extractMessage)(item)).join(', ')}`);
+                messages.push(`${newPrefix}=${value.map((item) => (0, exports.extractMessage)(item)).join('\n')}`);
             }
             else if (typeof value === 'string' ||
                 typeof value === 'number' ||
@@ -29,7 +29,7 @@ const extractMessage = (data) => {
                 messages.push(String((0, exports.extractMessage)(value)));
             }
         }
-        return messages.length > 0 ? messages.join(', ') : '';
+        return messages.length > 0 ? messages.join('\n') : '';
     }
     return '';
 };
