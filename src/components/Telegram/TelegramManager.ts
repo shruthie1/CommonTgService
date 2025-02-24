@@ -524,7 +524,7 @@ class TelegramManager {
     }
 
     private isAuthMine(auth: any): boolean {
-        return auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus') ||
+        return auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus 11') ||
             auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
             auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
             auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
