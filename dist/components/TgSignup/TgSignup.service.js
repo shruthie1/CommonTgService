@@ -137,7 +137,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             const session = TgSignupService_1.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
-                throw new common_1.BadRequestException('No active signup session found. Please request a new code.');
+                throw new common_1.BadRequestException('Session Expired. Please start again');
             }
             clearTimeout(session.timeoutId);
             session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
