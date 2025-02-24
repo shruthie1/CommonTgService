@@ -65,12 +65,7 @@ export class TgSignupController {
                 stack: error.stack
             });
 
-            // Pass the error message directly without parsing
-            if (error instanceof HttpException) {
-                throw error;
-            }
-
-            throw new BadRequestException(error.message || 'Unable to send verification code');
+            throw error;
         }
     }
 
@@ -118,12 +113,7 @@ export class TgSignupController {
                 stack: error.stack
             });
 
-            // Pass the error message directly without parsing
-            if (error instanceof HttpException) {
-                throw error;
-            }
-
-            throw new BadRequestException(error.message || 'Verification failed');
+            throw error;
         }
     }
 }
