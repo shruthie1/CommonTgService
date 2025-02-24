@@ -4,7 +4,7 @@ import { AddContactDto } from './dto/addContact.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connectToTelegram(mobile: string): Promise<import("./TelegramManager").default>;
+    connectToTelegram(mobile: string): Promise<import("src").TelegramManager>;
     connectClient(mobile: string): Promise<string>;
     disconnect(mobile: string): Promise<boolean>;
     disconnectAll(): Promise<string>;
@@ -26,8 +26,8 @@ export declare class TelegramController {
         otherVideoCount: number;
     }>;
     createGroup(mobile: string): Promise<{
-        id: any;
-        accessHash: any;
+        id: string;
+        accessHash: string;
     }>;
     forwardSecrets(mobile: string, fromId: string): Promise<void>;
     joinChannelAndForward(mobile: string, fromId: string, channel: string): Promise<void>;
@@ -49,17 +49,24 @@ export declare class TelegramController {
         canSendFalseChats: string[];
     }>;
     leaveChannels(mobile: string): Promise<string>;
-    getAuths(mobile: string): Promise<any>;
+    getAuths(mobile: string): Promise<import("telegram").Api.account.Authorizations>;
     set2Fa(mobile: string): Promise<string>;
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getGrpMembers(mobile: string, username: string): Promise<any[]>;
+    getGrpMembers(mobile: string, username: string): Promise<{
+        tgId: string;
+        name: string;
+        username: string;
+    }[]>;
     addContact(addContactDto: AddContactDto): Promise<void>;
     addContacts(addContactsDto: AddContactsDto): Promise<void>;
     newSession(mobile: string): Promise<string>;
     updateName(mobile: string, firstName: string, about: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<{
+        data: import("src/interfaces/telegram").MediaMessageMetadata[];
+        endOfMessages: boolean;
+    }>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<void>;
     downloadProfilePic(mobile: string, index: number, res: any): Promise<any>;
     forrward(mobile: string, chatId: string, messageId: number): Promise<void>;
