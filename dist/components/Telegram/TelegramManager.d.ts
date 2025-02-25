@@ -1,17 +1,28 @@
 /// <reference types="node" />
-import { TelegramClient } from 'telegram';
+import { Api, TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
-import { Api } from 'telegram/tl';
 import { TotalList } from 'telegram/Helpers';
-import { Dialog } from 'telegram/tl/custom/dialog';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
+import { BackupOptions, ContentFilter } from '../../interfaces/telegram';
+import { MediaAlbumOptions, GroupOptions } from '../../interfaces/telegram';
+interface MessageScheduleOptions {
+    chatId: string;
+    message: string;
+    scheduledTime: Date;
+    media?: {
+        type: 'photo' | 'video' | 'document';
+        url: string;
+    };
+}
 declare class TelegramManager {
     private session;
     phoneNumber: string;
     client: TelegramClient | null;
     private channelArray;
     private static activeClientSetup;
+    private contentFilters;
+    private filterHandler;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
         days?: number;
@@ -38,13 +49,17 @@ declare class TelegramManager {
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
     disconnect(): Promise<void>;
+    private cleanupClient;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
+    getDialogs(params: IterDialogsParams): Promise<{
+        id: string;
+        title: string;
+    }[]>;
     getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;
@@ -112,5 +127,85 @@ declare class TelegramManager {
     deleteProfilePhotos(): Promise<void>;
     createNewSession(): Promise<string>;
     waitForOtp(): Promise<string>;
+    createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel>;
+    updateGroupSettings(settings: {
+        groupId: string;
+        title?: string;
+        description?: string;
+        slowMode?: number;
+        memberRestrictions?: any;
+    }): Promise<boolean>;
+    scheduleMessageSend(opts: MessageScheduleOptions): Promise<Api.Message>;
+    getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]>;
+    sendMediaAlbum(album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
+    sendVoiceMessage(voice: {
+        chatId: string;
+        url: string;
+        duration?: number;
+        caption?: string;
+    }): Promise<Api.TypeUpdates>;
+    cleanupChat(cleanup: {
+        chatId: string;
+        beforeDate?: Date;
+        onlyMedia?: boolean;
+        excludePinned?: boolean;
+    }): Promise<{
+        deletedCount: number;
+    }>;
+    updatePrivacyBatch(settings: {
+        phoneNumber?: 'everybody' | 'contacts' | 'nobody';
+        lastSeen?: 'everybody' | 'contacts' | 'nobody';
+        profilePhotos?: 'everybody' | 'contacts' | 'nobody';
+        forwards?: 'everybody' | 'contacts' | 'nobody';
+        calls?: 'everybody' | 'contacts' | 'nobody';
+        groups?: 'everybody' | 'contacts' | 'nobody';
+    }): Promise<{
+        success: boolean;
+    }>;
+    createBackup(options: BackupOptions): Promise<{
+        backupId: string;
+        path: string;
+        format: "json" | "html";
+        timestamp: string;
+        chats: number;
+        messages: any;
+    }>;
+    getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
+        period: "week" | "month" | "day";
+        totalMessages: number;
+        uniqueSenders: number;
+        messageTypes: {
+            text: number;
+            photo: number;
+            video: number;
+            voice: number;
+            other: number;
+        };
+        topSenders: {
+            id: string;
+            count: number;
+        }[];
+        mostActiveHours: {
+            hour: number;
+            count: number;
+        }[];
+    }>;
+    private generateHtmlBackup;
+    private getMediaExtension;
+    setContentFilters(filters: ContentFilter): Promise<{
+        success: boolean;
+        filterId: string;
+    }>;
+    private executeFilterAction;
+    private getMediaType;
+    private downloadFileFromUrl;
+    private getEntityId;
+    downloadBackup(options: BackupOptions): Promise<{
+        messagesCount: number;
+        mediaCount: number;
+        outputPath: string;
+        totalSize: number;
+        backupId: string;
+    }>;
 }
 export default TelegramManager;

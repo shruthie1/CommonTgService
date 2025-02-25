@@ -1,7 +1,6 @@
-import { TelegramClient } from 'telegram';
+import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { NewMessage, NewMessageEvent } from 'telegram/events';
-import { Api } from 'telegram/tl';
 import axios from 'axios';
 import * as fs from 'fs';
 import { CustomFile } from 'telegram/client/uploads';
@@ -16,6 +15,26 @@ import { contains } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import * as path from 'path';
+import { promisify } from 'util';
+import { createHash } from 'crypto';
+import { BackupOptions, ChatStatistics, ContentFilter } from '../../interfaces/telegram';
+import {
+    BackupResult,
+    ScheduleMessageOptions,
+    MediaAlbumOptions,
+    GroupOptions
+} from '../../interfaces/telegram';
+
+interface MessageScheduleOptions {
+    chatId: string;
+    message: string;
+    scheduledTime: Date;
+    media?: {
+        type: 'photo' | 'video' | 'document';
+        url: string;
+    };
+}
 
 class TelegramManager {
     private session: StringSession;
@@ -23,11 +42,15 @@ class TelegramManager {
     public client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
+    private contentFilters: Map<string, ContentFilter>;
+    private filterHandler: any;
+
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
+        this.contentFilters = new Map();
     }
 
     public static getActiveClientSetup() {
@@ -173,28 +196,38 @@ class TelegramManager {
         if (this.client) {
             try {
                 console.log("Destroying Client: ", this.phoneNumber);
-                
-                // Remove event handler with proper parameters
-                this.client.removeEventHandler(this.handleEvents, new NewMessage({}));
-                
-                // Destroy the connection first
-                await this.client.destroy();
-                
-                // Then disconnect the client
-                await this.client.disconnect();
-                
-                // Clear the client instance
-                this.client = null;
-                
-                // Delete the session
-                this.session.delete();
-                
-                // Clear the channel array
-                this.channelArray = [];
+                await this.cleanupClient();
             } catch (error) {
                 console.error("Error during disconnect:", error);
                 throw error;
             }
+        }
+    }
+
+    private async cleanupClient() {
+        try {
+            if (!this.client) return;
+            const handlers = this.client.listEventHandlers();
+            for (const handler of handlers) {
+                this.client.removeEventHandler(handler[1], handler[0]);
+            }
+            try {
+                if (this.client.connected) {
+                    await this.client.disconnect();
+                }
+                await this.client.destroy();
+            } catch (error) {
+                parseError(error, `${this.phoneNumber}: Error during client cleanup`);
+            }
+            await this.client.destroy();
+            await this.client.disconnect();
+            this.client = null;
+            this.session.delete();
+            this.channelArray = [];
+            this.client = null;
+            await sleep(2000);
+        } catch (error) {
+            parseError(error, `${this.phoneNumber}: Error during client cleanup`);
         }
     }
 
@@ -304,10 +337,17 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>> {
+    async getDialogs(params: IterDialogsParams): Promise<{ id: string, title: string }[]> {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
-        return chats
+        return chats.map((dialog: Dialog) => ({
+            id: dialog.id.toString(),
+            title: dialog.title,
+            isChannel: dialog.isChannel,
+            isGroup: dialog.isGroup,
+            isUser: dialog.isUser,
+            entity: dialog.entity,
+        }));
     }
 
     async getLastMsgs(limit: number): Promise<string> {
@@ -523,14 +563,22 @@ class TelegramManager {
         }
     }
 
-    private isAuthMine(auth: any): boolean {
-        return auth.country.toLowerCase().includes('singapore') || auth.deviceModel.toLowerCase().includes('oneplus 11') ||
-            auth.deviceModel.toLowerCase().includes('cli') || auth.deviceModel.toLowerCase().includes('linux') ||
-            auth.appName.toLowerCase().includes('likki') || auth.appName.toLowerCase().includes('rams') ||
-            auth.appName.toLowerCase().includes('sru') || auth.appName.toLowerCase().includes('shru') ||
-            auth.appName.toLowerCase().includes("hanslnz") || auth.deviceModel.toLowerCase().includes('windows');
-    }
+    private isAuthMine(auth: Api.Authorization): boolean {
+        const authCriteria = [
+            { field: 'country', value: 'singapore' },
+            { field: 'deviceModel', values: ['oneplus 11', 'cli', 'linux', 'windows'] },
+            { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] }
+        ];
 
+        return authCriteria.some(criterion => {
+            if ('values' in criterion) {
+                return criterion.values.some(value =>
+                    auth[criterion.field].toLowerCase().includes(value.toLowerCase())
+                );
+            }
+            return auth[criterion.field].toLowerCase().includes(criterion.value.toLowerCase());
+        });
+    }
 
     private async resetAuthorization(auth: any): Promise<void> {
         await this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
@@ -1180,7 +1228,7 @@ class TelegramManager {
                 new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyStatusTimestamp(),
                     rules: [
-                        new Api.InputPrivacyValueAllowAll()
+                        new Api.InputPrivacyValueAllowAll(),
                     ],
                 })
             );
@@ -1392,6 +1440,750 @@ class TelegramManager {
                 console.log(err)
             }
         }
+    }
+
+    async createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel> {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const result = await this.client.invoke(new Api.channels.CreateChannel({
+            title: options.title,
+            about: options.description || '',
+            broadcast: false,
+            megagroup: true,
+            forImport: false,
+            geoPoint: undefined,
+            address: '',
+        }));
+
+        // Find the channel in updates safely
+        let channelId: bigInt.BigInteger | undefined;
+        if ('updates' in result) {
+            const updates = Array.isArray(result.updates) ? result.updates : [result.updates];
+            const channelUpdate = updates.find(u => u instanceof Api.UpdateChannel);
+            if (channelUpdate && 'channelId' in channelUpdate) {
+                channelId = channelUpdate.channelId;
+            }
+        }
+
+        if (!channelId) {
+            throw new Error('Failed to create channel');
+        }
+
+        const channel = await this.client.getEntity(channelId);
+        if (!(channel instanceof Api.Channel)) {
+            throw new Error('Created entity is not a channel');
+        }
+
+        if (options.members?.length) {
+            const users = await Promise.all(
+                options.members.map(member => this.client.getInputEntity(member))
+            );
+
+            await this.client.invoke(new Api.channels.InviteToChannel({
+                channel: await this.client.getInputEntity(channel),
+                users
+            }));
+        }
+
+        if (options.photo) {
+            const buffer = await this.downloadFileFromUrl(options.photo);
+            const inputFile = await this.client.uploadFile({
+                file: new CustomFile('photo.jpg', buffer.length, 'photo.jpg', buffer),
+                workers: 1
+            });
+
+            await this.client.invoke(new Api.channels.EditPhoto({
+                channel: await this.client.getInputEntity(channel),
+                photo: new Api.InputChatUploadedPhoto({
+                    file: inputFile
+                })
+            }));
+        }
+
+        return channel;
+    }
+
+    async updateGroupSettings(settings: {
+        groupId: string;
+        title?: string;
+        description?: string;
+        slowMode?: number;
+        memberRestrictions?: any;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const channel = await this.client.getEntity(settings.groupId);
+
+        if (settings.title || settings.description) {
+            await this.client.invoke(new Api.channels.EditTitle({
+                channel: channel,
+                title: settings.title || ''
+            }));
+
+            if (settings.description) {
+                await this.client.invoke(new Api.messages.EditChatAbout({
+                    peer: channel,
+                    about: settings.description
+                }));
+            }
+        }
+
+        if (settings.slowMode !== undefined) {
+            await this.client.invoke(new Api.channels.ToggleSlowMode({
+                channel: channel,
+                seconds: settings.slowMode
+            }));
+        }
+
+        return true;
+    }
+
+    async scheduleMessageSend(opts: MessageScheduleOptions) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const scheduleDate = Math.floor(opts.scheduledTime.getTime() / 1000);
+
+        if (opts.media) {
+            const buffer = await this.downloadFileFromUrl(opts.media.url);
+
+            const uploadedFile = await this.client.uploadFile({
+                file: new CustomFile('media', buffer.length, 'media', buffer),
+                workers: 1
+            });
+
+            return this.client.sendFile(opts.chatId, {
+                file: uploadedFile,
+                caption: opts.message,
+                forceDocument: opts.media.type === 'document',
+                scheduleDate
+            });
+        }
+
+        return this.client.sendMessage(opts.chatId, {
+            message: opts.message,
+            schedule: Math.floor(opts.scheduledTime.getTime() / 1000)
+        });
+    }
+
+    async getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]> {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const result = await this.client.invoke(new Api.messages.GetScheduledHistory({
+            peer: chatId,
+            hash: bigInt(0)
+        }));
+
+        return 'messages' in result && Array.isArray(result.messages)
+            ? result.messages.filter(msg => msg instanceof Api.Message)
+            : [];
+    }
+
+    async sendMediaAlbum(album: MediaAlbumOptions) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const mediaFiles = await Promise.all(
+            album.media.map(async (item) => {
+                const buffer = await this.downloadFileFromUrl(item.url);
+                const uploadedFile = await this.client.uploadFile({
+                    file: new CustomFile('media', buffer.length, 'media', buffer),
+                    workers: 1
+                });
+
+                return new Api.InputSingleMedia({
+                    media: item.type === 'photo'
+                        ? new Api.InputMediaUploadedPhoto({ file: uploadedFile })
+                        : new Api.InputMediaUploadedDocument({
+                            file: uploadedFile,
+                            mimeType: item.type === 'video' ? 'video/mp4' : 'application/octet-stream',
+                            attributes: []
+                        }),
+                    message: item.caption || '',
+                    entities: []
+                });
+            })
+        );
+
+        return this.client.invoke(new Api.messages.SendMultiMedia({
+            peer: album.chatId,
+            multiMedia: mediaFiles
+        }));
+    }
+
+    async sendVoiceMessage(voice: {
+        chatId: string;
+        url: string;
+        duration?: number;
+        caption?: string;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const buffer = await this.downloadFileFromUrl(voice.url);
+
+        return await this.client.invoke(new Api.messages.SendMedia({
+            peer: voice.chatId,
+            media: new Api.InputMediaUploadedDocument({
+                file: await this.client.uploadFile({
+                    file: new CustomFile('voice.ogg', buffer.length, 'voice.ogg', buffer),
+                    workers: 1
+                }),
+                mimeType: 'audio/ogg',
+                attributes: [
+                    new Api.DocumentAttributeAudio({
+                        voice: true,
+                        duration: voice.duration || 0
+                    })
+                ]
+            }),
+            message: voice.caption || '',
+            randomId: bigInt(Math.floor(Math.random() * 1000000000))
+        }));
+    }
+
+    async cleanupChat(cleanup: {
+        chatId: string;
+        beforeDate?: Date;
+        onlyMedia?: boolean;
+        excludePinned?: boolean;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const messages = await this.client.getMessages(cleanup.chatId, {
+            limit: 100,
+            ...(cleanup.beforeDate && {
+                offsetDate: Math.floor(cleanup.beforeDate.getTime() / 1000)
+            })
+        });
+
+        const toDelete = messages.filter(msg => {
+            if (cleanup.excludePinned && msg.pinned) return false;
+            if (cleanup.onlyMedia && !msg.media) return false;
+            return true;
+        });
+
+        if (toDelete.length > 0) {
+            await this.client.deleteMessages(cleanup.chatId, toDelete.map(m => m.id), {
+                revoke: true
+            });
+        }
+
+        return { deletedCount: toDelete.length };
+    }
+
+    async updatePrivacyBatch(settings: {
+        phoneNumber?: 'everybody' | 'contacts' | 'nobody';
+        lastSeen?: 'everybody' | 'contacts' | 'nobody';
+        profilePhotos?: 'everybody' | 'contacts' | 'nobody';
+        forwards?: 'everybody' | 'contacts' | 'nobody';
+        calls?: 'everybody' | 'contacts' | 'nobody';
+        groups?: 'everybody' | 'contacts' | 'nobody';
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const privacyRules = {
+            everybody: [new Api.InputPrivacyValueAllowAll()],
+            contacts: [new Api.InputPrivacyValueAllowContacts()],
+            nobody: [new Api.InputPrivacyValueDisallowAll()]
+        };
+
+        const updates = [];
+
+        if (settings.phoneNumber) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyPhoneNumber(),
+                rules: privacyRules[settings.phoneNumber]
+            })));
+        }
+
+        if (settings.lastSeen) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyStatusTimestamp(),
+                rules: privacyRules[settings.lastSeen]
+            })));
+        }
+
+        if (settings.profilePhotos) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyProfilePhoto(),
+                rules: privacyRules[settings.profilePhotos]
+            })));
+        }
+
+        if (settings.forwards) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyForwards(),
+                rules: privacyRules[settings.forwards]
+            })));
+        }
+        if (settings.calls) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyPhoneCall(),
+                rules: privacyRules[settings.calls]
+            })));
+        }
+
+        if (settings.groups) {
+            updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                key: new Api.InputPrivacyKeyChatInvite(),
+                rules: privacyRules[settings.groups]
+            })));
+        }
+        await Promise.all(updates);
+        return { success: true };
+    }
+
+    async createBackup(options: BackupOptions) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const backupId = createHash('md5')
+            .update(`${this.phoneNumber}-${Date.now()}`)
+            .digest('hex');
+
+        const backupDir = path.join(process.cwd(), 'backups', backupId);
+        await promisify(fs.mkdir)(backupDir, { recursive: true });
+
+        const dialogs = options.chatIds
+            ? await Promise.all(options.chatIds.map(id => this.client.getInputEntity(id)))
+            : (await this.client.getDialogs({ limit: 100 })).map(dialog => dialog.entity);
+
+        const backup = {
+            timestamp: new Date().toISOString(),
+            account: this.phoneNumber,
+            chats: []
+        };
+
+        for (const dialog of dialogs) {
+            const messages = await this.client.getMessages(dialog, { limit: 100 });
+            const chatBackup = {
+                id: this.getEntityId(dialog),
+                type: dialog.className,
+                messages: await Promise.all(
+                    messages.filter(Boolean).map(async msg => {
+                        const messageData: any = {
+                            id: msg.id,
+                            date: new Date(msg.date * 1000).toISOString(),
+                            text: msg.message || '',
+                            fromId: msg.fromId?.toString()
+                        };
+
+                        if (msg.media && options.includeMedia) {
+                            try {
+                                const mediaDir = path.join(backupDir, 'media', this.getEntityId(dialog));
+                                await promisify(fs.mkdir)(mediaDir, { recursive: true });
+                                const buffer = await this.client.downloadMedia(msg.media);
+                                if (buffer) {
+                                    const extension = this.getMediaExtension(msg.media);
+                                    const filename = `${msg.id}.${extension}`;
+                                    const filePath = path.join(mediaDir, filename);
+                                    await promisify(fs.writeFile)(filePath, buffer);
+                                    messageData.mediaFile = filename;
+                                    messageData.mediaType = msg.media.className;
+                                }
+                            } catch (error) {
+                                console.error(`Failed to backup media for message ${msg.id}:`, error);
+                            }
+                        }
+
+                        return messageData;
+                    })
+                )
+            };
+            backup.chats.push(chatBackup);
+        }
+
+        // Save JSON backup
+        const backupPath = path.join(backupDir, 'backup.json');
+        await promisify(fs.writeFile)(
+            backupPath,
+            JSON.stringify(backup, null, 2)
+        );
+
+        // Generate HTML if requested
+        if (options.exportFormat === 'html') {
+            const htmlPath = path.join(backupDir, 'backup.html');
+            await promisify(fs.writeFile)(
+                htmlPath,
+                this.generateHtmlBackup(backup)
+            );
+        }
+
+        return {
+            backupId,
+            path: backupPath,
+            format: options.exportFormat || 'json',
+            timestamp: backup.timestamp,
+            chats: backup.chats.length,
+            messages: backup.chats.reduce((sum, chat) => sum + chat.messages.length, 0)
+        };
+    }
+
+    async getChatStatistics(chatId: string, period: 'day' | 'week' | 'month') {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const now = Math.floor(Date.now() / 1000);
+        const periodInSeconds = {
+            day: 24 * 60 * 60,
+            week: 7 * 24 * 60 * 60,
+            month: 30 * 24 * 60 * 60
+        }[period];
+
+        const messages = await this.client.getMessages(chatId, {
+            limit: 100,
+            offsetDate: now - periodInSeconds
+        });
+
+        const stats = {
+            period,
+            totalMessages: messages.length,
+            uniqueSenders: new Set(messages.map(m => m.fromId?.toString()).filter(Boolean)).size,
+            messageTypes: {
+                text: messages.filter(m => !m.media && m.message).length,
+                photo: messages.filter(m => m.media && m.media.className === 'MessageMediaPhoto').length,
+                video: messages.filter(m => {
+                    if (!m.media || m.media.className !== 'MessageMediaDocument') return false;
+                    const doc = m.media.document;
+                    return doc && 'mimeType' in doc && doc.mimeType?.startsWith('video/');
+                }).length,
+                voice: messages.filter(m => {
+                    if (!m.media || m.media.className !== 'MessageMediaDocument') return false;
+                    const doc = m.media.document;
+                    return doc && 'mimeType' in doc && doc.mimeType?.startsWith('audio/');
+                }).length,
+                other: messages.filter(m => m.media && !['MessageMediaPhoto', 'MessageMediaDocument'].includes(m.media.className)).length
+            },
+            topSenders: Object.entries(
+                messages.reduce((acc, msg) => {
+                    const senderId = msg.fromId?.toString();
+                    if (senderId) {
+                        acc[senderId] = (acc[senderId] || 0) + 1;
+                    }
+                    return acc;
+                }, {} as Record<string, number>)
+            )
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10)
+                .map(([id, count]) => ({ id, count })),
+            mostActiveHours: Object.entries(
+                messages.reduce((acc, msg) => {
+                    const hour = new Date(msg.date * 1000).getHours();
+                    acc[hour] = (acc[hour] || 0) + 1;
+                    return acc;
+                }, {} as Record<number, number>)
+            )
+                .sort(([, a], [, b]) => b - a)
+                .map(([hour, count]) => ({ hour: Number(hour), count }))
+        };
+
+        return stats;
+    }
+
+    private generateHtmlBackup(backup: any): string {
+        const formatMessage = (msg: any) => {
+            const html = `<div class="message">
+                <div class="message-header">
+                    <span class="date">${new Date(msg.date).toLocaleString()}</span>
+                    ${msg.fromId ? `<span class="sender">From: ${msg.fromId}</span>` : ''}
+                </div>
+                <div class="message-content">
+                    ${msg.text ? `<div class="text">${msg.text}</div>` : ''}
+                    ${msg.mediaFile ? `
+                        <div class="media">
+                            <span class="media-type">${msg.mediaType}</span>
+                            <span class="media-file">${msg.mediaFile}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>`;
+            return html;
+        };
+
+        return `
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Telegram Backup - ${backup.account}</title>
+                    <meta charset="utf-8">
+                    <style>
+                        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; margin: 0; padding: 20px; }
+                        .container { max-width: 800px; margin: 0 auto; }
+                        .header { text-align: center; margin-bottom: 40px; }
+                        .chat { margin-bottom: 40px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+                        .chat-header { background: #f5f5f5; padding: 15px; border-bottom: 1px solid #ddd; }
+                        .chat-messages { padding: 20px; }
+                        .message { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 6px; }
+                        .message-header { color: #666; margin-bottom: 8px; font-size: 0.9em; }
+                        .message-content { }
+                        .media { margin-top: 10px; color: #0066cc; }
+                        .text { white-space: pre-wrap; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Telegram Backup</h1>
+                            <p>Account: ${backup.account}</p>
+                            <p>Date: ${backup.timestamp}</p>
+                        </div>
+                        ${backup.chats.map(chat => `
+                            <div class="chat">
+                                <div class="chat-header">
+                                    <h2>Chat ${chat.id} (${chat.type})</h2>
+                                </div>
+                                <div class="chat-messages">
+                                    ${chat.messages.map(formatMessage).join('\n')}
+                                </div>
+                            </div>
+                        `).join('\n')}
+                    </div>
+                </body>
+            </html>
+        `.trim();
+    }
+
+    private getMediaExtension(media: any): string {
+        if (!media) return 'bin';
+
+        switch (media.className) {
+            case 'MessageMediaPhoto':
+                return 'jpg';
+            case 'MessageMediaDocument':
+                const doc = media.document;
+                if (!doc || !('mimeType' in doc)) return 'bin';
+
+                const mime = doc.mimeType;
+                if (mime?.startsWith('video/')) return 'mp4';
+                if (mime?.startsWith('image/')) return mime.split('/')[1];
+                if (mime?.startsWith('audio/')) return 'ogg';
+                return 'bin';
+            default:
+                return 'bin';
+        }
+    }
+
+    async setContentFilters(filters: ContentFilter) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        this.contentFilters.set(filters.chatId, filters);
+
+        if (!this.filterHandler) {
+            this.filterHandler = this.client.addEventHandler(async (update) => {
+                if (!(update instanceof Api.UpdateNewMessage) || !(update.message instanceof Api.Message)) {
+                    return;
+                }
+
+                const message = update.message;
+                const peer = message.peerId;
+                if (!peer) return;
+
+                let chatId: string | undefined;
+
+                if (peer instanceof Api.PeerChannel && 'channelId' in peer) {
+                    chatId = peer.channelId.toString();
+                } else if (peer instanceof Api.PeerChat && 'chatId' in peer) {
+                    chatId = peer.chatId.toString();
+                } else if (peer instanceof Api.PeerUser && 'userId' in peer) {
+                    chatId = peer.userId.toString();
+                }
+
+                if (!chatId) return;
+
+                const chatFilters = this.contentFilters.get(chatId);
+                if (!chatFilters) return;
+
+                let shouldAct = false;
+
+                if (chatFilters.keywords?.length && message.message) {
+                    const messageText = message.message.toLowerCase();
+                    shouldAct = chatFilters.keywords.some(keyword =>
+                        messageText.includes(keyword.toLowerCase())
+                    );
+                }
+
+                if (!shouldAct && chatFilters.mediaTypes?.length && message.media) {
+                    const mediaType = this.getMediaType(message.media);
+                    shouldAct = chatFilters.mediaTypes.includes(mediaType);
+                }
+
+                if (shouldAct) {
+                    for (const action of chatFilters.actions) {
+                        await this.executeFilterAction(action, message);
+                    }
+                }
+            });
+        }
+
+        return { success: true, filterId: filters.chatId };
+    }
+
+    private async executeFilterAction(
+        action: 'delete' | 'warn' | 'mute',
+        message: Api.Message
+    ) {
+        if (!message.peerId || !this.client) return;
+
+        switch (action) {
+            case 'delete':
+                await this.client.deleteMessages(message.peerId, [message.id], { revoke: true });
+                break;
+            case 'warn':
+                await this.client.sendMessage(message.peerId, {
+                    message: `⚠️ Message filtered: Violates chat rules`,
+                    replyTo: message.id
+                });
+                break;
+            case 'mute':
+                if (message.fromId) {
+                    await this.client.invoke(new Api.channels.EditBanned({
+                        channel: message.peerId,
+                        participant: message.fromId,
+                        bannedRights: new Api.ChatBannedRights({
+                            untilDate: Math.floor(Date.now() / 1000) + 300,
+                            sendMessages: true,
+                            viewMessages: false,
+                            sendMedia: true,
+                            sendStickers: true,
+                            sendGifs: true,
+                            sendGames: true,
+                            sendInline: true,
+                            embedLinks: true
+                        })
+                    }));
+                }
+                break;
+        }
+    }
+
+    private getMediaType(media: Api.TypeMessageMedia): 'photo' | 'video' | 'document' {
+        if (media instanceof Api.MessageMediaPhoto) return 'photo';
+        if (media instanceof Api.MessageMediaDocument && 'document' in media) {
+            const doc = media.document;
+            if (doc && 'mimeType' in doc && typeof doc.mimeType === 'string' && doc.mimeType.startsWith('video/')) {
+                return 'video';
+            }
+        }
+        return 'document';
+    }
+
+    private async downloadFileFromUrl(url: string): Promise<Buffer> {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+    }
+
+    // Method to safely get entity ID
+    private getEntityId(entity: Api.TypeInputPeer | Api.TypeUser | Api.TypeChat): string {
+        if (entity instanceof Api.User) return entity.id.toString();
+        if (entity instanceof Api.Channel) return entity.id.toString();
+        if (entity instanceof Api.Chat) return entity.id.toString();
+        return '';
+    }
+
+    async downloadBackup(options: BackupOptions): Promise<{ 
+        messagesCount: number,
+        mediaCount: number,
+        outputPath: string,
+        totalSize: number,
+        backupId: string
+    }> {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const {
+            backupId,
+            chatIds,
+            includeMedia = false,
+            outputPath = path.join(process.cwd(), 'backups', backupId),
+            mediaTypes = ['photo', 'video', 'document', 'audio'],
+            restoreToChat
+        } = options;
+
+        // Ensure backup directory exists
+        if (!fs.existsSync(outputPath)) {
+            fs.mkdirSync(outputPath, { recursive: true });
+        }
+
+        const backupFilePath = path.join(outputPath, 'backup.json');
+        if (!fs.existsSync(backupFilePath)) {
+            throw new Error(`Backup file not found for ID: ${backupId}`);
+        }
+
+        const backupData = JSON.parse(await promisify(fs.readFile)(backupFilePath, 'utf-8'));
+        let totalMessages = 0;
+        let totalMedia = 0;
+        let totalSize = 0;
+
+        // Process each chat in the backup
+        for (const chat of backupData.chats) {
+            // Skip if specific chatIds are provided and doesn't match
+            if (chatIds.length > 0 && !chatIds.includes(chat.id)) continue;
+
+            totalMessages += chat.messages.length;
+
+            // Download media files if requested
+            if (includeMedia) {
+                const mediaDir = path.join(outputPath, 'media', chat.id);
+                fs.mkdirSync(mediaDir, { recursive: true });
+
+                for (const message of chat.messages) {
+                    if (message.media) {
+                        try {
+                            const mediaType = message.media.type;
+                            if (mediaTypes.includes(mediaType)) {
+                                const messages = await this.client.getMessages(chat.id, { ids: [message.id] });
+                                const msg = messages[0];
+                                
+                                if (msg && msg.media) {
+                                    const buffer = await this.client.downloadMedia(msg.media);
+                                    if (buffer) {
+                                        const mediaFileName = `${message.id}_${mediaType}.${this.getMediaExtension(msg.media)}`;
+                                        const mediaPath = path.join(mediaDir, mediaFileName);
+                                        await promisify(fs.writeFile)(mediaPath, buffer);
+                                        totalSize += buffer.length;
+                                        totalMedia++;
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to download media for message ${message.id}:`, error.message);
+                        }
+                        // Add delay to avoid rate limits
+                        await sleep(100);
+                    }
+                }
+            }
+
+            // Restore messages to a new chat if requested
+            if (restoreToChat) {
+                try {
+                    for (const message of chat.messages) {
+                        if (message.media && includeMedia) {
+                            const mediaPath = path.join(outputPath, 'media', chat.id, 
+                                `${message.id}_${message.media.type}.${this.getMediaExtension(message.media)}`);
+                            if (fs.existsSync(mediaPath)) {
+                                await this.client.sendFile(restoreToChat, {
+                                    file: mediaPath,
+                                    caption: message.text || undefined
+                                });
+                            }
+                        } else {
+                            await this.client.sendMessage(restoreToChat, {
+                                message: message.text || ''
+                            });
+                        }
+                        // Add delay to avoid rate limits
+                        await sleep(1000);
+                    }
+                } catch (error) {
+                    console.error(`Failed to restore messages to chat ${restoreToChat}:`, error.message);
+                }
+            }
+        }
+
+        return {
+            messagesCount: totalMessages,
+            mediaCount: totalMedia,
+            outputPath,
+            totalSize,
+            backupId
+        };
     }
 }
 export default TelegramManager;

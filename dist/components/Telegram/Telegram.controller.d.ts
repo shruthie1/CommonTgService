@@ -1,21 +1,60 @@
 import { TelegramService } from './Telegram.service';
-import { AddContactsDto } from './dto/addContacts.dto';
-import { AddContactDto } from './dto/addContact.dto';
+import { ForwardMessageDto } from './dto/forward-message.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChannelOperationDto } from './dto/channel-operation.dto';
+import { BulkMessageOperationDto } from './dto/metadata-operations.dto';
+import { AddContactsDto } from './dto/contact-operation.dto';
+import { Response } from 'express';
+import { BackupOptions, ChatStatistics, GroupOptions, MediaAlbumOptions, ScheduleMessageOptions } from '../../interfaces/telegram';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connectToTelegram(mobile: string): Promise<import("src").TelegramManager>;
-    connectClient(mobile: string): Promise<string>;
+    private handleTelegramOperation;
+    connect(mobile: string): Promise<import("src").TelegramManager>;
     disconnect(mobile: string): Promise<boolean>;
-    disconnectAll(): Promise<string>;
-    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
-    getMessagesNew(mobile: string, chatId: string, offset: number, limit?: number): Promise<any>;
-    getChatId(mobile: string, username: string): Promise<any>;
-    sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
-    lastActiveTime(mobile: string): Promise<string>;
-    joinChannels(mobile: string, channels: string): Promise<string>;
-    removeOtherAuths(mobile: string): Promise<string>;
-    getSelfMsgsInfo(mobile: string): Promise<{
+    getMe(mobile: string): Promise<import("telegram").Api.User>;
+    updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
+    setProfilePhoto(mobile: string, name: string): Promise<string>;
+    deleteProfilePhotos(mobile: string): Promise<void>;
+    getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
+    forwardMessage(forwardMessageDto: ForwardMessageDto): Promise<void>;
+    forwardBulkMessages(mobile: string, bulkOp: BulkMessageOperationDto): Promise<void>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
+    joinChannel(mobile: string, channelOp: ChannelOperationDto): Promise<void | import("telegram").Api.TypeUpdates>;
+    leaveChannel(mobile: string, channel: string): Promise<void>;
+    setup2FA(mobile: string): Promise<string>;
+    updatePrivacy(mobile: string): Promise<string>;
+    getActiveSessions(mobile: string): Promise<any[]>;
+    terminateOtherSessions(mobile: string): Promise<void>;
+    createNewSession(mobile: string): Promise<string>;
+    getConnectionStatus(): Promise<{
+        status: {
+            activeConnections: number;
+            rateLimited: number;
+            totalOperations: number;
+        };
+    }>;
+    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
+    getClientStatistics(): Promise<{
+        totalClients: number;
+        totalOperations: number;
+        failedOperations: number;
+        averageReconnects: number;
+    }>;
+    getHealthStatus(): Promise<{
+        connections: {
+            activeConnections: number;
+            rateLimited: number;
+            totalOperations: number;
+        };
+        statistics: {
+            totalClients: number;
+            totalOperations: number;
+            failedOperations: number;
+            averageReconnects: number;
+        };
+    }>;
+    getMediaStats(mobile: string): Promise<{
         photoCount: number;
         videoCount: number;
         movieCount: number;
@@ -25,44 +64,104 @@ export declare class TelegramController {
         ownVideoCount: number;
         otherVideoCount: number;
     }>;
-    createGroup(mobile: string): Promise<{
-        id: any;
-        accessHash: any;
-    }>;
-    forwardSecrets(mobile: string, fromId: string): Promise<void>;
-    joinChannelAndForward(mobile: string, fromId: string, channel: string): Promise<void>;
-    leaveChannel(mobile: string, channel: string): Promise<string>;
-    getCallLog(mobile: string): Promise<{
+    getCallLogStats(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;
         incoming: number;
         video: number;
         totalCalls: number;
     }>;
-    getMe(mobile: string): Promise<import("telegram").Api.User>;
-    getMedia(mobile: string): Promise<import("telegram").Api.messages.Messages>;
-    getChannelInfo(mobile: string, sendIds?: boolean): Promise<{
-        chatsArrayLength: number;
-        canSendTrueCount: number;
-        canSendFalseCount: number;
-        ids: string[];
-        canSendFalseChats: string[];
+    addContactsBulk(contactsDto: AddContactsDto): Promise<void>;
+    getMediaInfo(mobile: string): Promise<import("telegram").Api.messages.Messages>;
+    sendMedia(mobile: string, chatId: string, url: string, caption: string, filename: string, type: 'photo' | 'file'): Promise<void>;
+    downloadMedia(mobile: string, messageId: number, chatId: string, res: Response): Promise<any>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit?: number): Promise<import("src/components/Telegram/types/telegram-responses").MediaMetadata>;
+    getAllChats(mobile: string): Promise<any[]>;
+    getGroupMembers(mobile: string, entityId: string): Promise<any[]>;
+    blockChat(mobile: string, chatId: string): Promise<void>;
+    deleteChatHistory(mobile: string, chatId: string): Promise<void>;
+    sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
+    getAllDialogs(mobile: string, limit?: number, archived?: boolean): Promise<{
+        id: string;
+        title: string;
+    }[]>;
+    getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
+    getLastActiveTime(mobile: string): Promise<string>;
+    disconnectAllClients(): Promise<void>;
+    createGroupWithOptions(mobile: string, options: GroupOptions): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
+    updateGroupSettings(mobile: string, settings: {
+        groupId: string;
+        title?: string;
+        description?: string;
+        slowMode?: number;
+        memberRestrictions?: any;
+    }): Promise<boolean>;
+    scheduleMessage(mobile: string, schedule: ScheduleMessageOptions): Promise<import("telegram").Api.Message>;
+    getScheduledMessages(mobile: string, chatId: string): Promise<import("telegram").Api.TypeMessage[]>;
+    sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("telegram").Api.TypeUpdates>;
+    sendVoiceMessage(mobile: string, voice: {
+        chatId: string;
+        url: string;
+        duration?: number;
+        caption?: string;
+    }): Promise<import("telegram").Api.TypeUpdates>;
+    cleanupChat(mobile: string, cleanup: {
+        chatId: string;
+        beforeDate?: Date;
+        onlyMedia?: boolean;
+        excludePinned?: boolean;
+    }): Promise<{
+        deletedCount: number;
     }>;
-    leaveChannels(mobile: string): Promise<string>;
-    getAuths(mobile: string): Promise<any>;
-    set2Fa(mobile: string): Promise<string>;
-    setProfilePic(mobile: string, name: string): Promise<string>;
-    updatePrivacy(mobile: string): Promise<string>;
-    updateUsername(mobile: string, username: string): Promise<string>;
-    getGrpMembers(mobile: string, username: string): Promise<any[]>;
-    addContact(addContactDto: AddContactDto): Promise<void>;
-    addContacts(addContactsDto: AddContactsDto): Promise<void>;
-    newSession(mobile: string): Promise<string>;
-    updateName(mobile: string, firstName: string, about: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<any>;
-    downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<void>;
-    downloadProfilePic(mobile: string, index: number, res: any): Promise<any>;
-    forrward(mobile: string, chatId: string, messageId: number): Promise<void>;
-    deleteChat(mobile: string, chatId: string): Promise<void>;
-    deleteProfilePics(mobile: string): Promise<void>;
+    getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
+    updatePrivacyBatch(mobile: string, settings: {
+        phoneNumber?: 'everybody' | 'contacts' | 'nobody';
+        lastSeen?: 'everybody' | 'contacts' | 'nobody';
+        profilePhotos?: 'everybody' | 'contacts' | 'nobody';
+        forwards?: 'everybody' | 'contacts' | 'nobody';
+        calls?: 'everybody' | 'contacts' | 'nobody';
+        groups?: 'everybody' | 'contacts' | 'nobody';
+    }): Promise<{
+        success: boolean;
+    }>;
+    createBackup(mobile: string, options: {
+        chatIds?: string[];
+        includeMedia?: boolean;
+        exportFormat?: 'json' | 'html';
+    }): Promise<import("../../interfaces/telegram").BackupResult>;
+    downloadBackup(mobile: string, backupId: string, res: Response): Promise<void>;
+    downloadExistingBackup(mobile: string, backupId: string, options: Omit<BackupOptions, 'backupId'>): Promise<{
+        messagesCount: number;
+        mediaCount: number;
+        outputPath: string;
+        totalSize: number;
+        backupId: string;
+    }>;
+    getChatBackupStats(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
+    listBackups(mobile: string): Promise<{
+        backupId: string;
+        timestamp: any;
+        account: any;
+        chats: any;
+        totalMessages: any;
+    }[]>;
+    deleteBackup(mobile: string, backupId: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    processBatchMessages(mobile: string, batchOptions: {
+        items: any[];
+        batchSize: number;
+        operation: string;
+        delayMs?: number;
+    }): Promise<{
+        processed: number;
+        errors: Error[];
+    }>;
+    getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<any>;
+    validateSession(mobile: string): Promise<{
+        isValid: boolean;
+        isConnected: boolean;
+        phoneNumber: string;
+    }>;
 }

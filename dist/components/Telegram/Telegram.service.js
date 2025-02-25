@@ -50,14 +50,24 @@ const active_channels_service_1 = require("../active-channels/active-channels.se
 const path = __importStar(require("path"));
 const channels_service_1 = require("../channels/channels.service");
 const parseError_1 = require("../../utils/parseError");
+const telegram_error_1 = require("./types/telegram-error");
+const connection_manager_1 = require("./utils/connection-manager");
+const telegram_logger_1 = require("./utils/telegram-logger");
+const client_metadata_1 = require("./utils/client-metadata");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, bufferClientService, activeChannelsService, channelsService) {
         this.usersService = usersService;
         this.bufferClientService = bufferClientService;
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
+        this.connectionManager = connection_manager_1.ConnectionManager.getInstance();
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.metadataTracker = client_metadata_1.ClientMetadataTracker.getInstance();
+        this.cleanupInterval = this.connectionManager.startCleanupInterval();
     }
     async onModuleDestroy() {
+        this.logger.logOperation('system', 'Module destroy initiated');
+        clearInterval(this.cleanupInterval);
         await this.disconnectAll();
     }
     getActiveClientSetup() {
@@ -66,8 +76,30 @@ let TelegramService = TelegramService_1 = class TelegramService {
     setActiveClientSetup(data) {
         TelegramManager_1.default.setActiveClientSetup(data);
     }
-    async getClient(number) {
-        const client = TelegramService_1.clientsMap.get(number);
+    async executeWithConnection(mobile, operation, handler) {
+        this.logger.logOperation(mobile, `Starting operation: ${operation}`);
+        const client = await this.getClientOrThrow(mobile);
+        this.connectionManager.updateLastUsed(mobile);
+        try {
+            const result = await this.connectionManager.executeWithRateLimit(mobile, () => handler(client));
+            this.metadataTracker.recordOperation(mobile, operation, true);
+            this.logger.logOperation(mobile, `Completed operation: ${operation}`);
+            return result;
+        }
+        catch (error) {
+            this.metadataTracker.recordOperation(mobile, operation, false);
+            throw error;
+        }
+    }
+    async getClientOrThrow(mobile) {
+        const client = await this.getClient(mobile);
+        if (!client) {
+            throw new telegram_error_1.TelegramError('Client not found', telegram_error_1.TelegramErrorCode.CLIENT_NOT_FOUND);
+        }
+        return client;
+    }
+    async getClient(mobile) {
+        const client = TelegramService_1.clientsMap.get(mobile);
         try {
             if (client && client.connected()) {
                 await client.connect();
@@ -75,7 +107,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         catch (error) {
-            console.log(error);
+            console.error('Client connection error:', (0, parseError_1.parseError)(error));
         }
         return undefined;
     }
@@ -83,29 +115,22 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return TelegramService_1.clientsMap.has(number);
     }
     async deleteClient(number) {
-        const cli = await this.getClient(number);
-        await cli?.disconnect();
-        console.log("Disconnected : ", number);
+        await this.connectionManager.releaseConnection(number);
         return TelegramService_1.clientsMap.delete(number);
     }
     async disconnectAll() {
-        const data = TelegramService_1.clientsMap.entries();
-        console.log("Disconnecting All Clients");
-        for (const [phoneNumber, client] of data) {
-            try {
-                await client?.disconnect();
-                TelegramService_1.clientsMap.delete(phoneNumber);
-                console.log(`Client disconnected: ${phoneNumber}`);
-            }
-            catch (error) {
-                console.log((0, parseError_1.parseError)(error));
-                console.log(`Failed to Disconnect : ${phoneNumber}`);
-            }
-        }
+        this.logger.logOperation('system', 'Disconnecting all clients');
+        const clients = Array.from(TelegramService_1.clientsMap.keys());
+        await Promise.all(clients.map(mobile => {
+            this.logger.logOperation(mobile, 'Disconnecting client');
+            return this.connectionManager.releaseConnection(mobile);
+        }));
         TelegramService_1.clientsMap.clear();
         this.bufferClientService.clearJoinChannelInterval();
+        this.logger.logOperation('system', 'All clients disconnected');
     }
     async createClient(mobile, autoDisconnect = true, handler = true) {
+        this.logger.logOperation(mobile, 'Creating new client', { autoDisconnect, handler });
         const user = (await this.usersService.search({ mobile }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
@@ -118,8 +143,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 await client.getMe();
                 if (client) {
                     TelegramService_1.clientsMap.set(mobile, telegramManager);
+                    await this.connectionManager.acquireConnection(mobile, telegramManager);
+                    this.metadataTracker.initializeClient(mobile);
+                    this.logger.logOperation(mobile, 'Client created successfully');
                     if (autoDisconnect) {
                         setTimeout(async () => {
+                            this.logger.logOperation(mobile, 'Auto-disconnecting client');
                             if (client.connected || await this.getClient(mobile)) {
                                 console.log("SELF destroy client : ", mobile);
                                 await telegramManager.disconnect();
@@ -127,7 +156,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
                             else {
                                 console.log("Client Already Disconnected : ", mobile);
                             }
+                            await this.connectionManager.releaseConnection(mobile);
                             TelegramService_1.clientsMap.delete(mobile);
+                            this.metadataTracker.removeClient(mobile);
                         }, 180000);
                     }
                     else {
@@ -141,11 +172,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
                 }
             }
             catch (error) {
+                this.logger.logError(mobile, 'Client creation failed', error);
                 console.log("Parsing Error");
                 if (telegramManager) {
-                    await telegramManager.disconnect();
+                    await this.connectionManager.releaseConnection(mobile);
                     telegramManager = null;
                     TelegramService_1.clientsMap.delete(mobile);
+                    this.metadataTracker.removeClient(mobile);
                 }
                 const errorDetails = (0, parseError_1.parseError)(error);
                 if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
@@ -254,11 +287,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
             console.error("Error fetching adding Contacts:", err);
         }
     }
-    async removeOtherAuths(mobile) {
-        const telegramClient = await this.getClient(mobile);
-        await telegramClient.removeOtherAuths();
-        return 'Authorizations removed successfully';
-    }
     async getSelfMsgsInfo(mobile) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getSelfMSgsInfo();
@@ -275,6 +303,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.joinChannelAndForward(fromChatId, channel);
     }
+    async blockUser(mobile, chatId) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.blockUser(chatId);
+    }
+    async joinChannel(mobile, channelId) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.joinChannel(channelId);
+    }
     async getCallLog(mobile) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.getCallLog();
@@ -284,17 +320,15 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return await telegramClient.getMediaMessages();
     }
     async getChannelInfo(mobile, sendIds = false) {
-        const telegramClient = await this.getClient(mobile);
-        const result = await telegramClient.getDialogs({ limit: 10, archived: false });
-        return await telegramClient.channelInfo(sendIds);
-    }
-    async getAuths(mobile) {
-        const telegramClient = await this.getClient(mobile);
-        return await telegramClient.getAuths();
+        return this.executeWithConnection(mobile, 'Get channel info', async (client) => {
+            const dialogs = await client.getDialogs({ limit: 10, archived: false });
+            return await client.channelInfo(sendIds);
+        });
     }
     async getMe(mobile) {
-        const telegramClient = await this.getClient(mobile);
-        return await telegramClient.getMe();
+        return this.executeWithConnection(mobile, 'Get profile info', async (client) => {
+            return await client.getMe();
+        });
     }
     async createNewSession(mobile) {
         const telegramClient = await this.getClient(mobile);
@@ -374,8 +408,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
     }
     async getMediaMetadata(mobile, chatId, offset, limit) {
-        const telegramClient = await this.getClient(mobile);
-        return await telegramClient.getMediaMetadata(chatId, offset, limit);
+        return this.executeWithConnection(mobile, 'Get media metadata', (client) => client.getMediaMetadata(chatId, offset, limit));
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
         const telegramClient = await this.getClient(mobile);
@@ -392,23 +425,157 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return await telegramClient.leaveChannels(leaveChannelIds);
     }
     async leaveChannel(mobile, channel) {
-        const telegramClient = await this.getClient(mobile);
-        return await telegramClient.leaveChannels([channel]);
+        return this.executeWithConnection(mobile, 'Leave channel', (client) => client.leaveChannels([channel]));
     }
     async deleteChat(mobile, chatId) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.deleteChat(chatId);
     }
     async updateNameandBio(mobile, firstName, about) {
-        const telegramClient = await this.getClient(mobile);
-        try {
-            await telegramClient.updateProfile(firstName, about);
-            return "Username updated successfully";
+        return this.executeWithConnection(mobile, 'Update profile', (client) => client.updateProfile(firstName, about));
+    }
+    async getDialogs(mobile, query) {
+        return this.executeWithConnection(mobile, 'Get dialogs', async (client) => {
+            const { limit = 10, offsetId, archived = false } = query;
+            return await client.getDialogs({ limit, offsetId, archived });
+        });
+    }
+    async getConnectionStatus() {
+        const status = {
+            activeConnections: this.connectionManager.getActiveConnectionCount(),
+            rateLimited: 0,
+            totalOperations: 0
+        };
+        this.logger.logOperation('system', 'Connection status retrieved', status);
+        return status;
+    }
+    async forwardBulkMessages(mobile, fromChatId, toChatId, messageIds) {
+        return this.executeWithConnection(mobile, 'Forward bulk messages', async (client) => {
+            this.logger.logOperation(mobile, 'Starting bulk message forward', {
+                fromChatId,
+                toChatId,
+                messageCount: messageIds.length
+            });
+            const batchSize = 10;
+            for (let i = 0; i < messageIds.length; i += batchSize) {
+                const batch = messageIds.slice(i, i + batchSize);
+                await client.forwardMessages(fromChatId, toChatId, batch);
+                if (i + batchSize < messageIds.length) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+        });
+    }
+    async getAuths(mobile) {
+        return this.executeWithConnection(mobile, 'Get authorizations', async (client) => {
+            const auths = await client.getAuths();
+            this.logger.logOperation(mobile, 'Retrieved authorizations', {
+                count: auths?.length || 0
+            });
+            return auths;
+        });
+    }
+    async removeOtherAuths(mobile) {
+        return this.executeWithConnection(mobile, 'Remove other authorizations', async (client) => {
+            await client.removeOtherAuths();
+            this.logger.logOperation(mobile, 'Removed other authorizations');
+        });
+    }
+    async getClientMetadata(mobile) {
+        return this.metadataTracker.getMetadata(mobile);
+    }
+    async getClientStatistics() {
+        return this.metadataTracker.getStatistics();
+    }
+    async handleReconnect(mobile) {
+        this.metadataTracker.recordReconnect(mobile);
+        this.logger.logWarning(mobile, 'Client reconnection triggered');
+    }
+    async processBatch(items, batchSize, processor, delayMs = 2000) {
+        const errors = [];
+        let processed = 0;
+        for (let i = 0; i < items.length; i += batchSize) {
+            const batch = items.slice(i, i + batchSize);
+            try {
+                await processor(batch);
+                processed += batch.length;
+            }
+            catch (error) {
+                errors.push(error);
+                this.logger.logError('batch-process', 'Batch processing failed', error);
+            }
+            if (i + batchSize < items.length) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
         }
-        catch (error) {
-            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
-            throw new Error("Failed to update username");
+        return { processed, errors };
+    }
+    async createGroupWithOptions(mobile, options) {
+        return this.executeWithConnection(mobile, 'Create group with options', async (client) => {
+            const result = await client.createGroupWithOptions(options);
+            this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
+            return result;
+        });
+    }
+    async updateGroupSettings(mobile, settings) {
+        return this.executeWithConnection(mobile, 'Update group settings', (client) => client.updateGroupSettings(settings));
+    }
+    async scheduleMessage(mobile, options) {
+        return this.executeWithConnection(mobile, 'Schedule message', (client) => client.scheduleMessageSend(options));
+    }
+    async getScheduledMessages(mobile, chatId) {
+        return this.executeWithConnection(mobile, 'Get scheduled messages', (client) => client.getScheduledMessages(chatId));
+    }
+    async sendMediaAlbum(mobile, album) {
+        return this.executeWithConnection(mobile, 'Send media album', (client) => client.sendMediaAlbum(album));
+    }
+    async sendVoiceMessage(mobile, voice) {
+        return this.executeWithConnection(mobile, 'Send voice message', (client) => client.sendVoiceMessage(voice));
+    }
+    async cleanupChat(mobile, cleanup) {
+        return this.executeWithConnection(mobile, 'Clean up chat', (client) => client.cleanupChat(cleanup));
+    }
+    async getChatStatistics(mobile, chatId, period) {
+        return this.executeWithConnection(mobile, 'Get chat statistics', (client) => client.getChatStatistics(chatId, period));
+    }
+    async updatePrivacyBatch(mobile, settings) {
+        return this.executeWithConnection(mobile, 'Update privacy settings batch', (client) => client.updatePrivacyBatch(settings));
+    }
+    async createBackup(mobile, options) {
+        return this.executeWithConnection(mobile, 'Create backup', async (client) => {
+            const backup = await client.createBackup(options);
+            this.logger.logOperation(mobile, 'Backup created', { id: backup.backupId });
+            return backup;
+        });
+    }
+    async downloadBackup(mobile, options) {
+        return this.executeWithConnection(mobile, 'Download backup', (client) => client.downloadBackup(options));
+    }
+    async setContentFilters(mobile, filters) {
+        return this.executeWithConnection(mobile, 'Set content filters', (client) => client.setContentFilters(filters));
+    }
+    async processBatchWithProgress(items, operation, batchSize = 10, delayMs = 2000) {
+        const result = {
+            completed: 0,
+            total: items.length,
+            errors: []
+        };
+        for (let i = 0; i < items.length; i += batchSize) {
+            const batch = items.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (item) => {
+                try {
+                    await operation(item);
+                    result.completed++;
+                }
+                catch (error) {
+                    result.errors.push(error);
+                }
+            }));
+            if (i + batchSize < items.length) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
         }
+        return result;
     }
 };
 exports.TelegramService = TelegramService;

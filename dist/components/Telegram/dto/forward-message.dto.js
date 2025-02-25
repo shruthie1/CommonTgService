@@ -9,36 +9,25 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AddContactDto = void 0;
+exports.ForwardMessageDto = void 0;
+const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
-class AddContactDto {
+class ForwardMessageDto {
 }
-exports.AddContactDto = AddContactDto;
+exports.ForwardMessageDto = ForwardMessageDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'The mobile number of the user for authentication',
-        example: '+1234567890',
-    }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], AddContactDto.prototype, "mobile", void 0);
+], ForwardMessageDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'List of phone numbers to add as contacts',
-        type: Object,
-        example: [
-            {
-                mobile: '+1234567890',
-                tgId: "1234567890"
-            }
-        ],
-    }),
-    __metadata("design:type", Array)
-], AddContactDto.prototype, "data", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Prefix for automated contact names',
-        example: 'Contact',
-    }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID to forward to' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], AddContactDto.prototype, "prefix", void 0);
-//# sourceMappingURL=addContact.dto.js.map
+], ForwardMessageDto.prototype, "chatId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message ID to forward' }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], ForwardMessageDto.prototype, "messageId", void 0);
+//# sourceMappingURL=forward-message.dto.js.map

@@ -8,37 +8,66 @@ const axios_1 = __importDefault(require("axios"));
 const Helpers_1 = require("telegram/Helpers");
 const parseError_1 = require("./parseError");
 const logbots_1 = require("./logbots");
-async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
+const http_1 = __importDefault(require("http"));
+const https_1 = __importDefault(require("https"));
+async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
     if (!url)
-        throw new Error("URL is required");
-    options.timeout = options.timeout || 50000;
+        return undefined;
+    options.timeout = options.timeout || 30000;
     options.method = options.method || "GET";
     let lastError = null;
     console.log(`trying: ${url}`);
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), options.timeout);
+        const currentTimeout = options.timeout + (attempt * 5000);
+        const timeoutId = setTimeout(() => controller.abort(), currentTimeout);
         try {
-            const response = await (0, axios_1.default)({
-                ...options,
-                url,
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            return response;
+            try {
+                const response = await (0, axios_1.default)({
+                    ...options,
+                    url,
+                    signal: controller.signal,
+                    httpAgent: new http_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
+                    httpsAgent: new https_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
+                    maxRedirects: 5,
+                });
+                clearTimeout(timeoutId);
+                return response;
+            }
+            catch (axiosError) {
+                if (shouldTryFetchFallback(axiosError)) {
+                    const fetchResponse = await makeFetchRequest(url, options, controller.signal);
+                    clearTimeout(timeoutId);
+                    return fetchResponse;
+                }
+                throw axiosError;
+            }
         }
         catch (error) {
             clearTimeout(timeoutId);
-            if (axios_1.default.isAxiosError(error) && error.code === "ECONNABORTED") {
-                console.error(`Request timeout: ${url}`);
-            }
             lastError = error;
             const parsedError = (0, parseError_1.parseError)(error, url, false);
             const parsedUrl = new URL(url);
             const host = parsedUrl.host;
             const endpoint = parsedUrl.pathname + parsedUrl.search;
             const message = (0, parseError_1.extractMessage)(parsedError);
-            notify(`Attempt ${attempt} failed: `, { message: `host=${host}\nendpoint=${endpoint}\n${message.length < 250 ? `msg: ${message}` : "msg: Message too long"}` });
+            const isTimeout = axios_1.default.isAxiosError(error) &&
+                (error.code === "ECONNABORTED" ||
+                    error.message.includes("timeout") ||
+                    parsedError.status === 408);
+            if (isTimeout) {
+                console.error(`Request timeout (${options.timeout}ms): ${url}`);
+                notify(`Timeout on attempt ${attempt}`, {
+                    message: `host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
+                    status: 408
+                });
+            }
+            else {
+                notify(`Attempt ${attempt} failed`, {
+                    message: `host=${host}\nendpoint=${endpoint}\n${message.length < 250 ? `msg: ${message}` : "msg: Message too long"}`,
+                    status: parsedError.status
+                });
+            }
             if (parsedError.status === 403) {
                 notify(`Attempting bypass for`, { message: `host=${host}\nendpoint=${endpoint}` });
                 try {
@@ -49,25 +78,26 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 1) {
                 catch (bypassError) {
                     const errorDetails = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(bypassError, url, false));
                     notify(`Bypass attempt failed`, `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}`);
-                    throw bypassError;
+                    return undefined;
                 }
             }
-            if (attempt < maxRetries && shouldRetry(error, parsedError)) {
-                const delay = Math.min(500 * (attempt + 1), 5000);
+            if (attempt < maxRetries && (shouldRetry(error, parsedError) || isRetryableStatus(parsedError.status))) {
+                const delay = calculateBackoff(attempt);
+                console.log(`Retrying request (${attempt + 1}/${maxRetries}) after ${delay}ms`);
                 await (0, Helpers_1.sleep)(delay);
                 continue;
             }
-            throw error;
+            return undefined;
         }
     }
     const errorData = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(lastError, url, false));
     notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
-    throw lastError;
+    return undefined;
 }
 exports.fetchWithTimeout = fetchWithTimeout;
 async function makeBypassRequest(url, options) {
     if (!options.bypassUrl && !process.env.bypassURL)
-        throw new Error("Bypass URL is required");
+        return undefined;
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
     return axios_1.default.post(options.bypassUrl, {
         url,
@@ -78,19 +108,80 @@ async function makeBypassRequest(url, options) {
     });
 }
 function shouldRetry(error, parsedError) {
-    return (!axios_1.default.isCancel(error) &&
-        !parsedError.message.toLowerCase().includes("too many requests") &&
-        ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK"].includes(error.code));
+    if (axios_1.default.isAxiosError(error)) {
+        const networkErrors = [
+            'ETIMEDOUT',
+            'ECONNABORTED',
+            'ECONNREFUSED',
+            'ECONNRESET',
+            'ERR_NETWORK',
+            'ERR_BAD_RESPONSE',
+            'EHOSTUNREACH',
+            'ENETUNREACH'
+        ];
+        if (networkErrors.includes(error.code)) {
+            return true;
+        }
+        if (error.message?.toLowerCase().includes('timeout')) {
+            return true;
+        }
+    }
+    return isRetryableStatus(parsedError.status);
 }
 function notify(prefix, errorDetails) {
-    console.log(prefix, errorDetails.message);
+    const errorMessage = typeof errorDetails.message === 'string'
+        ? errorDetails.message
+        : JSON.stringify(errorDetails.message);
+    console.log(prefix, errorDetails);
     if (errorDetails.status === 429)
         return;
+    const notificationText = `${prefix}\n\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
+        errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
+            (0, parseError_1.extractMessage)(errorDetails?.message)}`;
     try {
-        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(`${prefix}\n\n${(0, parseError_1.extractMessage)(errorDetails?.message)}`)}`);
+        axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(notificationText)}`);
     }
     catch (error) {
         console.error("Failed to notify failure:", error);
     }
+}
+function isRetryableStatus(status) {
+    return [408, 500, 502, 503, 504, 429].includes(status);
+}
+function calculateBackoff(attempt) {
+    const minDelay = 500;
+    const maxDelay = 30000;
+    const base = Math.min(minDelay * Math.pow(2, attempt), maxDelay);
+    const jitter = Math.random() * (base * 0.2);
+    return Math.floor(base + jitter);
+}
+function shouldTryFetchFallback(error) {
+    return axios_1.default.isAxiosError(error) &&
+        ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK", "ECONNREFUSED"].includes(error.code);
+}
+async function makeFetchRequest(url, options, signal) {
+    const fetchOptions = {
+        method: options.method,
+        headers: options.headers,
+        body: options.data ? JSON.stringify(options.data) : undefined,
+        signal,
+        keepalive: true,
+        credentials: 'same-origin'
+    };
+    const response = await fetch(url, fetchOptions);
+    let data;
+    try {
+        data = await response.json();
+    }
+    catch (e) {
+        data = await response.text();
+    }
+    return {
+        data,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers),
+        config: options,
+    };
 }
 //# sourceMappingURL=fetchWithTimeout.js.map

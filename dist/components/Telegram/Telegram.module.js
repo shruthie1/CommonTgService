@@ -9,11 +9,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramModule = void 0;
 const common_1 = require("@nestjs/common");
 const Telegram_controller_1 = require("./Telegram.controller");
+const Telegram_service_1 = require("./Telegram.service");
 const users_module_1 = require("../users/users.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
-const Telegram_service_1 = require("./Telegram.service");
 const active_channels_module_1 = require("../active-channels/active-channels.module");
 const channels_module_1 = require("../channels/channels.module");
+const connection_manager_1 = require("./utils/connection-manager");
+const telegram_logger_1 = require("./utils/telegram-logger");
 let TelegramModule = class TelegramModule {
 };
 exports.TelegramModule = TelegramModule;
@@ -26,7 +28,17 @@ exports.TelegramModule = TelegramModule = __decorate([
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule)
         ],
         controllers: [Telegram_controller_1.TelegramController],
-        providers: [Telegram_service_1.TelegramService],
+        providers: [
+            Telegram_service_1.TelegramService,
+            {
+                provide: 'CONNECTION_MANAGER',
+                useValue: connection_manager_1.ConnectionManager.getInstance()
+            },
+            {
+                provide: 'TELEGRAM_LOGGER',
+                useValue: telegram_logger_1.TelegramLogger.getInstance()
+            }
+        ],
         exports: [Telegram_service_1.TelegramService]
     })
 ], TelegramModule);
