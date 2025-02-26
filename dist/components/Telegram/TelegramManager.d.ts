@@ -2,6 +2,7 @@
 import { Api, TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
+import { Dialog } from 'telegram/tl/custom/dialog';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
@@ -60,14 +61,7 @@ declare class TelegramManager {
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<{
-        id: string;
-        title: string;
-        isChannel: boolean;
-        isGroup: boolean;
-        isUser: boolean;
-        entity: EntityLike;
-    }[]>;
+    getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;

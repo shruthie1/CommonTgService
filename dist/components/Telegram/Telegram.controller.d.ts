@@ -116,14 +116,7 @@ export declare class TelegramController {
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, chatId: string): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
-    getAllDialogs(mobile: string, limit?: number, archived?: boolean): Promise<{
-        id: string;
-        title: string;
-        isChannel: boolean;
-        isGroup: boolean;
-        isUser: boolean;
-        entity: import("telegram/define").EntityLike;
-    }[]>;
+    getAllDialogs(mobile: string, limit?: number, archived?: boolean): Promise<import("telegram/Helpers").TotalList<import("telegram/tl/custom/dialog").Dialog>>;
     getLastActiveTime(mobile: string): Promise<string>;
     createGroupWithOptions(mobile: string, options: GroupSettingsDto): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
     updateGroupSettings(mobile: string, settings: GroupSettingsDto): Promise<boolean>;

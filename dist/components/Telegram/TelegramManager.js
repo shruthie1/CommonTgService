@@ -298,14 +298,7 @@ class TelegramManager {
     async getDialogs(params) {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
-        return chats.map((dialog) => ({
-            id: dialog.id.toString(),
-            title: dialog.title,
-            isChannel: dialog.isChannel,
-            isGroup: dialog.isGroup,
-            isUser: dialog.isUser,
-            entity: dialog.entity,
-        }));
+        return chats;
     }
     async getLastMsgs(limit) {
         if (!this.client)
