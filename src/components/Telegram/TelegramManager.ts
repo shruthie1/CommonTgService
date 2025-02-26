@@ -337,24 +337,10 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs(params: IterDialogsParams): Promise<{
-        id: string,
-        title: string,
-        isChannel: boolean,
-        isGroup: boolean,
-        isUser: boolean,
-        entity: EntityLike
-    }[]> {
+    async getDialogs(params: IterDialogsParams) {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
-        return chats.map((dialog: Dialog) => ({
-            id: dialog.id.toString(),
-            title: dialog.title,
-            isChannel: dialog.isChannel,
-            isGroup: dialog.isGroup,
-            isUser: dialog.isUser,
-            entity: dialog.entity,
-        }));
+        return chats;
     }
 
     async getLastMsgs(limit: number): Promise<string> {
