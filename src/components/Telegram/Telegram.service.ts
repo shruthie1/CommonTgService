@@ -18,7 +18,7 @@ import { TelegramLogger } from './utils/telegram-logger';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ClientMetadataTracker } from './utils/client-metadata';
 import { ClientMetadata } from './types/client-operations';
-import {  ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { BackupOptions, MediaAlbumOptions } from './types/telegram-types';
 
 @Injectable()
@@ -56,7 +56,7 @@ export class TelegramService implements OnModuleDestroy {
     public setActiveClientSetup(data: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string } | undefined) {
         TelegramManager.setActiveClientSetup(data);
     }
-  
+
     private async executeWithConnection<T>(mobile: string, operation: string, handler: (client: TelegramManager) => Promise<T>): Promise<T> {
         this.logger.logOperation(mobile, `Starting operation: ${operation}`);
         const client = await this.getClientOrThrow(mobile);
@@ -480,7 +480,13 @@ export class TelegramService implements OnModuleDestroy {
     async getDialogs(mobile: string, query: DialogsQueryDto) {
         return this.executeWithConnection(mobile, 'Get dialogs', async (client) => {
             const { limit = 10, offsetId, archived = false } = query;
-            return await client.getDialogs({ limit, offsetId, archived });
+            const dialogs = await client.getDialogs({ limit, offsetId, archived });
+            const chatData = [];
+            for (const chat of dialogs) {
+                const chatEntity = await chat.entity.toJSON();
+                chatData.push(chatEntity);
+            }
+            return chatData;
         });
     }
 
@@ -816,7 +822,7 @@ export class TelegramService implements OnModuleDestroy {
             offset?: number;
             limit?: number;
         }
-    ){
+    ) {
         return this.executeWithConnection(mobile, 'Get filtered media', (client) =>
             client.getFilteredMedia(params)
         );

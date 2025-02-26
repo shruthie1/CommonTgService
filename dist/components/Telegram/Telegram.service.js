@@ -443,7 +443,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async getDialogs(mobile, query) {
         return this.executeWithConnection(mobile, 'Get dialogs', async (client) => {
             const { limit = 10, offsetId, archived = false } = query;
-            return await client.getDialogs({ limit, offsetId, archived });
+            const dialogs = await client.getDialogs({ limit, offsetId, archived });
+            const chatData = [];
+            for (const chat of dialogs) {
+                const chatEntity = await chat.entity.toJSON();
+                chatData.push(chatEntity);
+            }
+            return chatData;
         });
     }
     async getConnectionStatus() {

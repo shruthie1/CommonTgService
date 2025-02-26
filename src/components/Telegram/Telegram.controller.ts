@@ -584,17 +584,6 @@ export class TelegramController {
         });
     }
 
-    // Chat Operations
-    @Get('chats/:mobile')
-    @ApiOperation({ summary: 'Get all chats' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async getAllChats(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            return client.getAllChats();
-        });
-    }
-
     @Get('group/members/:mobile')
     @ApiOperation({ summary: 'Get group members' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -657,7 +646,7 @@ export class TelegramController {
     }
 
     // Dialog Management
-    @Get('dialogs/all/:mobile')
+    @Get('dialogs/:mobile')
     @ApiOperation({ summary: 'Get all dialogs' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'limit', description: 'Number of dialogs to fetch', required: false, type: Number })

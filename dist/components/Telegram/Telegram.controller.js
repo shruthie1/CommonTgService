@@ -262,12 +262,6 @@ let TelegramController = class TelegramController {
             });
         });
     }
-    async getAllChats(mobile) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            return client.getAllChats();
-        });
-    }
     async getGroupMembers(mobile, groupId) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
@@ -292,10 +286,10 @@ let TelegramController = class TelegramController {
             return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
         });
     }
-    async getAllDialogs(mobile, limit = 500, archived = false) {
+    async getAllDialogs(mobile, limit = 500, offsetId = 0, archived = false) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.getDialogs(mobile, { limit, archived });
+            return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
         });
     }
     async getLastActiveTime(mobile) {
@@ -855,15 +849,6 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
-    (0, common_1.Get)('chats/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all chats' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getAllChats", null);
-__decorate([
     (0, common_1.Get)('group/members/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get group members' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
@@ -912,16 +897,18 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMessageWithInlineButton", null);
 __decorate([
-    (0, common_1.Get)('dialogs/all/:mobile'),
+    (0, common_1.Get)('dialogs/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all dialogs' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of dialogs to fetch', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetId', description: 'Number of dialogs to fetch', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'archived', description: 'Include archived chats', required: false, type: Boolean }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('archived')),
+    __param(2, (0, common_1.Query)('offsetId')),
+    __param(3, (0, common_1.Query)('archived')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Boolean]),
+    __metadata("design:paramtypes", [String, Number, Number, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getAllDialogs", null);
 __decorate([

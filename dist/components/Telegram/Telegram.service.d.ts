@@ -105,7 +105,7 @@ export declare class TelegramService implements OnModuleDestroy {
     leaveChannel(mobile: string, channel: string): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
     updateNameandBio(mobile: string, firstName: string, about?: string): Promise<void>;
-    getDialogs(mobile: string, query: DialogsQueryDto): Promise<import("telegram/Helpers").TotalList<import("telegram/tl/custom/dialog").Dialog>>;
+    getDialogs(mobile: string, query: DialogsQueryDto): Promise<any[]>;
     getConnectionStatus(): Promise<{
         activeConnections: number;
         rateLimited: number;
