@@ -407,16 +407,18 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new Error("Failed to update username");
         }
     }
-    async getMediaMetadata(mobile, chatId, offset, limit) {
-        return this.executeWithConnection(mobile, 'Get media metadata', (client) => client.getMediaMetadata(chatId, offset, limit));
+    async getMediaMetadata(mobile, chatId, offset, limit = 100) {
+        return this.executeWithConnection(mobile, 'Get media metadata', async (client) => {
+            return await client.getMediaMetadata(chatId, offset, limit);
+        });
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.downloadMediaFile(messageId, chatId, res);
     }
-    async forwardMessage(mobile, chatId, messageId) {
+    async forwardMessage(mobile, toChatId, fromChatId, messageId) {
         const telegramClient = await this.getClient(mobile);
-        return await telegramClient.forwardMessage(chatId, messageId);
+        return await telegramClient.forwardMessage(toChatId, fromChatId, messageId);
     }
     async leaveChannels(mobile) {
         const telegramClient = await this.getClient(mobile);
@@ -425,14 +427,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return await telegramClient.leaveChannels(leaveChannelIds);
     }
     async leaveChannel(mobile, channel) {
-        return this.executeWithConnection(mobile, 'Leave channel', (client) => client.leaveChannels([channel]));
+        await this.executeWithConnection(mobile, 'Leave channel', (client) => client.leaveChannels([channel]));
     }
     async deleteChat(mobile, chatId) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.deleteChat(chatId);
     }
     async updateNameandBio(mobile, firstName, about) {
-        return this.executeWithConnection(mobile, 'Update profile', (client) => client.updateProfile(firstName, about));
+        await this.executeWithConnection(mobile, 'Update profile', (client) => client.updateProfile(firstName, about));
     }
     async getDialogs(mobile, query) {
         return this.executeWithConnection(mobile, 'Get dialogs', async (client) => {
@@ -450,21 +452,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return status;
     }
     async forwardBulkMessages(mobile, fromChatId, toChatId, messageIds) {
-        return this.executeWithConnection(mobile, 'Forward bulk messages', async (client) => {
-            this.logger.logOperation(mobile, 'Starting bulk message forward', {
-                fromChatId,
-                toChatId,
-                messageCount: messageIds.length
-            });
-            const batchSize = 10;
-            for (let i = 0; i < messageIds.length; i += batchSize) {
-                const batch = messageIds.slice(i, i + batchSize);
-                await client.forwardMessages(fromChatId, toChatId, batch);
-                if (i + batchSize < messageIds.length) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-            }
-        });
+        await this.executeWithConnection(mobile, 'Forward bulk messages', (client) => client.forwardMessages(fromChatId, toChatId, messageIds));
     }
     async getAuths(mobile) {
         return this.executeWithConnection(mobile, 'Get authorizations', async (client) => {
@@ -499,13 +487,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
             try {
                 await processor(batch);
                 processed += batch.length;
+                if (i + batchSize < items.length) {
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
             }
             catch (error) {
                 errors.push(error);
                 this.logger.logError('batch-process', 'Batch processing failed', error);
-            }
-            if (i + batchSize < items.length) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
         }
         return { processed, errors };
@@ -521,7 +509,15 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return this.executeWithConnection(mobile, 'Update group settings', (client) => client.updateGroupSettings(settings));
     }
     async scheduleMessage(mobile, options) {
-        return this.executeWithConnection(mobile, 'Schedule message', (client) => client.scheduleMessageSend(options));
+        await this.executeWithConnection(mobile, 'Schedule message', async (client) => {
+            await client.scheduleMessageSend({
+                chatId: options.chatId,
+                message: options.message,
+                scheduledTime: options.scheduledTime,
+                replyTo: options.replyTo,
+                silent: options.silent
+            });
+        });
     }
     async getScheduledMessages(mobile, chatId) {
         return this.executeWithConnection(mobile, 'Get scheduled messages', (client) => client.getScheduledMessages(chatId));
@@ -542,11 +538,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return this.executeWithConnection(mobile, 'Update privacy settings batch', (client) => client.updatePrivacyBatch(settings));
     }
     async createBackup(mobile, options) {
-        return this.executeWithConnection(mobile, 'Create backup', async (client) => {
-            const backup = await client.createBackup(options);
-            this.logger.logOperation(mobile, 'Backup created', { id: backup.backupId });
-            return backup;
-        });
+        return this.executeWithConnection(mobile, 'Create backup', (client) => client.createBackup(options));
     }
     async downloadBackup(mobile, options) {
         return this.executeWithConnection(mobile, 'Download backup', (client) => client.downloadBackup(options));
@@ -578,22 +570,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return result;
     }
     async addGroupMembers(mobile, groupId, members) {
-        return this.executeWithConnection(mobile, 'Add group members', async (client) => {
-            await client.addGroupMembers(groupId, members);
-            this.logger.logOperation(mobile, 'Added members to group', { groupId, count: members.length });
-        });
+        await this.executeWithConnection(mobile, 'Add group members', (client) => client.addGroupMembers(groupId, members));
     }
     async removeGroupMembers(mobile, groupId, members) {
-        return this.executeWithConnection(mobile, 'Remove group members', async (client) => {
-            await client.removeGroupMembers(groupId, members);
-            this.logger.logOperation(mobile, 'Removed members from group', { groupId, count: members.length });
-        });
+        await this.executeWithConnection(mobile, 'Remove group members', (client) => client.removeGroupMembers(groupId, members));
     }
     async promoteToAdmin(mobile, groupId, userId, permissions, rank) {
-        return this.executeWithConnection(mobile, 'Promote to admin', async (client) => {
-            await client.promoteToAdmin(groupId, userId, permissions, rank);
-            this.logger.logOperation(mobile, 'Promoted user to admin', { groupId, userId, rank });
-        });
+        await this.executeWithConnection(mobile, 'Promote to admin', (client) => client.promoteToAdmin(groupId, userId, permissions, rank));
     }
     async demoteAdmin(mobile, groupId, userId) {
         return this.executeWithConnection(mobile, 'Demote admin', async (client) => {

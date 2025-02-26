@@ -1,4 +1,4 @@
-import { IsString, IsArray } from 'class-validator';
+import { IsString, IsArray, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export interface ContactData {
@@ -7,10 +7,6 @@ export interface ContactData {
 }
 
 export class AddContactDto {
-    @ApiProperty({ description: 'Mobile number' })
-    @IsString()
-    mobile: string;
-
     @ApiProperty({ description: 'Contact data', type: [Object] })
     @IsArray()
     data: ContactData[];
@@ -21,15 +17,13 @@ export class AddContactDto {
 }
 
 export class AddContactsDto {
-    @ApiProperty({ description: 'Mobile number' })
-    @IsString()
-    mobile: string;
-
-    @ApiProperty({ description: 'Phone numbers to add', type: [String] })
+    @ApiProperty({ description: 'Array of phone numbers to add', type: [String] })
     @IsArray()
+    @IsString({ each: true })
     phoneNumbers: string[];
 
-    @ApiProperty({ description: 'Name prefix for contacts' })
+    @ApiProperty({ description: 'Optional prefix for phone numbers', required: false })
+    @IsOptional()
     @IsString()
-    prefix: string;
+    prefix?: string;
 }

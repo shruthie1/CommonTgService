@@ -7,34 +7,6 @@ export interface ActiveClientSetup {
     clientId: string;
 }
 
-export interface MediaMessageMetadata {
-    messageId: number;
-    mediaType: 'photo' | 'video';
-    thumb: string | null;
-}
-
-export interface BackupOptions {
-    chatIds?: string[];
-    includeMedia?: boolean;
-    exportFormat?: 'json' | 'html';
-    backupId?: string;
-    beforeDate?: Date;
-    afterDate?: Date;
-    maxMessages?: number;
-    outputPath?: string;
-    mediaTypes?: ('photo' | 'video' | 'document' | 'audio')[];
-    restoreToChat?: string;
-}
-
-export interface BackupResult {
-    backupId: string;
-    path: string;
-    format: 'json' | 'html';
-    timestamp: string;
-    chats: number;
-    messages: number;
-}
-
 export interface ChatStatistics {
     period: 'day' | 'week' | 'month';
     totalMessages: number;
@@ -63,29 +35,29 @@ export interface ContentFilter {
     actions: ('delete' | 'warn' | 'mute')[];
 }
 
-export interface ScheduleMessageOptions {
+
+export interface MessageScheduleOptions {
     chatId: string;
     message: string;
     scheduledTime: Date;
-    media?: {
-        type: 'photo' | 'video' | 'document';
-        url: string;
-    };
+    replyTo?: number;
+    silent?: boolean;
 }
-
-export interface MediaAlbumOptions {
-    chatId: string;
-    media: Array<{
-        type: 'photo' | 'video';
-        url: string;
-        caption?: string;
-    }>;
-}
-
 export interface GroupOptions {
     title: string;
-    description?: string;
     members?: string[];
-    isPublic?: boolean;
     photo?: string;
+    description?: string;
+    address?: string;
+    slowMode?: number;
+    megagroup?: boolean;
+    forImport?: boolean;
+}
+
+export interface ChannelInfo {
+    chatsArrayLength: number;
+    canSendTrueCount: number;
+    canSendFalseCount: number;
+    ids: string[];
+    canSendFalseChats: string[];
 }

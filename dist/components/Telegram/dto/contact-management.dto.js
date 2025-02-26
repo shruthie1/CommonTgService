@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContactExportImportDto = exports.ContactBlockListDto = exports.ContactGroupDto = void 0;
+exports.ContactImportDto = exports.ContactExportImportDto = exports.ContactBlockListDto = exports.ContactGroupDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 class ContactGroupDto {
@@ -47,17 +47,28 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ContactBlockListDto.prototype, "block", void 0);
 class ContactExportImportDto {
+    constructor() {
+        this.includeBlocked = false;
+    }
 }
 exports.ContactExportImportDto = ContactExportImportDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Format of export/import (vcard/csv)', enum: ['vcard', 'csv'] }),
-    (0, class_validator_1.IsString)(),
+    (0, swagger_1.ApiProperty)({ enum: ['vcard', 'csv'], description: 'Export format type' }),
+    (0, class_validator_1.IsEnum)(['vcard', 'csv']),
     __metadata("design:type", String)
 ], ContactExportImportDto.prototype, "format", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether to include blocked contacts' }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether to include blocked contacts', required: false, default: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], ContactExportImportDto.prototype, "includeBlocked", void 0);
+class ContactImportDto {
+}
+exports.ContactImportDto = ContactImportDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Contacts to import', type: [Object] }),
+    (0, class_validator_1.IsArray)(),
+    __metadata("design:type", Array)
+], ContactImportDto.prototype, "contacts", void 0);
 //# sourceMappingURL=contact-management.dto.js.map

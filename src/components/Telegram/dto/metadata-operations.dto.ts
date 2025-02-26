@@ -1,6 +1,36 @@
-import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, Min, Max, Length, ArrayMinSize, ArrayMaxSize, IsNotEmpty } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, Min, Max, Length, ArrayMinSize, ArrayMaxSize, IsNotEmpty, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
+
+export enum MetadataType {
+    PHOTO = 'photo',
+    VIDEO = 'video',
+    DOCUMENT = 'document'
+}
+
+export class MediaMetadataDto {
+    @ApiProperty({ description: 'Message ID containing the media' })
+    @IsNumber()
+    messageId: number;
+
+    @ApiProperty({ description: 'Type of media', enum: MetadataType })
+    @IsEnum(MetadataType)
+    type: MetadataType;
+
+    @ApiProperty({ description: 'Base64 encoded thumbnail', required: false })
+    @IsOptional()
+    @IsString()
+    thumb?: string;
+
+    @ApiProperty({ description: 'Media caption', required: false })
+    @IsOptional()
+    @IsString()
+    caption?: string;
+
+    @ApiProperty({ description: 'Message timestamp' })
+    @IsNumber()
+    date: number;
+}
 
 export class DialogsQueryDto {
     @ApiPropertyOptional({ description: 'Number of dialogs to fetch', required: false, type: Number, minimum: 1, maximum: 1000 })
@@ -28,29 +58,6 @@ export class DialogsQueryDto {
     })
     @IsBoolean({ message: 'Archived must be a boolean value (true/false)' })
     archived?: boolean = false;
-}
-
-export class MessageQueryDto {
-    @ApiProperty({ description: 'Entity to get messages from', type: String, minLength: 1, maxLength: 255 })
-    @IsString()
-    @IsNotEmpty()
-    @Length(1, 255, { message: 'Entity ID must be between 1 and 255 characters' })
-    entityId!: string;
-
-    @ApiProperty({ description: 'Number of messages to fetch', required: false, type: Number, minimum: 1, maximum: 1000 })
-    @IsOptional()
-    @Transform(({ value }) => parseInt(value))
-    @IsNumber()
-    @Min(0)
-    @Min(1, { message: 'Limit must be at least 1' })
-    @Max(1000, { message: 'Limit cannot exceed 1000' })
-    limit?: number = 100;
-
-    @ApiProperty({ description: 'Message offset ID', required: false, type: Number, minimum: 0 })
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 0 })
-    offsetId?: number = 0;
 }
 
 export class BulkMessageOperationDto {

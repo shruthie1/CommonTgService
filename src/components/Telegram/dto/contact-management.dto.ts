@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsBoolean, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ContactGroupDto {
@@ -28,13 +28,27 @@ export class ContactBlockListDto {
   block: boolean;
 }
 
-export class ContactExportImportDto {
-  @ApiProperty({ description: 'Format of export/import (vcard/csv)', enum: ['vcard', 'csv'] })
-  @IsString()
-  format: 'vcard' | 'csv';
+export type ExportFormat = 'vcard' | 'csv';
 
-  @ApiProperty({ description: 'Whether to include blocked contacts' })
+export class ContactExportImportDto {
+  @ApiProperty({ enum: ['vcard', 'csv'], description: 'Export format type' })
+  @IsEnum(['vcard', 'csv'] as const)
+  format: ExportFormat;
+
+  @ApiProperty({ description: 'Whether to include blocked contacts', required: false, default: false })
   @IsOptional()
   @IsBoolean()
-  includeBlocked?: boolean;
+  includeBlocked = false;
+}
+
+interface ContactData {
+  firstName: string;
+  lastName?: string;
+  phone: string;
+}
+
+export class ContactImportDto {
+  @ApiProperty({ description: 'Contacts to import', type: [Object] })
+  @IsArray()
+  contacts: ContactData[];
 }

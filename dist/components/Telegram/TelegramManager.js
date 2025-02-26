@@ -965,9 +965,9 @@ class TelegramManager {
             res.status(500).send('Error downloading media');
         }
     }
-    async forwardMessage(chatId, messageId) {
+    async forwardMessage(toChatId, fromChatId, messageId) {
         try {
-            await this.client.forwardMessages("@fuckyoubabie", { fromPeer: chatId, messages: messageId });
+            await this.client.forwardMessages(toChatId, { fromPeer: fromChatId, messages: messageId });
         }
         catch (error) {
             console.log("Failed to Forward Message : ", error.errorMessage);

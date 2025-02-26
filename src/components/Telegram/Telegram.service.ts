@@ -12,14 +12,14 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { parseError } from '../../utils/parseError';
 import { TelegramError, TelegramErrorCode } from './types/telegram-error';
-import { ChannelInfo, MediaMetadata } from './types/telegram-responses';
+import { ChannelInfo } from './types/telegram-responses';
 import { ConnectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ClientMetadataTracker } from './utils/client-metadata';
 import { ClientMetadata } from './types/client-operations';
-import { Dialog } from 'telegram/tl/custom/dialog';
-import { BackupOptions, BackupResult, ChatStatistics, ContentFilter, ScheduleMessageOptions, MediaAlbumOptions, GroupOptions } from '../../interfaces/telegram';
+import {  ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { BackupOptions, MediaAlbumOptions } from './types/telegram-types';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -56,7 +56,7 @@ export class TelegramService implements OnModuleDestroy {
     public setActiveClientSetup(data: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string } | undefined) {
         TelegramManager.setActiveClientSetup(data);
     }
-
+  
     private async executeWithConnection<T>(mobile: string, operation: string, handler: (client: TelegramManager) => Promise<T>): Promise<T> {
         this.logger.logOperation(mobile, `Starting operation: ${operation}`);
         const client = await this.getClientOrThrow(mobile);
@@ -428,10 +428,10 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<MediaMetadata> {
-        return this.executeWithConnection(mobile, 'Get media metadata', (client) =>
-            client.getMediaMetadata(chatId, offset, limit)
-        );
+    async getMediaMetadata(mobile: string, chatId?: string, offset?: number, limit: number = 100) {
+        return this.executeWithConnection(mobile, 'Get media metadata', async (client) => {
+            return await client.getMediaMetadata(chatId, offset, limit);
+        });
     }
 
     async downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any) {
@@ -439,9 +439,9 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.downloadMediaFile(messageId, chatId, res)
     }
 
-    async forwardMessage(mobile: string, chatId: string, messageId: number) {
-        const telegramClient = await this.getClient(mobile)
-        return await telegramClient.forwardMessage(chatId, messageId);
+    async forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number) {
+        const telegramClient = await this.getClient(mobile);
+        return await telegramClient.forwardMessage(toChatId, fromChatId, messageId);
     }
 
     async leaveChannels(mobile: string) {
@@ -453,11 +453,10 @@ export class TelegramService implements OnModuleDestroy {
 
 
     async leaveChannel(mobile: string, channel: string): Promise<void> {
-        return this.executeWithConnection(mobile, 'Leave channel', (client) =>
-            client.leaveChannels([channel])
+        await this.executeWithConnection(mobile, 'Leave channel',
+            (client) => client.leaveChannels([channel]),
         );
     }
-
 
     async deleteChat(mobile: string, chatId: string) {
         const telegramClient = await this.getClient(mobile)
@@ -468,8 +467,8 @@ export class TelegramService implements OnModuleDestroy {
         firstName: string,
         about?: string,
     ): Promise<void> {
-        return this.executeWithConnection(mobile, 'Update profile', (client) =>
-            client.updateProfile(firstName, about)
+        await this.executeWithConnection(mobile, 'Update profile',
+            (client) => client.updateProfile(firstName, about),
         );
     }
 
@@ -501,25 +500,9 @@ export class TelegramService implements OnModuleDestroy {
         toChatId: string,
         messageIds: number[]
     ): Promise<void> {
-        return this.executeWithConnection(mobile, 'Forward bulk messages', async (client) => {
-            this.logger.logOperation(mobile, 'Starting bulk message forward', {
-                fromChatId,
-                toChatId,
-                messageCount: messageIds.length
-            });
-
-            // Process in batches to avoid rate limits
-            const batchSize = 10;
-            for (let i = 0; i < messageIds.length; i += batchSize) {
-                const batch = messageIds.slice(i, i + batchSize);
-                await client.forwardMessages(fromChatId, toChatId, batch);
-
-                // Add delay between batches to avoid flood wait
-                if (i + batchSize < messageIds.length) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-            }
-        });
+        await this.executeWithConnection(mobile, 'Forward bulk messages',
+            (client) => client.forwardMessages(fromChatId, toChatId, messageIds),
+        );
     }
 
     async getAuths(mobile: string): Promise<any[]> {
@@ -568,13 +551,12 @@ export class TelegramService implements OnModuleDestroy {
             try {
                 await processor(batch);
                 processed += batch.length;
+                if (i + batchSize < items.length) {
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
             } catch (error) {
                 errors.push(error);
                 this.logger.logError('batch-process', 'Batch processing failed', error);
-            }
-
-            if (i + batchSize < items.length) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
         }
 
@@ -606,9 +588,17 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     // Message Scheduling
-    async scheduleMessage(mobile: string, options: ScheduleMessageOptions) {
-        return this.executeWithConnection(mobile, 'Schedule message', (client) =>
-            client.scheduleMessageSend(options)
+    async scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<void> {
+        await this.executeWithConnection(mobile, 'Schedule message',
+            async (client) => {
+                await client.scheduleMessageSend({
+                    chatId: options.chatId,
+                    message: options.message,
+                    scheduledTime: options.scheduledTime,
+                    replyTo: options.replyTo,
+                    silent: options.silent
+                });
+            },
         );
     }
 
@@ -655,8 +645,8 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async getChatStatistics(mobile: string, chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics> {
-        return this.executeWithConnection(mobile, 'Get chat statistics', (client) =>
-            client.getChatStatistics(chatId, period)
+        return this.executeWithConnection(mobile, 'Get chat statistics',
+            (client) => client.getChatStatistics(chatId, period),
         );
     }
 
@@ -678,12 +668,10 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     // Backup and Restore
-    async createBackup(mobile: string, options: BackupOptions): Promise<BackupResult> {
-        return this.executeWithConnection(mobile, 'Create backup', async (client) => {
-            const backup = await client.createBackup(options);
-            this.logger.logOperation(mobile, 'Backup created', { id: backup.backupId });
-            return backup;
-        });
+    async createBackup(mobile: string, options: BackupOptions) {
+        return this.executeWithConnection(mobile, 'Create backup',
+            (client) => client.createBackup(options),
+        );
     }
 
     async downloadBackup(mobile: string, options: BackupOptions) {
@@ -738,17 +726,15 @@ export class TelegramService implements OnModuleDestroy {
 
     // Group Member Management
     async addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
-        return this.executeWithConnection(mobile, 'Add group members', async (client) => {
-            await client.addGroupMembers(groupId, members);
-            this.logger.logOperation(mobile, 'Added members to group', { groupId, count: members.length });
-        });
+        await this.executeWithConnection(mobile, 'Add group members',
+            (client) => client.addGroupMembers(groupId, members),
+        );
     }
 
     async removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
-        return this.executeWithConnection(mobile, 'Remove group members', async (client) => {
-            await client.removeGroupMembers(groupId, members);
-            this.logger.logOperation(mobile, 'Removed members from group', { groupId, count: members.length });
-        });
+        await this.executeWithConnection(mobile, 'Remove group members',
+            (client) => client.removeGroupMembers(groupId, members),
+        );
     }
 
     async promoteToAdmin(
@@ -769,10 +755,9 @@ export class TelegramService implements OnModuleDestroy {
         },
         rank?: string
     ): Promise<void> {
-        return this.executeWithConnection(mobile, 'Promote to admin', async (client) => {
-            await client.promoteToAdmin(groupId, userId, permissions, rank);
-            this.logger.logOperation(mobile, 'Promoted user to admin', { groupId, userId, rank });
-        });
+        await this.executeWithConnection(mobile, 'Promote to admin',
+            (client) => client.promoteToAdmin(groupId, userId, permissions, rank)
+        );
     }
 
     async demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void> {
@@ -826,7 +811,7 @@ export class TelegramService implements OnModuleDestroy {
             offset?: number;
             limit?: number;
         }
-    ) {
+    ){
         return this.executeWithConnection(mobile, 'Get filtered media', (client) =>
             client.getFilteredMedia(params)
         );

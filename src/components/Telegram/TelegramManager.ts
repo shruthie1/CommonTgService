@@ -18,18 +18,18 @@ import { notifbot } from '../../utils/logbots';
 import * as path from 'path';
 import { promisify } from 'util';
 import { createHash } from 'crypto';
-import { BackupOptions, ChatStatistics, ContentFilter } from '../../interfaces/telegram';
+import { ContentFilter } from '../../interfaces/telegram';
 import {
-    BackupResult,
-    ScheduleMessageOptions,
-    MediaAlbumOptions,
     GroupOptions
 } from '../../interfaces/telegram';
+import { MediaAlbumOptions, BackupOptions } from './types/telegram-types';
 
 interface MessageScheduleOptions {
     chatId: string;
     message: string;
     scheduledTime: Date;
+    replyTo?: number;
+    silent?: boolean;
     media?: {
         type: 'photo' | 'video' | 'document';
         url: string;
@@ -337,7 +337,14 @@ class TelegramManager {
         const messages = await this.client.getMessages(entityLike, { limit });
         return messages;
     }
-    async getDialogs(params: IterDialogsParams): Promise<{ id: string, title: string }[]> {
+    async getDialogs(params: IterDialogsParams): Promise<{
+        id: string,
+        title: string,
+        isChannel: boolean,
+        isGroup: boolean,
+        isUser: boolean,
+        entity: EntityLike
+    }[]> {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats.map((dialog: Dialog) => ({
@@ -1132,9 +1139,9 @@ class TelegramManager {
 
 
 
-    async forwardMessage(chatId: string, messageId: number) {
+    async forwardMessage(toChatId: string, fromChatId: string, messageId: number) {
         try {
-            await this.client.forwardMessages("@fuckyoubabie", { fromPeer: chatId, messages: messageId })
+            await this.client.forwardMessages(toChatId, { fromPeer: fromChatId, messages: messageId })
         } catch (error) {
             console.log("Failed to Forward Message : ", error.errorMessage);
         }

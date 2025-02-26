@@ -7,6 +7,7 @@ import { ActiveChannelsModule } from '../active-channels/active-channels.module'
 import { ChannelsModule } from '../channels/channels.module';
 import { ConnectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
+import { TelegramValidationConfig } from './config/telegram-validation.config';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { TelegramLogger } from './utils/telegram-logger';
     controllers: [TelegramController],
     providers: [
         TelegramService,
+        TelegramValidationConfig,
         {
             provide: 'CONNECTION_MANAGER',
             useValue: ConnectionManager.getInstance()

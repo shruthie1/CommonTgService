@@ -1,4 +1,5 @@
 export class TelegramError extends Error {
+    status: any;
     constructor(
         message: string,
         public readonly code?: string,

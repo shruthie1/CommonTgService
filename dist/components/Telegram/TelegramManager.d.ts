@@ -5,12 +5,15 @@ import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { BackupOptions, ContentFilter } from '../../interfaces/telegram';
-import { MediaAlbumOptions, GroupOptions } from '../../interfaces/telegram';
+import { ContentFilter } from '../../interfaces/telegram';
+import { GroupOptions } from '../../interfaces/telegram';
+import { MediaAlbumOptions, BackupOptions } from './types/telegram-types';
 interface MessageScheduleOptions {
     chatId: string;
     message: string;
     scheduledTime: Date;
+    replyTo?: number;
+    silent?: boolean;
     media?: {
         type: 'photo' | 'video' | 'document';
         url: string;
@@ -60,6 +63,10 @@ declare class TelegramManager {
     getDialogs(params: IterDialogsParams): Promise<{
         id: string;
         title: string;
+        isChannel: boolean;
+        isGroup: boolean;
+        isUser: boolean;
+        entity: EntityLike;
     }[]>;
     getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
@@ -116,7 +123,7 @@ declare class TelegramManager {
     downloadWithTimeout(promise: Promise<Buffer>, timeout: number): Promise<unknown>;
     getMediaMetadata(chatId?: string, offset?: number, limit?: number): any;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
-    forwardMessage(chatId: string, messageId: number): Promise<void>;
+    forwardMessage(toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;

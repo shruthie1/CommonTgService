@@ -9,10 +9,46 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BulkMessageOperationDto = exports.MessageQueryDto = exports.DialogsQueryDto = void 0;
+exports.BulkMessageOperationDto = exports.DialogsQueryDto = exports.MediaMetadataDto = exports.MetadataType = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
+var MetadataType;
+(function (MetadataType) {
+    MetadataType["PHOTO"] = "photo";
+    MetadataType["VIDEO"] = "video";
+    MetadataType["DOCUMENT"] = "document";
+})(MetadataType || (exports.MetadataType = MetadataType = {}));
+class MediaMetadataDto {
+}
+exports.MediaMetadataDto = MediaMetadataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message ID containing the media' }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], MediaMetadataDto.prototype, "messageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Type of media', enum: MetadataType }),
+    (0, class_validator_1.IsEnum)(MetadataType),
+    __metadata("design:type", String)
+], MediaMetadataDto.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Base64 encoded thumbnail', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaMetadataDto.prototype, "thumb", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Media caption', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaMetadataDto.prototype, "caption", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message timestamp' }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], MediaMetadataDto.prototype, "date", void 0);
 class DialogsQueryDto {
     constructor() {
         this.limit = 100;
@@ -52,37 +88,6 @@ __decorate([
     (0, class_validator_1.IsBoolean)({ message: 'Archived must be a boolean value (true/false)' }),
     __metadata("design:type", Boolean)
 ], DialogsQueryDto.prototype, "archived", void 0);
-class MessageQueryDto {
-    constructor() {
-        this.limit = 100;
-        this.offsetId = 0;
-    }
-}
-exports.MessageQueryDto = MessageQueryDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Entity to get messages from', type: String, minLength: 1, maxLength: 255 }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.Length)(1, 255, { message: 'Entity ID must be between 1 and 255 characters' }),
-    __metadata("design:type", String)
-], MessageQueryDto.prototype, "entityId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of messages to fetch', required: false, type: Number, minimum: 1, maximum: 1000 }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
-    (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(0),
-    (0, class_validator_1.Min)(1, { message: 'Limit must be at least 1' }),
-    (0, class_validator_1.Max)(1000, { message: 'Limit cannot exceed 1000' }),
-    __metadata("design:type", Number)
-], MessageQueryDto.prototype, "limit", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message offset ID', required: false, type: Number, minimum: 0 }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Type)(() => Number),
-    (0, class_validator_1.IsNumber)({ maxDecimalPlaces: 0 }),
-    __metadata("design:type", Number)
-], MessageQueryDto.prototype, "offsetId", void 0);
 class BulkMessageOperationDto {
 }
 exports.BulkMessageOperationDto = BulkMessageOperationDto;

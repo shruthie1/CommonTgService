@@ -8,10 +8,11 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
-import { ChannelInfo, MediaMetadata } from './types/telegram-responses';
+import { ChannelInfo } from './types/telegram-responses';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ClientMetadata } from './types/client-operations';
-import { BackupOptions, BackupResult, ChatStatistics, ContentFilter, ScheduleMessageOptions, MediaAlbumOptions, GroupOptions } from '../../interfaces/telegram';
+import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { BackupOptions, MediaAlbumOptions } from './types/telegram-types';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private bufferClientService;
@@ -96,9 +97,9 @@ export declare class TelegramService implements OnModuleDestroy {
     updatePrivacy(mobile: string): Promise<string>;
     downloadProfilePic(mobile: string, index: number): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit: number): Promise<MediaMetadata>;
+    getMediaMetadata(mobile: string, chatId?: string, offset?: number, limit?: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
-    forwardMessage(mobile: string, chatId: string, messageId: number): Promise<void>;
+    forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<void>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
@@ -106,6 +107,10 @@ export declare class TelegramService implements OnModuleDestroy {
     getDialogs(mobile: string, query: DialogsQueryDto): Promise<{
         id: string;
         title: string;
+        isChannel: boolean;
+        isGroup: boolean;
+        isUser: boolean;
+        entity: EntityLike;
     }[]>;
     getConnectionStatus(): Promise<{
         activeConnections: number;
@@ -135,7 +140,7 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: ScheduleMessageOptions): Promise<Api.Message>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<void>;
     getScheduledMessages(mobile: string, chatId: string): Promise<Api.TypeMessage[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
     sendVoiceMessage(mobile: string, voice: {
@@ -163,7 +168,14 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         success: boolean;
     }>;
-    createBackup(mobile: string, options: BackupOptions): Promise<BackupResult>;
+    createBackup(mobile: string, options: BackupOptions): Promise<{
+        backupId: string;
+        path: string;
+        format: "json" | "html";
+        timestamp: string;
+        chats: number;
+        messages: any;
+    }>;
     downloadBackup(mobile: string, options: BackupOptions): Promise<{
         messagesCount: number;
         mediaCount: number;

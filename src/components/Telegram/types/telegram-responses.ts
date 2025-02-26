@@ -5,14 +5,3 @@ export interface ChannelInfo {
     ids: string[];
     canSendFalseChats: string[];
 }
-
-export interface MediaMetadata {
-    photoCount: number;
-    videoCount: number;
-    movieCount: number;
-    total: number;
-    ownPhotoCount: number;
-    otherPhotoCount: number;
-    ownVideoCount: number;
-    otherVideoCount: number;
-}

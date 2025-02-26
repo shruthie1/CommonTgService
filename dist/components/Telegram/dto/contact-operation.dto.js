@@ -16,11 +16,6 @@ class AddContactDto {
 }
 exports.AddContactDto = AddContactDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], AddContactDto.prototype, "mobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Contact data', type: [Object] }),
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
@@ -34,17 +29,14 @@ class AddContactsDto {
 }
 exports.AddContactsDto = AddContactsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], AddContactsDto.prototype, "mobile", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Phone numbers to add', type: [String] }),
+    (0, swagger_1.ApiProperty)({ description: 'Array of phone numbers to add', type: [String] }),
     (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], AddContactsDto.prototype, "phoneNumbers", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Name prefix for contacts' }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional prefix for phone numbers', required: false }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], AddContactsDto.prototype, "prefix", void 0);
