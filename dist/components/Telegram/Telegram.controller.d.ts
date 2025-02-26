@@ -16,7 +16,7 @@ export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
     private handleTelegramOperation;
-    connect(mobile: string): Promise<import("src").TelegramManager>;
+    connect(mobile: string): Promise<import("./TelegramManager").default>;
     disconnect(mobile: string): Promise<boolean>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
@@ -42,7 +42,7 @@ export declare class TelegramController {
         }[];
         total: number;
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
     joinChannel(mobile: string, channelOp: ChannelOperationDto): Promise<void | import("telegram").Api.TypeUpdates>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
@@ -57,7 +57,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;
@@ -98,7 +98,7 @@ export declare class TelegramController {
     getMediaInfo(mobile: string): Promise<import("telegram").Api.messages.Messages>;
     sendMedia(mobile: string, chatId: string, url: string, caption: string, filename: string, type: 'photo' | 'file'): Promise<void>;
     downloadMedia(mobile: string, messageId: number, chatId: string, res: Response): Promise<any>;
-    getMediaMetadata(mobile: string, chatId: string, offset: number, limit?: number): Promise<import("src/components/Telegram/types/telegram-responses").MediaMetadata>;
+    getMediaMetadata(mobile: string, chatId: string, offset: number, limit?: number): Promise<import("./types/telegram-responses").MediaMetadata>;
     getFilteredMedia(mobile: string, filterParams: MediaFilterDto): Promise<{
         messages: {
             messageId: number;
