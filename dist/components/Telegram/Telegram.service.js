@@ -321,7 +321,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async getChannelInfo(mobile, sendIds = false) {
         return this.executeWithConnection(mobile, 'Get channel info', async (client) => {
-            const dialogs = await client.getDialogs({ limit: 10, archived: false });
             return await client.channelInfo(sendIds);
         });
     }
