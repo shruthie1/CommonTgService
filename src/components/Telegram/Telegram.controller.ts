@@ -661,15 +661,17 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get all dialogs' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'limit', description: 'Number of dialogs to fetch', required: false, type: Number })
+    @ApiQuery({ name: 'offsetId', description: 'Number of dialogs to fetch', required: false, type: Number })
     @ApiQuery({ name: 'archived', description: 'Include archived chats', required: false, type: Boolean })
     async getAllDialogs(
         @Param('mobile') mobile: string,
         @Query('limit') limit: number = 500,
+        @Query('offsetId') offsetId: number = 0,
         @Query('archived') archived: boolean = false
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.getDialogs(mobile, { limit, archived });
+            return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
         });
     }
 
