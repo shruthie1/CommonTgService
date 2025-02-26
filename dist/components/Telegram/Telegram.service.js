@@ -577,6 +577,66 @@ let TelegramService = TelegramService_1 = class TelegramService {
         }
         return result;
     }
+    async addGroupMembers(mobile, groupId, members) {
+        return this.executeWithConnection(mobile, 'Add group members', async (client) => {
+            await client.addGroupMembers(groupId, members);
+            this.logger.logOperation(mobile, 'Added members to group', { groupId, count: members.length });
+        });
+    }
+    async removeGroupMembers(mobile, groupId, members) {
+        return this.executeWithConnection(mobile, 'Remove group members', async (client) => {
+            await client.removeGroupMembers(groupId, members);
+            this.logger.logOperation(mobile, 'Removed members from group', { groupId, count: members.length });
+        });
+    }
+    async promoteToAdmin(mobile, groupId, userId, permissions, rank) {
+        return this.executeWithConnection(mobile, 'Promote to admin', async (client) => {
+            await client.promoteToAdmin(groupId, userId, permissions, rank);
+            this.logger.logOperation(mobile, 'Promoted user to admin', { groupId, userId, rank });
+        });
+    }
+    async demoteAdmin(mobile, groupId, userId) {
+        return this.executeWithConnection(mobile, 'Demote admin', async (client) => {
+            await client.demoteAdmin(groupId, userId);
+            this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
+        });
+    }
+    async unblockGroupUser(mobile, groupId, userId) {
+        return this.executeWithConnection(mobile, 'Unblock group user', async (client) => {
+            await client.unblockGroupUser(groupId, userId);
+            this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
+        });
+    }
+    async getGroupAdmins(mobile, groupId) {
+        return this.executeWithConnection(mobile, 'Get group admins', (client) => client.getGroupAdmins(groupId));
+    }
+    async getGroupBannedUsers(mobile, groupId) {
+        return this.executeWithConnection(mobile, 'Get group banned users', (client) => client.getGroupBannedUsers(groupId));
+    }
+    async searchMessages(mobile, params) {
+        return this.executeWithConnection(mobile, 'Search messages', (client) => client.searchMessages(params));
+    }
+    async getFilteredMedia(mobile, params) {
+        return this.executeWithConnection(mobile, 'Get filtered media', (client) => client.getFilteredMedia(params));
+    }
+    async exportContacts(mobile, format, includeBlocked = false) {
+        return this.executeWithConnection(mobile, 'Export contacts', (client) => client.exportContacts(format, includeBlocked));
+    }
+    async importContacts(mobile, contacts) {
+        return this.executeWithConnection(mobile, 'Import contacts', (client) => client.importContacts(contacts));
+    }
+    async manageBlockList(mobile, userIds, block) {
+        return this.executeWithConnection(mobile, block ? 'Block users' : 'Unblock users', (client) => client.manageBlockList(userIds, block));
+    }
+    async getContactStatistics(mobile) {
+        return this.executeWithConnection(mobile, 'Get contact statistics', (client) => client.getContactStatistics());
+    }
+    async createChatFolder(mobile, options) {
+        return this.executeWithConnection(mobile, 'Create chat folder', (client) => client.createChatFolder(options));
+    }
+    async getChatFolders(mobile) {
+        return this.executeWithConnection(mobile, 'Get chat folders', (client) => client.getChatFolders());
+    }
 };
 exports.TelegramService = TelegramService;
 TelegramService.clientsMap = new Map();

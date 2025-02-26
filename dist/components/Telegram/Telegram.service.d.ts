@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
@@ -175,4 +176,159 @@ export declare class TelegramService implements OnModuleDestroy {
         filterId: string;
     }>;
     private processBatchWithProgress;
+    addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
+    removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
+    promoteToAdmin(mobile: string, groupId: string, userId: string, permissions?: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }, rank?: string): Promise<void>;
+    demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void>;
+    unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void>;
+    getGroupAdmins(mobile: string, groupId: string): Promise<{
+        userId: string;
+        rank?: string;
+        permissions: {
+            changeInfo: boolean;
+            postMessages: boolean;
+            editMessages: boolean;
+            deleteMessages: boolean;
+            banUsers: boolean;
+            inviteUsers: boolean;
+            pinMessages: boolean;
+            addAdmins: boolean;
+            anonymous: boolean;
+            manageCall: boolean;
+        };
+    }[]>;
+    getGroupBannedUsers(mobile: string, groupId: string): Promise<{
+        userId: string;
+        bannedRights: {
+            viewMessages: boolean;
+            sendMessages: boolean;
+            sendMedia: boolean;
+            sendStickers: boolean;
+            sendGifs: boolean;
+            sendGames: boolean;
+            sendInline: boolean;
+            embedLinks: boolean;
+            untilDate: number;
+        };
+    }[]>;
+    searchMessages(mobile: string, params: {
+        chatId: string;
+        query?: string;
+        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
+        offset?: number;
+        limit?: number;
+    }): Promise<{
+        messages: {
+            id: number;
+            message: string;
+            date: number;
+            sender: {
+                id: string;
+                is_self: boolean;
+                username: string;
+            };
+            media: {
+                type: "document" | "video" | "photo";
+                thumbnailUrl: string | Buffer;
+            };
+        }[];
+        total: number;
+    }>;
+    getFilteredMedia(mobile: string, params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        offset?: number;
+        limit?: number;
+    }): Promise<{
+        messages: {
+            messageId: number;
+            type: "document" | "video" | "photo";
+            thumb: any;
+            caption: string;
+            date: number;
+            mediaDetails: {
+                filename: string;
+                duration: number;
+                mimeType: string;
+                size: import("big-integer").BigInteger;
+            };
+        }[];
+        total: number;
+        hasMore: boolean;
+    }>;
+    exportContacts(mobile: string, format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
+    importContacts(mobile: string, contacts: {
+        firstName: string;
+        lastName?: string;
+        phone: string;
+    }[]): Promise<({
+        success: boolean;
+        phone: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        phone: string;
+        error: any;
+    })[]>;
+    manageBlockList(mobile: string, userIds: string[], block: boolean): Promise<({
+        success: boolean;
+        userId: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        userId: string;
+        error: any;
+    })[]>;
+    getContactStatistics(mobile: string): Promise<{
+        total: any;
+        online: any;
+        withPhone: any;
+        mutual: any;
+        lastWeekActive: any;
+    }>;
+    createChatFolder(mobile: string, options: {
+        name: string;
+        includedChats: string[];
+        excludedChats?: string[];
+        includeContacts?: boolean;
+        includeNonContacts?: boolean;
+        includeGroups?: boolean;
+        includeBroadcasts?: boolean;
+        includeBots?: boolean;
+        excludeMuted?: boolean;
+        excludeRead?: boolean;
+        excludeArchived?: boolean;
+    }): Promise<{
+        id: number;
+        name: string;
+        options: {
+            includeContacts: boolean;
+            includeNonContacts: boolean;
+            includeGroups: boolean;
+            includeBroadcasts: boolean;
+            includeBots: boolean;
+            excludeMuted: boolean;
+            excludeRead: boolean;
+            excludeArchived: boolean;
+        };
+    }>;
+    getChatFolders(mobile: string): Promise<{
+        id: any;
+        title: any;
+        includedChatsCount: any;
+        excludedChatsCount: any;
+    }[]>;
 }

@@ -735,4 +735,164 @@ export class TelegramService implements OnModuleDestroy {
 
         return result;
     }
+
+    // Group Member Management
+    async addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
+        return this.executeWithConnection(mobile, 'Add group members', async (client) => {
+            await client.addGroupMembers(groupId, members);
+            this.logger.logOperation(mobile, 'Added members to group', { groupId, count: members.length });
+        });
+    }
+
+    async removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
+        return this.executeWithConnection(mobile, 'Remove group members', async (client) => {
+            await client.removeGroupMembers(groupId, members);
+            this.logger.logOperation(mobile, 'Removed members from group', { groupId, count: members.length });
+        });
+    }
+
+    async promoteToAdmin(
+        mobile: string,
+        groupId: string,
+        userId: string,
+        permissions?: {
+            changeInfo?: boolean;
+            postMessages?: boolean;
+            editMessages?: boolean;
+            deleteMessages?: boolean;
+            banUsers?: boolean;
+            inviteUsers?: boolean;
+            pinMessages?: boolean;
+            addAdmins?: boolean;
+            anonymous?: boolean;
+            manageCall?: boolean;
+        },
+        rank?: string
+    ): Promise<void> {
+        return this.executeWithConnection(mobile, 'Promote to admin', async (client) => {
+            await client.promoteToAdmin(groupId, userId, permissions, rank);
+            this.logger.logOperation(mobile, 'Promoted user to admin', { groupId, userId, rank });
+        });
+    }
+
+    async demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void> {
+        return this.executeWithConnection(mobile, 'Demote admin', async (client) => {
+            await client.demoteAdmin(groupId, userId);
+            this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
+        });
+    }
+
+    async unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void> {
+        return this.executeWithConnection(mobile, 'Unblock group user', async (client) => {
+            await client.unblockGroupUser(groupId, userId);
+            this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
+        });
+    }
+
+    async getGroupAdmins(mobile: string, groupId: string) {
+        return this.executeWithConnection(mobile, 'Get group admins', (client) =>
+            client.getGroupAdmins(groupId)
+        );
+    }
+
+    async getGroupBannedUsers(mobile: string, groupId: string) {
+        return this.executeWithConnection(mobile, 'Get group banned users', (client) =>
+            client.getGroupBannedUsers(groupId)
+        );
+    }
+
+    async searchMessages(
+        mobile: string,
+        params: {
+            chatId: string;
+            query?: string;
+            types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
+            offset?: number;
+            limit?: number;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Search messages', (client) =>
+            client.searchMessages(params)
+        );
+    }
+
+    async getFilteredMedia(
+        mobile: string,
+        params: {
+            chatId: string;
+            types?: ('photo' | 'video' | 'document' | 'voice')[];
+            startDate?: Date;
+            endDate?: Date;
+            offset?: number;
+            limit?: number;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Get filtered media', (client) =>
+            client.getFilteredMedia(params)
+        );
+    }
+
+    // Contact Management
+    async exportContacts(
+        mobile: string,
+        format: 'vcard' | 'csv',
+        includeBlocked: boolean = false
+    ) {
+        return this.executeWithConnection(mobile, 'Export contacts', (client) =>
+            client.exportContacts(format, includeBlocked)
+        );
+    }
+
+    async importContacts(
+        mobile: string,
+        contacts: { firstName: string; lastName?: string; phone: string }[]
+    ) {
+        return this.executeWithConnection(mobile, 'Import contacts', (client) =>
+            client.importContacts(contacts)
+        );
+    }
+
+    async manageBlockList(
+        mobile: string,
+        userIds: string[],
+        block: boolean
+    ) {
+        return this.executeWithConnection(mobile, block ? 'Block users' : 'Unblock users', (client) =>
+            client.manageBlockList(userIds, block)
+        );
+    }
+
+    async getContactStatistics(mobile: string) {
+        return this.executeWithConnection(mobile, 'Get contact statistics', (client) =>
+            client.getContactStatistics()
+        );
+    }
+
+    // Chat Folder Management
+    async createChatFolder(
+        mobile: string,
+        options: {
+            name: string;
+            includedChats: string[];
+            excludedChats?: string[];
+            includeContacts?: boolean;
+            includeNonContacts?: boolean;
+            includeGroups?: boolean;
+            includeBroadcasts?: boolean;
+            includeBots?: boolean;
+            excludeMuted?: boolean;
+            excludeRead?: boolean;
+            excludeArchived?: boolean;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Create chat folder', (client) =>
+            client.createChatFolder(options)
+        );
+    }
+
+    async getChatFolders(mobile: string) {
+        return this.executeWithConnection(mobile, 'Get chat folders', (client) =>
+            client.getChatFolders()
+        );
+    }
 }

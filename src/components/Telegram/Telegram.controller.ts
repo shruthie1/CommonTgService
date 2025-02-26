@@ -6,6 +6,11 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChannelOperationDto } from './dto/channel-operation.dto';
 import { BulkMessageOperationDto } from './dto/metadata-operations.dto';
 import { AddContactsDto } from './dto/contact-operation.dto';
+import { MessageSearchDto } from './dto/message-search.dto';
+import { MediaFilterDto } from './dto/media-filter.dto';
+import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
+import { ContactExportImportDto } from './dto/contact-export-import.dto';
+import { ContactBlockListDto } from './dto/contact-block-list.dto';
 import { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -160,6 +165,19 @@ export class TelegramController {
                 bulkOp.toChatId,
                 bulkOp.messageIds
             );
+        });
+    }
+
+    @Get('messages/search/:mobile')
+    @ApiOperation({ summary: 'Search messages in a chat' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async searchMessages(
+        @Param('mobile') mobile: string,
+        @Query() searchParams: MessageSearchDto
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.searchMessages(mobile, searchParams);
         });
     }
 
@@ -407,6 +425,23 @@ export class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
+        });
+    }
+
+    @Get('media/filter/:mobile')
+    @ApiOperation({ summary: 'Get filtered media messages from a chat' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getFilteredMedia(
+        @Param('mobile') mobile: string,
+        @Query() filterParams: MediaFilterDto
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getFilteredMedia(mobile, {
+                ...filterParams,
+                startDate: filterParams.startDate ? new Date(filterParams.startDate) : undefined,
+                endDate: filterParams.endDate ? new Date(filterParams.endDate) : undefined
+            });
         });
     }
 
@@ -879,6 +914,216 @@ export class TelegramController {
                 isConnected,
                 phoneNumber: client.phoneNumber
             };
+        });
+    }
+
+    // Group Member Management
+    @Post('group/members/add/:mobile')
+    @ApiOperation({ summary: 'Add members to a group' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async addGroupMembers(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            groupId: string;
+            members: string[];
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.addGroupMembers(mobile, data.groupId, data.members);
+        });
+    }
+
+    @Delete('group/members/remove/:mobile')
+    @ApiOperation({ summary: 'Remove members from a group' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async removeGroupMembers(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            groupId: string;
+            members: string[];
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.removeGroupMembers(mobile, data.groupId, data.members);
+        });
+    }
+
+    @Post('group/admin/promote/:mobile')
+    @ApiOperation({ summary: 'Promote group members to admin' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async promoteToAdmin(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            groupId: string;
+            userId: string;
+            permissions?: {
+                changeInfo?: boolean;
+                postMessages?: boolean;
+                editMessages?: boolean;
+                deleteMessages?: boolean;
+                banUsers?: boolean;
+                inviteUsers?: boolean;
+                pinMessages?: boolean;
+                addAdmins?: boolean;
+                anonymous?: boolean;
+                manageCall?: boolean;
+            };
+            rank?: string;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.promoteToAdmin(mobile, data.groupId, data.userId, data.permissions, data.rank);
+        });
+    }
+
+    @Post('group/admin/demote/:mobile')
+    @ApiOperation({ summary: 'Demote group admin to regular member' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async demoteAdmin(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            groupId: string;
+            userId: string;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.demoteAdmin(mobile, data.groupId, data.userId);
+        });
+    }
+
+    @Post('group/unblock/:mobile')
+    @ApiOperation({ summary: 'Unblock a user in a group' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async unblockGroupUser(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            groupId: string;
+            userId: string;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
+        });
+    }
+
+    @Get('group/admins/:mobile')
+    @ApiOperation({ summary: 'Get list of group admins' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
+    async getGroupAdmins(
+        @Param('mobile') mobile: string,
+        @Query('groupId') groupId: string
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getGroupAdmins(mobile, groupId);
+        });
+    }
+
+    @Get('group/banned/:mobile')
+    @ApiOperation({ summary: 'Get list of banned users in a group' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
+    async getGroupBannedUsers(
+        @Param('mobile') mobile: string,
+        @Query('groupId') groupId: string
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getGroupBannedUsers(mobile, groupId);
+        });
+    }
+
+    // Advanced Contact Management
+    @Post('contacts/export/:mobile')
+    @ApiOperation({ summary: 'Export contacts in vCard or CSV format' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async exportContacts(
+        @Param('mobile') mobile: string,
+        @Body() exportOptions: ContactExportImportDto,
+        @Res() res: Response
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            const data = await this.telegramService.exportContacts(
+                mobile,
+                exportOptions.format,
+                exportOptions.includeBlocked
+            );
+
+            const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportOptions.format}`;
+            res.setHeader('Content-Type', exportOptions.format === 'vcard' ? 'text/vcard' : 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(data);
+        });
+    }
+
+    @Post('contacts/import/:mobile')
+    @ApiOperation({ summary: 'Import contacts from a list' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async importContacts(
+        @Param('mobile') mobile: string,
+        @Body() contacts: { firstName: string; lastName?: string; phone: string }[]
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.importContacts(mobile, contacts);
+        });
+    }
+
+    @Post('contacts/block/:mobile')
+    @ApiOperation({ summary: 'Manage blocked contacts' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async manageBlockList(
+        @Param('mobile') mobile: string,
+        @Body() blockList: ContactBlockListDto
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.manageBlockList(
+                mobile,
+                blockList.userIds,
+                blockList.block
+            );
+        });
+    }
+
+    @Get('contacts/statistics/:mobile')
+    @ApiOperation({ summary: 'Get contact activity statistics' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getContactStatistics(@Param('mobile') mobile: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getContactStatistics(mobile);
+        });
+    }
+
+    // Chat Folder Management
+    @Post('folders/create/:mobile')
+    @ApiOperation({ summary: 'Create a new chat folder' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async createChatFolder(
+        @Param('mobile') mobile: string,
+        @Body() folder: CreateChatFolderDto
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.createChatFolder(mobile, folder);
+        });
+    }
+
+    @Get('folders/:mobile')
+    @ApiOperation({ summary: 'Get all chat folders' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getChatFolders(@Param('mobile') mobile: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getChatFolders(mobile);
         });
     }
 }

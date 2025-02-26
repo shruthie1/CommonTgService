@@ -2,6 +2,7 @@
 import { Api, TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
+import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
 import { BackupOptions, ContentFilter } from '../../interfaces/telegram';
@@ -198,6 +199,7 @@ declare class TelegramManager {
     }>;
     private executeFilterAction;
     private getMediaType;
+    private getMediaDetails;
     private downloadFileFromUrl;
     private getEntityId;
     downloadBackup(options: BackupOptions): Promise<{
@@ -207,5 +209,162 @@ declare class TelegramManager {
         totalSize: number;
         backupId: string;
     }>;
+    addGroupMembers(groupId: string, members: string[]): Promise<void>;
+    removeGroupMembers(groupId: string, members: string[]): Promise<void>;
+    promoteToAdmin(groupId: string, userId: string, permissions?: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }, rank?: string): Promise<void>;
+    demoteAdmin(groupId: string, userId: string): Promise<void>;
+    unblockGroupUser(groupId: string, userId: string): Promise<void>;
+    getGroupAdmins(groupId: string): Promise<Array<{
+        userId: string;
+        rank?: string;
+        permissions: {
+            changeInfo: boolean;
+            postMessages: boolean;
+            editMessages: boolean;
+            deleteMessages: boolean;
+            banUsers: boolean;
+            inviteUsers: boolean;
+            pinMessages: boolean;
+            addAdmins: boolean;
+            anonymous: boolean;
+            manageCall: boolean;
+        };
+    }>>;
+    getGroupBannedUsers(groupId: string): Promise<Array<{
+        userId: string;
+        bannedRights: {
+            viewMessages: boolean;
+            sendMessages: boolean;
+            sendMedia: boolean;
+            sendStickers: boolean;
+            sendGifs: boolean;
+            sendGames: boolean;
+            sendInline: boolean;
+            embedLinks: boolean;
+            untilDate: number;
+        };
+    }>>;
+    searchMessages(params: {
+        chatId: string;
+        query?: string;
+        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
+        offset?: number;
+        limit?: number;
+    }): Promise<{
+        messages: {
+            id: number;
+            message: string;
+            date: number;
+            sender: {
+                id: string;
+                is_self: boolean;
+                username: string;
+            };
+            media: {
+                type: "document" | "video" | "photo";
+                thumbnailUrl: string | Buffer;
+            };
+        }[];
+        total: number;
+    }>;
+    getFilteredMedia(params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        offset?: number;
+        limit?: number;
+    }): Promise<{
+        messages: {
+            messageId: number;
+            type: "document" | "video" | "photo";
+            thumb: any;
+            caption: string;
+            date: number;
+            mediaDetails: {
+                filename: string;
+                duration: number;
+                mimeType: string;
+                size: bigInt.BigInteger;
+            };
+        }[];
+        total: number;
+        hasMore: boolean;
+    }>;
+    private generateCSV;
+    private generateVCard;
+    exportContacts(format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
+    importContacts(data: {
+        firstName: string;
+        lastName?: string;
+        phone: string;
+    }[]): Promise<({
+        success: boolean;
+        phone: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        phone: string;
+        error: any;
+    })[]>;
+    manageBlockList(userIds: string[], block: boolean): Promise<({
+        success: boolean;
+        userId: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        userId: string;
+        error: any;
+    })[]>;
+    getContactStatistics(): Promise<{
+        total: any;
+        online: any;
+        withPhone: any;
+        mutual: any;
+        lastWeekActive: any;
+    }>;
+    createChatFolder(options: {
+        name: string;
+        includedChats: string[];
+        excludedChats?: string[];
+        includeContacts?: boolean;
+        includeNonContacts?: boolean;
+        includeGroups?: boolean;
+        includeBroadcasts?: boolean;
+        includeBots?: boolean;
+        excludeMuted?: boolean;
+        excludeRead?: boolean;
+        excludeArchived?: boolean;
+    }): Promise<{
+        id: number;
+        name: string;
+        options: {
+            includeContacts: boolean;
+            includeNonContacts: boolean;
+            includeGroups: boolean;
+            includeBroadcasts: boolean;
+            includeBots: boolean;
+            excludeMuted: boolean;
+            excludeRead: boolean;
+            excludeArchived: boolean;
+        };
+    }>;
+    getChatFolders(): Promise<{
+        id: any;
+        title: any;
+        includedChatsCount: any;
+        excludedChatsCount: any;
+    }[]>;
 }
 export default TelegramManager;

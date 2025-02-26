@@ -1756,15 +1756,30 @@ class TelegramManager {
         }
     }
     getMediaType(media) {
-        if (media instanceof telegram_1.Api.MessageMediaPhoto)
+        if (media instanceof telegram_1.Api.MessageMediaPhoto) {
             return 'photo';
-        if (media instanceof telegram_1.Api.MessageMediaDocument && 'document' in media) {
-            const doc = media.document;
-            if (doc && 'mimeType' in doc && typeof doc.mimeType === 'string' && doc.mimeType.startsWith('video/')) {
+        }
+        else if (media instanceof telegram_1.Api.MessageMediaDocument) {
+            const document = media.document;
+            if (document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo)) {
                 return 'video';
             }
+            return 'document';
         }
         return 'document';
+    }
+    getMediaDetails(media) {
+        const document = media.document;
+        const filename = document.attributes.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename ||
+            attr instanceof telegram_1.Api.DocumentAttributeAudio);
+        const duration = document.attributes.find(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo ||
+            attr instanceof telegram_1.Api.DocumentAttributeAudio);
+        return {
+            filename: filename?.fileName || undefined,
+            duration: duration ? ('duration' in duration ? duration.duration : undefined) : undefined,
+            mimeType: document.mimeType,
+            size: document.size
+        };
     }
     async downloadFileFromUrl(url) {
         const response = await fetch(url);
@@ -1860,6 +1875,449 @@ class TelegramManager {
             totalSize,
             backupId
         };
+    }
+    async addGroupMembers(groupId, members) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const channel = await this.client.getInputEntity(groupId);
+        const users = await Promise.all(members.map(member => this.client.getInputEntity(member)));
+        await this.client.invoke(new telegram_1.Api.channels.InviteToChannel({
+            channel: channel,
+            users
+        }));
+    }
+    async removeGroupMembers(groupId, members) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const channel = await this.client.getInputEntity(groupId);
+        for (const member of members) {
+            const user = await this.client.getInputEntity(member);
+            await this.client.invoke(new telegram_1.Api.channels.EditBanned({
+                channel: channel,
+                participant: user,
+                bannedRights: new telegram_1.Api.ChatBannedRights({
+                    untilDate: 0,
+                    viewMessages: true,
+                    sendMessages: true,
+                    sendMedia: true,
+                    sendStickers: true,
+                    sendGifs: true,
+                    sendGames: true,
+                    sendInline: true,
+                    embedLinks: true
+                })
+            }));
+        }
+    }
+    async promoteToAdmin(groupId, userId, permissions, rank) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const channel = await this.client.getInputEntity(groupId);
+        const user = await this.client.getInputEntity(userId);
+        await this.client.invoke(new telegram_1.Api.channels.EditAdmin({
+            channel: channel,
+            userId: user,
+            adminRights: new telegram_1.Api.ChatAdminRights({
+                changeInfo: permissions?.changeInfo ?? false,
+                postMessages: permissions?.postMessages ?? false,
+                editMessages: permissions?.editMessages ?? false,
+                deleteMessages: permissions?.deleteMessages ?? false,
+                banUsers: permissions?.banUsers ?? false,
+                inviteUsers: permissions?.inviteUsers ?? true,
+                pinMessages: permissions?.pinMessages ?? false,
+                addAdmins: permissions?.addAdmins ?? false,
+                anonymous: permissions?.anonymous ?? false,
+                manageCall: permissions?.manageCall ?? false,
+                other: false
+            }),
+            rank: rank || ''
+        }));
+    }
+    async demoteAdmin(groupId, userId) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const channel = await this.client.getInputEntity(groupId);
+        const user = await this.client.getInputEntity(userId);
+        await this.client.invoke(new telegram_1.Api.channels.EditAdmin({
+            channel: channel,
+            userId: user,
+            adminRights: new telegram_1.Api.ChatAdminRights({
+                changeInfo: false,
+                postMessages: false,
+                editMessages: false,
+                deleteMessages: false,
+                banUsers: false,
+                inviteUsers: false,
+                pinMessages: false,
+                addAdmins: false,
+                anonymous: false,
+                manageCall: false,
+                other: false
+            }),
+            rank: ''
+        }));
+    }
+    async unblockGroupUser(groupId, userId) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const channel = await this.client.getInputEntity(groupId);
+        const user = await this.client.getInputEntity(userId);
+        await this.client.invoke(new telegram_1.Api.channels.EditBanned({
+            channel: channel,
+            participant: user,
+            bannedRights: new telegram_1.Api.ChatBannedRights({
+                untilDate: 0,
+                viewMessages: false,
+                sendMessages: false,
+                sendMedia: false,
+                sendStickers: false,
+                sendGifs: false,
+                sendGames: false,
+                sendInline: false,
+                embedLinks: false
+            })
+        }));
+    }
+    async getGroupAdmins(groupId) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const result = await this.client.invoke(new telegram_1.Api.channels.GetParticipants({
+            channel: await this.client.getInputEntity(groupId),
+            filter: new telegram_1.Api.ChannelParticipantsAdmins(),
+            offset: 0,
+            limit: 100,
+            hash: (0, big_integer_1.default)(0)
+        }));
+        if ('users' in result) {
+            const participants = result.participants;
+            const users = result.users;
+            return participants.map(participant => {
+                const adminRights = participant.adminRights;
+                return {
+                    userId: participant.userId.toString(),
+                    rank: participant.rank || '',
+                    permissions: {
+                        changeInfo: adminRights.changeInfo || false,
+                        postMessages: adminRights.postMessages || false,
+                        editMessages: adminRights.editMessages || false,
+                        deleteMessages: adminRights.deleteMessages || false,
+                        banUsers: adminRights.banUsers || false,
+                        inviteUsers: adminRights.inviteUsers || false,
+                        pinMessages: adminRights.pinMessages || false,
+                        addAdmins: adminRights.addAdmins || false,
+                        anonymous: adminRights.anonymous || false,
+                        manageCall: adminRights.manageCall || false
+                    }
+                };
+            });
+        }
+        return [];
+    }
+    async getGroupBannedUsers(groupId) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const result = await this.client.invoke(new telegram_1.Api.channels.GetParticipants({
+            channel: await this.client.getInputEntity(groupId),
+            filter: new telegram_1.Api.ChannelParticipantsBanned({ q: '' }),
+            offset: 0,
+            limit: 100,
+            hash: (0, big_integer_1.default)(0)
+        }));
+        if ('users' in result) {
+            const participants = result.participants;
+            return participants.map(participant => {
+                const bannedRights = participant.bannedRights;
+                return {
+                    userId: participant.peer.chatId.toString(),
+                    bannedRights: {
+                        viewMessages: bannedRights.viewMessages || false,
+                        sendMessages: bannedRights.sendMessages || false,
+                        sendMedia: bannedRights.sendMedia || false,
+                        sendStickers: bannedRights.sendStickers || false,
+                        sendGifs: bannedRights.sendGifs || false,
+                        sendGames: bannedRights.sendGames || false,
+                        sendInline: bannedRights.sendInline || false,
+                        embedLinks: bannedRights.embedLinks || false,
+                        untilDate: bannedRights.untilDate || 0
+                    }
+                };
+            });
+        }
+        return [];
+    }
+    async searchMessages(params) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const { chatId, query = '', types = ['all'], offset = 0, limit = 20 } = params;
+        let filter = new telegram_1.Api.InputMessagesFilterEmpty();
+        if (types.length === 1 && types[0] !== 'all') {
+            switch (types[0]) {
+                case 'photo':
+                    filter = new telegram_1.Api.InputMessagesFilterPhotos();
+                    break;
+                case 'video':
+                    filter = new telegram_1.Api.InputMessagesFilterVideo();
+                    break;
+                case 'voice':
+                    filter = new telegram_1.Api.InputMessagesFilterVoice();
+                    break;
+                case 'document':
+                    filter = new telegram_1.Api.InputMessagesFilterDocument();
+                    break;
+                case 'text':
+                    break;
+            }
+        }
+        const result = await this.client.invoke(new telegram_1.Api.messages.Search({
+            peer: await this.client.getInputEntity(chatId),
+            q: query,
+            filter: filter,
+            minDate: 0,
+            maxDate: 0,
+            offsetId: offset,
+            addOffset: 0,
+            limit: limit,
+            maxId: 0,
+            minId: 0,
+            hash: (0, big_integer_1.default)(0),
+            fromId: undefined
+        }));
+        if (!('messages' in result)) {
+            return { messages: [], total: 0 };
+        }
+        let messages = result.messages;
+        if (types.includes('text') && types.length === 1) {
+            messages = messages.filter((msg) => !('media' in msg));
+        }
+        const processedMessages = await Promise.all(messages.map(async (message) => {
+            const media = 'media' in message && message.media
+                ? {
+                    type: this.getMediaType(message.media),
+                    thumbnailUrl: await this.getMediaUrl(message),
+                }
+                : null;
+            return {
+                id: message.id,
+                message: message.message,
+                date: message.date,
+                sender: {
+                    id: message.senderId?.toString(),
+                    is_self: message.out,
+                    username: message.fromId ? message.fromId.toString() : null,
+                },
+                media,
+            };
+        }));
+        return {
+            messages: processedMessages,
+            total: ('count' in result ? result.count : messages.length) || messages.length
+        };
+    }
+    async getFilteredMedia(params) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50 } = params;
+        const query = {
+            offsetId: offset,
+            limit,
+            ...(startDate && { minDate: Math.floor(startDate.getTime() / 1000) }),
+            ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
+        };
+        const messages = await this.client.getMessages(chatId, query);
+        const filteredMessages = messages.filter(message => {
+            if (!message.media)
+                return false;
+            const mediaType = this.getMediaType(message.media);
+            return types.includes(mediaType);
+        });
+        const mediaData = await Promise.all(filteredMessages.map(async (message) => {
+            let thumbBuffer = null;
+            try {
+                if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+                    const sizes = message.photo?.sizes || [1];
+                    thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
+                }
+                else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                    const sizes = message.document?.thumbs || [1];
+                    thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }), 5000);
+                }
+            }
+            catch (error) {
+                console.warn(`Failed to get thumbnail for message ${message.id}:`, error.message);
+            }
+            const mediaDetails = await this.getMediaDetails(message.media);
+            return {
+                messageId: message.id,
+                type: this.getMediaType(message.media),
+                thumb: thumbBuffer?.toString('base64') || null,
+                caption: message.message || '',
+                date: message.date,
+                mediaDetails,
+            };
+        }));
+        return {
+            messages: mediaData,
+            total: messages.total,
+            hasMore: messages.length === limit
+        };
+    }
+    generateCSV(contacts) {
+        const header = ['First Name', 'Last Name', 'Phone', 'Blocked'].join(',');
+        const rows = contacts.map(contact => [
+            contact.firstName,
+            contact.lastName,
+            contact.phone,
+            contact.blocked
+        ].join(','));
+        return [header, ...rows].join('\n');
+    }
+    generateVCard(contacts) {
+        return contacts.map(contact => {
+            const vcard = [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                `FN:${contact.firstName} ${contact.lastName || ''}`.trim(),
+                `TEL;TYPE=CELL:${contact.phone || ''}`,
+                'END:VCARD'
+            ];
+            return vcard.join('\n');
+        }).join('\n\n');
+    }
+    async exportContacts(format, includeBlocked = false) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const contactsResult = await this.client.invoke(new telegram_1.Api.contacts.GetContacts({}));
+        const contacts = contactsResult?.contacts || [];
+        let blockedContacts;
+        if (includeBlocked) {
+            blockedContacts = await this.client.invoke(new telegram_1.Api.contacts.GetBlocked({
+                offset: 0,
+                limit: 100
+            }));
+        }
+        if (format === 'csv') {
+            const csvData = contacts.map((contact) => ({
+                firstName: contact.firstName || '',
+                lastName: contact.lastName || '',
+                phone: contact.phone || '',
+                blocked: blockedContacts ? blockedContacts.peers.some((p) => p.id.toString() === contact.id.toString()) : false
+            }));
+            return this.generateCSV(csvData);
+        }
+        else {
+            return this.generateVCard(contacts);
+        }
+    }
+    async importContacts(data) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const results = await Promise.all(data.map(async (contact) => {
+            try {
+                await this.client.invoke(new telegram_1.Api.contacts.ImportContacts({
+                    contacts: [new telegram_1.Api.InputPhoneContact({
+                            clientId: (0, big_integer_1.default)(Math.floor(Math.random() * 1000000)),
+                            phone: contact.phone,
+                            firstName: contact.firstName,
+                            lastName: contact.lastName || ''
+                        })]
+                }));
+                return { success: true, phone: contact.phone };
+            }
+            catch (error) {
+                return { success: false, phone: contact.phone, error: error.message };
+            }
+        }));
+        return results;
+    }
+    async manageBlockList(userIds, block) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const results = await Promise.all(userIds.map(async (userId) => {
+            try {
+                if (block) {
+                    await this.client.invoke(new telegram_1.Api.contacts.Block({
+                        id: await this.client.getInputEntity(userId)
+                    }));
+                }
+                else {
+                    await this.client.invoke(new telegram_1.Api.contacts.Unblock({
+                        id: await this.client.getInputEntity(userId)
+                    }));
+                }
+                return { success: true, userId };
+            }
+            catch (error) {
+                return { success: false, userId, error: error.message };
+            }
+        }));
+        return results;
+    }
+    async getContactStatistics() {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const contactsResult = await this.client.invoke(new telegram_1.Api.contacts.GetContacts({}));
+        const contacts = contactsResult?.contacts || [];
+        const onlineContacts = contacts.filter((c) => c.status && 'wasOnline' in c.status);
+        return {
+            total: contacts.length,
+            online: onlineContacts.length,
+            withPhone: contacts.filter((c) => c.phone).length,
+            mutual: contacts.filter((c) => c.mutual).length,
+            lastWeekActive: onlineContacts.filter((c) => {
+                const lastSeen = new Date(c.status.wasOnline * 1000);
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                return lastSeen > weekAgo;
+            }).length
+        };
+    }
+    async createChatFolder(options) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const folder = new telegram_1.Api.DialogFilter({
+            id: Math.floor(Math.random() * 1000),
+            title: options.name,
+            includePeers: await Promise.all(options.includedChats.map(id => this.client.getInputEntity(id))),
+            excludePeers: await Promise.all((options.excludedChats || []).map(id => this.client.getInputEntity(id))),
+            pinnedPeers: [],
+            contacts: options.includeContacts ?? true,
+            nonContacts: options.includeNonContacts ?? true,
+            groups: options.includeGroups ?? true,
+            broadcasts: options.includeBroadcasts ?? true,
+            bots: options.includeBots ?? true,
+            excludeMuted: options.excludeMuted ?? false,
+            excludeRead: options.excludeRead ?? false,
+            excludeArchived: options.excludeArchived ?? false
+        });
+        await this.client.invoke(new telegram_1.Api.messages.UpdateDialogFilter({
+            id: folder.id,
+            filter: folder
+        }));
+        return {
+            id: folder.id,
+            name: options.name,
+            options: {
+                includeContacts: folder.contacts,
+                includeNonContacts: folder.nonContacts,
+                includeGroups: folder.groups,
+                includeBroadcasts: folder.broadcasts,
+                includeBots: folder.bots,
+                excludeMuted: folder.excludeMuted,
+                excludeRead: folder.excludeRead,
+                excludeArchived: folder.excludeArchived
+            }
+        };
+    }
+    async getChatFolders() {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const filters = await this.client.invoke(new telegram_1.Api.messages.GetDialogFilters());
+        return filters.map((filter) => ({
+            id: filter.id ?? 0,
+            title: filter.title ?? '',
+            includedChatsCount: Array.isArray(filter.includePeers) ? filter.includePeers.length : 0,
+            excludedChatsCount: Array.isArray(filter.excludePeers) ? filter.excludePeers.length : 0
+        }));
     }
 }
 exports.default = TelegramManager;

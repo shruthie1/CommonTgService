@@ -44,6 +44,11 @@ const update_profile_dto_1 = require("./dto/update-profile.dto");
 const channel_operation_dto_1 = require("./dto/channel-operation.dto");
 const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const contact_operation_dto_1 = require("./dto/contact-operation.dto");
+const message_search_dto_1 = require("./dto/message-search.dto");
+const media_filter_dto_1 = require("./dto/media-filter.dto");
+const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
+const contact_export_import_dto_1 = require("./dto/contact-export-import.dto");
+const contact_block_list_dto_1 = require("./dto/contact-block-list.dto");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 let TelegramController = class TelegramController {
@@ -111,6 +116,12 @@ let TelegramController = class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.forwardBulkMessages(mobile, bulkOp.fromChatId, bulkOp.toChatId, bulkOp.messageIds);
+        });
+    }
+    async searchMessages(mobile, searchParams) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.searchMessages(mobile, searchParams);
         });
     }
     async getChannelInfo(mobile, includeIds = false) {
@@ -229,6 +240,16 @@ let TelegramController = class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
+        });
+    }
+    async getFilteredMedia(mobile, filterParams) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getFilteredMedia(mobile, {
+                ...filterParams,
+                startDate: filterParams.startDate ? new Date(filterParams.startDate) : undefined,
+                endDate: filterParams.endDate ? new Date(filterParams.endDate) : undefined
+            });
         });
     }
     async getAllChats(mobile) {
@@ -453,6 +474,88 @@ let TelegramController = class TelegramController {
             };
         });
     }
+    async addGroupMembers(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.addGroupMembers(mobile, data.groupId, data.members);
+        });
+    }
+    async removeGroupMembers(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.removeGroupMembers(mobile, data.groupId, data.members);
+        });
+    }
+    async promoteToAdmin(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.promoteToAdmin(mobile, data.groupId, data.userId, data.permissions, data.rank);
+        });
+    }
+    async demoteAdmin(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.demoteAdmin(mobile, data.groupId, data.userId);
+        });
+    }
+    async unblockGroupUser(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
+        });
+    }
+    async getGroupAdmins(mobile, groupId) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getGroupAdmins(mobile, groupId);
+        });
+    }
+    async getGroupBannedUsers(mobile, groupId) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getGroupBannedUsers(mobile, groupId);
+        });
+    }
+    async exportContacts(mobile, exportOptions, res) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            const data = await this.telegramService.exportContacts(mobile, exportOptions.format, exportOptions.includeBlocked);
+            const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportOptions.format}`;
+            res.setHeader('Content-Type', exportOptions.format === 'vcard' ? 'text/vcard' : 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(data);
+        });
+    }
+    async importContacts(mobile, contacts) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.importContacts(mobile, contacts);
+        });
+    }
+    async manageBlockList(mobile, blockList) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.manageBlockList(mobile, blockList.userIds, blockList.block);
+        });
+    }
+    async getContactStatistics(mobile) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getContactStatistics(mobile);
+        });
+    }
+    async createChatFolder(mobile, folder) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.createChatFolder(mobile, folder);
+        });
+    }
+    async getChatFolders(mobile) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getChatFolders(mobile);
+        });
+    }
 };
 exports.TelegramController = TelegramController;
 __decorate([
@@ -550,6 +653,16 @@ __decorate([
     __metadata("design:paramtypes", [String, metadata_operations_dto_1.BulkMessageOperationDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "forwardBulkMessages", null);
+__decorate([
+    (0, common_1.Get)('messages/search/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Search messages in a chat' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, message_search_dto_1.MessageSearchDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "searchMessages", null);
 __decorate([
     (0, common_1.Get)('channels/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get channel information' }),
@@ -746,6 +859,16 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMediaMetadata", null);
+__decorate([
+    (0, common_1.Get)('media/filter/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get filtered media messages from a chat' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, media_filter_dto_1.MediaFilterDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
     (0, common_1.Get)('chats/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all chats' }),
@@ -1036,6 +1159,137 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "validateSession", null);
+__decorate([
+    (0, common_1.Post)('group/members/add/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Add members to a group' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "addGroupMembers", null);
+__decorate([
+    (0, common_1.Delete)('group/members/remove/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove members from a group' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "removeGroupMembers", null);
+__decorate([
+    (0, common_1.Post)('group/admin/promote/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Promote group members to admin' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "promoteToAdmin", null);
+__decorate([
+    (0, common_1.Post)('group/admin/demote/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Demote group admin to regular member' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "demoteAdmin", null);
+__decorate([
+    (0, common_1.Post)('group/unblock/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Unblock a user in a group' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "unblockGroupUser", null);
+__decorate([
+    (0, common_1.Get)('group/admins/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get list of group admins' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('groupId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getGroupAdmins", null);
+__decorate([
+    (0, common_1.Get)('group/banned/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get list of banned users in a group' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('groupId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getGroupBannedUsers", null);
+__decorate([
+    (0, common_1.Post)('contacts/export/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Export contacts in vCard or CSV format' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, contact_export_import_dto_1.ContactExportImportDto, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "exportContacts", null);
+__decorate([
+    (0, common_1.Post)('contacts/import/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Import contacts from a list' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Array]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "importContacts", null);
+__decorate([
+    (0, common_1.Post)('contacts/block/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Manage blocked contacts' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, contact_block_list_dto_1.ContactBlockListDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "manageBlockList", null);
+__decorate([
+    (0, common_1.Get)('contacts/statistics/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get contact activity statistics' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getContactStatistics", null);
+__decorate([
+    (0, common_1.Post)('folders/create/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new chat folder' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, create_chat_folder_dto_1.CreateChatFolderDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "createChatFolder", null);
+__decorate([
+    (0, common_1.Get)('folders/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all chat folders' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getChatFolders", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

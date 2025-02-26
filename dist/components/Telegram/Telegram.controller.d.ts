@@ -1,9 +1,15 @@
+/// <reference types="node" />
 import { TelegramService } from './Telegram.service';
 import { ForwardMessageDto } from './dto/forward-message.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChannelOperationDto } from './dto/channel-operation.dto';
 import { BulkMessageOperationDto } from './dto/metadata-operations.dto';
 import { AddContactsDto } from './dto/contact-operation.dto';
+import { MessageSearchDto } from './dto/message-search.dto';
+import { MediaFilterDto } from './dto/media-filter.dto';
+import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
+import { ContactExportImportDto } from './dto/contact-export-import.dto';
+import { ContactBlockListDto } from './dto/contact-block-list.dto';
 import { Response } from 'express';
 import { BackupOptions, ChatStatistics, GroupOptions, MediaAlbumOptions, ScheduleMessageOptions } from '../../interfaces/telegram';
 export declare class TelegramController {
@@ -19,6 +25,23 @@ export declare class TelegramController {
     getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
     forwardMessage(forwardMessageDto: ForwardMessageDto): Promise<void>;
     forwardBulkMessages(mobile: string, bulkOp: BulkMessageOperationDto): Promise<void>;
+    searchMessages(mobile: string, searchParams: MessageSearchDto): Promise<{
+        messages: {
+            id: number;
+            message: string;
+            date: number;
+            sender: {
+                id: string;
+                is_self: boolean;
+                username: string;
+            };
+            media: {
+                type: "document" | "video" | "photo";
+                thumbnailUrl: string | Buffer;
+            };
+        }[];
+        total: number;
+    }>;
     getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
     joinChannel(mobile: string, channelOp: ChannelOperationDto): Promise<void | import("telegram").Api.TypeUpdates>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
@@ -76,6 +99,23 @@ export declare class TelegramController {
     sendMedia(mobile: string, chatId: string, url: string, caption: string, filename: string, type: 'photo' | 'file'): Promise<void>;
     downloadMedia(mobile: string, messageId: number, chatId: string, res: Response): Promise<any>;
     getMediaMetadata(mobile: string, chatId: string, offset: number, limit?: number): Promise<import("src/components/Telegram/types/telegram-responses").MediaMetadata>;
+    getFilteredMedia(mobile: string, filterParams: MediaFilterDto): Promise<{
+        messages: {
+            messageId: number;
+            type: "document" | "video" | "photo";
+            thumb: any;
+            caption: string;
+            date: number;
+            mediaDetails: {
+                filename: string;
+                duration: number;
+                mimeType: string;
+                size: import("big-integer").BigInteger;
+            };
+        }[];
+        total: number;
+        hasMore: boolean;
+    }>;
     getAllChats(mobile: string): Promise<any[]>;
     getGroupMembers(mobile: string, entityId: string): Promise<any[]>;
     blockChat(mobile: string, chatId: string): Promise<void>;
@@ -164,4 +204,117 @@ export declare class TelegramController {
         isConnected: boolean;
         phoneNumber: string;
     }>;
+    addGroupMembers(mobile: string, data: {
+        groupId: string;
+        members: string[];
+    }): Promise<void>;
+    removeGroupMembers(mobile: string, data: {
+        groupId: string;
+        members: string[];
+    }): Promise<void>;
+    promoteToAdmin(mobile: string, data: {
+        groupId: string;
+        userId: string;
+        permissions?: {
+            changeInfo?: boolean;
+            postMessages?: boolean;
+            editMessages?: boolean;
+            deleteMessages?: boolean;
+            banUsers?: boolean;
+            inviteUsers?: boolean;
+            pinMessages?: boolean;
+            addAdmins?: boolean;
+            anonymous?: boolean;
+            manageCall?: boolean;
+        };
+        rank?: string;
+    }): Promise<void>;
+    demoteAdmin(mobile: string, data: {
+        groupId: string;
+        userId: string;
+    }): Promise<void>;
+    unblockGroupUser(mobile: string, data: {
+        groupId: string;
+        userId: string;
+    }): Promise<void>;
+    getGroupAdmins(mobile: string, groupId: string): Promise<{
+        userId: string;
+        rank?: string;
+        permissions: {
+            changeInfo: boolean;
+            postMessages: boolean;
+            editMessages: boolean;
+            deleteMessages: boolean;
+            banUsers: boolean;
+            inviteUsers: boolean;
+            pinMessages: boolean;
+            addAdmins: boolean;
+            anonymous: boolean;
+            manageCall: boolean;
+        };
+    }[]>;
+    getGroupBannedUsers(mobile: string, groupId: string): Promise<{
+        userId: string;
+        bannedRights: {
+            viewMessages: boolean;
+            sendMessages: boolean;
+            sendMedia: boolean;
+            sendStickers: boolean;
+            sendGifs: boolean;
+            sendGames: boolean;
+            sendInline: boolean;
+            embedLinks: boolean;
+            untilDate: number;
+        };
+    }[]>;
+    exportContacts(mobile: string, exportOptions: ContactExportImportDto, res: Response): Promise<void>;
+    importContacts(mobile: string, contacts: {
+        firstName: string;
+        lastName?: string;
+        phone: string;
+    }[]): Promise<({
+        success: boolean;
+        phone: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        phone: string;
+        error: any;
+    })[]>;
+    manageBlockList(mobile: string, blockList: ContactBlockListDto): Promise<({
+        success: boolean;
+        userId: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        userId: string;
+        error: any;
+    })[]>;
+    getContactStatistics(mobile: string): Promise<{
+        total: any;
+        online: any;
+        withPhone: any;
+        mutual: any;
+        lastWeekActive: any;
+    }>;
+    createChatFolder(mobile: string, folder: CreateChatFolderDto): Promise<{
+        id: number;
+        name: string;
+        options: {
+            includeContacts: boolean;
+            includeNonContacts: boolean;
+            includeGroups: boolean;
+            includeBroadcasts: boolean;
+            includeBots: boolean;
+            excludeMuted: boolean;
+            excludeRead: boolean;
+            excludeArchived: boolean;
+        };
+    }>;
+    getChatFolders(mobile: string): Promise<{
+        id: any;
+        title: any;
+        includedChatsCount: any;
+        excludedChatsCount: any;
+    }[]>;
 }
