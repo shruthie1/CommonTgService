@@ -22,8 +22,19 @@ export declare class AdminPermissionsDto {
     anonymous?: boolean;
     manageCall?: boolean;
 }
-export declare class GroupSettingsDto {
+export declare class BaseGroupOperationDto {
     groupId: string;
+}
+export declare class GroupMemberOperationDto extends BaseGroupOperationDto {
+    members: string[];
+}
+export declare class AdminOperationDto extends BaseGroupOperationDto {
+    userId: string;
+    isPromote: boolean;
+    permissions?: AdminPermissionsDto;
+    rank?: string;
+}
+export declare class GroupSettingsDto extends BaseGroupOperationDto {
     title: string;
     description?: string;
     address?: string;
@@ -40,18 +51,7 @@ export declare class GroupSettingsDto {
         embedLinks?: boolean;
     };
 }
-export declare class GroupMemberOperationDto {
-    groupId: string;
-    members: string[];
-}
-export declare class AdminOperationDto {
-    groupId: string;
-    userId: string;
-    isPromote: boolean;
-    permissions?: AdminPermissionsDto;
-    rank?: string;
-}
-export declare class ChatCleanupDto {
+export declare class ChatCleanupDto extends BaseGroupOperationDto {
     chatId: string;
     beforeDate?: Date;
     onlyMedia?: boolean;

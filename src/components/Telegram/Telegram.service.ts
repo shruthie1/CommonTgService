@@ -329,7 +329,6 @@ export class TelegramService implements OnModuleDestroy {
 
     async getChannelInfo(mobile: string, sendIds: boolean = false): Promise<ChannelInfo> {
         return this.executeWithConnection(mobile, 'Get channel info', async (client) => {
-            const dialogs = await client.getDialogs({ limit: 10, archived: false });
             return await client.channelInfo(sendIds);
         });
     }
@@ -337,6 +336,12 @@ export class TelegramService implements OnModuleDestroy {
     async getMe(mobile: string) {
         return this.executeWithConnection(mobile, 'Get profile info', async (client) => {
             return await client.getMe();
+        });
+    }
+
+    async getEntity(mobile: string, entity: EntityLike) {
+        return this.executeWithConnection(mobile, 'Get entity info', async (client) => {
+            return await client.getEntity(entity); // Assuming 'getEntity()' is a valid method
         });
     }
 

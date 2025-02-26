@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MediaDownloadDto = exports.VoiceMessageDto = exports.SendMediaAlbumDto = exports.MediaAlbumItemDto = exports.SendMediaDto = exports.MediaFilterDto = exports.MediaSearchDto = exports.MediaType = void 0;
+exports.MediaDownloadDto = exports.VoiceMessageDto = exports.SendMediaAlbumDto = exports.MediaAlbumItemDto = exports.SendMediaDto = exports.MediaFilterDto = exports.MediaSearchDto = exports.BaseMediaOperationDto = exports.MediaType = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
@@ -21,14 +21,21 @@ var MediaType;
     MediaType["VOICE"] = "voice";
     MediaType["AUDIO"] = "audio";
 })(MediaType || (exports.MediaType = MediaType = {}));
-class MediaSearchDto {
+class BaseMediaOperationDto {
 }
-exports.MediaSearchDto = MediaSearchDto;
+exports.BaseMediaOperationDto = BaseMediaOperationDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to search in' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID for media operation' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], MediaSearchDto.prototype, "chatId", void 0);
+], BaseMediaOperationDto.prototype, "chatId", void 0);
+class MediaSearchDto extends BaseMediaOperationDto {
+    constructor() {
+        super(...arguments);
+        this.limit = 50;
+    }
+}
+exports.MediaSearchDto = MediaSearchDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Media types to include', enum: MediaType, isArray: true }),
     (0, class_validator_1.IsArray)(),
@@ -49,20 +56,9 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
     __metadata("design:type", Number)
 ], MediaSearchDto.prototype, "limit", void 0);
-class MediaFilterDto {
+class MediaFilterDto extends MediaSearchDto {
 }
 exports.MediaFilterDto = MediaFilterDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to filter media from' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], MediaFilterDto.prototype, "chatId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Types of media to include', enum: MediaType, isArray: true }),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.IsEnum)(MediaType, { each: true }),
-    __metadata("design:type", Array)
-], MediaFilterDto.prototype, "types", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Start date for filtering', required: false }),
     (0, class_validator_1.IsOptional)(),
@@ -77,28 +73,9 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value ? new Date(value).toISOString() : undefined),
     __metadata("design:type", String)
 ], MediaFilterDto.prototype, "endDate", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message offset for pagination', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
-    __metadata("design:type", Number)
-], MediaFilterDto.prototype, "offset", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of messages to fetch', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
-    __metadata("design:type", Number)
-], MediaFilterDto.prototype, "limit", void 0);
-class SendMediaDto {
+class SendMediaDto extends BaseMediaOperationDto {
 }
 exports.SendMediaDto = SendMediaDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to send media to' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SendMediaDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'URL of the media file' }),
     (0, class_validator_1.IsString)(),
@@ -141,14 +118,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaAlbumItemDto.prototype, "caption", void 0);
-class SendMediaAlbumDto {
+class SendMediaAlbumDto extends BaseMediaOperationDto {
 }
 exports.SendMediaAlbumDto = SendMediaAlbumDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to send media album to' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SendMediaAlbumDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Array of media items', type: [MediaAlbumItemDto] }),
     (0, class_validator_1.IsArray)(),
@@ -156,14 +128,9 @@ __decorate([
     (0, class_transformer_1.Type)(() => MediaAlbumItemDto),
     __metadata("design:type", Array)
 ], SendMediaAlbumDto.prototype, "media", void 0);
-class VoiceMessageDto {
+class VoiceMessageDto extends BaseMediaOperationDto {
 }
 exports.VoiceMessageDto = VoiceMessageDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to send voice message to' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], VoiceMessageDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'URL of the voice message file' }),
     (0, class_validator_1.IsString)(),
@@ -182,17 +149,12 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], VoiceMessageDto.prototype, "caption", void 0);
-class MediaDownloadDto {
+class MediaDownloadDto extends BaseMediaOperationDto {
 }
 exports.MediaDownloadDto = MediaDownloadDto;
 __decorate([
-    (0, class_validator_1.IsNotEmpty)(),
     (0, swagger_1.ApiProperty)({ description: 'ID of the message containing the media' }),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], MediaDownloadDto.prototype, "messageId", void 0);
-__decorate([
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, swagger_1.ApiProperty)({ description: 'ID of the chat containing the message' }),
-    __metadata("design:type", String)
-], MediaDownloadDto.prototype, "chatId", void 0);
 //# sourceMappingURL=media-operations.dto.js.map

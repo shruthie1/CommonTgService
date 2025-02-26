@@ -4,11 +4,9 @@ export declare enum MetadataType {
     DOCUMENT = "document"
 }
 export declare class MediaMetadataDto {
-    messageId: number;
-    type: MetadataType;
-    thumb?: string;
-    caption?: string;
-    date: number;
+    chatId: string;
+    offset?: number;
+    limit?: number;
 }
 export declare class DialogsQueryDto {
     limit: number;

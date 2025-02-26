@@ -20,35 +20,28 @@ var MetadataType;
     MetadataType["DOCUMENT"] = "document";
 })(MetadataType || (exports.MetadataType = MetadataType = {}));
 class MediaMetadataDto {
+    constructor() {
+        this.limit = 50;
+    }
 }
 exports.MediaMetadataDto = MediaMetadataDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message ID containing the media' }),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], MediaMetadataDto.prototype, "messageId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Type of media', enum: MetadataType }),
-    (0, class_validator_1.IsEnum)(MetadataType),
-    __metadata("design:type", String)
-], MediaMetadataDto.prototype, "type", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Base64 encoded thumbnail', required: false }),
-    (0, class_validator_1.IsOptional)(),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID to get metadata from' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], MediaMetadataDto.prototype, "thumb", void 0);
+], MediaMetadataDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media caption', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Message offset', required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], MediaMetadataDto.prototype, "caption", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message timestamp' }),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
-], MediaMetadataDto.prototype, "date", void 0);
+], MediaMetadataDto.prototype, "offset", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Maximum number of items', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], MediaMetadataDto.prototype, "limit", void 0);
 class DialogsQueryDto {
     constructor() {
         this.limit = 100;
@@ -62,8 +55,8 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(1, { message: 'Limit must be at least 1' }),
-    (0, class_validator_1.Max)(1000, { message: 'Limit cannot exceed 1000' }),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(1000),
     __metadata("design:type", Number)
 ], DialogsQueryDto.prototype, "limit", void 0);
 __decorate([
@@ -72,7 +65,6 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(0),
-    (0, class_validator_1.Min)(0, { message: 'Offset must be non-negative' }),
     __metadata("design:type", Number)
 ], DialogsQueryDto.prototype, "offsetId", void 0);
 __decorate([
@@ -85,7 +77,7 @@ __decorate([
             return false;
         return value;
     }),
-    (0, class_validator_1.IsBoolean)({ message: 'Archived must be a boolean value (true/false)' }),
+    (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], DialogsQueryDto.prototype, "archived", void 0);
 class BulkMessageOperationDto {
@@ -94,23 +86,15 @@ exports.BulkMessageOperationDto = BulkMessageOperationDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Source chat ID', type: String, minLength: 1, maxLength: 255 }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.Length)(1, 255),
     __metadata("design:type", String)
 ], BulkMessageOperationDto.prototype, "fromChatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Target chat ID', type: String, minLength: 1, maxLength: 255 }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.Length)(1, 255),
     __metadata("design:type", String)
 ], BulkMessageOperationDto.prototype, "toChatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Message IDs to operate on', type: [Number], minItems: 1, maxItems: 100 }),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayMinSize)(1, { message: 'At least one message ID is required' }),
-    (0, class_validator_1.ArrayMaxSize)(100, { message: 'Cannot operate on more than 100 messages at once' }),
-    (0, class_validator_1.IsNumber)({}, { each: true }),
     (0, class_transformer_1.Transform)(({ value }) => Array.isArray(value) ? value.map(Number) : value),
     __metadata("design:type", Array)
 ], BulkMessageOperationDto.prototype, "messageIds", void 0);

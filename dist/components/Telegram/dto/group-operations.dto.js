@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ChatCleanupDto = exports.AdminOperationDto = exports.GroupMemberOperationDto = exports.GroupSettingsDto = exports.AdminPermissionsDto = exports.AdminPermission = void 0;
+exports.ChatCleanupDto = exports.GroupSettingsDto = exports.AdminOperationDto = exports.GroupMemberOperationDto = exports.BaseGroupOperationDto = exports.AdminPermissionsDto = exports.AdminPermission = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
@@ -111,19 +111,58 @@ __decorate([
     (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "manageCall", void 0);
-class GroupSettingsDto {
+class BaseGroupOperationDto {
+}
+exports.BaseGroupOperationDto = BaseGroupOperationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Group ID' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], BaseGroupOperationDto.prototype, "groupId", void 0);
+class GroupMemberOperationDto extends BaseGroupOperationDto {
+}
+exports.GroupMemberOperationDto = GroupMemberOperationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Array of user IDs', type: [String] }),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], GroupMemberOperationDto.prototype, "members", void 0);
+class AdminOperationDto extends BaseGroupOperationDto {
+}
+exports.AdminOperationDto = AdminOperationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'User ID to promote/demote' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], AdminOperationDto.prototype, "userId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether to promote or demote', required: true }),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], AdminOperationDto.prototype, "isPromote", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Admin permissions', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => AdminPermissionsDto),
+    __metadata("design:type", AdminPermissionsDto)
+], AdminOperationDto.prototype, "permissions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Custom admin rank/title', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AdminOperationDto.prototype, "rank", void 0);
+class GroupSettingsDto extends BaseGroupOperationDto {
     constructor() {
+        super(...arguments);
         this.megagroup = true;
         this.forImport = false;
     }
 }
 exports.GroupSettingsDto = GroupSettingsDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group ID for updates', required: true }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], GroupSettingsDto.prototype, "groupId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Group title', required: true }),
     (0, class_validator_1.IsString)(),
@@ -166,54 +205,7 @@ __decorate([
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], GroupSettingsDto.prototype, "memberRestrictions", void 0);
-class GroupMemberOperationDto {
-}
-exports.GroupMemberOperationDto = GroupMemberOperationDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group ID' }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], GroupMemberOperationDto.prototype, "groupId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Array of user IDs', type: [String] }),
-    (0, class_validator_1.IsString)({ each: true }),
-    __metadata("design:type", Array)
-], GroupMemberOperationDto.prototype, "members", void 0);
-class AdminOperationDto {
-}
-exports.AdminOperationDto = AdminOperationDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group ID' }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], AdminOperationDto.prototype, "groupId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'User ID to promote/demote' }),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], AdminOperationDto.prototype, "userId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether to promote or demote', required: true }),
-    (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
-], AdminOperationDto.prototype, "isPromote", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Admin permissions', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.ValidateNested)(),
-    (0, class_transformer_1.Type)(() => AdminPermissionsDto),
-    __metadata("design:type", AdminPermissionsDto)
-], AdminOperationDto.prototype, "permissions", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Custom admin rank/title', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], AdminOperationDto.prototype, "rank", void 0);
-class ChatCleanupDto {
+class ChatCleanupDto extends BaseGroupOperationDto {
 }
 exports.ChatCleanupDto = ChatCleanupDto;
 __decorate([

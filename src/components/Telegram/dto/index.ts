@@ -1,23 +1,17 @@
-// Response DTOs
-export * from './response-validation.dto';
-export * from './common-responses.dto';
+// Core Types and Interfaces
+export * from '../../../interfaces/telegram';
 
-// Media DTOs
+// Base DTOs
+export * from './batch-operations.dto';
 export * from './media-operations.dto';
-export * from './notification-settings.dto';
-
-// Group and Chat DTOs
+export * from './schedule-operations.dto';
+export * from './metadata-operations.dto';
 export * from './group-operations.dto';
-
-// Profile and Privacy DTOs
+export * from './contact-management.dto';
 export * from './profile-settings.dto';
 
-// Contact DTOs
-export * from './contact-management.dto';
-export * from './contact-operation.dto';
-
-// Schedule DTOs 
-export * from './schedule-operations.dto';
-
-// Batch Operations
-export * from './batch-operations.dto';
+// Type Re-exports
+export { BatchOperationType } from './batch-operations.dto';
+export { MediaType } from './media-operations.dto';
+export { AdminPermission } from './group-operations.dto';
+export { ExportFormat } from './contact-management.dto';

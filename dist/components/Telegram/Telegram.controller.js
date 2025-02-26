@@ -20,6 +20,7 @@ const dto_1 = require("./dto");
 const message_search_dto_1 = require("./dto/message-search.dto");
 const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
+const common_responses_dto_1 = require("./dto/common-responses.dto");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -51,6 +52,12 @@ let TelegramController = class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getMe(mobile);
+        });
+    }
+    async getEntity(mobile, entity) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getEntity(mobile, entity);
         });
     }
     async updateProfile(mobile, updateProfileDto) {
@@ -498,6 +505,18 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMe", null);
 __decorate([
+    (0, common_1.Get)('entity/:mobile/:entity'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get Entity profile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiParam)({ name: 'entity', description: 'Entity identifier', required: true }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Entity retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('entity')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getEntity", null);
+__decorate([
     (0, common_1.Post)('profile/update/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
@@ -692,7 +711,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('monitoring/status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get service health and connection status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: dto_1.ConnectionStatusDto }),
+    (0, swagger_1.ApiResponse)({ status: 200, type: common_responses_dto_1.ConnectionStatusDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)

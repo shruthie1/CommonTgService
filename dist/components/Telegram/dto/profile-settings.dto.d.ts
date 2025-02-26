@@ -1,7 +1,6 @@
-type PrivacyLevel = 'everybody' | 'contacts' | 'nobody';
+import { PrivacyLevel } from '../../../interfaces/telegram';
 export declare class UpdateProfileDto {
     firstName: string;
-    lastName?: string;
     about?: string;
 }
 export declare class PrivacySettingsDto {
@@ -19,4 +18,3 @@ export declare class SecuritySettingsDto {
 export declare class ProfilePhotoDto {
     name: string;
 }
-export {};

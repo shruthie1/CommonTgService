@@ -330,6 +330,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return await client.getMe();
         });
     }
+    async getEntity(mobile, entity) {
+        return this.executeWithConnection(mobile, 'Get entity info', async (client) => {
+            return await client.getEntity(entity);
+        });
+    }
     async createNewSession(mobile) {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.createNewSession();

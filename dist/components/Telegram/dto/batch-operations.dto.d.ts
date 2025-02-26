@@ -1,20 +1,23 @@
 export declare enum BatchOperationType {
     FORWARD = "forward",
-    DELETE = "delete"
+    DELETE = "delete",
+    EDIT = "edit"
 }
-export declare class BatchItemDto {
+export declare class BaseBatchItemDto {
     chatId: string;
+}
+export declare class BatchItemDto extends BaseBatchItemDto {
     messageId?: number;
     fromChatId?: string;
     toChatId?: string;
 }
 export declare class BatchProcessDto {
-    items: BatchItemDto[];
     operation: BatchOperationType;
+    items: BatchItemDto[];
     batchSize?: number;
     delayMs?: number;
 }
-export declare class ForwardBatchDto extends BatchProcessDto {
+export declare class ForwardBatchDto {
     fromChatId: string;
     toChatId: string;
     messageIds: number[];

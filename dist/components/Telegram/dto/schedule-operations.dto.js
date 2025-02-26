@@ -13,14 +13,10 @@ exports.BatchProcessItemDto = exports.RescheduleMessageDto = exports.DeleteSched
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
-class ScheduleMessageDto {
+const batch_operations_dto_1 = require("./batch-operations.dto");
+class ScheduleMessageDto extends batch_operations_dto_1.BaseBatchItemDto {
 }
 exports.ScheduleMessageDto = ScheduleMessageDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to send message to' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], ScheduleMessageDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Message content' }),
     (0, class_validator_1.IsString)(),
@@ -44,17 +40,13 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], ScheduleMessageDto.prototype, "silent", void 0);
-class GetScheduledMessagesDto {
+class GetScheduledMessagesDto extends batch_operations_dto_1.BaseBatchItemDto {
     constructor() {
+        super(...arguments);
         this.limit = 50;
     }
 }
 exports.GetScheduledMessagesDto = GetScheduledMessagesDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID to get scheduled messages from' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], GetScheduledMessagesDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Maximum number of messages to return', required: false, default: 50 }),
     (0, class_validator_1.IsOptional)(),
@@ -62,14 +54,9 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
     __metadata("design:type", Number)
 ], GetScheduledMessagesDto.prototype, "limit", void 0);
-class DeleteScheduledMessageDto {
+class DeleteScheduledMessageDto extends batch_operations_dto_1.BaseBatchItemDto {
 }
 exports.DeleteScheduledMessageDto = DeleteScheduledMessageDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID containing the scheduled message' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], DeleteScheduledMessageDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'ID of the scheduled message to delete' }),
     (0, class_validator_1.IsNumber)(),

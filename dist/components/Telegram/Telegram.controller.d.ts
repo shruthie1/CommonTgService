@@ -14,6 +14,7 @@ export declare class TelegramController {
     disconnect(mobile: string): Promise<boolean>;
     disconnectAllClients(): Promise<void>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
+    getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;

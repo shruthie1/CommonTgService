@@ -3,7 +3,6 @@ import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse } from 
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
-    ConnectionStatusDto,
     SendMediaDto,
     MediaDownloadDto,
     SendMediaAlbumDto,
@@ -29,6 +28,7 @@ import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from 'src/interfaces/telegram';
+import { ConnectionStatusDto } from './dto/common-responses.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -91,6 +91,18 @@ export class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getMe(mobile);
+        });
+    }
+
+    @Get('entity/:mobile/:entity')
+    @ApiOperation({ summary: 'Get Entity profile' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiParam({ name: 'entity', description: 'Entity identifier', required: true })
+    @ApiResponse({ status: 200, description: 'Entity retrieved successfully' })
+    async getEntity(@Param('mobile') mobile: string, @Param('entity') entity: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getEntity(mobile, entity);
         });
     }
 
@@ -487,16 +499,16 @@ export class TelegramController {
             const client = await this.telegramService.createClient(mobile);
             if (sendMediaDto.type === MediaType.PHOTO) {
                 return client.sendPhotoChat(
-                    sendMediaDto.chatId, 
-                    sendMediaDto.url, 
-                    sendMediaDto.caption, 
+                    sendMediaDto.chatId,
+                    sendMediaDto.url,
+                    sendMediaDto.caption,
                     sendMediaDto.filename
                 );
             }
             return client.sendFileChat(
-                sendMediaDto.chatId, 
-                sendMediaDto.url, 
-                sendMediaDto.caption, 
+                sendMediaDto.chatId,
+                sendMediaDto.url,
+                sendMediaDto.caption,
                 sendMediaDto.filename
             );
         });

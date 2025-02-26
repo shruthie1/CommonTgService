@@ -1,3 +1,9 @@
+export declare enum PrivacyLevelEnum {
+    everybody = "everybody",
+    contacts = "contacts",
+    nobody = "nobody"
+}
+export type PrivacyLevel = keyof typeof PrivacyLevelEnum;
 export interface ActiveClientSetup {
     days?: number;
     archiveOld: boolean;
@@ -48,6 +54,15 @@ export interface GroupOptions {
     slowMode?: number;
     megagroup?: boolean;
     forImport?: boolean;
+    memberRestrictions?: {
+        sendMessages?: boolean;
+        sendMedia?: boolean;
+        sendStickers?: boolean;
+        sendGifs?: boolean;
+        sendGames?: boolean;
+        sendInline?: boolean;
+        embedLinks?: boolean;
+    };
 }
 export interface ChannelInfo {
     chatsArrayLength: number;
@@ -55,4 +70,17 @@ export interface ChannelInfo {
     canSendFalseCount: number;
     ids: string[];
     canSendFalseChats: string[];
+}
+export interface ChatFolderOptions {
+    name: string;
+    includedChats: string[];
+    excludedChats?: string[];
+    includeContacts?: boolean;
+    includeNonContacts?: boolean;
+    includeGroups?: boolean;
+    includeBroadcasts?: boolean;
+    includeBots?: boolean;
+    excludeMuted?: boolean;
+    excludeRead?: boolean;
+    excludeArchived?: boolean;
 }

@@ -5,22 +5,19 @@ export declare enum MediaType {
     VOICE = "voice",
     AUDIO = "audio"
 }
-export declare class MediaSearchDto {
+export declare class BaseMediaOperationDto {
     chatId: string;
+}
+export declare class MediaSearchDto extends BaseMediaOperationDto {
     types: MediaType[];
     offset?: number;
     limit?: number;
 }
-export declare class MediaFilterDto {
-    chatId: string;
-    types: MediaType[];
+export declare class MediaFilterDto extends MediaSearchDto {
     startDate?: string;
     endDate?: string;
-    offset?: number;
-    limit?: number;
 }
-export declare class SendMediaDto {
-    chatId: string;
+export declare class SendMediaDto extends BaseMediaOperationDto {
     url: string;
     caption?: string;
     filename: string;
@@ -31,17 +28,14 @@ export declare class MediaAlbumItemDto {
     type: MediaType;
     caption?: string;
 }
-export declare class SendMediaAlbumDto {
-    chatId: string;
+export declare class SendMediaAlbumDto extends BaseMediaOperationDto {
     media: MediaAlbumItemDto[];
 }
-export declare class VoiceMessageDto {
-    chatId: string;
+export declare class VoiceMessageDto extends BaseMediaOperationDto {
     url: string;
     duration?: number;
     caption?: string;
 }
-export declare class MediaDownloadDto {
+export declare class MediaDownloadDto extends BaseMediaOperationDto {
     messageId: number;
-    chatId: string;
 }

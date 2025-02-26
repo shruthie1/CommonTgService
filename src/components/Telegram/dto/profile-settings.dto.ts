@@ -1,53 +1,47 @@
 import { IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-
-type PrivacyLevel = 'everybody' | 'contacts' | 'nobody';
+import { PrivacyLevel, PrivacyLevelEnum } from '../../../interfaces/telegram';
 
 export class UpdateProfileDto {
-  @ApiProperty({ description: 'First name to set' })
+  @ApiProperty({ description: 'First name' })
   @IsString()
   firstName: string;
 
-  @ApiProperty({ description: 'Last name', required: false })
-  @IsOptional()
-  @IsString()
-  lastName?: string;
-
-  @ApiProperty({ description: 'About/bio text', required: false })
+  @ApiProperty({ description: 'About/bio information', required: false })
   @IsOptional()
   @IsString()
   about?: string;
 }
 
 export class PrivacySettingsDto {
-  @ApiProperty({ description: 'Phone number visibility', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Phone number visibility', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   phoneNumber?: PrivacyLevel;
 
-  @ApiProperty({ description: 'Last seen visibility', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Last seen visibility', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   lastSeen?: PrivacyLevel;
 
-  @ApiProperty({ description: 'Profile photos visibility', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Profile photos visibility', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   profilePhotos?: PrivacyLevel;
 
-  @ApiProperty({ description: 'Message forwards visibility', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Message forwards visibility', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   forwards?: PrivacyLevel;
 
-  @ApiProperty({ description: 'Calls privacy', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Calls privacy', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   calls?: PrivacyLevel;
 
-  @ApiProperty({ description: 'Group chats privacy', enum: ['everybody', 'contacts', 'nobody'], required: false })
+  @ApiProperty({ description: 'Group chats privacy', enum: PrivacyLevelEnum, required: false })
   @IsOptional()
-  @IsEnum(['everybody', 'contacts', 'nobody'])
+  @IsEnum(PrivacyLevelEnum)
   groups?: PrivacyLevel;
 }
 

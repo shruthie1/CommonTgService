@@ -1,12 +1,9 @@
-import { IsString, IsOptional, IsNumber, IsArray, IsDateString, ValidateNested, IsEnum, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Type, Transform } from 'class-transformer';
+import { Transform } from 'class-transformer';
+import { BaseBatchItemDto } from './batch-operations.dto';
 
-export class ScheduleMessageDto {
-  @ApiProperty({ description: 'Chat ID to send message to' })
-  @IsString()
-  chatId: string;
-
+export class ScheduleMessageDto extends BaseBatchItemDto {
   @ApiProperty({ description: 'Message content' })
   @IsString()
   message: string;
@@ -27,11 +24,7 @@ export class ScheduleMessageDto {
   silent?: boolean;
 }
 
-export class GetScheduledMessagesDto {
-  @ApiProperty({ description: 'Chat ID to get scheduled messages from' })
-  @IsString()
-  chatId: string;
-
+export class GetScheduledMessagesDto extends BaseBatchItemDto {
   @ApiProperty({ description: 'Maximum number of messages to return', required: false, default: 50 })
   @IsOptional()
   @IsNumber()
@@ -39,11 +32,7 @@ export class GetScheduledMessagesDto {
   limit?: number = 50;
 }
 
-export class DeleteScheduledMessageDto {
-  @ApiProperty({ description: 'Chat ID containing the scheduled message' })
-  @IsString()
-  chatId: string;
-
+export class DeleteScheduledMessageDto extends BaseBatchItemDto {
   @ApiProperty({ description: 'ID of the scheduled message to delete' })
   @IsNumber()
   messageId: number;

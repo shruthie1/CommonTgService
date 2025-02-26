@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsNumber, IsBoolean, IsObject, ValidateNested, IsNotEmpty, IsEnum, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+
 export enum AdminPermission {
   CHANGE_INFO = 'changeInfo',
   POST_MESSAGES = 'postMessages',
@@ -76,12 +77,43 @@ export class AdminPermissionsDto {
   manageCall?: boolean = true;
 }
 
-export class GroupSettingsDto {
-  @ApiProperty({ description: 'Group ID for updates', required: true })
+// Base class for group operations
+export class BaseGroupOperationDto {
+  @ApiProperty({ description: 'Group ID' })
   @IsString()
   @IsNotEmpty()
   groupId: string;
+}
 
+export class GroupMemberOperationDto extends BaseGroupOperationDto {
+  @ApiProperty({ description: 'Array of user IDs', type: [String] })
+  @IsString({ each: true })
+  members: string[];
+}
+
+export class AdminOperationDto extends BaseGroupOperationDto {
+  @ApiProperty({ description: 'User ID to promote/demote' })
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @ApiProperty({ description: 'Whether to promote or demote', required: true })
+  @IsBoolean()
+  isPromote: boolean;
+
+  @ApiProperty({ description: 'Admin permissions', required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AdminPermissionsDto)
+  permissions?: AdminPermissionsDto;
+
+  @ApiProperty({ description: 'Custom admin rank/title', required: false })
+  @IsOptional()
+  @IsString()
+  rank?: string;
+}
+
+export class GroupSettingsDto extends BaseGroupOperationDto {
   @ApiProperty({ description: 'Group title', required: true })
   @IsString()
   @IsNotEmpty()
@@ -126,50 +158,11 @@ export class GroupSettingsDto {
   };
 }
 
-export class GroupMemberOperationDto {
-  @ApiProperty({ description: 'Group ID' })
-  @IsString()
-  @IsNotEmpty()
-  groupId: string;
-
-  @ApiProperty({ description: 'Array of user IDs', type: [String] })
-  @IsString({ each: true })
-  members: string[];
-}
-
-export class AdminOperationDto {
-  @ApiProperty({ description: 'Group ID' })
-  @IsString()
-  @IsNotEmpty()
-  groupId: string;
-
-  @ApiProperty({ description: 'User ID to promote/demote' })
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
-
-  @ApiProperty({ description: 'Whether to promote or demote', required: true })
-  @IsBoolean()
-  isPromote: boolean;
-
-  @ApiProperty({ description: 'Admin permissions', required: false })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => AdminPermissionsDto)
-  permissions?: AdminPermissionsDto;
-
-  @ApiProperty({ description: 'Custom admin rank/title', required: false })
-  @IsOptional()
-  @IsString()
-  rank?: string;
-}
-
-export class ChatCleanupDto {
+export class ChatCleanupDto extends BaseGroupOperationDto {
   @ApiProperty({ description: 'Chat ID to clean up' })
   @IsString()
   @IsNotEmpty()
   chatId: string;
-
   @ApiProperty({ description: 'Delete messages before this date', required: false })
   @IsOptional()
   @IsDateString()

@@ -12,22 +12,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = exports.UpdateProfileDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
+const telegram_1 = require("../../../interfaces/telegram");
 class UpdateProfileDto {
 }
 exports.UpdateProfileDto = UpdateProfileDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name to set' }),
+    (0, swagger_1.ApiProperty)({ description: 'First name' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last name', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "lastName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About/bio text', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'About/bio information', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -36,39 +31,39 @@ class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "phoneNumber", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "lastSeen", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "profilePhotos", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "forwards", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "calls", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: ['everybody', 'contacts', 'nobody'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(['everybody', 'contacts', 'nobody']),
+    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "groups", void 0);
 class SecuritySettingsDto {

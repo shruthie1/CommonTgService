@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContactImportDto = exports.ContactExportImportDto = exports.ContactBlockListDto = exports.ContactGroupDto = void 0;
+exports.AddContactsDto = exports.ContactImportDto = exports.ContactExportImportDto = exports.ContactBlockListDto = exports.ContactGroupDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 class ContactGroupDto {
@@ -71,4 +71,18 @@ __decorate([
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
 ], ContactImportDto.prototype, "contacts", void 0);
+class AddContactsDto {
+}
+exports.AddContactsDto = AddContactsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Phone numbers to add', type: [String] }),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], AddContactsDto.prototype, "phoneNumbers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Name prefix to use for added contacts' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AddContactsDto.prototype, "prefix", void 0);
 //# sourceMappingURL=contact-management.dto.js.map
