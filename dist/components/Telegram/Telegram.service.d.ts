@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
@@ -12,7 +11,7 @@ import { ChannelInfo } from './types/telegram-responses';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ClientMetadata } from './types/client-operations';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
-import { BackupOptions, MediaAlbumOptions } from './types/telegram-types';
+import { MediaAlbumOptions } from './types/telegram-types';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private bufferClientService;
@@ -159,28 +158,8 @@ export declare class TelegramService implements OnModuleDestroy {
         forwards?: 'everybody' | 'contacts' | 'nobody';
         calls?: 'everybody' | 'contacts' | 'nobody';
         groups?: 'everybody' | 'contacts' | 'nobody';
-    }): Promise<{
-        success: boolean;
-    }>;
-    createBackup(mobile: string, options: BackupOptions): Promise<{
-        backupId: string;
-        path: string;
-        format: "json" | "html";
-        timestamp: string;
-        chats: number;
-        messages: any;
-    }>;
-    downloadBackup(mobile: string, options: BackupOptions): Promise<{
-        messagesCount: number;
-        mediaCount: number;
-        outputPath: string;
-        totalSize: number;
-        backupId: string;
-    }>;
-    setContentFilters(mobile: string, filters: ContentFilter): Promise<{
-        success: boolean;
-        filterId: string;
-    }>;
+    }): Promise<boolean>;
+    setContentFilters(mobile: string, filters: ContentFilter): Promise<void>;
     private processBatchWithProgress;
     addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
     removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
@@ -245,7 +224,7 @@ export declare class TelegramService implements OnModuleDestroy {
                 username: string;
             };
             media: {
-                type: "document" | "video" | "photo";
+                type: "video" | "photo" | "document";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -258,18 +237,22 @@ export declare class TelegramService implements OnModuleDestroy {
         endDate?: Date;
         offset?: number;
         limit?: number;
+        maxId?: number;
+        minId?: number;
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "video" | "photo" | "document";
             thumb: any;
             caption: string;
             date: number;
             mediaDetails: {
-                filename: string;
-                duration: number;
-                mimeType: string;
                 size: import("big-integer").BigInteger;
+                mimeType: string;
+                fileName: string;
+                duration: number;
+                width: number;
+                height: number;
             };
         }[];
         total: number;
@@ -336,5 +319,133 @@ export declare class TelegramService implements OnModuleDestroy {
         title: any;
         includedChatsCount: any;
         excludedChatsCount: any;
+    }[]>;
+    getSessionInfo(mobile: string): Promise<{
+        sessions: {
+            hash: string;
+            deviceModel: string;
+            platform: string;
+            systemVersion: string;
+            appName: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            country: string;
+            region: string;
+        }[];
+        webSessions: {
+            hash: string;
+            domain: string;
+            browser: string;
+            platform: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            region: string;
+        }[];
+    }>;
+    terminateSession(mobile: string, options: {
+        hash: string;
+        type: 'app' | 'web';
+        exceptCurrent?: boolean;
+    }): Promise<boolean>;
+    editMessage(mobile: string, options: {
+        chatId: string;
+        messageId: number;
+        text?: string;
+        media?: {
+            type: 'photo' | 'video' | 'document';
+            url: string;
+        };
+    }): Promise<Api.TypeUpdates>;
+    updateChatSettings(mobile: string, settings: {
+        chatId: string;
+        title?: string;
+        about?: string;
+        photo?: string;
+        slowMode?: number;
+        linkedChat?: string;
+        defaultSendAs?: string;
+    }): Promise<boolean>;
+    sendMediaBatch(mobile: string, options: {
+        chatId: string;
+        media: Array<{
+            type: 'photo' | 'video' | 'document';
+            url: string;
+            caption?: string;
+            fileName?: string;
+        }>;
+        silent?: boolean;
+        scheduleDate?: number;
+    }): Promise<Api.TypeUpdates>;
+    hasPassword(mobile: string): Promise<boolean>;
+    getContacts(mobile: string): Promise<Api.contacts.TypeContacts>;
+    getChats(mobile: string, options: {
+        limit?: number;
+        offsetDate?: number;
+        offsetId?: number;
+        offsetPeer?: string;
+        folderId?: number;
+    }): Promise<{
+        id: string;
+        title: string;
+        username: string;
+        type: string;
+        unreadCount: number;
+        lastMessage: {
+            id: number;
+            text: string;
+            date: Date;
+        };
+    }[]>;
+    getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
+    getMessageStats(mobile: string, options: {
+        chatId: string;
+        period: 'day' | 'week' | 'month';
+        fromDate?: Date;
+    }): Promise<{
+        total: number;
+        withMedia: number;
+        withLinks: number;
+        withForwards: number;
+        byHour: any[];
+        byType: {
+            text: number;
+            photo: number;
+            video: number;
+            document: number;
+            other: number;
+        };
+    }>;
+    getTopPrivateChats(mobile: string): Promise<{
+        chatId: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+        totalMessages: number;
+        interactionScore: number;
+        calls: {
+            total: number;
+            incoming: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+            outgoing: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+        };
+        media: {
+            photos: number;
+            videos: number;
+        };
+        activityBreakdown: {
+            videoCalls: number;
+            audioCalls: number;
+            mediaSharing: number;
+            textMessages: number;
+        };
     }[]>;
 }

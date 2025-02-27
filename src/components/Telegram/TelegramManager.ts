@@ -15,14 +15,12 @@ import { contains } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import * as path from 'path';
-import { promisify } from 'util';
-import { createHash } from 'crypto';
 import { ContentFilter } from '../../interfaces/telegram';
 import {
     GroupOptions
 } from '../../interfaces/telegram';
-import { MediaAlbumOptions, BackupOptions } from './types/telegram-types';
+import { MediaAlbumOptions } from './types/telegram-types';
+import { IterMessagesParams } from 'telegram/client/messages';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -960,14 +958,6 @@ class TelegramManager {
         }
     }
 
-    // Helper function to handle download with a timeout
-    downloadWithTimeout(promise: Promise<Buffer>, timeout: number) {
-        return Promise.race([
-            promise, // The actual download promise
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Download timeout')), timeout))
-        ]);
-    }
-
     async getMediaMetadata(chatId: string = 'me', offset: number = undefined, limit = 100) {
         try {
             const query = { limit: parseInt(limit.toString()) };
@@ -1071,7 +1061,8 @@ class TelegramManager {
 
     async downloadMediaFile(messageId: number, chatId: string = 'me', res: any) {
         try {
-            const messages = await this.client.getMessages(chatId, { ids: [messageId] });
+            const entity = await this.safeGetEntity(chatId);
+            const messages = await this.client.getMessages(entity, { ids: [messageId] });
             const message = <Api.Message>messages[0];
 
             if (message && !(message.media instanceof Api.MessageMediaEmpty)) {
@@ -1123,7 +1114,49 @@ class TelegramManager {
         }
     }
 
+    private async downloadWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T> {
+        return Promise.race([
+            promise,
+            new Promise<T>((_, reject) =>
+                setTimeout(() => reject(new Error('Download timeout')), timeout)
+            )
+        ]);
+    }
 
+    private getMediaDetails(media: Api.MessageMediaDocument) {
+        if (!media?.document) return null;
+
+        const doc = media.document;
+        if (doc instanceof Api.DocumentEmpty) return null;
+        const videoAttr = doc.attributes.find(attr =>
+            attr instanceof Api.DocumentAttributeVideo
+        ) as Api.DocumentAttributeVideo;
+
+        const fileNameAttr = doc.attributes.find(attr =>
+            attr instanceof Api.DocumentAttributeFilename
+        ) as Api.DocumentAttributeFilename;
+
+        return {
+            size: doc.size,
+            mimeType: doc.mimeType,
+            fileName: fileNameAttr?.fileName || null,
+            duration: videoAttr?.duration || null,
+            width: videoAttr?.w || null,
+            height: videoAttr?.h || null
+        };
+    }
+
+    private async downloadFileFromUrl(url: string): Promise<Buffer> {
+        try {
+            const response = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 30000
+            });
+            return Buffer.from(response.data);
+        } catch (error) {
+            throw new Error(`Failed to download file: ${error.message}`);
+        }
+    }
 
     async forwardMessage(toChatId: string, fromChatId: string, messageId: number) {
         try {
@@ -1680,133 +1713,92 @@ class TelegramManager {
 
         const updates = [];
 
-        if (settings.phoneNumber) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyPhoneNumber(),
-                rules: privacyRules[settings.phoneNumber]
-            })));
+        const privacyMap = {
+            phoneNumber: Api.InputPrivacyKeyPhoneNumber,
+            lastSeen: Api.InputPrivacyKeyStatusTimestamp,
+            profilePhotos: Api.InputPrivacyKeyProfilePhoto,
+            forwards: Api.InputPrivacyKeyForwards,
+            calls: Api.InputPrivacyKeyPhoneCall,
+            groups: Api.InputPrivacyKeyChatInvite
+        };
+
+        for (const [key, value] of Object.entries(settings)) {
+            if (value && key in privacyMap) {
+                updates.push(this.client.invoke(new Api.account.SetPrivacy({
+                    key: new privacyMap[key](),
+                    rules: privacyRules[value]
+                })));
+            }
         }
 
-        if (settings.lastSeen) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyStatusTimestamp(),
-                rules: privacyRules[settings.lastSeen]
-            })));
-        }
-
-        if (settings.profilePhotos) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyProfilePhoto(),
-                rules: privacyRules[settings.profilePhotos]
-            })));
-        }
-
-        if (settings.forwards) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyForwards(),
-                rules: privacyRules[settings.forwards]
-            })));
-        }
-        if (settings.calls) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyPhoneCall(),
-                rules: privacyRules[settings.calls]
-            })));
-        }
-
-        if (settings.groups) {
-            updates.push(this.client.invoke(new Api.account.SetPrivacy({
-                key: new Api.InputPrivacyKeyChatInvite(),
-                rules: privacyRules[settings.groups]
-            })));
-        }
         await Promise.all(updates);
-        return { success: true };
+        return true;
     }
 
-    async createBackup(options: BackupOptions) {
+    async getSessionInfo() {
         if (!this.client) throw new Error('Client not initialized');
 
-        const backupId = createHash('md5')
-            .update(`${this.phoneNumber}-${Date.now()}`)
-            .digest('hex');
+        const [authorizationsResult, devicesResult] = await Promise.all([
+            this.client.invoke(new Api.account.GetAuthorizations()),
+            this.client.invoke(new Api.account.GetWebAuthorizations())
+        ]);
 
-        const backupDir = path.join(process.cwd(), 'backups', backupId);
-        await promisify(fs.mkdir)(backupDir, { recursive: true });
+        const sessions = authorizationsResult.authorizations.map(auth => ({
+            hash: auth.hash.toString(),
+            deviceModel: auth.deviceModel,
+            platform: auth.platform,
+            systemVersion: auth.systemVersion,
+            appName: auth.appName,
+            dateCreated: new Date(auth.dateCreated * 1000),
+            dateActive: new Date(auth.dateActive * 1000),
+            ip: auth.ip,
+            country: auth.country,
+            region: auth.region
+        }));
 
-        const dialogs = options.chatIds
-            ? await Promise.all(options.chatIds.map(id => this.client.getInputEntity(id)))
-            : (await this.client.getDialogs({ limit: 100 })).map(dialog => dialog.entity);
-
-        const backup = {
-            timestamp: new Date().toISOString(),
-            account: this.phoneNumber,
-            chats: []
-        };
-
-        for (const dialog of dialogs) {
-            const messages = await this.client.getMessages(dialog, { limit: 100 });
-            const chatBackup = {
-                id: this.getEntityId(dialog),
-                type: dialog.className,
-                messages: await Promise.all(
-                    messages.filter(Boolean).map(async msg => {
-                        const messageData: any = {
-                            id: msg.id,
-                            date: new Date(msg.date * 1000).toISOString(),
-                            text: msg.message || '',
-                            fromId: msg.fromId?.toString()
-                        };
-
-                        if (msg.media && options.includeMedia) {
-                            try {
-                                const mediaDir = path.join(backupDir, 'media', this.getEntityId(dialog));
-                                await promisify(fs.mkdir)(mediaDir, { recursive: true });
-                                const buffer = await this.client.downloadMedia(msg.media);
-                                if (buffer) {
-                                    const extension = this.getMediaExtension(msg.media);
-                                    const filename = `${msg.id}.${extension}`;
-                                    const filePath = path.join(mediaDir, filename);
-                                    await promisify(fs.writeFile)(filePath, buffer);
-                                    messageData.mediaFile = filename;
-                                    messageData.mediaType = msg.media.className;
-                                }
-                            } catch (error) {
-                                console.error(`Failed to backup media for message ${msg.id}:`, error);
-                            }
-                        }
-
-                        return messageData;
-                    })
-                )
-            };
-            backup.chats.push(chatBackup);
-        }
-
-        // Save JSON backup
-        const backupPath = path.join(backupDir, 'backup.json');
-        await promisify(fs.writeFile)(
-            backupPath,
-            JSON.stringify(backup, null, 2)
-        );
-
-        // Generate HTML if requested
-        if (options.exportFormat === 'html') {
-            const htmlPath = path.join(backupDir, 'backup.html');
-            await promisify(fs.writeFile)(
-                htmlPath,
-                this.generateHtmlBackup(backup)
-            );
-        }
+        const webSessions = devicesResult.authorizations.map(auth => ({
+            hash: auth.hash.toString(),
+            domain: auth.domain,
+            browser: auth.browser,
+            platform: auth.platform,
+            dateCreated: new Date(auth.dateCreated * 1000),
+            dateActive: new Date(auth.dateActive * 1000),
+            ip: auth.ip,
+            region: auth.region
+        }));
 
         return {
-            backupId,
-            path: backupPath,
-            format: options.exportFormat || 'json',
-            timestamp: backup.timestamp,
-            chats: backup.chats.length,
-            messages: backup.chats.reduce((sum, chat) => sum + chat.messages.length, 0)
+            sessions,
+            webSessions
         };
+    }
+
+    async terminateSession(options: {
+        hash: string;
+        type: 'app' | 'web';
+        exceptCurrent?: boolean;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        if (options.exceptCurrent) {
+            if (options.type === 'app') {
+                await this.client.invoke(new Api.auth.ResetAuthorizations());
+            } else {
+                await this.client.invoke(new Api.account.ResetWebAuthorizations());
+            }
+            return true;
+        }
+
+        if (options.type === 'app') {
+            await this.client.invoke(new Api.account.ResetAuthorization({
+                hash: bigInt(options.hash)
+            }));
+        } else {
+            await this.client.invoke(new Api.account.ResetWebAuthorization({
+                hash: bigInt(options.hash)
+            }));
+        }
+        return true;
     }
 
     async getChatStatistics(chatId: string, period: 'day' | 'week' | 'month') {
@@ -1869,69 +1861,6 @@ class TelegramManager {
         return stats;
     }
 
-    private generateHtmlBackup(backup: any): string {
-        const formatMessage = (msg: any) => {
-            const html = `<div class="message">
-                <div class="message-header">
-                    <span class="date">${new Date(msg.date).toLocaleString()}</span>
-                    ${msg.fromId ? `<span class="sender">From: ${msg.fromId}</span>` : ''}
-                </div>
-                <div class="message-content">
-                    ${msg.text ? `<div class="text">${msg.text}</div>` : ''}
-                    ${msg.mediaFile ? `
-                        <div class="media">
-                            <span class="media-type">${msg.mediaType}</span>
-                            <span class="media-file">${msg.mediaFile}</span>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>`;
-            return html;
-        };
-
-        return `
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <title>Telegram Backup - ${backup.account}</title>
-                    <meta charset="utf-8">
-                    <style>
-                        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; margin: 0; padding: 20px; }
-                        .container { max-width: 800px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 40px; }
-                        .chat { margin-bottom: 40px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
-                        .chat-header { background: #f5f5f5; padding: 15px; border-bottom: 1px solid #ddd; }
-                        .chat-messages { padding: 20px; }
-                        .message { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 6px; }
-                        .message-header { color: #666; margin-bottom: 8px; font-size: 0.9em; }
-                        .message-content { }
-                        .media { margin-top: 10px; color: #0066cc; }
-                        .text { white-space: pre-wrap; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="header">
-                            <h1>Telegram Backup</h1>
-                            <p>Account: ${backup.account}</p>
-                            <p>Date: ${backup.timestamp}</p>
-                        </div>
-                        ${backup.chats.map(chat => `
-                            <div class="chat">
-                                <div class="chat-header">
-                                    <h2>Chat ${chat.id} (${chat.type})</h2>
-                                </div>
-                                <div class="chat-messages">
-                                    ${chat.messages.map(formatMessage).join('\n')}
-                                </div>
-                            </div>
-                        `).join('\n')}
-                    </div>
-                </body>
-            </html>
-        `.trim();
-    }
-
     private getMediaExtension(media: any): string {
         if (!media) return 'bin';
 
@@ -1958,90 +1887,80 @@ class TelegramManager {
         this.contentFilters.set(filters.chatId, filters);
 
         if (!this.filterHandler) {
-            this.filterHandler = this.client.addEventHandler(async (update) => {
-                if (!(update instanceof Api.UpdateNewMessage) || !(update.message instanceof Api.Message)) {
-                    return;
-                }
+            this.filterHandler = this.client.addEventHandler(async (event) => {
+                if (event instanceof NewMessageEvent) {
+                    const message = event.message;
+                    const chatId = message.chatId?.toString();
+                    const filter = this.contentFilters.get(chatId);
 
-                const message = update.message;
-                const peer = message.peerId;
-                if (!peer) return;
+                    if (!filter) return;
 
-                let chatId: string | undefined;
-
-                if (peer instanceof Api.PeerChannel && 'channelId' in peer) {
-                    chatId = peer.channelId.toString();
-                } else if (peer instanceof Api.PeerChat && 'chatId' in peer) {
-                    chatId = peer.chatId.toString();
-                } else if (peer instanceof Api.PeerUser && 'userId' in peer) {
-                    chatId = peer.userId.toString();
-                }
-
-                if (!chatId) return;
-
-                const chatFilters = this.contentFilters.get(chatId);
-                if (!chatFilters) return;
-
-                let shouldAct = false;
-
-                if (chatFilters.keywords?.length && message.message) {
-                    const messageText = message.message.toLowerCase();
-                    shouldAct = chatFilters.keywords.some(keyword =>
-                        messageText.includes(keyword.toLowerCase())
-                    );
-                }
-
-                if (!shouldAct && chatFilters.mediaTypes?.length && message.media) {
-                    const mediaType = this.getMediaType(message.media);
-                    shouldAct = chatFilters.mediaTypes.includes(mediaType);
-                }
-
-                if (shouldAct) {
-                    for (const action of chatFilters.actions) {
-                        await this.executeFilterAction(action, message);
+                    const shouldFilter = await this.evaluateMessage(message, filter);
+                    if (shouldFilter) {
+                        for (const action of filter.actions) {
+                            await this.executeFilterAction(action, message);
+                        }
                     }
                 }
-            });
+            }, new NewMessage({}));
         }
-
-        return { success: true, filterId: filters.chatId };
     }
 
-    private async executeFilterAction(
-        action: 'delete' | 'warn' | 'mute',
-        message: Api.Message
-    ) {
-        if (!message.peerId || !this.client) return;
+    private async evaluateMessage(message: Api.Message, filter: ContentFilter): Promise<boolean> {
+        if (filter.keywords?.length) {
+            const messageText = message.message.toLowerCase();
+            if (filter.keywords.some(keyword => messageText.includes(keyword.toLowerCase()))) {
+                return true;
+            }
+        }
 
-        switch (action) {
-            case 'delete':
-                await this.client.deleteMessages(message.peerId, [message.id], { revoke: true });
-                break;
-            case 'warn':
-                await this.client.sendMessage(message.peerId, {
-                    message: `⚠️ Message filtered: Violates chat rules`,
-                    replyTo: message.id
-                });
-                break;
-            case 'mute':
-                if (message.fromId) {
-                    await this.client.invoke(new Api.channels.EditBanned({
-                        channel: message.peerId,
-                        participant: message.fromId,
-                        bannedRights: new Api.ChatBannedRights({
-                            untilDate: Math.floor(Date.now() / 1000) + 300,
-                            sendMessages: true,
-                            viewMessages: false,
-                            sendMedia: true,
-                            sendStickers: true,
-                            sendGifs: true,
-                            sendGames: true,
-                            sendInline: true,
-                            embedLinks: true
-                        })
-                    }));
-                }
-                break;
+        if (filter.mediaTypes?.length && message.media) {
+            const mediaType = this.getMediaType(message.media);
+            if (filter.mediaTypes.includes(mediaType)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async executeFilterAction(action: 'delete' | 'warn' | 'mute', message: Api.Message) {
+        try {
+            switch (action) {
+                case 'delete':
+                    await this.client.deleteMessages(message.chatId, [message.id], { revoke: true });
+                    break;
+                case 'warn':
+                    await this.client.sendMessage(message.chatId, {
+                        message: `⚠️ Message filtered due to content policy.`,
+                        replyTo: message.id
+                    });
+                    break;
+                case 'mute':
+                    if (message.fromId) {
+                        await this.client.invoke(new Api.channels.EditBanned({
+                            channel: message.chatId,
+                            participant: message.fromId,
+                            bannedRights: new Api.ChatBannedRights({
+                                untilDate: Math.floor(Date.now() / 1000) + 3600,
+                                sendMessages: true
+                            })
+                        }));
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error(`Failed to execute filter action ${action}:`, error);
+        }
+    }
+
+    private getSearchFilter(filter: string): Api.TypeMessagesFilter {
+        switch (filter) {
+            case 'photo': return new Api.InputMessagesFilterPhotos();
+            case 'video': return new Api.InputMessagesFilterVideo();
+            case 'document': return new Api.InputMessagesFilterDocument();
+            case 'url': return new Api.InputMessagesFilterUrl();
+            default: return new Api.InputMessagesFilterEmpty();
         }
     }
 
@@ -2058,148 +1977,11 @@ class TelegramManager {
         return 'document';
     }
 
-    private getMediaDetails(media: Api.MessageMediaDocument) {
-        const document = media.document as Api.Document;
-
-        const filename = document.attributes.find(attr =>
-            attr instanceof Api.DocumentAttributeFilename ||
-            attr instanceof Api.DocumentAttributeAudio
-        ) as (Api.DocumentAttributeFilename | Api.DocumentAttributeAudio | undefined);
-
-        const duration = document.attributes.find(attr =>
-            attr instanceof Api.DocumentAttributeVideo ||
-            attr instanceof Api.DocumentAttributeAudio
-        ) as (Api.DocumentAttributeVideo | Api.DocumentAttributeAudio | undefined);
-
-        return {
-            filename: (filename as Api.DocumentAttributeFilename)?.fileName || undefined,
-            duration: duration ? ('duration' in duration ? duration.duration : undefined) : undefined,
-            mimeType: document.mimeType,
-            size: document.size
-        };
-    }
-
-    private async downloadFileFromUrl(url: string): Promise<Buffer> {
-        const response = await fetch(url);
-        const arrayBuffer = await response.arrayBuffer();
-        return Buffer.from(arrayBuffer);
-    }
-
-    // Method to safely get entity ID
     private getEntityId(entity: Api.TypeInputPeer | Api.TypeUser | Api.TypeChat): string {
         if (entity instanceof Api.User) return entity.id.toString();
         if (entity instanceof Api.Channel) return entity.id.toString();
         if (entity instanceof Api.Chat) return entity.id.toString();
         return '';
-    }
-
-    async downloadBackup(options: BackupOptions): Promise<{
-        messagesCount: number,
-        mediaCount: number,
-        outputPath: string,
-        totalSize: number,
-        backupId: string
-    }> {
-        if (!this.client) throw new Error('Client not initialized');
-
-        const {
-            backupId,
-            chatIds,
-            includeMedia = false,
-            outputPath = path.join(process.cwd(), 'backups', backupId),
-            mediaTypes = ['photo', 'video', 'document', 'audio'],
-            restoreToChat
-        } = options;
-
-        // Ensure backup directory exists
-        if (!fs.existsSync(outputPath)) {
-            fs.mkdirSync(outputPath, { recursive: true });
-        }
-
-        const backupFilePath = path.join(outputPath, 'backup.json');
-        if (!fs.existsSync(backupFilePath)) {
-            throw new Error(`Backup file not found for ID: ${backupId}`);
-        }
-
-        const backupData = JSON.parse(await promisify(fs.readFile)(backupFilePath, 'utf-8'));
-        let totalMessages = 0;
-        let totalMedia = 0;
-        let totalSize = 0;
-
-        // Process each chat in the backup
-        for (const chat of backupData.chats) {
-            // Skip if specific chatIds are provided and doesn't match
-            if (chatIds.length > 0 && !chatIds.includes(chat.id)) continue;
-
-            totalMessages += chat.messages.length;
-
-            // Download media files if requested
-            if (includeMedia) {
-                const mediaDir = path.join(outputPath, 'media', chat.id);
-                fs.mkdirSync(mediaDir, { recursive: true });
-
-                for (const message of chat.messages) {
-                    if (message.media) {
-                        try {
-                            const mediaType = message.media.type;
-                            if (mediaTypes.includes(mediaType)) {
-                                const messages = await this.client.getMessages(chat.id, { ids: [message.id] });
-                                const msg = messages[0];
-
-                                if (msg && msg.media) {
-                                    const buffer = await this.client.downloadMedia(msg.media);
-                                    if (buffer) {
-                                        const mediaFileName = `${message.id}_${mediaType}.${this.getMediaExtension(msg.media)}`;
-                                        const mediaPath = path.join(mediaDir, mediaFileName);
-                                        await promisify(fs.writeFile)(mediaPath, buffer);
-                                        totalSize += buffer.length;
-                                        totalMedia++;
-                                    }
-                                }
-                            }
-                        } catch (error) {
-                            console.warn(`Failed to download media for message ${message.id}:`, error.message);
-                        }
-                        // Add delay to avoid rate limits
-                        await sleep(100);
-                    }
-                }
-            }
-
-            // Restore messages to a new chat if requested
-            if (restoreToChat) {
-                try {
-                    for (const message of chat.messages) {
-                        if (message.media && includeMedia) {
-                            const mediaPath = path.join(outputPath, 'media', chat.id,
-                                `${message.id}_${message.media.type}.${this.getMediaExtension(message.media)}`);
-                            if (fs.existsSync(mediaPath)) {
-                                await this.client.sendFile(restoreToChat, {
-                                    file: mediaPath,
-                                    caption: message.text || undefined
-                                });
-                            }
-                        } else {
-                            await this.client.sendMessage(restoreToChat, {
-                                message: message.text || ''
-                            });
-                        }
-                        // Add delay to avoid rate limits
-                        await sleep(1000);
-                    }
-                } catch (error) {
-                    console.error(`Failed to restore messages to chat ${restoreToChat}:`, error.message);
-                }
-            }
-        }
-
-        return {
-            messagesCount: totalMessages,
-            mediaCount: totalMedia,
-            outputPath,
-            totalSize,
-            backupId
-        };
     }
 
     async addGroupMembers(groupId: string, members: string[]): Promise<void> {
@@ -2526,19 +2308,25 @@ class TelegramManager {
         endDate?: Date;
         offset?: number;
         limit?: number;
+        maxId?: number;
+        minId?: number;
     }) {
         if (!this.client) throw new Error('Client not initialized');
 
-        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50 } = params;
+        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50, maxId, minId } = params;
 
-        const query = {
+        const query: Partial<IterMessagesParams> = {
             offsetId: offset,
-            limit,
+            limit: limit || 500,
+            ...(maxId ? { maxId } : {}),
+            ...(minId ? { minId } : {}),
             ...(startDate && { minDate: Math.floor(startDate.getTime() / 1000) }),
             ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
         };
 
-        const messages = await this.client.getMessages(chatId, query);
+        const ent = await this.safeGetEntity(chatId);
+
+        const messages = await this.client.getMessages(ent, query);
         const filteredMessages = messages.filter(message => {
             if (!message.media) return false;
             const mediaType = this.getMediaType(message.media);
@@ -2583,6 +2371,38 @@ class TelegramManager {
             total: messages.total,
             hasMore: messages.length === limit
         };
+    }
+
+    async safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null> {
+        if (!this.client) throw new Error('Client not initialized');
+
+        try {
+            // First attempt: direct getEntity
+            return await this.client.getEntity(entityId);
+        } catch (error) {
+            console.log(`Failed to get entity directly for ${entityId}, searching in dialogs...`);
+
+            try {
+                // Second attempt: search through dialogs
+                const dialogs = await this.client.getDialogs({
+                    limit: 300 // Adjust limit as needed
+                });
+
+                // Search through dialog entities
+                for (const dialog of dialogs) {
+                    const entity = dialog.entity;
+                    if (entity.id.toString() === entityId.toString()) {
+                        return entity;
+                    }
+                }
+
+                console.log(`Entity ${entityId} not found in dialogs either`);
+                return null;
+            } catch (dialogError) {
+                console.error('Error while searching dialogs:', dialogError);
+                return null;
+            }
+        }
     }
 
     // Contact Management Features
@@ -2770,6 +2590,494 @@ class TelegramManager {
             includedChatsCount: Array.isArray(filter.includePeers) ? filter.includePeers.length : 0,
             excludedChatsCount: Array.isArray(filter.excludePeers) ? filter.excludePeers.length : 0
         }));
+    }
+
+    async sendMediaBatch(options: {
+        chatId: string;
+        media: Array<{
+            type: 'photo' | 'video' | 'document';
+            url: string;
+            caption?: string;
+            fileName?: string;
+        }>;
+        silent?: boolean;
+        scheduleDate?: number;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const mediaFiles = await Promise.all(
+            options.media.map(async (item) => {
+                const buffer = await this.downloadFileFromUrl(item.url);
+                const file = new CustomFile(
+                    item.fileName || `media.${this.getMediaExtension(item.type)}`,
+                    buffer.length,
+                    'media',
+                    buffer
+                );
+
+                const uploadedFile = await this.client.uploadFile({
+                    file,
+                    workers: 1
+                });
+
+                const inputMedia = item.type === 'photo' ?
+                    new Api.InputMediaUploadedPhoto({ file: uploadedFile }) :
+                    new Api.InputMediaUploadedDocument({
+                        file: uploadedFile,
+                        mimeType: this.getMimeType(item.type),
+                        attributes: this.getMediaAttributes(item)
+                    });
+
+                return new Api.InputSingleMedia({
+                    media: inputMedia,
+                    message: item.caption || '',
+                    entities: []
+                });
+            })
+        );
+
+        return this.client.invoke(new Api.messages.SendMultiMedia({
+            peer: options.chatId,
+            multiMedia: mediaFiles,
+            silent: options.silent,
+            scheduleDate: options.scheduleDate
+        }));
+    }
+
+    private getMimeType(type: string): string {
+        switch (type) {
+            case 'photo': return 'image/jpeg';
+            case 'video': return 'video/mp4';
+            case 'document': return 'application/octet-stream';
+            default: return 'application/octet-stream';
+        }
+    }
+
+    private getMediaAttributes(item: { type: string, fileName?: string }): Api.TypeDocumentAttribute[] {
+        const attributes: Api.TypeDocumentAttribute[] = [];
+
+        if (item.fileName) {
+            attributes.push(new Api.DocumentAttributeFilename({
+                fileName: item.fileName
+            }));
+        }
+
+        if (item.type === 'video') {
+            attributes.push(new Api.DocumentAttributeVideo({
+                duration: 0,
+                w: 1280,
+                h: 720,
+                supportsStreaming: true
+            }));
+        }
+
+        return attributes;
+    }
+
+    async editMessage(options: {
+        chatId: string;
+        messageId: number;
+        text?: string;
+        media?: {
+            type: 'photo' | 'video' | 'document';
+            url: string;
+        };
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        if (options.media) {
+            const buffer = await this.downloadFileFromUrl(options.media.url);
+            const file = new CustomFile(
+                `media.${this.getMediaExtension(options.media.type)}`,
+                buffer.length,
+                'media',
+                buffer
+            );
+
+            const uploadedFile = await this.client.uploadFile({
+                file,
+                workers: 1
+            });
+
+            const inputMedia = options.media.type === 'photo' ?
+                new Api.InputMediaUploadedPhoto({ file: uploadedFile }) :
+                new Api.InputMediaUploadedDocument({
+                    file: uploadedFile,
+                    mimeType: this.getMimeType(options.media.type),
+                    attributes: this.getMediaAttributes(options.media)
+                });
+
+            return this.client.invoke(new Api.messages.EditMessage({
+                peer: options.chatId,
+                id: options.messageId,
+                media: inputMedia,
+                message: options.text || ''
+            }));
+        }
+
+        if (options.text) {
+            return this.client.invoke(new Api.messages.EditMessage({
+                peer: options.chatId,
+                id: options.messageId,
+                message: options.text
+            }));
+        }
+
+        throw new Error('Either text or media must be provided');
+    }
+
+    async getChats(options: {
+        limit?: number;
+        offsetDate?: number;
+        offsetId?: number;
+        offsetPeer?: string;
+        folderId?: number;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const dialogs = await this.client.getDialogs({
+            ...options,
+            limit: options.limit || 100
+        });
+
+        return Promise.all(dialogs.map(async (dialog) => {
+            const entity = dialog.entity;
+            return {
+                id: entity.id.toString(),
+                title: 'title' in entity ? entity.title : null,
+                username: 'username' in entity ? entity.username : null,
+                type: entity instanceof Api.User ? 'user' :
+                    entity instanceof Api.Chat ? 'group' :
+                        entity instanceof Api.Channel ? 'channel' : 'unknown',
+                unreadCount: dialog.unreadCount,
+                lastMessage: dialog.message ? {
+                    id: dialog.message.id,
+                    text: dialog.message.message,
+                    date: new Date(dialog.message.date * 1000)
+                } : null
+            };
+        }));
+    }
+
+    async updateChatSettings(settings: {
+        chatId: string;
+        title?: string;
+        about?: string;
+        photo?: string;
+        slowMode?: number;
+        linkedChat?: string;
+        defaultSendAs?: string;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const chat = await this.client.getEntity(settings.chatId);
+
+        const updates: Promise<any>[] = [];
+
+        if (settings.title) {
+            updates.push(this.client.invoke(new Api.channels.EditTitle({
+                channel: chat,
+                title: settings.title
+            })));
+        }
+
+        if (settings.about) {
+            updates.push(this.client.invoke(new Api.messages.EditChatAbout({
+                peer: chat,
+                about: settings.about
+            })));
+        }
+
+        if (settings.photo) {
+            const buffer = await this.downloadFileFromUrl(settings.photo);
+            const file = await this.client.uploadFile({
+                file: new CustomFile('photo.jpg', buffer.length, 'photo.jpg', buffer),
+                workers: 1
+            });
+
+            updates.push(this.client.invoke(new Api.channels.EditPhoto({
+                channel: chat,
+                photo: new Api.InputChatUploadedPhoto({
+                    file: file
+                })
+            })));
+        }
+
+        if (settings.slowMode !== undefined) {
+            updates.push(this.client.invoke(new Api.channels.ToggleSlowMode({
+                channel: chat,
+                seconds: settings.slowMode
+            })));
+        }
+
+        if (settings.linkedChat) {
+            const linkedChannel = await this.client.getEntity(settings.linkedChat);
+            updates.push(this.client.invoke(new Api.channels.SetDiscussionGroup({
+                broadcast: chat,
+                group: linkedChannel
+            })));
+        }
+
+        await Promise.all(updates);
+        return true;
+    }
+
+    async getMessageStats(options: {
+        chatId: string;
+        period: 'day' | 'week' | 'month';
+        fromDate?: Date;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
+
+        const now = options.fromDate || new Date();
+        const startDate = new Date(now);
+
+        switch (options.period) {
+            case 'day':
+                startDate.setDate(startDate.getDate() - 1);
+                break;
+            case 'week':
+                startDate.setDate(startDate.getDate() - 7);
+                break;
+            case 'month':
+                startDate.setMonth(startDate.getMonth() - 1);
+                break;
+        }
+
+        const messages = await this.client.getMessages(options.chatId, {
+            limit: 100,
+            offsetDate: Math.floor(now.getTime() / 1000),
+        });
+
+        const stats = {
+            total: messages.length,
+            withMedia: 0,
+            withLinks: 0,
+            withForwards: 0,
+            byHour: new Array(24).fill(0),
+            byType: {
+                text: 0,
+                photo: 0,
+                video: 0,
+                document: 0,
+                other: 0
+            }
+        };
+
+        for (const msg of messages) {
+            const hour = new Date(msg.date * 1000).getHours();
+            stats.byHour[hour]++;
+
+            if (msg.media) {
+                stats.withMedia++;
+                const mediaType = this.getMediaType(msg.media);
+                stats.byType[mediaType] = (stats.byType[mediaType] || 0) + 1;
+            } else if (msg.message) {
+                if (msg.message.match(/https?:\/\/[^\s]+/)) {
+                    stats.withLinks++;
+                }
+                stats.byType.text++;
+            }
+
+            if (msg.fwdFrom) {
+                stats.withForwards++;
+            }
+        }
+
+        return stats;
+    }
+
+    async getTopPrivateChats(): Promise<Array<{
+        chatId: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+        totalMessages: number;
+        interactionScore: number;
+        calls: {
+            total: number;
+            incoming: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+            outgoing: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+        };
+        media: {
+            photos: number;
+            videos: number;
+        };
+        activityBreakdown: {
+            videoCalls: number;
+            audioCalls: number;
+            mediaSharing: number;
+            textMessages: number;
+        };
+    }>> {
+        if (!this.client) throw new Error('Client not initialized');
+
+        console.log('Starting getTopPrivateChats analysis...');
+        const startTime = Date.now();
+
+        // Weighting factors for different interaction types
+        const weights = {
+            videoCall: 15,      // Video calls have highest weight due to high engagement
+            audioCall: 8,       // Audio calls indicate strong connection
+            sharedVideo: 6,     // Videos show high interaction intent
+            sharedPhoto: 4,     // Photos show moderate interaction
+            textMessage: 1,     // Base weight for messages
+            recentActivityBonus: 1.5  // Bonus multiplier for recent activity
+        };
+
+        console.log('Fetching dialogs...');
+        const dialogs = await this.client.getDialogs({
+            limit: 200 // Reduced from 500 for better performance
+        });
+        console.log(`Found ${dialogs.length} total dialogs`);
+
+        // Filter private chats more strictly
+        const privateChats = dialogs.filter(dialog =>
+            dialog.isUser &&
+            dialog.entity instanceof Api.User &&
+            !dialog.entity.bot && // Explicitly exclude bots
+            !dialog.entity.deleted && // Exclude deleted accounts
+            !dialog.entity.fake && // Exclude fake accounts
+            dialog.entity.id.toString() !== "777000" && // Exclude Telegram's service notifications
+            dialog.entity.id.toString() !== "42777" // Exclude Telegram's support account
+        );
+
+        console.log(`Found ${privateChats.length} valid private chats after filtering`);
+
+        // Calculate recent activity window (last month)
+        const now = Math.floor(Date.now() / 1000);
+        // const oneMonthAgo = now - (30 * 24 * 60 * 60);
+
+        // Process chats in batches to avoid overwhelming the API
+        const batchSize = 10;
+        const chatStats = [];
+
+        for (let i = 0; i < privateChats.length; i += batchSize) {
+            console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)}`);
+            const batch = privateChats.slice(i, i + batchSize);
+
+            const batchResults = await Promise.all(batch.map(async (dialog) => {
+                const processingStart = Date.now();
+                const chatId = dialog.entity.id.toString();
+                const user = dialog.entity as Api.User;
+
+                console.log(`Processing chat ${chatId} (${user.firstName || 'Unknown'})`);
+
+                try {
+                    // Get recent messages with optimization
+                    const messages = await this.client.getMessages(chatId, {
+                        limit: 500,
+                        // offsetDate: oneMonthAgo
+                    });
+
+                    // Skip chats with fewer than 20 messages
+                    if (messages.length < 20) {
+                        console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length})`);
+                        return null;
+                    }
+
+                    console.log(`Retrieved ${messages.length} messages for chat ${chatId}`);
+
+                    const callStats = {
+                        total: 0,
+                        incoming: { total: 0, audio: 0, video: 0 },
+                        outgoing: { total: 0, audio: 0, video: 0 }
+                    };
+
+                    const mediaStats = { photos: 0, videos: 0 };
+                    let recentActivityScore = 0;
+
+                    // Optimize message processing with a single loop
+                    for (const message of messages) {
+                        const messageAge = now - message.date;
+                        const recencyMultiplier = 1 + (1 - messageAge / (30 * 24 * 60 * 60));
+
+                        if (message.action instanceof Api.MessageActionPhoneCall) {
+                            const call = message.action;
+                            callStats.total++;
+
+                            if (message.out) {
+                                callStats.outgoing.total++;
+                                call.video ? callStats.outgoing.video++ : callStats.outgoing.audio++;
+                            } else {
+                                callStats.incoming.total++;
+                                call.video ? callStats.incoming.video++ : callStats.incoming.audio++;
+                            }
+                        }
+
+                        if (message.media) {
+                            if (message.media instanceof Api.MessageMediaPhoto) {
+                                mediaStats.photos++;
+                            } else if (message.media instanceof Api.MessageMediaDocument &&
+                                message.media.document instanceof Api.Document &&
+                                message.media.document.mimeType?.startsWith('video/')) {
+                                mediaStats.videos++;
+                            }
+                        }
+
+                        recentActivityScore += recencyMultiplier;
+                    }
+
+                    // Calculate scores
+                    const interactionScore = (
+                        (callStats.incoming.video + callStats.outgoing.video) * weights.videoCall +
+                        (callStats.incoming.audio + callStats.outgoing.audio) * weights.audioCall +
+                        mediaStats.videos * weights.sharedVideo +
+                        mediaStats.photos * weights.sharedPhoto +
+                        messages.length * weights.textMessage
+                    ) * (recentActivityScore * weights.recentActivityBonus);
+
+                    // Calculate activity breakdown
+                    const activityBreakdown = {
+                        videoCalls: ((callStats.incoming.video + callStats.outgoing.video) * weights.videoCall) / interactionScore * 100,
+                        audioCalls: ((callStats.incoming.audio + callStats.outgoing.audio) * weights.audioCall) / interactionScore * 100,
+                        mediaSharing: ((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto)) / interactionScore * 100,
+                        textMessages: (messages.length * weights.textMessage) / interactionScore * 100
+                    };
+
+                    const processingTime = Date.now() - processingStart;
+                    console.log(`Finished processing chat ${chatId} in ${processingTime}ms with interaction score: ${interactionScore}`);
+
+                    return {
+                        chatId,
+                        username: user.username,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        totalMessages: messages.length,
+                        interactionScore: Math.round(interactionScore * 100) / 100,
+                        calls: callStats,
+                        media: mediaStats,
+                        activityBreakdown
+                    };
+                } catch (error) {
+                    console.error(`Error processing chat ${chatId}:`, error);
+                    return null;
+                }
+            }));
+
+            chatStats.push(...batchResults.filter(Boolean));
+        }
+
+        // Sort by interaction score and get top 5
+        const topChats = chatStats
+            .sort((a, b) => b.interactionScore - a.interactionScore)
+            .slice(0, 5);
+
+        const totalTime = Date.now() - startTime;
+        console.log(`getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
+        topChats.forEach((chat, index) => {
+            console.log(`Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}`);
+        });
+
+        return topChats;
     }
 }
 export default TelegramManager;

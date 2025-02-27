@@ -19,7 +19,7 @@ import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ClientMetadataTracker } from './utils/client-metadata';
 import { ClientMetadata } from './types/client-operations';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
-import { BackupOptions, MediaAlbumOptions } from './types/telegram-types';
+import { MediaAlbumOptions } from './types/telegram-types';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -677,20 +677,6 @@ export class TelegramService implements OnModuleDestroy {
             client.updatePrivacyBatch(settings)
         );
     }
-
-    // Backup and Restore
-    async createBackup(mobile: string, options: BackupOptions) {
-        return this.executeWithConnection(mobile, 'Create backup',
-            (client) => client.createBackup(options),
-        );
-    }
-
-    async downloadBackup(mobile: string, options: BackupOptions) {
-        return this.executeWithConnection(mobile, 'Download backup', (client) =>
-            client.downloadBackup(options)
-        );
-    }
-
     // Content Filtering
     async setContentFilters(
         mobile: string,
@@ -820,7 +806,9 @@ export class TelegramService implements OnModuleDestroy {
             startDate?: Date;
             endDate?: Date;
             offset?: number;
-            limit?: number;
+            limit?: number;            
+            maxId?: number;
+            minId?: number;
         }
     ) {
         return this.executeWithConnection(mobile, 'Get filtered media', (client) =>
@@ -890,5 +878,169 @@ export class TelegramService implements OnModuleDestroy {
         return this.executeWithConnection(mobile, 'Get chat folders', (client) =>
             client.getChatFolders()
         );
+    }
+
+    // Session Management
+    async getSessionInfo(mobile: string) {
+        return this.executeWithConnection(mobile, 'Get session info', (client) =>
+            client.getSessionInfo()
+        );
+    }
+
+    async terminateSession(
+        mobile: string, 
+        options: {
+            hash: string;
+            type: 'app' | 'web';
+            exceptCurrent?: boolean;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Terminate session', (client) =>
+            client.terminateSession(options)
+        );
+    }
+
+    // Message Management
+    async editMessage(
+        mobile: string,
+        options: {
+            chatId: string;
+            messageId: number;
+            text?: string;
+            media?: {
+                type: 'photo' | 'video' | 'document';
+                url: string;
+            };
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Edit message', (client) =>
+            client.editMessage(options)
+        );
+    }
+
+    // Chat Management
+    async updateChatSettings(
+        mobile: string,
+        settings: {
+            chatId: string;
+            title?: string;
+            about?: string;
+            photo?: string;
+            slowMode?: number;
+            linkedChat?: string;
+            defaultSendAs?: string;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Update chat settings', (client) =>
+            client.updateChatSettings(settings)
+        );
+    }
+
+    // Media Handling
+    async sendMediaBatch(
+        mobile: string,
+        options: {
+            chatId: string;
+            media: Array<{
+                type: 'photo' | 'video' | 'document';
+                url: string;
+                caption?: string;
+                fileName?: string;
+            }>;
+            silent?: boolean;
+            scheduleDate?: number;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Send media batch', (client) =>
+            client.sendMediaBatch(options)
+        );
+    }
+
+    // Password Management
+    async hasPassword(mobile: string): Promise<boolean> {
+        return this.executeWithConnection(mobile, 'Check password status', (client) =>
+            client.hasPassword()
+        );
+    }
+
+    // Contact Management
+    async getContacts(mobile: string) {
+        return this.executeWithConnection(mobile, 'Get contacts list', (client) =>
+            client.getContacts()
+        );
+    }
+
+    // Extended Chat Functions
+    async getChats(
+        mobile: string,
+        options: {
+            limit?: number;
+            offsetDate?: number;
+            offsetId?: number;
+            offsetPeer?: string;
+            folderId?: number;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Get chats', (client) =>
+            client.getChats(options)
+        );
+    }
+
+    // File Operations
+    async getFileUrl(mobile: string, url: string, filename: string): Promise<string> {
+        return this.executeWithConnection(mobile, 'Get file URL', (client) =>
+            client.getFileUrl(url, filename)
+        );
+    }
+
+    // Message Stats
+    async getMessageStats(
+        mobile: string,
+        options: {
+            chatId: string;
+            period: 'day' | 'week' | 'month';
+            fromDate?: Date;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Get message statistics', (client) =>
+            client.getMessageStats(options)
+        );
+    }
+
+    // Chat Analytics
+    async getTopPrivateChats(mobile: string): Promise<{
+        chatId: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+        totalMessages: number;
+        interactionScore: number;
+        calls: {
+            total: number;
+            incoming: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+            outgoing: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+        };
+        media: {
+            photos: number;
+            videos: number;
+        };
+        activityBreakdown: {
+            videoCalls: number;
+            audioCalls: number;
+            mediaSharing: number;
+            textMessages: number;
+        };
+    }[]> {
+        return this.executeWithConnection(mobile, 'Get top private chats', async (client) => {
+            return client.getTopPrivateChats();
+        });
     }
 }

@@ -1,7 +1,6 @@
-/// <reference types="node" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
-import { SendMediaDto, MediaDownloadDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType } from './dto';
+import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType } from './dto';
 import { MessageType } from './dto/message-search.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
@@ -36,7 +35,7 @@ export declare class TelegramController {
                 username: string;
             };
             media: {
-                type: "document" | "video" | "photo";
+                type: "photo" | "video" | "document";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -47,12 +46,39 @@ export declare class TelegramController {
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
-    updatePrivacyBatch(mobile: string, settings: PrivacySettingsDto): Promise<{
-        success: boolean;
-    }>;
+    updatePrivacyBatch(mobile: string, settings: PrivacySettingsDto): Promise<boolean>;
     getActiveSessions(mobile: string): Promise<any[]>;
     terminateOtherSessions(mobile: string): Promise<void>;
     createNewSession(mobile: string): Promise<string>;
+    getSessionInfo(mobile: string): Promise<{
+        sessions: {
+            hash: string;
+            deviceModel: string;
+            platform: string;
+            systemVersion: string;
+            appName: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            country: string;
+            region: string;
+        }[];
+        webSessions: {
+            hash: string;
+            domain: string;
+            browser: string;
+            platform: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            region: string;
+        }[];
+    }>;
+    terminateSession(mobile: string, data: {
+        hash: string;
+        type: 'app' | 'web';
+        exceptCurrent?: boolean;
+    }): Promise<boolean>;
     getConnectionStatus(): Promise<{
         status: {
             activeConnections: number;
@@ -91,21 +117,23 @@ export declare class TelegramController {
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     getMediaInfo(mobile: string, chatId: string, types?: MediaType[], offset?: number, limit?: number): Promise<any>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
-    downloadMedia(mobile: string, downloadDto: MediaDownloadDto, res: Response): Promise<any>;
+    downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<any>;
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("telegram").Api.TypeUpdates>;
     getMediaMetadata(mobile: string, searchDto: MediaSearchDto): Promise<any>;
-    getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string): Promise<{
+    getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "photo" | "video" | "document";
             thumb: any;
             caption: string;
             date: number;
             mediaDetails: {
-                filename: string;
-                duration: number;
-                mimeType: string;
                 size: import("big-integer").BigInteger;
+                mimeType: string;
+                fileName: string;
+                duration: number;
+                width: number;
+                height: number;
             };
         }[];
         total: number;
@@ -225,5 +253,97 @@ export declare class TelegramController {
         title: any;
         includedChatsCount: any;
         excludedChatsCount: any;
+    }[]>;
+    editMessage(mobile: string, options: {
+        chatId: string;
+        messageId: number;
+        text?: string;
+        media?: {
+            type: 'photo' | 'video' | 'document';
+            url: string;
+        };
+    }): Promise<import("telegram").Api.TypeUpdates>;
+    updateChatSettings(mobile: string, settings: {
+        chatId: string;
+        title?: string;
+        about?: string;
+        photo?: string;
+        slowMode?: number;
+        linkedChat?: string;
+        defaultSendAs?: string;
+    }): Promise<boolean>;
+    sendMediaBatch(mobile: string, options: {
+        chatId: string;
+        media: Array<{
+            type: 'photo' | 'video' | 'document';
+            url: string;
+            caption?: string;
+            fileName?: string;
+        }>;
+        silent?: boolean;
+        scheduleDate?: number;
+    }): Promise<import("telegram").Api.TypeUpdates>;
+    hasPassword(mobile: string): Promise<boolean>;
+    getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number): Promise<{
+        id: string;
+        title: string;
+        username: string;
+        type: string;
+        unreadCount: number;
+        lastMessage: {
+            id: number;
+            text: string;
+            date: Date;
+        };
+    }[]>;
+    getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
+    getMessageStats(mobile: string, options: {
+        chatId: string;
+        period: 'day' | 'week' | 'month';
+        fromDate?: Date;
+    }): Promise<{
+        total: number;
+        withMedia: number;
+        withLinks: number;
+        withForwards: number;
+        byHour: any[];
+        byType: {
+            text: number;
+            photo: number;
+            video: number;
+            document: number;
+            other: number;
+        };
+    }>;
+    getTopPrivateChats(mobile: string): Promise<{
+        chatId: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+        totalMessages: number;
+        interactionScore: number;
+        calls: {
+            total: number;
+            incoming: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+            outgoing: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+        };
+        media: {
+            photos: number;
+            videos: number;
+        };
+        activityBreakdown: {
+            videoCalls: number;
+            audioCalls: number;
+            mediaSharing: number;
+            textMessages: number;
+        };
     }[]>;
 }

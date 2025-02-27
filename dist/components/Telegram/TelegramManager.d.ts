@@ -8,7 +8,7 @@ import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
 import { ContentFilter } from '../../interfaces/telegram';
 import { GroupOptions } from '../../interfaces/telegram';
-import { MediaAlbumOptions, BackupOptions } from './types/telegram-types';
+import { MediaAlbumOptions } from './types/telegram-types';
 interface MessageScheduleOptions {
     chatId: string;
     message: string;
@@ -114,9 +114,11 @@ declare class TelegramManager {
     getContacts(): Promise<Api.contacts.TypeContacts>;
     deleteChat(chatId: string): Promise<void>;
     blockUser(chatId: string): Promise<void>;
-    downloadWithTimeout(promise: Promise<Buffer>, timeout: number): Promise<unknown>;
     getMediaMetadata(chatId?: string, offset?: number, limit?: number): any;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
+    private downloadWithTimeout;
+    private getMediaDetails;
+    private downloadFileFromUrl;
     forwardMessage(toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
@@ -161,19 +163,38 @@ declare class TelegramManager {
         forwards?: 'everybody' | 'contacts' | 'nobody';
         calls?: 'everybody' | 'contacts' | 'nobody';
         groups?: 'everybody' | 'contacts' | 'nobody';
-    }): Promise<{
-        success: boolean;
+    }): Promise<boolean>;
+    getSessionInfo(): Promise<{
+        sessions: {
+            hash: string;
+            deviceModel: string;
+            platform: string;
+            systemVersion: string;
+            appName: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            country: string;
+            region: string;
+        }[];
+        webSessions: {
+            hash: string;
+            domain: string;
+            browser: string;
+            platform: string;
+            dateCreated: Date;
+            dateActive: Date;
+            ip: string;
+            region: string;
+        }[];
     }>;
-    createBackup(options: BackupOptions): Promise<{
-        backupId: string;
-        path: string;
-        format: "json" | "html";
-        timestamp: string;
-        chats: number;
-        messages: any;
-    }>;
+    terminateSession(options: {
+        hash: string;
+        type: 'app' | 'web';
+        exceptCurrent?: boolean;
+    }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "week" | "month" | "day";
+        period: "day" | "week" | "month";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -192,24 +213,13 @@ declare class TelegramManager {
             count: number;
         }[];
     }>;
-    private generateHtmlBackup;
     private getMediaExtension;
-    setContentFilters(filters: ContentFilter): Promise<{
-        success: boolean;
-        filterId: string;
-    }>;
+    setContentFilters(filters: ContentFilter): Promise<void>;
+    private evaluateMessage;
     private executeFilterAction;
+    private getSearchFilter;
     private getMediaType;
-    private getMediaDetails;
-    private downloadFileFromUrl;
     private getEntityId;
-    downloadBackup(options: BackupOptions): Promise<{
-        messagesCount: number;
-        mediaCount: number;
-        outputPath: string;
-        totalSize: number;
-        backupId: string;
-    }>;
     addGroupMembers(groupId: string, members: string[]): Promise<void>;
     removeGroupMembers(groupId: string, members: string[]): Promise<void>;
     promoteToAdmin(groupId: string, userId: string, permissions?: {
@@ -273,7 +283,7 @@ declare class TelegramManager {
                 username: string;
             };
             media: {
-                type: "document" | "video" | "photo";
+                type: "video" | "photo" | "document";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -286,23 +296,28 @@ declare class TelegramManager {
         endDate?: Date;
         offset?: number;
         limit?: number;
+        maxId?: number;
+        minId?: number;
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "video" | "photo" | "document";
             thumb: any;
             caption: string;
             date: number;
             mediaDetails: {
-                filename: string;
-                duration: number;
-                mimeType: string;
                 size: bigInt.BigInteger;
+                mimeType: string;
+                fileName: string;
+                duration: number;
+                width: number;
+                height: number;
             };
         }[];
         total: number;
         hasMore: boolean;
     }>;
+    safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
     private generateCSV;
     private generateVCard;
     exportContacts(format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
@@ -367,5 +382,103 @@ declare class TelegramManager {
         includedChatsCount: any;
         excludedChatsCount: any;
     }[]>;
+    sendMediaBatch(options: {
+        chatId: string;
+        media: Array<{
+            type: 'photo' | 'video' | 'document';
+            url: string;
+            caption?: string;
+            fileName?: string;
+        }>;
+        silent?: boolean;
+        scheduleDate?: number;
+    }): Promise<Api.TypeUpdates>;
+    private getMimeType;
+    private getMediaAttributes;
+    editMessage(options: {
+        chatId: string;
+        messageId: number;
+        text?: string;
+        media?: {
+            type: 'photo' | 'video' | 'document';
+            url: string;
+        };
+    }): Promise<Api.TypeUpdates>;
+    getChats(options: {
+        limit?: number;
+        offsetDate?: number;
+        offsetId?: number;
+        offsetPeer?: string;
+        folderId?: number;
+    }): Promise<{
+        id: string;
+        title: string;
+        username: string;
+        type: string;
+        unreadCount: number;
+        lastMessage: {
+            id: number;
+            text: string;
+            date: Date;
+        };
+    }[]>;
+    updateChatSettings(settings: {
+        chatId: string;
+        title?: string;
+        about?: string;
+        photo?: string;
+        slowMode?: number;
+        linkedChat?: string;
+        defaultSendAs?: string;
+    }): Promise<boolean>;
+    getMessageStats(options: {
+        chatId: string;
+        period: 'day' | 'week' | 'month';
+        fromDate?: Date;
+    }): Promise<{
+        total: number;
+        withMedia: number;
+        withLinks: number;
+        withForwards: number;
+        byHour: any[];
+        byType: {
+            text: number;
+            photo: number;
+            video: number;
+            document: number;
+            other: number;
+        };
+    }>;
+    getTopPrivateChats(): Promise<Array<{
+        chatId: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+        totalMessages: number;
+        interactionScore: number;
+        calls: {
+            total: number;
+            incoming: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+            outgoing: {
+                total: number;
+                audio: number;
+                video: number;
+            };
+        };
+        media: {
+            photos: number;
+            videos: number;
+        };
+        activityBreakdown: {
+            videoCalls: number;
+            audioCalls: number;
+            mediaSharing: number;
+            textMessages: number;
+        };
+    }>>;
 }
 export default TelegramManager;

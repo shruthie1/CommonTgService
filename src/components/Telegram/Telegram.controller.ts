@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, UsePipes, ValidationPipe, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, UsePipes, ValidationPipe, Delete, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
@@ -387,6 +387,33 @@ export class TelegramController {
         });
     }
 
+    @Get('session/info/:mobile')
+    @ApiOperation({ summary: 'Get session information' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getSessionInfo(@Param('mobile') mobile: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getSessionInfo(mobile);
+        });
+    }
+
+    @Post('session/terminate/:mobile')
+    @ApiOperation({ summary: 'Terminate specific session' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async terminateSession(
+        @Param('mobile') mobile: string,
+        @Body() data: {
+            hash: string;
+            type: 'app' | 'web';
+            exceptCurrent?: boolean;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.terminateSession(mobile, data);
+        });
+    }
+
     // Monitoring & Health
     @Get('monitoring/status')
     @ApiOperation({ summary: 'Get service health and connection status' })
@@ -514,18 +541,20 @@ export class TelegramController {
         });
     }
 
-    @Post('media/download/:mobile')
+    @Get('media/download/:mobile')
     @ApiOperation({ summary: 'Download media from a message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiBody({ type: MediaDownloadDto })
+    @ApiQuery({ name: 'chatId', required: true })
+    @ApiQuery({ name: 'messageId', required: true })
     async downloadMedia(
         @Param('mobile') mobile: string,
-        @Body() downloadDto: MediaDownloadDto,
+        @Query('chatId') chatId: string,
+        @Query('messageId') messageId: number,
         @Res() res: Response
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.downloadMediaFile(mobile, downloadDto.messageId, downloadDto.chatId, res);
+            return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
         });
     }
 
@@ -562,16 +591,22 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get filtered media messages from a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'types', enum: ['photo', 'video', 'document'], required: false })
+    @ApiQuery({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true })
     @ApiQuery({ name: 'startDate', required: false })
     @ApiQuery({ name: 'endDate', required: false })
+    @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
+    @ApiQuery({ name: 'minId', required: false, type: Number })
+    @ApiQuery({ name: 'maxId', required: false, type: Number })
     @ApiResponse({ status: 200, type: [MediaMetadataDto] })
     async getFilteredMedia(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
-        @Query('type') types?: ('photo' | 'video' | 'document' | 'voice')[],
+        @Query('types') types?: ('photo' | 'video' | 'document' | 'voice')[],
         @Query('startDate') startDate?: string,
-        @Query('endDate') endDate?: string
+        @Query('endDate') endDate?: string,
+        @Query('limit') limit?: number,
+        @Query('minId') minId?: number,
+        @Query('maxId') maxId?: number
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
@@ -579,7 +614,10 @@ export class TelegramController {
                 chatId,
                 types,
                 startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined
+                endDate: endDate ? new Date(endDate) : undefined,
+                limit,
+                minId,
+                maxId
             });
         });
     }
@@ -1059,6 +1097,145 @@ export class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getChatFolders(mobile);
+        });
+    }
+
+    @Put('messages/:mobile')
+    @ApiOperation({ summary: 'Edit message' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async editMessage(
+        @Param('mobile') mobile: string,
+        @Body() options: {
+            chatId: string;
+            messageId: number;
+            text?: string;
+            media?: {
+                type: 'photo' | 'video' | 'document';
+                url: string;
+            };
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.editMessage(mobile, options);
+        });
+    }
+
+    @Post('chat/settings/:mobile')
+    @ApiOperation({ summary: 'Update chat settings' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async updateChatSettings(
+        @Param('mobile') mobile: string,
+        @Body() settings: {
+            chatId: string;
+            title?: string;
+            about?: string;
+            photo?: string;
+            slowMode?: number;
+            linkedChat?: string;
+            defaultSendAs?: string;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.updateChatSettings(mobile, settings);
+        });
+    }
+
+    @Post('media/batch/:mobile')
+    @ApiOperation({ summary: 'Send multiple media files in batch' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async sendMediaBatch(
+        @Param('mobile') mobile: string,
+        @Body() options: {
+            chatId: string;
+            media: Array<{
+                type: 'photo' | 'video' | 'document';
+                url: string;
+                caption?: string;
+                fileName?: string;
+            }>;
+            silent?: boolean;
+            scheduleDate?: number;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.sendMediaBatch(mobile, options);
+        });
+    }
+
+    @Get('security/2fa-status/:mobile')
+    @ApiOperation({ summary: 'Check if 2FA password is set' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async hasPassword(@Param('mobile') mobile: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.hasPassword(mobile);
+        });
+    }
+
+    @Get('chats/:mobile')
+    @ApiOperation({ summary: 'Get chats with advanced filtering' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getChats(
+        @Param('mobile') mobile: string,
+        @Query('limit') limit?: number,
+        @Query('offsetDate') offsetDate?: number,
+        @Query('offsetId') offsetId?: number,
+        @Query('offsetPeer') offsetPeer?: string,
+        @Query('folderId') folderId?: number
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getChats(mobile, {
+                limit,
+                offsetDate,
+                offsetId,
+                offsetPeer,
+                folderId
+            });
+        });
+    }
+
+    @Get('file/url/:mobile')
+    @ApiOperation({ summary: 'Get downloadable URL for a file' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getFileUrl(
+        @Param('mobile') mobile: string,
+        @Query('url') url: string,
+        @Query('filename') filename: string
+    ): Promise<string> {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getFileUrl(mobile, url, filename);
+        });
+    }
+
+    @Get('messages/stats/:mobile')
+    @ApiOperation({ summary: 'Get message statistics' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getMessageStats(
+        @Param('mobile') mobile: string,
+        @Body() options: {
+            chatId: string;
+            period: 'day' | 'week' | 'month';
+            fromDate?: Date;
+        }
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getMessageStats(mobile, options);
+        });
+    }
+
+    @Get('chats/top-private/:mobile')
+    @ApiOperation({ summary: 'Get top 5 private chats with detailed statistics' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    async getTopPrivateChats(@Param('mobile') mobile: string) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getTopPrivateChats(mobile);
         });
     }
 }

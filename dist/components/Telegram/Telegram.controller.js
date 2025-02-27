@@ -180,6 +180,18 @@ let TelegramController = class TelegramController {
             return this.telegramService.createNewSession(mobile);
         });
     }
+    async getSessionInfo(mobile) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getSessionInfo(mobile);
+        });
+    }
+    async terminateSession(mobile, data) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.terminateSession(mobile, data);
+        });
+    }
     async getConnectionStatus() {
         return {
             status: await this.telegramService.getConnectionStatus()
@@ -233,10 +245,10 @@ let TelegramController = class TelegramController {
             return client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
         });
     }
-    async downloadMedia(mobile, downloadDto, res) {
+    async downloadMedia(mobile, chatId, messageId, res) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.downloadMediaFile(mobile, downloadDto.messageId, downloadDto.chatId, res);
+            return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
         });
     }
     async sendMediaAlbum(mobile, albumDto) {
@@ -251,14 +263,15 @@ let TelegramController = class TelegramController {
             return this.telegramService.getMediaMetadata(mobile, searchDto.chatId, searchDto.offset, searchDto.limit);
         });
     }
-    async getFilteredMedia(mobile, chatId, types, startDate, endDate) {
+    async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getFilteredMedia(mobile, {
                 chatId,
                 types,
                 startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined
+                endDate: endDate ? new Date(endDate) : undefined,
+                limit
             });
         });
     }
@@ -455,6 +468,60 @@ let TelegramController = class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getChatFolders(mobile);
+        });
+    }
+    async editMessage(mobile, options) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.editMessage(mobile, options);
+        });
+    }
+    async updateChatSettings(mobile, settings) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.updateChatSettings(mobile, settings);
+        });
+    }
+    async sendMediaBatch(mobile, options) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.sendMediaBatch(mobile, options);
+        });
+    }
+    async hasPassword(mobile) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.hasPassword(mobile);
+        });
+    }
+    async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getChats(mobile, {
+                limit,
+                offsetDate,
+                offsetId,
+                offsetPeer,
+                folderId
+            });
+        });
+    }
+    async getFileUrl(mobile, url, filename) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getFileUrl(mobile, url, filename);
+        });
+    }
+    async getMessageStats(mobile, options) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getMessageStats(mobile, options);
+        });
+    }
+    async getTopPrivateChats(mobile) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            return this.telegramService.getTopPrivateChats(mobile);
         });
     }
 };
@@ -703,6 +770,25 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "createNewSession", null);
 __decorate([
+    (0, common_1.Get)('session/info/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get session information' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getSessionInfo", null);
+__decorate([
+    (0, common_1.Post)('session/terminate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Terminate specific session' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "terminateSession", null);
+__decorate([
     (0, common_1.Get)('monitoring/status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get service health and connection status' }),
     (0, swagger_1.ApiResponse)({ status: 200, type: common_responses_dto_1.ConnectionStatusDto }),
@@ -796,15 +882,17 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMedia", null);
 __decorate([
-    (0, common_1.Post)('media/download/:mobile'),
+    (0, common_1.Get)('media/download/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Download media from a message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.MediaDownloadDto }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'messageId', required: true }),
     __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Body)()),
-    __param(2, (0, common_1.Res)()),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('messageId')),
+    __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.MediaDownloadDto, Object]),
+    __metadata("design:paramtypes", [String, String, Number, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "downloadMedia", null);
 __decorate([
@@ -835,17 +923,19 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get filtered media messages from a chat' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'types', enum: ['photo', 'video', 'document'], required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true }),
     (0, swagger_1.ApiQuery)({ name: 'startDate', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'endDate', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
     (0, swagger_1.ApiResponse)({ status: 200, type: [metadata_operations_dto_1.MediaMetadataDto] }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
-    __param(2, (0, common_1.Query)('type')),
+    __param(2, (0, common_1.Query)('types')),
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
+    __param(5, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Array, String, String]),
+    __metadata("design:paramtypes", [String, String, Array, String, String, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
@@ -1174,6 +1264,89 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChatFolders", null);
+__decorate([
+    (0, common_1.Put)('messages/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Edit message' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "editMessage", null);
+__decorate([
+    (0, common_1.Post)('chat/settings/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update chat settings' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "updateChatSettings", null);
+__decorate([
+    (0, common_1.Post)('media/batch/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send multiple media files in batch' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "sendMediaBatch", null);
+__decorate([
+    (0, common_1.Get)('security/2fa-status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check if 2FA password is set' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "hasPassword", null);
+__decorate([
+    (0, common_1.Get)('chats/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chats with advanced filtering' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('offsetDate')),
+    __param(3, (0, common_1.Query)('offsetId')),
+    __param(4, (0, common_1.Query)('offsetPeer')),
+    __param(5, (0, common_1.Query)('folderId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Number, Number, String, Number]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getChats", null);
+__decorate([
+    (0, common_1.Get)('file/url/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('url')),
+    __param(2, (0, common_1.Query)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getFileUrl", null);
+__decorate([
+    (0, common_1.Get)('messages/stats/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get message statistics' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getMessageStats", null);
+__decorate([
+    (0, common_1.Get)('chats/top-private/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get top 5 private chats with detailed statistics' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getTopPrivateChats", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

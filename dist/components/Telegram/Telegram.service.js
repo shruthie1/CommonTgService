@@ -547,12 +547,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async updatePrivacyBatch(mobile, settings) {
         return this.executeWithConnection(mobile, 'Update privacy settings batch', (client) => client.updatePrivacyBatch(settings));
     }
-    async createBackup(mobile, options) {
-        return this.executeWithConnection(mobile, 'Create backup', (client) => client.createBackup(options));
-    }
-    async downloadBackup(mobile, options) {
-        return this.executeWithConnection(mobile, 'Download backup', (client) => client.downloadBackup(options));
-    }
     async setContentFilters(mobile, filters) {
         return this.executeWithConnection(mobile, 'Set content filters', (client) => client.setContentFilters(filters));
     }
@@ -629,6 +623,41 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async getChatFolders(mobile) {
         return this.executeWithConnection(mobile, 'Get chat folders', (client) => client.getChatFolders());
+    }
+    async getSessionInfo(mobile) {
+        return this.executeWithConnection(mobile, 'Get session info', (client) => client.getSessionInfo());
+    }
+    async terminateSession(mobile, options) {
+        return this.executeWithConnection(mobile, 'Terminate session', (client) => client.terminateSession(options));
+    }
+    async editMessage(mobile, options) {
+        return this.executeWithConnection(mobile, 'Edit message', (client) => client.editMessage(options));
+    }
+    async updateChatSettings(mobile, settings) {
+        return this.executeWithConnection(mobile, 'Update chat settings', (client) => client.updateChatSettings(settings));
+    }
+    async sendMediaBatch(mobile, options) {
+        return this.executeWithConnection(mobile, 'Send media batch', (client) => client.sendMediaBatch(options));
+    }
+    async hasPassword(mobile) {
+        return this.executeWithConnection(mobile, 'Check password status', (client) => client.hasPassword());
+    }
+    async getContacts(mobile) {
+        return this.executeWithConnection(mobile, 'Get contacts list', (client) => client.getContacts());
+    }
+    async getChats(mobile, options) {
+        return this.executeWithConnection(mobile, 'Get chats', (client) => client.getChats(options));
+    }
+    async getFileUrl(mobile, url, filename) {
+        return this.executeWithConnection(mobile, 'Get file URL', (client) => client.getFileUrl(url, filename));
+    }
+    async getMessageStats(mobile, options) {
+        return this.executeWithConnection(mobile, 'Get message statistics', (client) => client.getMessageStats(options));
+    }
+    async getTopPrivateChats(mobile) {
+        return this.executeWithConnection(mobile, 'Get top private chats', async (client) => {
+            return client.getTopPrivateChats();
+        });
     }
 };
 exports.TelegramService = TelegramService;
