@@ -91,13 +91,23 @@ export class AppController {
                 method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
                 headers: { type: 'object', additionalProperties: { type: 'string' } },
                 data: { type: 'object', description: 'Request body data' },
-                params: { type: 'object', additionalProperties: { type: 'string' } }
+                params: { type: 'object', additionalProperties: { type: 'string' } },
+                responseType: { type: 'string', enum: ['json', 'text', 'blob', 'arraybuffer', 'stream'], default: 'json' },
+                timeout: { type: 'number', description: 'Request timeout in milliseconds' }
             }
         }
     })
     async executeRequest(@Body(new ValidationPipe({ transform: true })) requestDetails: ExecuteRequestDto): Promise<RequestResponse> {
         try {
-            const { url, method = 'GET', headers = {}, data, params } = requestDetails;
+            const { 
+                url, 
+                method = 'GET', 
+                headers = {}, 
+                data, 
+                params, 
+                responseType = 'json',
+                timeout = 30000
+            } = requestDetails;
             
             const response: AxiosResponse = await axios({
                 url,
@@ -105,15 +115,63 @@ export class AppController {
                 headers,
                 data,
                 params,
+                responseType,
+                timeout,
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
                 validateStatus: () => true // This ensures axios doesn't throw error for non-2xx responses
             });
 
-            return response.data;
+            // Prepare response headers
+            const responseHeaders = Object.entries(response.headers).reduce((acc, [key, value]) => {
+                acc[key] = Array.isArray(value) ? value.join(', ') : value;
+                return acc;
+            }, {});
+
+            // Handle different response types
+            let responseData = response.data;
+            const contentType = response.headers['content-type'];
+
+            // If response is binary and responseType wasn't specified
+            if (contentType?.includes('application/octet-stream') && responseType === 'json') {
+                responseData = Buffer.from(response.data).toString('base64');
+            }
+
+            // If response is XML and responseType is json, try to parse it
+            if (contentType?.includes('xml') && responseType === 'json') {
+                try {
+                    // Return raw XML if it can't be parsed to JSON
+                    responseData = response.data;
+                } catch (e) {
+                    console.warn('Could not parse XML response to JSON');
+                }
+            }
+
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                headers: responseHeaders,
+                data: responseData
+            };
         } catch (error) {
-            throw new HttpException({
+            // Enhanced error handling
+            const errorResponse = {
                 message: 'Failed to execute request',
-                error: error.message
-            }, 500);
+                error: error.message,
+                code: error.code,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                headers: error.response?.headers,
+            };
+
+            // Handle specific error types
+            if (error.code === 'ECONNABORTED') {
+                errorResponse.message = 'Request timed out';
+            } else if (error.code === 'ENOTFOUND') {
+                errorResponse.message = 'Host not found';
+            }
+
+            throw new HttpException(errorResponse, error.response?.status || 500);
         }
     }
 }
