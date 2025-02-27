@@ -225,7 +225,7 @@ export declare class TelegramService implements OnModuleDestroy {
                 username: string;
             };
             media: {
-                type: "video" | "photo" | "document";
+                type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -243,7 +243,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "video" | "photo" | "document";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;

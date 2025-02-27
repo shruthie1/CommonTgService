@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MediaDownloadDto = exports.VoiceMessageDto = exports.SendMediaAlbumDto = exports.MediaAlbumItemDto = exports.SendMediaDto = exports.MediaFilterDto = exports.MediaSearchDto = exports.BaseMediaOperationDto = exports.MediaType = void 0;
+exports.VoiceMessageDto = exports.SendMediaAlbumDto = exports.MediaAlbumItemDto = exports.SendMediaDto = exports.MediaFilterDto = exports.MediaSearchDto = exports.BaseMediaOperationDto = exports.MediaType = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
@@ -149,12 +149,4 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], VoiceMessageDto.prototype, "caption", void 0);
-class MediaDownloadDto extends BaseMediaOperationDto {
-}
-exports.MediaDownloadDto = MediaDownloadDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'ID of the message containing the media' }),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], MediaDownloadDto.prototype, "messageId", void 0);
 //# sourceMappingURL=media-operations.dto.js.map
