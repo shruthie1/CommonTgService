@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, promises as fs } from 'fs';
 import { diskStorage, File as MulterFile } from 'multer';
 import { join } from 'path';
 import { CloudinaryService } from './cloudinary';
-import axios, { AxiosResponse } from 'axios';
+import axios, { AxiosResponse, ResponseType } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
 import { randomUUID } from 'crypto';
 import { Response } from 'express';
@@ -94,18 +94,18 @@ export class AppController {
         const startTime = Date.now();
 
         try {
-            const { 
-                url, 
-                method = 'GET', 
-                headers = {}, 
-                data, 
-                params, 
+            const {
+                url,
+                method = 'GET',
+                headers = {},
+                data,
+                params,
                 responseType = 'json',
                 timeout = 30000,
                 followRedirects = true,
                 maxRedirects = 5
             } = requestDetails;
-            
+
             // Log request details
             this.logger.log({
                 message: 'Executing HTTP request',
@@ -120,7 +120,7 @@ export class AppController {
                     dataSize: data ? JSON.stringify(data).length : 0
                 }
             });
-            
+
             const response = await axios({
                 url,
                 method,
@@ -134,7 +134,6 @@ export class AppController {
                 maxBodyLength: Infinity,
                 validateStatus: () => true,
                 decompress: true,
-                responseEncoding: null // Important: Don't decode the response
             });
 
             // Set response status
@@ -144,7 +143,7 @@ export class AppController {
             Object.entries(response.headers).forEach(([key, value]) => {
                 // Skip transfer-encoding as it might conflict with our response
                 if (key.toLowerCase() === 'transfer-encoding') return;
-                
+
                 if (Array.isArray(value)) {
                     res.setHeader(key, value);
                 } else {
@@ -164,18 +163,18 @@ export class AppController {
             });
 
             // For binary responses, send the raw buffer
-            if (responseType === 'arraybuffer' || 
+            if (responseType === 'arraybuffer' ||
                 response.headers['content-type']?.includes('application/octet-stream') ||
                 response.headers['content-type']?.includes('image/') ||
                 response.headers['content-type']?.includes('audio/') ||
                 response.headers['content-type']?.includes('video/') ||
                 response.headers['content-type']?.includes('application/pdf')) {
-                
+
                 // Ensure content-type is preserved
                 if (!res.getHeader('content-type') && response.headers['content-type']) {
                     res.setHeader('content-type', response.headers['content-type']);
                 }
-                
+
                 // Send raw buffer for binary data
                 return res.send(Buffer.from(response.data));
             }
@@ -205,7 +204,7 @@ export class AppController {
                         res.setHeader(key, value as string);
                     }
                 });
-                
+
                 return res.status(error.response.status).send(error.response.data);
             }
 

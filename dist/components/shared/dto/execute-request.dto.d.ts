@@ -1,10 +1,11 @@
 import { Method } from 'axios';
-export declare enum ResponseType {
+declare enum ResponseType {
     JSON = "json",
     TEXT = "text",
+    STREAM = "stream",
     BLOB = "blob",
-    ARRAYBUFFER = "arraybuffer",
-    STREAM = "stream"
+    DOCUMENT = "document",
+    ARRAYBUFFER = "arraybuffer"
 }
 export declare class ExecuteRequestDto {
     url: string;
@@ -17,3 +18,4 @@ export declare class ExecuteRequestDto {
     followRedirects?: boolean;
     maxRedirects?: number;
 }
+export {};

@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ExecuteRequestDto = exports.ResponseType = void 0;
+exports.ExecuteRequestDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
@@ -17,10 +17,11 @@ var ResponseType;
 (function (ResponseType) {
     ResponseType["JSON"] = "json";
     ResponseType["TEXT"] = "text";
-    ResponseType["BLOB"] = "blob";
-    ResponseType["ARRAYBUFFER"] = "arraybuffer";
     ResponseType["STREAM"] = "stream";
-})(ResponseType || (exports.ResponseType = ResponseType = {}));
+    ResponseType["BLOB"] = "blob";
+    ResponseType["DOCUMENT"] = "document";
+    ResponseType["ARRAYBUFFER"] = "arraybuffer";
+})(ResponseType || (ResponseType = {}));
 class ExecuteRequestDto {
 }
 exports.ExecuteRequestDto = ExecuteRequestDto;
@@ -42,7 +43,7 @@ __decorate([
     __metadata("design:type", Object)
 ], ExecuteRequestDto.prototype, "headers", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Request body data' }),
+    (0, swagger_1.ApiPropertyOptional)({ enum: ResponseType, default: ResponseType.JSON }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], ExecuteRequestDto.prototype, "data", void 0);

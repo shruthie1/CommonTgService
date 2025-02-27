@@ -1,14 +1,15 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsUrl, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsEnum, IsObject, IsUrl, IsNumber, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Method } from 'axios';
 import { Transform } from 'class-transformer';
 
-export enum ResponseType {
+enum ResponseType {
     JSON = 'json',
     TEXT = 'text',
+    STREAM = 'stream',
     BLOB = 'blob',
-    ARRAYBUFFER = 'arraybuffer',
-    STREAM = 'stream'
+    DOCUMENT = 'document',
+    ARRAYBUFFER = 'arraybuffer'
 }
 
 export class ExecuteRequestDto {
