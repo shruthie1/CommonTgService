@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UploadedFile, UseInterceptors, Body, HttpException, ValidationPipe, Logger } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFile, UseInterceptors, Body, HttpException, ValidationPipe, Logger, Res } from '@nestjs/common';
 import { AppService } from './app.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -9,6 +9,7 @@ import { CloudinaryService } from './cloudinary';
 import axios, { AxiosResponse } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
 import { randomUUID } from 'crypto';
+import { Response } from 'express';
 
 interface RequestResponse {
     status: number;
@@ -85,23 +86,11 @@ export class AppController {
 
     @Post('execute-request')
     @ApiOperation({ summary: 'Execute an HTTP request with given details' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            required: ['url'],
-            properties: {
-                url: { type: 'string', description: 'The URL to send the request to' },
-                method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
-                headers: { type: 'object', additionalProperties: { type: 'string' } },
-                data: { type: 'object', description: 'Request body data' },
-                params: { type: 'object', additionalProperties: { type: 'string' } },
-                responseType: { type: 'string', enum: ['json', 'text', 'blob', 'arraybuffer', 'stream'], default: 'json' },
-                timeout: { type: 'number', description: 'Request timeout in milliseconds' }
-            }
-        }
-    })
-    async executeRequest(@Body(new ValidationPipe({ transform: true })) requestDetails: ExecuteRequestDto): Promise<RequestResponse> {
-        const requestId = randomUUID(); // Generate unique request ID for tracking
+    async executeRequest(
+        @Body(new ValidationPipe({ transform: true })) requestDetails: ExecuteRequestDto,
+        @Res() res: Response
+    ) {
+        const requestId = randomUUID();
         const startTime = Date.now();
 
         try {
@@ -128,13 +117,11 @@ export class AppController {
                     params,
                     responseType,
                     timeout,
-                    followRedirects,
-                    maxRedirects,
                     dataSize: data ? JSON.stringify(data).length : 0
                 }
             });
             
-            const response: AxiosResponse = await axios({
+            const response = await axios({
                 url,
                 method,
                 headers,
@@ -145,137 +132,67 @@ export class AppController {
                 maxRedirects: followRedirects ? maxRedirects : 0,
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
-                validateStatus: () => true, // This ensures axios doesn't throw error for non-2xx responses
-                responseEncoding: responseType === 'json' ? 'utf8' : null // Allow binary responses
+                validateStatus: () => true,
+                decompress: true,
+                responseEncoding: responseType === 'json' ? 'utf8' : null
             });
 
-            const executionTime = Date.now() - startTime;
+            // Set response status
+            res.status(response.status);
 
-            // Prepare response headers
-            const responseHeaders = Object.entries(response.headers).reduce((acc, [key, value]) => {
-                acc[key] = Array.isArray(value) ? value.join(', ') : value;
-                return acc;
-            }, {});
-
-            // Handle different response types
-            let responseData = response.data;
-            const contentType = response.headers['content-type'];
-
-            // Handle binary responses
-            if (responseType === 'arraybuffer') {
-                // Convert ArrayBuffer to Base64
-                const buffer = Buffer.from(response.data);
-                responseData = {
-                    data: buffer.toString('base64'),
-                    mimeType: contentType || 'application/octet-stream',
-                    size: buffer.length
-                };
-                
-                this.logger.debug({
-                    message: 'Processed ArrayBuffer response',
-                    requestId,
-                    contentType,
-                    size: buffer.length
-                });
-            }
-            // Handle binary response when responseType is not specified
-            else if (contentType?.includes('application/octet-stream') || 
-                    contentType?.includes('application/pdf') ||
-                    contentType?.includes('image/') ||
-                    contentType?.includes('audio/') ||
-                    contentType?.includes('video/')) {
-                const buffer = Buffer.from(response.data);
-                responseData = {
-                    data: buffer.toString('base64'),
-                    mimeType: contentType,
-                    size: buffer.length
-                };
-
-                this.logger.debug({
-                    message: 'Converted binary response to base64',
-                    requestId,
-                    contentType,
-                    size: buffer.length
-                });
-            }
-            // If response is XML and responseType is json, try to parse it
-            else if (contentType?.includes('xml') && responseType === 'json') {
-                try {
-                    responseData = response.data;
-                } catch (e) {
-                    this.logger.warn({
-                        message: 'Could not parse XML response to JSON',
-                        requestId,
-                        error: e.message
-                    });
+            // Copy all headers from the upstream response
+            Object.entries(response.headers).forEach(([key, value]) => {
+                // Handle array of header values
+                if (Array.isArray(value)) {
+                    res.setHeader(key, value);
+                } else {
+                    res.setHeader(key, value as string);
                 }
-            }
+            });
 
             // Log response details
             this.logger.log({
-                message: 'Request completed successfully',
+                message: 'Request completed',
                 requestId,
                 metrics: {
-                    executionTime,
-                    responseSize: typeof responseData === 'object' ? 
-                        responseData.size || JSON.stringify(responseData).length : 
-                        responseData?.length,
+                    executionTime: Date.now() - startTime,
                     status: response.status
-                },
-                response: {
-                    status: response.status,
-                    statusText: response.statusText,
-                    contentType,
-                    headers: this.sanitizeHeaders(responseHeaders)
                 }
             });
 
-            return {
-                status: response.status,
-                statusText: response.statusText,
-                headers: responseHeaders,
-                data: responseData
-            };
+            // Send the response data directly
+            return res.send(response.data);
+
         } catch (error) {
-            const executionTime = Date.now() - startTime;
-
-            // Enhanced error handling with detailed logging
-            const errorResponse = {
-                message: 'Failed to execute request',
-                error: error.message,
-                code: error.code,
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                headers: error.response?.headers,
-            };
-
-            // Handle specific error types
-            if (error.code === 'ECONNABORTED') {
-                errorResponse.message = 'Request timed out';
-            } else if (error.code === 'ENOTFOUND') {
-                errorResponse.message = 'Host not found';
-            }
-
-            // Log error details
             this.logger.error({
                 message: 'Request failed',
                 requestId,
-                metrics: {
-                    executionTime,
-                    errorCode: error.code
-                },
                 error: {
                     message: error.message,
-                    stack: error.stack,
-                    response: error.response ? {
-                        status: error.response.status,
-                        statusText: error.response.statusText,
-                        headers: this.sanitizeHeaders(error.response.headers)
-                    } : undefined
+                    code: error.code,
+                    stack: error.stack
                 }
             });
 
-            throw new HttpException(errorResponse, error.response?.status || 500);
+            // Handle error response
+            if (error.response) {
+                // Copy error response headers
+                Object.entries(error.response.headers).forEach(([key, value]) => {
+                    if (Array.isArray(value)) {
+                        res.setHeader(key, value);
+                    } else {
+                        res.setHeader(key, value as string);
+                    }
+                });
+                
+                return res.status(error.response.status).send(error.response.data);
+            }
+
+            // Handle network or other errors
+            return res.status(500).json({
+                message: error.message,
+                code: error.code
+            });
         }
     }
 

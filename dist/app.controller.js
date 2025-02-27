@@ -52,7 +52,7 @@ let AppController = class AppController {
             throw error;
         }
     }
-    async executeRequest(requestDetails) {
+    async executeRequest(requestDetails, res) {
         const requestId = (0, crypto_1.randomUUID)();
         const startTime = Date.now();
         try {
@@ -67,8 +67,6 @@ let AppController = class AppController {
                     params,
                     responseType,
                     timeout,
-                    followRedirects,
-                    maxRedirects,
                     dataSize: data ? JSON.stringify(data).length : 0
                 }
             });
@@ -84,117 +82,53 @@ let AppController = class AppController {
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
                 validateStatus: () => true,
+                decompress: true,
                 responseEncoding: responseType === 'json' ? 'utf8' : null
             });
-            const executionTime = Date.now() - startTime;
-            const responseHeaders = Object.entries(response.headers).reduce((acc, [key, value]) => {
-                acc[key] = Array.isArray(value) ? value.join(', ') : value;
-                return acc;
-            }, {});
-            let responseData = response.data;
-            const contentType = response.headers['content-type'];
-            if (responseType === 'arraybuffer') {
-                const buffer = Buffer.from(response.data);
-                responseData = {
-                    data: buffer.toString('base64'),
-                    mimeType: contentType || 'application/octet-stream',
-                    size: buffer.length
-                };
-                this.logger.debug({
-                    message: 'Processed ArrayBuffer response',
-                    requestId,
-                    contentType,
-                    size: buffer.length
-                });
-            }
-            else if (contentType?.includes('application/octet-stream') ||
-                contentType?.includes('application/pdf') ||
-                contentType?.includes('image/') ||
-                contentType?.includes('audio/') ||
-                contentType?.includes('video/')) {
-                const buffer = Buffer.from(response.data);
-                responseData = {
-                    data: buffer.toString('base64'),
-                    mimeType: contentType,
-                    size: buffer.length
-                };
-                this.logger.debug({
-                    message: 'Converted binary response to base64',
-                    requestId,
-                    contentType,
-                    size: buffer.length
-                });
-            }
-            else if (contentType?.includes('xml') && responseType === 'json') {
-                try {
-                    responseData = response.data;
+            res.status(response.status);
+            Object.entries(response.headers).forEach(([key, value]) => {
+                if (Array.isArray(value)) {
+                    res.setHeader(key, value);
                 }
-                catch (e) {
-                    this.logger.warn({
-                        message: 'Could not parse XML response to JSON',
-                        requestId,
-                        error: e.message
-                    });
-                }
-            }
-            this.logger.log({
-                message: 'Request completed successfully',
-                requestId,
-                metrics: {
-                    executionTime,
-                    responseSize: typeof responseData === 'object' ?
-                        responseData.size || JSON.stringify(responseData).length :
-                        responseData?.length,
-                    status: response.status
-                },
-                response: {
-                    status: response.status,
-                    statusText: response.statusText,
-                    contentType,
-                    headers: this.sanitizeHeaders(responseHeaders)
+                else {
+                    res.setHeader(key, value);
                 }
             });
-            return {
-                status: response.status,
-                statusText: response.statusText,
-                headers: responseHeaders,
-                data: responseData
-            };
+            this.logger.log({
+                message: 'Request completed',
+                requestId,
+                metrics: {
+                    executionTime: Date.now() - startTime,
+                    status: response.status
+                }
+            });
+            return res.send(response.data);
         }
         catch (error) {
-            const executionTime = Date.now() - startTime;
-            const errorResponse = {
-                message: 'Failed to execute request',
-                error: error.message,
-                code: error.code,
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                headers: error.response?.headers,
-            };
-            if (error.code === 'ECONNABORTED') {
-                errorResponse.message = 'Request timed out';
-            }
-            else if (error.code === 'ENOTFOUND') {
-                errorResponse.message = 'Host not found';
-            }
             this.logger.error({
                 message: 'Request failed',
                 requestId,
-                metrics: {
-                    executionTime,
-                    errorCode: error.code
-                },
                 error: {
                     message: error.message,
-                    stack: error.stack,
-                    response: error.response ? {
-                        status: error.response.status,
-                        statusText: error.response.statusText,
-                        headers: this.sanitizeHeaders(error.response.headers)
-                    } : undefined
+                    code: error.code,
+                    stack: error.stack
                 }
             });
-            throw new common_1.HttpException(errorResponse, error.response?.status || 500);
+            if (error.response) {
+                Object.entries(error.response.headers).forEach(([key, value]) => {
+                    if (Array.isArray(value)) {
+                        res.setHeader(key, value);
+                    }
+                    else {
+                        res.setHeader(key, value);
+                    }
+                });
+                return res.status(error.response.status).send(error.response.data);
+            }
+            return res.status(500).json({
+                message: error.message,
+                code: error.code
+            });
         }
     }
     sanitizeHeaders(headers) {
@@ -256,24 +190,10 @@ __decorate([
 __decorate([
     (0, common_1.Post)('execute-request'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute an HTTP request with given details' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            required: ['url'],
-            properties: {
-                url: { type: 'string', description: 'The URL to send the request to' },
-                method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
-                headers: { type: 'object', additionalProperties: { type: 'string' } },
-                data: { type: 'object', description: 'Request body data' },
-                params: { type: 'object', additionalProperties: { type: 'string' } },
-                responseType: { type: 'string', enum: ['json', 'text', 'blob', 'arraybuffer', 'stream'], default: 'json' },
-                timeout: { type: 'number', description: 'Request timeout in milliseconds' }
-            }
-        }
-    }),
     __param(0, (0, common_1.Body)(new common_1.ValidationPipe({ transform: true }))),
+    __param(1, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [execute_request_dto_1.ExecuteRequestDto]),
+    __metadata("design:paramtypes", [execute_request_dto_1.ExecuteRequestDto, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "executeRequest", null);
 exports.AppController = AppController = __decorate([
