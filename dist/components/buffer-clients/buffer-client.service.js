@@ -189,6 +189,13 @@ let BufferClientService = class BufferClientService {
                                     this.removeFromBufferMap(mobile);
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);
                                 }
+                                if (error.message === "SESSION_REVOKED" ||
+                                    error.message === "AUTH_KEY_UNREGISTERED" ||
+                                    error.message === "USER_DEACTIVATED" ||
+                                    error.message === "USER_DEACTIVATED_BAN") {
+                                    console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                    await this.remove(mobile);
+                                }
                             }
                             await this.telegramService.deleteClient(mobile);
                         }
@@ -252,7 +259,7 @@ let BufferClientService = class BufferClientService {
             await (0, Helpers_1.sleep)(2000);
             const bufferclients = await this.findAll();
             let goodIds = [];
-            let badIds = [];
+            const badIds = [];
             if (bufferclients.length < 70) {
                 for (let i = 0; i < 70 - bufferclients.length; i++) {
                     badIds.push(i.toString());
