@@ -11,37 +11,29 @@ const logbots_1 = require("./logbots");
 const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
 async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
-    if (!url)
+    if (!url) {
+        console.error('URL is empty');
         return undefined;
+    }
     options.timeout = options.timeout || 30000;
     options.method = options.method || "GET";
     let lastError = null;
-    console.log(`trying: ${url}`);
+    console.log(`Trying: ${url}`);
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
         const currentTimeout = options.timeout + (attempt * 5000);
         const timeoutId = setTimeout(() => controller.abort(), currentTimeout);
         try {
-            try {
-                const response = await (0, axios_1.default)({
-                    ...options,
-                    url,
-                    signal: controller.signal,
-                    httpAgent: new http_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
-                    httpsAgent: new https_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
-                    maxRedirects: 5,
-                });
-                clearTimeout(timeoutId);
-                return response;
-            }
-            catch (axiosError) {
-                if (shouldTryFetchFallback(axiosError)) {
-                    const fetchResponse = await makeFetchRequest(url, options, controller.signal);
-                    clearTimeout(timeoutId);
-                    return fetchResponse;
-                }
-                throw axiosError;
-            }
+            const response = await (0, axios_1.default)({
+                ...options,
+                url,
+                signal: controller.signal,
+                httpAgent: new http_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
+                httpsAgent: new https_1.default.Agent({ keepAlive: true, timeout: currentTimeout }),
+                maxRedirects: 5,
+            });
+            clearTimeout(timeoutId);
+            return response;
         }
         catch (error) {
             clearTimeout(timeoutId);
@@ -72,7 +64,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
                 notify(`Attempting bypass for`, { message: `host=${host}\nendpoint=${endpoint}` });
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully Excuted 403 Request`, { message: `host=${host}\nendpoint=${endpoint}` });
+                    notify(`Successfully executed 403 request`, { message: `host=${host}\nendpoint=${endpoint}` });
                     return bypassResponse;
                 }
                 catch (bypassError) {
@@ -96,8 +88,10 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
 }
 exports.fetchWithTimeout = fetchWithTimeout;
 async function makeBypassRequest(url, options) {
-    if (!options.bypassUrl && !process.env.bypassURL)
-        return undefined;
+    if (!options.bypassUrl && !process.env.bypassURL) {
+        console.error('Bypass URL is not provided');
+        throw new Error('Bypass URL is not provided');
+    }
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
     return axios_1.default.post(options.bypassUrl, {
         url,
@@ -132,7 +126,9 @@ function notify(prefix, errorDetails) {
     const errorMessage = typeof errorDetails.message === 'string'
         ? errorDetails.message
         : JSON.stringify(errorDetails.message);
-    console.log(prefix, errorDetails);
+    console.error(`${prefix}\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
+        errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
+            (0, parseError_1.extractMessage)(errorDetails?.message)}`);
     if (errorDetails.status === 429)
         return;
     const notificationText = `${prefix}\n\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
@@ -154,34 +150,5 @@ function calculateBackoff(attempt) {
     const base = Math.min(minDelay * Math.pow(2, attempt), maxDelay);
     const jitter = Math.random() * (base * 0.2);
     return Math.floor(base + jitter);
-}
-function shouldTryFetchFallback(error) {
-    return axios_1.default.isAxiosError(error) &&
-        ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK", "ECONNREFUSED"].includes(error.code);
-}
-async function makeFetchRequest(url, options, signal) {
-    const fetchOptions = {
-        method: options.method,
-        headers: options.headers,
-        body: options.data ? JSON.stringify(options.data) : undefined,
-        signal,
-        keepalive: true,
-        credentials: 'same-origin'
-    };
-    const response = await fetch(url, fetchOptions);
-    let data;
-    try {
-        data = await response.json();
-    }
-    catch (e) {
-        data = await response.text();
-    }
-    return {
-        data,
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers),
-        config: options,
-    };
 }
 //# sourceMappingURL=fetchWithTimeout.js.map
