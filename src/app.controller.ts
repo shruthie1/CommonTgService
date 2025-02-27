@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UploadedFile, UseInterceptors, Body, HttpException, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFile, UseInterceptors, Body, HttpException, ValidationPipe, Logger } from '@nestjs/common';
 import { AppService } from './app.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -8,6 +8,7 @@ import { join } from 'path';
 import { CloudinaryService } from './cloudinary';
 import axios, { AxiosResponse } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
+import { randomUUID } from 'crypto';
 
 interface RequestResponse {
     status: number;
@@ -18,6 +19,8 @@ interface RequestResponse {
 
 @Controller()
 export class AppController {
+    private logger = new Logger('AppController');
+
     constructor(private readonly appService: AppService) {}
 
     @Get()
@@ -98,6 +101,9 @@ export class AppController {
         }
     })
     async executeRequest(@Body(new ValidationPipe({ transform: true })) requestDetails: ExecuteRequestDto): Promise<RequestResponse> {
+        const requestId = randomUUID(); // Generate unique request ID for tracking
+        const startTime = Date.now();
+
         try {
             const { 
                 url, 
@@ -106,8 +112,27 @@ export class AppController {
                 data, 
                 params, 
                 responseType = 'json',
-                timeout = 30000
+                timeout = 30000,
+                followRedirects = true,
+                maxRedirects = 5
             } = requestDetails;
+            
+            // Log request details
+            this.logger.log({
+                message: 'Executing HTTP request',
+                requestId,
+                details: {
+                    url,
+                    method,
+                    headers: this.sanitizeHeaders(headers),
+                    params,
+                    responseType,
+                    timeout,
+                    followRedirects,
+                    maxRedirects,
+                    dataSize: data ? JSON.stringify(data).length : 0
+                }
+            });
             
             const response: AxiosResponse = await axios({
                 url,
@@ -117,10 +142,13 @@ export class AppController {
                 params,
                 responseType,
                 timeout,
+                maxRedirects: followRedirects ? maxRedirects : 0,
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
                 validateStatus: () => true // This ensures axios doesn't throw error for non-2xx responses
             });
+
+            const executionTime = Date.now() - startTime;
 
             // Prepare response headers
             const responseHeaders = Object.entries(response.headers).reduce((acc, [key, value]) => {
@@ -135,17 +163,42 @@ export class AppController {
             // If response is binary and responseType wasn't specified
             if (contentType?.includes('application/octet-stream') && responseType === 'json') {
                 responseData = Buffer.from(response.data).toString('base64');
+                this.logger.debug({
+                    message: 'Converted binary response to base64',
+                    requestId,
+                    contentType
+                });
             }
 
             // If response is XML and responseType is json, try to parse it
             if (contentType?.includes('xml') && responseType === 'json') {
                 try {
-                    // Return raw XML if it can't be parsed to JSON
                     responseData = response.data;
                 } catch (e) {
-                    console.warn('Could not parse XML response to JSON');
+                    this.logger.warn({
+                        message: 'Could not parse XML response to JSON',
+                        requestId,
+                        error: e.message
+                    });
                 }
             }
+
+            // Log response details
+            this.logger.log({
+                message: 'Request completed successfully',
+                requestId,
+                metrics: {
+                    executionTime,
+                    responseSize: JSON.stringify(responseData).length,
+                    status: response.status
+                },
+                response: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    contentType,
+                    headers: this.sanitizeHeaders(responseHeaders)
+                }
+            });
 
             return {
                 status: response.status,
@@ -154,7 +207,9 @@ export class AppController {
                 data: responseData
             };
         } catch (error) {
-            // Enhanced error handling
+            const executionTime = Date.now() - startTime;
+
+            // Enhanced error handling with detailed logging
             const errorResponse = {
                 message: 'Failed to execute request',
                 error: error.message,
@@ -171,7 +226,39 @@ export class AppController {
                 errorResponse.message = 'Host not found';
             }
 
+            // Log error details
+            this.logger.error({
+                message: 'Request failed',
+                requestId,
+                metrics: {
+                    executionTime,
+                    errorCode: error.code
+                },
+                error: {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response ? {
+                        status: error.response.status,
+                        statusText: error.response.statusText,
+                        headers: this.sanitizeHeaders(error.response.headers)
+                    } : undefined
+                }
+            });
+
             throw new HttpException(errorResponse, error.response?.status || 500);
         }
+    }
+
+    // Helper method to sanitize sensitive headers
+    private sanitizeHeaders(headers: Record<string, any>): Record<string, any> {
+        const sensitiveHeaders = ['authorization', 'cookie', 'set-cookie'];
+        return Object.entries(headers).reduce((acc, [key, value]) => {
+            if (sensitiveHeaders.includes(key.toLowerCase())) {
+                acc[key] = '[REDACTED]';
+            } else {
+                acc[key] = value;
+            }
+            return acc;
+        }, {});
     }
 }
