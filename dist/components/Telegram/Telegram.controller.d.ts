@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType } from './dto';
@@ -35,7 +36,7 @@ export declare class TelegramController {
                 username: string;
             };
             media: {
-                type: "photo" | "video" | "document";
+                type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -123,7 +124,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "photo" | "video" | "document";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;
