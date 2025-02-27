@@ -20,6 +20,9 @@ export async function fetchWithTimeout(
     let lastError: Error | null = null;
 
     console.log(`Trying: ${url}`);
+    const parsedUrl = new URL(url);
+    const host = parsedUrl.host;
+    const endpoint = parsedUrl.pathname + parsedUrl.search;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
@@ -40,10 +43,7 @@ export async function fetchWithTimeout(
         } catch (error) {
             clearTimeout(timeoutId);
             lastError = error;
-            const parsedError = parseError(error, url, false);
-            const parsedUrl = new URL(url);
-            const host = parsedUrl.host;
-            const endpoint = parsedUrl.pathname + parsedUrl.search;
+            const parsedError = parseError(error, `host: ${host}\nendpoint:${endpoint}`, false);
 
             const message = extractMessage(parsedError);
             const isTimeout = axios.isAxiosError(error) &&
@@ -71,7 +71,7 @@ export async function fetchWithTimeout(
                     notify(`Successfully executed 403 request`, { message: `host=${host}\nendpoint=${endpoint}` });
                     return bypassResponse;
                 } catch (bypassError) {
-                    const errorDetails = extractMessage(parseError(bypassError, url, false));
+                    const errorDetails = extractMessage(parseError(bypassError, `host: ${host}\nendpoint:${endpoint}`, false));
                     notify(`Bypass attempt failed`, `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}`);
                     return undefined;
                 }
@@ -86,7 +86,7 @@ export async function fetchWithTimeout(
             return undefined;
         }
     }
-    const errorData = extractMessage(parseError(lastError, url, false));
+    const errorData = extractMessage(parseError(lastError, `host: ${host}\nendpoint:${endpoint}`, false));
     notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
     return undefined;
 }
