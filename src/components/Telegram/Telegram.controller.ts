@@ -4,7 +4,6 @@ import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
     SendMediaDto,
-    MediaDownloadDto,
     SendMediaAlbumDto,
     MediaSearchDto,
     GroupSettingsDto,

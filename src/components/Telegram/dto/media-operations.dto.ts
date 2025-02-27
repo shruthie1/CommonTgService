@@ -110,9 +110,3 @@ export class VoiceMessageDto extends BaseMediaOperationDto {
   @IsString()
   caption?: string;
 }
-
-export class MediaDownloadDto extends BaseMediaOperationDto {
-  @ApiProperty({ description: 'ID of the message containing the media' })
-  @IsNumber()
-  messageId: number;
-}

@@ -9,7 +9,7 @@ export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
     private handleTelegramOperation;
-    connect(mobile: string): Promise<import("./TelegramManager").default>;
+    connect(mobile: string): Promise<import("src").TelegramManager>;
     disconnect(mobile: string): Promise<boolean>;
     disconnectAllClients(): Promise<void>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
@@ -41,7 +41,7 @@ export declare class TelegramController {
         }[];
         total: number;
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
     joinChannel(mobile: string, channel: string, forward?: boolean, fromChatId?: string): Promise<void | import("telegram").Api.TypeUpdates>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
@@ -86,7 +86,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;

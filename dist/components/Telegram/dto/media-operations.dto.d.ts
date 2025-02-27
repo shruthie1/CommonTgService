@@ -36,6 +36,3 @@ export declare class VoiceMessageDto extends BaseMediaOperationDto {
     duration?: number;
     caption?: string;
 }
-export declare class MediaDownloadDto extends BaseMediaOperationDto {
-    messageId: number;
-}
