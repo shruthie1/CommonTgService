@@ -32,7 +32,7 @@ export class BufferClientService {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,
-    ) { }
+    ) {}
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
         const newUser = new this.bufferClientModel(bufferClient);
@@ -204,6 +204,13 @@ export class BufferClientService {
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);
                                     // await this.update(mobile, { channels: channels.ids.length });
                                 }
+                                if (error.message === "SESSION_REVOKED" ||
+                                    error.message === "AUTH_KEY_UNREGISTERED" ||
+                                    error.message === "USER_DEACTIVATED" ||
+                                    error.message === "USER_DEACTIVATED_BAN") {
+                                    console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                    await this.remove(mobile);
+                                }
                             }
                             await this.telegramService.deleteClient(mobile);
                         } else {
@@ -280,7 +287,7 @@ export class BufferClientService {
             await sleep(2000);
             const bufferclients = await this.findAll();
             let goodIds: string[] = [];
-            let badIds: string[] = [];
+            const badIds: string[] = [];
             if (bufferclients.length < 70) {
                 for (let i = 0; i < 70 - bufferclients.length; i++) {
                     badIds.push(i.toString())
