@@ -198,6 +198,13 @@ let PromoteClientService = class PromoteClientService {
                                     this.removeFromPromoteMap(mobile);
                                     const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                                 }
+                                if (error.message === "SESSION_REVOKED" ||
+                                    error.message === "AUTH_KEY_UNREGISTERED" ||
+                                    error.message === "USER_DEACTIVATED" ||
+                                    error.message === "USER_DEACTIVATED_BAN") {
+                                    console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                    await this.remove(mobile);
+                                }
                             }
                             finally {
                                 await this.telegramService.deleteClient(mobile);
@@ -274,7 +281,7 @@ let PromoteClientService = class PromoteClientService {
             await (0, Helpers_1.sleep)(2000);
             const promoteclients = await this.findAll();
             let goodIds = [];
-            let badIds = [];
+            const badIds = [];
             if (promoteclients.length < 80) {
                 for (let i = 0; i < 80 - promoteclients.length && badIds.length < 4; i++) {
                     badIds.push(i.toString());
