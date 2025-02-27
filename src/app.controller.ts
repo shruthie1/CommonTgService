@@ -145,7 +145,8 @@ export class AppController {
                 maxRedirects: followRedirects ? maxRedirects : 0,
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
-                validateStatus: () => true // This ensures axios doesn't throw error for non-2xx responses
+                validateStatus: () => true, // This ensures axios doesn't throw error for non-2xx responses
+                responseEncoding: responseType === 'json' ? 'utf8' : null // Allow binary responses
             });
 
             const executionTime = Date.now() - startTime;
@@ -160,18 +161,45 @@ export class AppController {
             let responseData = response.data;
             const contentType = response.headers['content-type'];
 
-            // If response is binary and responseType wasn't specified
-            if (contentType?.includes('application/octet-stream') && responseType === 'json') {
-                responseData = Buffer.from(response.data).toString('base64');
+            // Handle binary responses
+            if (responseType === 'arraybuffer') {
+                // Convert ArrayBuffer to Base64
+                const buffer = Buffer.from(response.data);
+                responseData = {
+                    data: buffer.toString('base64'),
+                    mimeType: contentType || 'application/octet-stream',
+                    size: buffer.length
+                };
+                
+                this.logger.debug({
+                    message: 'Processed ArrayBuffer response',
+                    requestId,
+                    contentType,
+                    size: buffer.length
+                });
+            }
+            // Handle binary response when responseType is not specified
+            else if (contentType?.includes('application/octet-stream') || 
+                    contentType?.includes('application/pdf') ||
+                    contentType?.includes('image/') ||
+                    contentType?.includes('audio/') ||
+                    contentType?.includes('video/')) {
+                const buffer = Buffer.from(response.data);
+                responseData = {
+                    data: buffer.toString('base64'),
+                    mimeType: contentType,
+                    size: buffer.length
+                };
+
                 this.logger.debug({
                     message: 'Converted binary response to base64',
                     requestId,
-                    contentType
+                    contentType,
+                    size: buffer.length
                 });
             }
-
             // If response is XML and responseType is json, try to parse it
-            if (contentType?.includes('xml') && responseType === 'json') {
+            else if (contentType?.includes('xml') && responseType === 'json') {
                 try {
                     responseData = response.data;
                 } catch (e) {
@@ -189,7 +217,9 @@ export class AppController {
                 requestId,
                 metrics: {
                     executionTime,
-                    responseSize: JSON.stringify(responseData).length,
+                    responseSize: typeof responseData === 'object' ? 
+                        responseData.size || JSON.stringify(responseData).length : 
+                        responseData?.length,
                     status: response.status
                 },
                 response: {
