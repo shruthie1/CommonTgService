@@ -9,11 +9,13 @@ interface RequestResponse {
 }
 export declare class AppController {
     private readonly appService;
+    private logger;
     constructor(appService: AppService);
     getHello(): string;
     uploadFileAndUpdate(file: MulterFile): Promise<{
         message: string;
     }>;
     executeRequest(requestDetails: ExecuteRequestDto): Promise<RequestResponse>;
+    private sanitizeHeaders;
 }
 export {};

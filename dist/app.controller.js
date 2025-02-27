@@ -26,9 +26,11 @@ const multer_1 = require("multer");
 const path_1 = require("path");
 const axios_1 = __importDefault(require("axios"));
 const execute_request_dto_1 = require("./components/shared/dto/execute-request.dto");
+const crypto_1 = require("crypto");
 let AppController = class AppController {
     constructor(appService) {
         this.appService = appService;
+        this.logger = new common_1.Logger('AppController');
     }
     getHello() {
         return this.appService.getHello();
@@ -51,8 +53,25 @@ let AppController = class AppController {
         }
     }
     async executeRequest(requestDetails) {
+        const requestId = (0, crypto_1.randomUUID)();
+        const startTime = Date.now();
         try {
-            const { url, method = 'GET', headers = {}, data, params, responseType = 'json', timeout = 30000 } = requestDetails;
+            const { url, method = 'GET', headers = {}, data, params, responseType = 'json', timeout = 30000, followRedirects = true, maxRedirects = 5 } = requestDetails;
+            this.logger.log({
+                message: 'Executing HTTP request',
+                requestId,
+                details: {
+                    url,
+                    method,
+                    headers: this.sanitizeHeaders(headers),
+                    params,
+                    responseType,
+                    timeout,
+                    followRedirects,
+                    maxRedirects,
+                    dataSize: data ? JSON.stringify(data).length : 0
+                }
+            });
             const response = await (0, axios_1.default)({
                 url,
                 method,
@@ -61,10 +80,12 @@ let AppController = class AppController {
                 params,
                 responseType,
                 timeout,
+                maxRedirects: followRedirects ? maxRedirects : 0,
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
                 validateStatus: () => true
             });
+            const executionTime = Date.now() - startTime;
             const responseHeaders = Object.entries(response.headers).reduce((acc, [key, value]) => {
                 acc[key] = Array.isArray(value) ? value.join(', ') : value;
                 return acc;
@@ -73,15 +94,39 @@ let AppController = class AppController {
             const contentType = response.headers['content-type'];
             if (contentType?.includes('application/octet-stream') && responseType === 'json') {
                 responseData = Buffer.from(response.data).toString('base64');
+                this.logger.debug({
+                    message: 'Converted binary response to base64',
+                    requestId,
+                    contentType
+                });
             }
             if (contentType?.includes('xml') && responseType === 'json') {
                 try {
                     responseData = response.data;
                 }
                 catch (e) {
-                    console.warn('Could not parse XML response to JSON');
+                    this.logger.warn({
+                        message: 'Could not parse XML response to JSON',
+                        requestId,
+                        error: e.message
+                    });
                 }
             }
+            this.logger.log({
+                message: 'Request completed successfully',
+                requestId,
+                metrics: {
+                    executionTime,
+                    responseSize: JSON.stringify(responseData).length,
+                    status: response.status
+                },
+                response: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    contentType,
+                    headers: this.sanitizeHeaders(responseHeaders)
+                }
+            });
             return {
                 status: response.status,
                 statusText: response.statusText,
@@ -90,6 +135,7 @@ let AppController = class AppController {
             };
         }
         catch (error) {
+            const executionTime = Date.now() - startTime;
             const errorResponse = {
                 message: 'Failed to execute request',
                 error: error.message,
@@ -104,8 +150,37 @@ let AppController = class AppController {
             else if (error.code === 'ENOTFOUND') {
                 errorResponse.message = 'Host not found';
             }
+            this.logger.error({
+                message: 'Request failed',
+                requestId,
+                metrics: {
+                    executionTime,
+                    errorCode: error.code
+                },
+                error: {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response ? {
+                        status: error.response.status,
+                        statusText: error.response.statusText,
+                        headers: this.sanitizeHeaders(error.response.headers)
+                    } : undefined
+                }
+            });
             throw new common_1.HttpException(errorResponse, error.response?.status || 500);
         }
+    }
+    sanitizeHeaders(headers) {
+        const sensitiveHeaders = ['authorization', 'cookie', 'set-cookie'];
+        return Object.entries(headers).reduce((acc, [key, value]) => {
+            if (sensitiveHeaders.includes(key.toLowerCase())) {
+                acc[key] = '[REDACTED]';
+            }
+            else {
+                acc[key] = value;
+            }
+            return acc;
+        }, {});
     }
 };
 exports.AppController = AppController;
