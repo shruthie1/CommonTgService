@@ -19,6 +19,9 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
     options.method = options.method || "GET";
     let lastError = null;
     console.log(`Trying: ${url}`);
+    const parsedUrl = new URL(url);
+    const host = parsedUrl.host;
+    const endpoint = parsedUrl.pathname + parsedUrl.search;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
         const currentTimeout = options.timeout + (attempt * 5000);
@@ -38,10 +41,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
         catch (error) {
             clearTimeout(timeoutId);
             lastError = error;
-            const parsedError = (0, parseError_1.parseError)(error, url, false);
-            const parsedUrl = new URL(url);
-            const host = parsedUrl.host;
-            const endpoint = parsedUrl.pathname + parsedUrl.search;
+            const parsedError = (0, parseError_1.parseError)(error, `host: ${host}\nendpoint:${endpoint}`, false);
             const message = (0, parseError_1.extractMessage)(parsedError);
             const isTimeout = axios_1.default.isAxiosError(error) &&
                 (error.code === "ECONNABORTED" ||
@@ -68,7 +68,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
                     return bypassResponse;
                 }
                 catch (bypassError) {
-                    const errorDetails = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(bypassError, url, false));
+                    const errorDetails = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(bypassError, `host: ${host}\nendpoint:${endpoint}`, false));
                     notify(`Bypass attempt failed`, `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}`);
                     return undefined;
                 }
@@ -82,7 +82,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
             return undefined;
         }
     }
-    const errorData = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(lastError, url, false));
+    const errorData = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(lastError, `host: ${host}\nendpoint:${endpoint}`, false));
     notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
     return undefined;
 }
