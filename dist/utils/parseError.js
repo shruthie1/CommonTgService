@@ -98,7 +98,7 @@ function parseError(err, prefix, sendErr = true) {
                 !fullMessage.toLowerCase().includes('could not find') &&
                 !fullMessage.includes('ECONNREFUSED');
             if (shouldSend) {
-                const notifUrl = `${(0, logbots_1.notifbot)()}&text=${prefixStr} :: ${err.errorMessage ? err.errorMessage : fullMessage}`;
+                const notifUrl = `${(0, logbots_1.notifbot)()}&text=${prefixStr} :: ${err.errorMessage ? err.errorMessage : (0, exports.extractMessage)(message)}`;
                 (0, fetchWithTimeout_1.fetchWithTimeout)(notifUrl);
             }
         }
