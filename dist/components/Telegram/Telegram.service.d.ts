@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";

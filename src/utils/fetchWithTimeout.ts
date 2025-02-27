@@ -4,9 +4,6 @@ import { extractMessage, parseError } from "./parseError";
 import { ppplbot } from "./logbots";
 import http from 'http';
 import https from 'https';
-import { Logger } from '@nestjs/common';
-
-const logger = new Logger('fetchWithTimeout');
 
 export async function fetchWithTimeout(
     url: string,
@@ -14,7 +11,7 @@ export async function fetchWithTimeout(
     maxRetries = 3
 ): Promise<AxiosResponse | undefined> {
     if (!url) {
-        logger.error('URL is empty');
+        console.error('URL is empty');
         return undefined;
     }
 
@@ -22,7 +19,7 @@ export async function fetchWithTimeout(
     options.method = options.method || "GET";
     let lastError: Error | null = null;
 
-    logger.log(`Trying: ${url}`);
+    console.log(`Trying: ${url}`);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
@@ -55,7 +52,7 @@ export async function fetchWithTimeout(
                     parsedError.status === 408);
 
             if (isTimeout) {
-                logger.error(`Request timeout (${options.timeout}ms): ${url}`);
+                console.error(`Request timeout (${options.timeout}ms): ${url}`);
                 notify(`Timeout on attempt ${attempt}`, {
                     message: `host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
                     status: 408
@@ -82,7 +79,7 @@ export async function fetchWithTimeout(
 
             if (attempt < maxRetries && (shouldRetry(error, parsedError) || isRetryableStatus(parsedError.status))) {
                 const delay = calculateBackoff(attempt);
-                logger.log(`Retrying request (${attempt + 1}/${maxRetries}) after ${delay}ms`);
+                console.log(`Retrying request (${attempt + 1}/${maxRetries}) after ${delay}ms`);
                 await sleep(delay);
                 continue;
             }
@@ -96,7 +93,7 @@ export async function fetchWithTimeout(
 
 async function makeBypassRequest(url: string, options: AxiosRequestConfig & { bypassUrl?: string }): Promise<AxiosResponse | undefined> {
     if (!options.bypassUrl && !process.env.bypassURL) {
-        logger.error('Bypass URL is not provided');
+        console.error('Bypass URL is not provided');
         throw new Error('Bypass URL is not provided');
     }
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
@@ -139,7 +136,7 @@ function notify(prefix: string, errorDetails: any) {
         ? errorDetails.message
         : JSON.stringify(errorDetails.message);
 
-    logger.error(`${prefix}\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
+    console.error(`${prefix}\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
         errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
             extractMessage(errorDetails?.message)
         }`);
@@ -154,7 +151,7 @@ function notify(prefix: string, errorDetails: any) {
     try {
         axios.get(`${ppplbot(process.env.httpFailuresChannel)}&text=${encodeURIComponent(notificationText)}`);
     } catch (error) {
-        logger.error("Failed to notify failure:", error);
+        console.error("Failed to notify failure:", error);
     }
 }
 

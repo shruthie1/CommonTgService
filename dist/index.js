@@ -16622,17 +16622,15 @@ const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseE
 const logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
 const http_1 = __importDefault(__webpack_require__(/*! http */ "http"));
 const https_1 = __importDefault(__webpack_require__(/*! https */ "https"));
-const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const logger = new common_1.Logger('fetchWithTimeout');
 async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
     if (!url) {
-        logger.error('URL is empty');
+        console.error('URL is empty');
         return undefined;
     }
     options.timeout = options.timeout || 30000;
     options.method = options.method || "GET";
     let lastError = null;
-    logger.log(`Trying: ${url}`);
+    console.log(`Trying: ${url}`);
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
         const currentTimeout = options.timeout + (attempt * 5000);
@@ -16662,7 +16660,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
                     error.message.includes("timeout") ||
                     parsedError.status === 408);
             if (isTimeout) {
-                logger.error(`Request timeout (${options.timeout}ms): ${url}`);
+                console.error(`Request timeout (${options.timeout}ms): ${url}`);
                 notify(`Timeout on attempt ${attempt}`, {
                     message: `host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
                     status: 408
@@ -16689,7 +16687,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
             }
             if (attempt < maxRetries && (shouldRetry(error, parsedError) || isRetryableStatus(parsedError.status))) {
                 const delay = calculateBackoff(attempt);
-                logger.log(`Retrying request (${attempt + 1}/${maxRetries}) after ${delay}ms`);
+                console.log(`Retrying request (${attempt + 1}/${maxRetries}) after ${delay}ms`);
                 await (0, Helpers_1.sleep)(delay);
                 continue;
             }
@@ -16703,7 +16701,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
 exports.fetchWithTimeout = fetchWithTimeout;
 async function makeBypassRequest(url, options) {
     if (!options.bypassUrl && !process.env.bypassURL) {
-        logger.error('Bypass URL is not provided');
+        console.error('Bypass URL is not provided');
         throw new Error('Bypass URL is not provided');
     }
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
@@ -16740,7 +16738,7 @@ function notify(prefix, errorDetails) {
     const errorMessage = typeof errorDetails.message === 'string'
         ? errorDetails.message
         : JSON.stringify(errorDetails.message);
-    logger.error(`${prefix}\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
+    console.error(`${prefix}\n${errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
         errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
             (0, parseError_1.extractMessage)(errorDetails?.message)}`);
     if (errorDetails.status === 429)
@@ -16752,7 +16750,7 @@ function notify(prefix, errorDetails) {
         axios_1.default.get(`${(0, logbots_1.ppplbot)(process.env.httpFailuresChannel)}&text=${encodeURIComponent(notificationText)}`);
     }
     catch (error) {
-        logger.error("Failed to notify failure:", error);
+        console.error("Failed to notify failure:", error);
     }
 }
 function isRetryableStatus(status) {
