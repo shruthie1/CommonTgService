@@ -950,23 +950,6 @@ class TelegramManager {
             res.status(500).send('Error downloading media');
         }
     }
-    async handleMediaDownload(operation, timeout = 5000) {
-        try {
-            return await this.downloadWithTimeout(operation(), timeout);
-        }
-        catch (error) {
-            if (error.message === 'Download timeout') {
-                console.warn('Media download timeout');
-            }
-            else if (error.message.includes('FILE_REFERENCE_EXPIRED')) {
-                console.warn('File reference expired');
-            }
-            else {
-                console.error('Media download error:', error.message);
-            }
-            return null;
-        }
-    }
     async downloadWithTimeout(promise, timeout) {
         return Promise.race([
             promise,
@@ -1961,10 +1944,12 @@ class TelegramManager {
     async getFilteredMedia(params) {
         if (!this.client)
             throw new Error('Client not initialized');
-        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50 } = params;
+        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50, maxId, minId } = params;
         const query = {
             offsetId: offset,
             limit: limit || 500,
+            ...(maxId ? { maxId } : {}),
+            ...(minId ? { minId } : {}),
             ...(startDate && { minDate: Math.floor(startDate.getTime() / 1000) }),
             ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
         };

@@ -263,7 +263,7 @@ let TelegramController = class TelegramController {
             return this.telegramService.getMediaMetadata(mobile, searchDto.chatId, searchDto.offset, searchDto.limit);
         });
     }
-    async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit) {
+    async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, minId, maxId) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.getFilteredMedia(mobile, {
@@ -271,7 +271,9 @@ let TelegramController = class TelegramController {
                 types,
                 startDate: startDate ? new Date(startDate) : undefined,
                 endDate: endDate ? new Date(endDate) : undefined,
-                limit
+                limit,
+                minId,
+                maxId
             });
         });
     }
@@ -927,6 +929,8 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'startDate', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'endDate', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
     (0, swagger_1.ApiResponse)({ status: 200, type: [metadata_operations_dto_1.MediaMetadataDto] }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
@@ -934,8 +938,10 @@ __decorate([
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
     __param(5, (0, common_1.Query)('limit')),
+    __param(6, (0, common_1.Query)('minId')),
+    __param(7, (0, common_1.Query)('maxId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Array, String, String, Number]),
+    __metadata("design:paramtypes", [String, String, Array, String, String, Number, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([

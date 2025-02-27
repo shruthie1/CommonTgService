@@ -194,7 +194,7 @@ declare class TelegramManager {
         exceptCurrent?: boolean;
     }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "day" | "week" | "month";
+        period: "week" | "month" | "day";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -283,7 +283,7 @@ declare class TelegramManager {
                 username: string;
             };
             media: {
-                type: "video" | "photo" | "document";
+                type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -301,7 +301,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "video" | "photo" | "document";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;
