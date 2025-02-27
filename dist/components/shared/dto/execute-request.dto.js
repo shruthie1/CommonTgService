@@ -43,7 +43,7 @@ __decorate([
     __metadata("design:type", Object)
 ], ExecuteRequestDto.prototype, "headers", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: ResponseType, default: ResponseType.JSON }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Request body data' }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], ExecuteRequestDto.prototype, "data", void 0);

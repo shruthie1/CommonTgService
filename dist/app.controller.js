@@ -84,7 +84,6 @@ let AppController = class AppController {
                 validateStatus: () => true,
                 decompress: true,
             });
-            console.log("response: ", response.data);
             res.status(response.status);
             Object.entries(response.headers).forEach(([key, value]) => {
                 if (key.toLowerCase() === 'transfer-encoding')
@@ -114,10 +113,8 @@ let AppController = class AppController {
                 if (!res.getHeader('content-type') && response.headers['content-type']) {
                     res.setHeader('content-type', response.headers['content-type']);
                 }
-                console.log("Sending raw buffer for binary data");
                 return res.send(Buffer.from(response.data));
             }
-            console.log("sending response json data ");
             return res.send(response.data);
         }
         catch (error) {

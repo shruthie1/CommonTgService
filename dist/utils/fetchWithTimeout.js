@@ -97,7 +97,6 @@ async function makeBypassRequest(url, options) {
         responseType: options.responseType || 'json',
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        responseEncoding: options.responseType === 'json' ? 'utf8' : null,
         timeout: options.timeout || 30000,
         httpAgent: new http_1.default.Agent({ keepAlive: true }),
         httpsAgent: new https_1.default.Agent({ keepAlive: true })
