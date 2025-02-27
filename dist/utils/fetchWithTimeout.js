@@ -93,13 +93,40 @@ async function makeBypassRequest(url, options) {
         throw new Error('Bypass URL is not provided');
     }
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
-    return axios_1.default.post(options.bypassUrl, {
+    const bypassAxios = axios_1.default.create({
+        responseType: options.responseType || 'json',
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        responseEncoding: options.responseType === 'json' ? 'utf8' : null,
+        timeout: options.timeout || 30000,
+        httpAgent: new http_1.default.Agent({ keepAlive: true }),
+        httpsAgent: new https_1.default.Agent({ keepAlive: true })
+    });
+    const response = await bypassAxios.post(options.bypassUrl, {
         url,
         method: options.method,
         headers: options.headers,
         data: options.data,
         params: options.params,
+        responseType: options.responseType,
+        timeout: options.timeout,
+        followRedirects: options.maxRedirects !== 0,
+        maxRedirects: options.maxRedirects
+    }, {
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
+    if (options.responseType === 'arraybuffer' ||
+        response.headers['content-type']?.includes('application/octet-stream') ||
+        response.headers['content-type']?.includes('image/') ||
+        response.headers['content-type']?.includes('audio/') ||
+        response.headers['content-type']?.includes('video/') ||
+        response.headers['content-type']?.includes('application/pdf')) {
+        response.data = Buffer.from(response.data);
+    }
+    return response;
 }
 function shouldRetry(error, parsedError) {
     if (axios_1.default.isAxiosError(error)) {
