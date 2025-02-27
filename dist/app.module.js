@@ -30,11 +30,9 @@ const promote_client_module_1 = require("./components/promote-clients/promote-cl
 const TgSignup_module_1 = require("./components/TgSignup/TgSignup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
 const npoint_module_1 = require("./components/n-point/npoint.module");
-const throttle_middleware_1 = require("./middlewares/throttle.middleware");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
-        consumer.apply(throttle_middleware_1.ThrottleMiddleware).exclude({ path: 'execute-request', method: common_1.RequestMethod.ALL }).forRoutes('*');
     }
 };
 exports.AppModule = AppModule;
