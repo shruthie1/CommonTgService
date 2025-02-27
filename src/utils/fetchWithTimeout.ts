@@ -96,14 +96,57 @@ async function makeBypassRequest(url: string, options: AxiosRequestConfig & { by
         console.error('Bypass URL is not provided');
         throw new Error('Bypass URL is not provided');
     }
+
     options.bypassUrl = options.bypassUrl || `${process.env.bypassURL}/execute-request`;
-    return axios.post(options.bypassUrl, {
+
+    // Create a new Axios instance for the bypass request
+    const bypassAxios = axios.create({
+        // Set responseType to arraybuffer for binary responses
+        responseType: options.responseType || 'json',
+        // Increase max content length for large files
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        // Preserve the original response encoding
+        responseEncoding: options.responseType === 'json' ? 'utf8' : null,
+        // Configure timeout
+        timeout: options.timeout || 30000,
+        // Configure HTTP/HTTPS agents for better connection handling
+        httpAgent: new http.Agent({ keepAlive: true }),
+        httpsAgent: new https.Agent({ keepAlive: true })
+    });
+
+    // Make the bypass request with all necessary options
+    const response = await bypassAxios.post(options.bypassUrl, {
         url,
         method: options.method,
         headers: options.headers,
         data: options.data,
         params: options.params,
+        responseType: options.responseType,
+        timeout: options.timeout,
+        followRedirects: options.maxRedirects !== 0,
+        maxRedirects: options.maxRedirects
+    }, {
+        // Ensure headers are properly forwarded
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
+
+    // For binary responses, ensure we're returning the correct format
+    if (options.responseType === 'arraybuffer' || 
+        response.headers['content-type']?.includes('application/octet-stream') ||
+        response.headers['content-type']?.includes('image/') ||
+        response.headers['content-type']?.includes('audio/') ||
+        response.headers['content-type']?.includes('video/') ||
+        response.headers['content-type']?.includes('application/pdf')) {
+        
+        // Ensure the response data is a Buffer for binary content
+        response.data = Buffer.from(response.data);
+    }
+
+    return response;
 }
 
 function shouldRetry(error: any, parsedError: any): boolean {
