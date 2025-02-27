@@ -115,8 +115,7 @@ export function parseError(
         !fullMessage.includes('ECONNREFUSED');
 
       if (shouldSend) {
-        const encodedMessage = encodeURIComponent(response.message);
-        const notifUrl = `${notifbot()}&text=${encodedMessage}`;
+        const notifUrl = `${notifbot()}&text=${prefixStr} :: ${err.errorMessage ? err.errorMessage : fullMessage}`;
         fetchWithTimeout(notifUrl);
       }
     } catch (fetchError) {

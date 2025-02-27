@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
@@ -225,7 +224,7 @@ export declare class TelegramService implements OnModuleDestroy {
                 username: string;
             };
             media: {
-                type: "document" | "video" | "photo";
+                type: "video" | "photo" | "document";
                 thumbnailUrl: string | Buffer;
             };
         }[];
@@ -243,7 +242,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "video" | "photo" | "document";
             thumb: any;
             caption: string;
             date: number;
