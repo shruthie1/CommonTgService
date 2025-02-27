@@ -189,10 +189,10 @@ let BufferClientService = class BufferClientService {
                                     this.removeFromBufferMap(mobile);
                                     const channels = await this.telegramService.getChannelInfo(mobile, true);
                                 }
-                                if (error.message === "SESSION_REVOKED" ||
-                                    error.message === "AUTH_KEY_UNREGISTERED" ||
-                                    error.message === "USER_DEACTIVATED" ||
-                                    error.message === "USER_DEACTIVATED_BAN") {
+                                if (errorDetails.message === "SESSION_REVOKED" ||
+                                    errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
+                                    errorDetails.message === "USER_DEACTIVATED" ||
+                                    errorDetails.message === "USER_DEACTIVATED_BAN") {
                                     console.log("Session Revoked or Auth Key Unregistered. Removing Client");
                                     await this.remove(mobile);
                                 }
