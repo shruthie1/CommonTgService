@@ -134,7 +134,7 @@ export class AppController {
                 maxBodyLength: Infinity,
                 validateStatus: () => true,
                 decompress: true,
-                responseEncoding: responseType === 'json' ? 'utf8' : null
+                responseEncoding: null // Important: Don't decode the response
             });
 
             // Set response status
@@ -142,7 +142,9 @@ export class AppController {
 
             // Copy all headers from the upstream response
             Object.entries(response.headers).forEach(([key, value]) => {
-                // Handle array of header values
+                // Skip transfer-encoding as it might conflict with our response
+                if (key.toLowerCase() === 'transfer-encoding') return;
+                
                 if (Array.isArray(value)) {
                     res.setHeader(key, value);
                 } else {
@@ -156,11 +158,29 @@ export class AppController {
                 requestId,
                 metrics: {
                     executionTime: Date.now() - startTime,
-                    status: response.status
+                    status: response.status,
+                    contentType: response.headers['content-type']
                 }
             });
 
-            // Send the response data directly
+            // For binary responses, send the raw buffer
+            if (responseType === 'arraybuffer' || 
+                response.headers['content-type']?.includes('application/octet-stream') ||
+                response.headers['content-type']?.includes('image/') ||
+                response.headers['content-type']?.includes('audio/') ||
+                response.headers['content-type']?.includes('video/') ||
+                response.headers['content-type']?.includes('application/pdf')) {
+                
+                // Ensure content-type is preserved
+                if (!res.getHeader('content-type') && response.headers['content-type']) {
+                    res.setHeader('content-type', response.headers['content-type']);
+                }
+                
+                // Send raw buffer for binary data
+                return res.send(Buffer.from(response.data));
+            }
+
+            // For other types, send as is
             return res.send(response.data);
 
         } catch (error) {
@@ -178,6 +198,7 @@ export class AppController {
             if (error.response) {
                 // Copy error response headers
                 Object.entries(error.response.headers).forEach(([key, value]) => {
+                    if (key.toLowerCase() === 'transfer-encoding') return;
                     if (Array.isArray(value)) {
                         res.setHeader(key, value);
                     } else {

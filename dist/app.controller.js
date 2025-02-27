@@ -83,10 +83,12 @@ let AppController = class AppController {
                 maxBodyLength: Infinity,
                 validateStatus: () => true,
                 decompress: true,
-                responseEncoding: responseType === 'json' ? 'utf8' : null
+                responseEncoding: null
             });
             res.status(response.status);
             Object.entries(response.headers).forEach(([key, value]) => {
+                if (key.toLowerCase() === 'transfer-encoding')
+                    return;
                 if (Array.isArray(value)) {
                     res.setHeader(key, value);
                 }
@@ -99,9 +101,21 @@ let AppController = class AppController {
                 requestId,
                 metrics: {
                     executionTime: Date.now() - startTime,
-                    status: response.status
+                    status: response.status,
+                    contentType: response.headers['content-type']
                 }
             });
+            if (responseType === 'arraybuffer' ||
+                response.headers['content-type']?.includes('application/octet-stream') ||
+                response.headers['content-type']?.includes('image/') ||
+                response.headers['content-type']?.includes('audio/') ||
+                response.headers['content-type']?.includes('video/') ||
+                response.headers['content-type']?.includes('application/pdf')) {
+                if (!res.getHeader('content-type') && response.headers['content-type']) {
+                    res.setHeader('content-type', response.headers['content-type']);
+                }
+                return res.send(Buffer.from(response.data));
+            }
             return res.send(response.data);
         }
         catch (error) {
@@ -116,6 +130,8 @@ let AppController = class AppController {
             });
             if (error.response) {
                 Object.entries(error.response.headers).forEach(([key, value]) => {
+                    if (key.toLowerCase() === 'transfer-encoding')
+                        return;
                     if (Array.isArray(value)) {
                         res.setHeader(key, value);
                     }
