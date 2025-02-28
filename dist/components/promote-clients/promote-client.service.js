@@ -139,11 +139,11 @@ let PromoteClientService = class PromoteClientService {
                                 }
                                 this.joinChannelMap.set(document.mobile, result);
                                 this.joinChannelQueue();
+                                await this.telegramService.deleteClient(document.mobile);
                             }
                             else {
                                 await client.leaveChannels(channels.canSendFalseChats);
                             }
-                            await this.telegramService.deleteClient(document.mobile);
                         }
                         catch (error) {
                             if (error.message === "SESSION_REVOKED" ||

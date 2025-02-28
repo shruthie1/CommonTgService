@@ -137,11 +137,11 @@ let BufferClientService = class BufferClientService {
                                 result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
                             }
                             this.joinChannelMap.set(document.mobile, result);
-                            await this.telegramService.deleteClient(document.mobile);
                             this.joinChannelQueue();
+                            await this.telegramService.deleteClient(document.mobile);
                         }
                         else {
-                            await client.leaveChannels(channels.canSendFalseChats);
+                            client.leaveChannels(channels.canSendFalseChats);
                         }
                     }
                     catch (error) {
