@@ -138,9 +138,10 @@ let BufferClientService = class BufferClientService {
                             }
                             this.joinChannelMap.set(document.mobile, result);
                             await this.telegramService.deleteClient(document.mobile);
+                            this.joinChannelQueue();
                         }
                         else {
-                            client.leaveChannels(channels.canSendFalseChats);
+                            await client.leaveChannels(channels.canSendFalseChats);
                         }
                     }
                     catch (error) {
@@ -155,7 +156,6 @@ let BufferClientService = class BufferClientService {
                         (0, parseError_1.parseError)(error);
                     }
                 }
-                this.joinChannelQueue();
             }
             console.log("Joining Channel Triggered Succesfully for ", clients.length);
             return `Initiated Joining channels ${clients.length}`;
