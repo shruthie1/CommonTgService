@@ -453,11 +453,11 @@ class TelegramManager {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
-                console.log("Failed to leave channel :", errorDetails.message);
+                console.log(`${this.phoneNumber} Failed to leave channel :`, errorDetails.message);
                 break;
             }
         }
-        console.log("Left All Channels");
+        console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
     }
     async getEntity(entity) {
         return await this.client?.getEntity(entity);
