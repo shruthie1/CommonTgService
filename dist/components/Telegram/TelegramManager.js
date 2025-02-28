@@ -442,12 +442,14 @@ class TelegramManager {
         console.log("ChatsLength: ", chats);
         for (const id of chats) {
             try {
-                await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
-                    channel: id
-                }));
-                console.log("Left channel :", id);
-                if (chats.length > 1) {
-                    await (0, Helpers_1.sleep)(30000);
+                if (this.client) {
+                    await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
+                        channel: id
+                    }));
+                    console.log("Left channel :", id);
+                    if (chats.length > 1) {
+                        await (0, Helpers_1.sleep)(30000);
+                    }
                 }
             }
             catch (error) {
@@ -455,6 +457,7 @@ class TelegramManager {
                 console.log("Failed to leave channel :", errorDetails.message);
             }
         }
+        console.log("Left All Channels");
     }
     async getEntity(entity) {
         return await this.client?.getEntity(entity);
