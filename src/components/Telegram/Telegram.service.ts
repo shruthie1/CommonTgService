@@ -135,6 +135,7 @@ export class TelegramService implements OnModuleDestroy {
                     this.metadataTracker.initializeClient(mobile);
                     this.logger.logOperation(mobile, 'Client created successfully');
                     if (autoDisconnect) {
+                        this.logger.logOperation(mobile, 'Auto Disconnecting initiated');
                         setTimeout(async () => {
                             this.logger.logOperation(mobile, 'Auto-disconnecting client');
                             if (client.connected || await this.getClient(mobile)) {
