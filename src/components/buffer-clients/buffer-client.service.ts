@@ -264,16 +264,20 @@ export class BufferClientService {
                     for (const mobile of keys) {
                         const channels = this.leaveChannelMap.get(mobile);
                         if (channels && channels.length > 0) {
-                            const channelId = channels.shift();
+                            const channelsToProcess = channels.splice(0, 10);
                             console.log(mobile, " Pending Channels to Leave:", channels.length)
                             this.leaveChannelMap.set(mobile, channels);
                             try {
-                                await this.telegramService.createClient(mobile, false, false);
-                                console.log(mobile, " Trying to leave channel:", channelId);
-                                await this.telegramService.leaveChannel(mobile, `-100${channelId}`);
+                                const client = await this.telegramService.createClient(mobile, false, false);
+                                console.log(mobile, " Trying to leave channels:", channelsToProcess.length);
+                                try {
+                                    await client.leaveChannels(channelsToProcess);
+                                } catch (error) {
+                                    console.log(`Error leaving channels for mobile ${mobile}:`, error);
+                                }
                             } catch (error) {
                                 await this.telegramService.deleteClient(mobile);
-                                const errorDetails = parseError(error, `${mobile} Channel ${channelId} Leave Channel ERR: `, false);
+                                const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
                                 if (errorDetails.message === "SESSION_REVOKED" ||
                                     errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
                                     errorDetails.message === "USER_DEACTIVATED" ||
