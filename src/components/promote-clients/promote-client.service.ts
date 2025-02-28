@@ -156,7 +156,7 @@ export class PromoteClientService {
                                 this.joinChannelQueue();
                                 await this.telegramService.deleteClient(document.mobile);
                             } else {
-                                await client.leaveChannels(channels.canSendFalseChats);
+                                client.leaveChannels(channels.canSendFalseChats);
                             }
                         } catch (error) {
                             if (error.message === "SESSION_REVOKED" ||
