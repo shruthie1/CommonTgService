@@ -142,10 +142,13 @@ export class BufferClientService {
         if (!this.telegramService.getActiveClientSetup()) {
             this.logger.log('Starting join channel process');
             await this.telegramService.disconnectAll();
+            
+            // Clear both queues before starting new process
             this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            
             await sleep(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
-            // const today = (new Date(Date.now())).toISOString().split('T')[0];
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
             
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
@@ -206,12 +209,13 @@ export class BufferClientService {
 
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            this.logger.debug('Join channel process is already running');
+            this.logger.warn('Join channel process is already running, instance:', this.joinChannelIntervalId);
             return;
         }
 
         const existingKeys = Array.from(this.joinChannelMap.keys());
         if (existingKeys.length === 0) {
+            this.logger.debug('No channels to join, not starting queue');
             return;
         }
 
@@ -224,8 +228,14 @@ export class BufferClientService {
                     return;
                 }
 
-                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}`);
-                
+                // Add timeout to prevent infinite processing
+                const processTimeout = setTimeout(() => {
+                    this.logger.error('Join channel interval processing timeout');
+                    this.clearJoinChannelInterval();
+                }, this.JOIN_CHANNEL_INTERVAL - 1000);
+
+                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
+
                 for (const mobile of keys) {
                     const channels = this.joinChannelMap.get(mobile);
                     if (!channels || channels.length === 0) {
@@ -264,20 +274,31 @@ export class BufferClientService {
                         await this.telegramService.deleteClient(mobile);
                     }
                 }
+
+                clearTimeout(processTimeout);
             } catch (error) {
                 this.logger.error('Error in join channel interval', error.stack);
+                this.clearJoinChannelInterval();
             }
         }, this.JOIN_CHANNEL_INTERVAL);
+        
+        this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
     }
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
+            this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             this.isJoinChannelProcessing = false;
-            setTimeout(() => {
-                this.joinchannelForBufferClients(false);
-            }, 30000);
+            
+            // Only schedule next run if there are items in the map
+            if (this.joinChannelMap.size > 0) {
+                setTimeout(() => {
+                    this.logger.debug('Triggering next join channel process');
+                    this.joinchannelForBufferClients(false);
+                }, 30000);
+            }
         }
     }
 
@@ -296,12 +317,13 @@ export class BufferClientService {
 
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.debug('Leave channel process is already running');
+            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
             return;
         }
 
         const existingKeys = Array.from(this.leaveChannelMap.keys());
         if (existingKeys.length === 0) {
+            this.logger.debug('No channels to leave, not starting queue');
             return;
         }
 
@@ -310,11 +332,18 @@ export class BufferClientService {
             try {
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
+                    this.logger.debug('Leave map is empty, clearing interval');
                     this.clearLeaveChannelInterval();
                     return;
                 }
 
-                this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining`);
+                // Add timeout to prevent infinite processing
+                const processTimeout = setTimeout(() => {
+                    this.logger.error('Leave channel interval processing timeout');
+                    this.clearLeaveChannelInterval();
+                }, this.LEAVE_CHANNEL_INTERVAL - 1000);
+
+                this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
 
                 for (const mobile of keys) {
                     const channels = this.leaveChannelMap.get(mobile);
@@ -326,7 +355,13 @@ export class BufferClientService {
 
                     const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
                     this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
-                    this.leaveChannelMap.set(mobile, channels);
+                    
+                    // Only update map if there are remaining channels
+                    if (channels.length > 0) {
+                        this.leaveChannelMap.set(mobile, channels);
+                    } else {
+                        this.removeFromLeaveMap(mobile);
+                    }
 
                     try {
                         const client = await this.telegramService.createClient(mobile, false, false);
@@ -341,7 +376,7 @@ export class BufferClientService {
                             errorDetails.message === "USER_DEACTIVATED" ||
                             errorDetails.message === "USER_DEACTIVATED_BAN"
                         ) {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`, error.stack);
+                            this.logger.error(`Session invalid for ${mobile}, removing client`);
                             await this.remove(mobile);
                             this.removeFromLeaveMap(mobile);
                         }
@@ -349,18 +384,25 @@ export class BufferClientService {
                         await this.telegramService.deleteClient(mobile);
                     }
                 }
+
+                clearTimeout(processTimeout);
             } catch (error) {
                 this.logger.error('Error in leave channel interval', error.stack);
+                this.clearLeaveChannelInterval();
             }
         }, this.LEAVE_CHANNEL_INTERVAL);
+        
+        this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
     }
 
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
+            this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
             clearInterval(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
         this.isLeaveChannelProcessing = false;
+        this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
 
     async setAsBufferClient(
