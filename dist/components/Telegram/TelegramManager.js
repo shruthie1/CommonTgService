@@ -447,7 +447,7 @@ class TelegramManager {
                 }));
                 console.log("Left channel :", id);
                 if (chats.length > 1) {
-                    await (0, Helpers_1.sleep)(30000);
+                    await (0, Helpers_1.sleep)(10000);
                 }
             }
             catch (error) {
