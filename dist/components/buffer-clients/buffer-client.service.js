@@ -295,8 +295,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await client.leaveChannels(channelsToProcess).catch(error => {
                             this.logger.error(`Error leaving channels for ${mobile}:`, error.stack);
                         });
-                        const remainingChannels = await client.channelInfo(true);
-                        await this.update(mobile, { channels: remainingChannels.ids.length });
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);

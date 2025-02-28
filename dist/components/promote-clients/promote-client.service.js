@@ -313,9 +313,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await client.leaveChannels(channelsToProcess).catch(error => {
                             this.logger.error(`Error leaving channels for mobile ${mobile}:`, error);
                         });
-                        const remainingChannels = await client.channelInfo(true);
-                        await this.update(mobile, { channels: remainingChannels.ids.length });
-                        this.logger.debug(`${mobile}: Successfully updated channel count to ${remainingChannels.ids.length}`);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error);

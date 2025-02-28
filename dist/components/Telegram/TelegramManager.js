@@ -446,9 +446,9 @@ class TelegramManager {
                 await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
                     channel: channelId
                 }));
-                console.log("Left channel :", id);
+                console.log(`${this.phoneNumber} Left channel :`, id);
                 if (chats.length > 1) {
-                    await (0, Helpers_1.sleep)(5000);
+                    await (0, Helpers_1.sleep)(3000);
                 }
             }
             catch (error) {
