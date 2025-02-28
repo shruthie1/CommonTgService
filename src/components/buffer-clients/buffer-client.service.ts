@@ -147,7 +147,7 @@ export class BufferClientService {
                         const channels = await client.channelInfo(true);
                         console.log("Existing Channels Length : ", channels.ids.length);
                         await this.update(document.mobile, { channels: channels.ids.length });
-                        console.log("Channels to leave : ", channels.canSendFalseChats.length);
+                        console.log("Channels to leave : ", channels.canSendFalseChats, channels.canSendFalseChats.length);
                         let result = [];
                         if (channels.canSendFalseCount < 10) {
                             if (channels.ids.length < 220) {
@@ -270,7 +270,7 @@ export class BufferClientService {
                             try {
                                 await this.telegramService.createClient(mobile, false, false);
                                 console.log(mobile, " Trying to leave channel:", channelId);
-                                await this.telegramService.leaveChannel(mobile, channelId);
+                                await this.telegramService.leaveChannel(mobile, `-100${channelId}`);
                             } catch (error) {
                                 await this.telegramService.deleteClient(mobile);
                                 const errorDetails = parseError(error, `${mobile} Channel ${channelId} Leave Channel ERR: `, false);
