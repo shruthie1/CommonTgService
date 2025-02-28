@@ -272,7 +272,7 @@ let BufferClientService = class BufferClientService {
                 else {
                     this.clearLeaveChannelInterval();
                 }
-            }, 20 * 1000);
+            }, 30 * 1000);
         }
     }
     clearLeaveChannelInterval() {
