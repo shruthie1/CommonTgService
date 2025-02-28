@@ -141,6 +141,7 @@ let BufferClientService = class BufferClientService {
                             await this.telegramService.deleteClient(document.mobile);
                         }
                         else {
+                            this.joinChannelMap.delete(document.mobile);
                             client.leaveChannels(channels.canSendFalseChats);
                         }
                     }
