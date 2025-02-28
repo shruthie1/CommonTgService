@@ -1,6 +1,6 @@
 import { ChannelsService } from './../channels/channels.service';
 import { Channel } from './../channels/schemas/channel.schema';
-import { BadRequestException, ConflictException, HttpException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
@@ -15,8 +15,10 @@ import { PromoteClientService } from '../promote-clients/promote-client.service'
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+
 @Injectable()
 export class BufferClientService {
+    private readonly logger = new Logger(BufferClientService.name);
     private joinChannelMap: Map<string, Channel[]> = new Map();
     private joinChannelIntervalId: NodeJS.Timeout;
     private leaveChannelMap: Map<string, string[]> = new Map();
@@ -138,22 +140,28 @@ export class BufferClientService {
 
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
         if (!this.telegramService.getActiveClientSetup()) {
-            console.log("Joining Channel Started")
+            this.logger.log('Starting join channel process');
             await this.telegramService.disconnectAll();
             this.clearJoinChannelInterval();
             await sleep(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
             // const today = (new Date(Date.now())).toISOString().split('T')[0];
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
+            
+            this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
+            
             if (clients.length > 0) {
                 for (const document of clients) {
                     try {
                         const client = await this.telegramService.createClient(document.mobile, false, false);
-                        console.log("Started Joining for : ", document.mobile)
+                        this.logger.log(`Started joining process for mobile: ${document.mobile}`);
+                        
                         const channels = await client.channelInfo(true);
-                        console.log("Existing Channels Length : ", channels.ids.length);
+                        this.logger.debug(`Client ${document.mobile} has ${channels.ids.length} existing channels`);
+                        
                         await this.update(document.mobile, { channels: channels.ids.length });
-                        console.log("Channels to leave : ", channels.canSendFalseChats, channels.canSendFalseChats.length);
+                        this.logger.debug(`Client ${document.mobile} has ${channels.canSendFalseChats.length} channels that can't send messages`);
+                        
                         let result = [];
                         if (channels.canSendFalseCount < 10) {
                             if (channels.ids.length < 220) {
@@ -161,10 +169,12 @@ export class BufferClientService {
                             } else {
                                 result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
                             }
+                            this.logger.debug(`Adding ${result.length} new channels to join queue for ${document.mobile}`);
                             this.joinChannelMap.set(document.mobile, result);
                             this.joinChannelQueue();
                             await this.telegramService.deleteClient(document.mobile);
                         } else {
+                            this.logger.warn(`Client ${document.mobile} has too many restricted channels, moving to leave queue`);
                             this.joinChannelMap.delete(document.mobile);
 
                             const channelsToLeave = channels.canSendFalseChats.slice(200);
@@ -181,7 +191,7 @@ export class BufferClientService {
                             error.message === "AUTH_KEY_UNREGISTERED" ||
                             error.message === "USER_DEACTIVATED" ||
                             error.message === "USER_DEACTIVATED_BAN") {
-                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            this.logger.error(`Session invalid for ${document.mobile}, removing client`, error.stack);
                             await this.remove(document.mobile);
                             await this.telegramService.deleteClient(document.mobile);
                         }
@@ -189,16 +199,16 @@ export class BufferClientService {
                     }
                 }
             }
-            console.log("Joining Channel Triggered Succesfully for ", clients.length);
+            this.logger.log(`Join channel process initiated for ${clients.length} clients`);
             return `Initiated Joining channels ${clients.length}`
         } else {
-            console.log("ignored active check buffer channels as active client setup exists")
+            this.logger.warn('Ignored active check buffer channels as active client setup exists');
         }
     }
 
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            console.log("Join channel process is already running");
+            this.logger.debug('Join channel process is already running');
             return;
         }
 
@@ -216,28 +226,30 @@ export class BufferClientService {
                     return;
                 }
 
-                console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
+                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}`);
+                
                 for (const mobile of keys) {
                     const channels = this.joinChannelMap.get(mobile);
                     if (!channels || channels.length === 0) {
+                        this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
                         this.removeFromBufferMap(mobile);
                         continue;
                     }
 
                     const channel = channels.shift();
-                    console.log(mobile, " Pending Channels: ", channels.length);
+                    this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
                     this.joinChannelMap.set(mobile, channels);
 
                     try {
                         await this.telegramService.createClient(mobile, false, false);
-                        console.log(mobile, " Trying to join: ", channel.username);
+                        this.logger.debug(`${mobile} attempting to join channel: @${channel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, channel);
                     } catch (error) {
                         const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
+                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`, errorDetails);
 
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                            console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
+                            this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromBufferMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -247,7 +259,7 @@ export class BufferClientService {
                             errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
                             errorDetails.message === "USER_DEACTIVATED" ||
                             errorDetails.message === "USER_DEACTIVATED_BAN") {
-                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            this.logger.error(`Session invalid for ${mobile}, removing client`);
                             await this.remove(mobile);
                         }
                     } finally {
@@ -255,7 +267,7 @@ export class BufferClientService {
                     }
                 }
             } catch (error) {
-                console.error("Error in join channel interval:", error);
+                this.logger.error('Error in join channel interval', error.stack);
             }
         }, this.JOIN_CHANNEL_INTERVAL);
     }
@@ -286,7 +298,7 @@ export class BufferClientService {
 
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            console.log("Leave channel process is already running");
+            this.logger.debug('Leave channel process is already running');
             return;
         }
 
@@ -304,25 +316,26 @@ export class BufferClientService {
                     return;
                 }
 
-                console.log("In LEAVE CHANNEL interval: ", new Date().toISOString(), keys.length);
+                this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining`);
 
                 for (const mobile of keys) {
                     const channels = this.leaveChannelMap.get(mobile);
                     if (!channels || channels.length === 0) {
+                        this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
                         this.removeFromLeaveMap(mobile);
                         continue;
                     }
 
                     const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                    console.log(mobile, " Pending Channels to Leave:", channels.length);
+                    this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
                     this.leaveChannelMap.set(mobile, channels);
 
                     try {
                         const client = await this.telegramService.createClient(mobile, false, false);
-                        console.log(mobile, " Trying to leave channels:", channelsToProcess.length);
+                        this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
 
                         await client.leaveChannels(channelsToProcess).catch(error => {
-                            console.log(`Error leaving channels for mobile ${mobile}:`, error);
+                            this.logger.error(`Error leaving channels for ${mobile}:`, error.stack);
                         });
 
                         const remainingChannels = await client.channelInfo(true);
@@ -336,7 +349,7 @@ export class BufferClientService {
                             errorDetails.message === "USER_DEACTIVATED" ||
                             errorDetails.message === "USER_DEACTIVATED_BAN"
                         ) {
-                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            this.logger.error(`Session invalid for ${mobile}, removing client`, error.stack);
                             await this.remove(mobile);
                             this.removeFromLeaveMap(mobile);
                         }
@@ -345,7 +358,7 @@ export class BufferClientService {
                     }
                 }
             } catch (error) {
-                console.error("Error in leave channel interval:", error);
+                this.logger.error('Error in leave channel interval', error.stack);
             }
         }, this.LEAVE_CHANNEL_INTERVAL);
     }
