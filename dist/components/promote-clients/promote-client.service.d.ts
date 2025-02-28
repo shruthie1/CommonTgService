@@ -45,6 +45,9 @@ export declare class PromoteClientService {
     private joinChannelIntervalId;
     private leaveChannelMap;
     private leaveChannelIntervalId;
+    private isLeaveChannelProcessing;
+    private isJoinChannelProcessing;
+    private readonly JOIN_CHANNEL_INTERVAL;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(): Promise<PromoteClient[]>;
