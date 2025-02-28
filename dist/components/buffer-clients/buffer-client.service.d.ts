@@ -45,6 +45,11 @@ export declare class BufferClientService {
     private joinChannelIntervalId;
     private leaveChannelMap;
     private leaveChannelIntervalId;
+    private isJoinChannelProcessing;
+    private isLeaveChannelProcessing;
+    private readonly JOIN_CHANNEL_INTERVAL;
+    private readonly LEAVE_CHANNEL_INTERVAL;
+    private readonly LEAVE_CHANNEL_BATCH_SIZE;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService);
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
