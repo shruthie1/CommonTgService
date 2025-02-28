@@ -147,8 +147,9 @@ export class BufferClientService {
                         const channels = await client.channelInfo(true);
                         console.log("Existing Channels Length : ", channels.ids.length);
                         await this.update(document.mobile, { channels: channels.ids.length });
+                        console.log("Channels to leave : ", channels.canSendFalseChats.length);
                         let result = [];
-                        if (channels.canSendFalseCount < 50) {
+                        if (channels.canSendFalseCount < 10) {
                             if (channels.ids.length < 220) {
                                 result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
                             } else {
