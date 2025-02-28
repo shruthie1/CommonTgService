@@ -512,7 +512,7 @@ class TelegramManager {
                 );
                 console.log("Left channel :", id);
                 if (chats.length > 1) {
-                    await sleep(10000);
+                    await sleep(5000);
                 }
 
             } catch (error) {
