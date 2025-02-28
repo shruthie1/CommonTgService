@@ -174,9 +174,8 @@ export class PromoteClientService {
                                     this.joinChannelQueue();
                                 }
                             } else {
-                                this.logger.debug(`${document.mobile}: Too many channels with no send permissions, queueing for leave`);
-                                const channelsToLeave = channels.canSendFalseChats.slice(200);
-                                this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                                this.logger.debug(`${document.mobile}: Too many channels with no send permissions, queueing for leave: ${channels.canSendFalseChats.length}`);
+                                this.leaveChannelMap.set(document.mobile, channels.canSendFalseChats);
                                 this.leaveChannelQueue();
                             }
                         } catch (error) {
