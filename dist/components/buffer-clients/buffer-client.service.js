@@ -153,10 +153,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             await this.telegramService.deleteClient(document.mobile);
                         }
                         else {
-                            this.logger.warn(`Client ${document.mobile} has too many restricted channels, moving to leave queue`);
+                            this.logger.warn(`Client ${document.mobile} has too many restricted channels, moving to leave queue: ${channels.canSendFalseChats.length}`);
                             this.joinChannelMap.delete(document.mobile);
-                            const channelsToLeave = channels.canSendFalseChats.slice(200);
-                            this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                            this.leaveChannelMap.set(document.mobile, channels.canSendFalseChats);
                             this.leaveChannelQueue();
                             await this.telegramService.deleteClient(document.mobile);
                         }
