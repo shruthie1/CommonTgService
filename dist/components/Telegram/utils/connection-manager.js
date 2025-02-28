@@ -40,6 +40,7 @@ class ConnectionManager {
         const now = Date.now();
         for (const [mobile, connection] of this.activeConnections.entries()) {
             if (now - connection.lastUsed > maxIdleTime) {
+                console.log(`Releasing inactive connection for ${mobile}`);
                 await this.releaseConnection(mobile);
             }
         }

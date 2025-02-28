@@ -43,6 +43,8 @@ export declare class PromoteClientService {
     private bufferClientService;
     private joinChannelMap;
     private joinChannelIntervalId;
+    private leaveChannelMap;
+    private leaveChannelIntervalId;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(): Promise<PromoteClient[]>;
@@ -57,6 +59,10 @@ export declare class PromoteClientService {
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;
+    removeFromLeaveMap(key: string): void;
+    clearLeaveMap(): void;
+    leaveChannelQueue(): Promise<void>;
+    clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[]): Promise<void>;
