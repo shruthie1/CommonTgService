@@ -129,8 +129,9 @@ let BufferClientService = class BufferClientService {
                         const channels = await client.channelInfo(true);
                         console.log("Existing Channels Length : ", channels.ids.length);
                         await this.update(document.mobile, { channels: channels.ids.length });
+                        console.log("Channels to leave : ", channels.canSendFalseChats.length);
                         let result = [];
-                        if (channels.canSendFalseCount < 50) {
+                        if (channels.canSendFalseCount < 10) {
                             if (channels.ids.length < 220) {
                                 result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
                             }
@@ -143,12 +144,10 @@ let BufferClientService = class BufferClientService {
                         }
                         else {
                             this.joinChannelMap.delete(document.mobile);
-                            if (channels.ids.length > 300) {
-                                const channelsToLeave = channels.canSendFalseChats.slice(200);
-                                this.leaveChannelMap.set(document.mobile, channelsToLeave);
-                                this.leaveChannelQueue();
-                                await this.telegramService.deleteClient(document.mobile);
-                            }
+                            const channelsToLeave = channels.canSendFalseChats.slice(200);
+                            this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                            this.leaveChannelQueue();
+                            await this.telegramService.deleteClient(document.mobile);
                         }
                     }
                     catch (error) {
@@ -250,8 +249,6 @@ let BufferClientService = class BufferClientService {
                                 await this.telegramService.createClient(mobile, false, false);
                                 console.log(mobile, " Trying to leave channel:", channelId);
                                 await this.telegramService.leaveChannel(mobile, channelId);
-                                const currentChannelInfo = await this.telegramService.getChannelInfo(mobile, true);
-                                await this.update(mobile, { channels: currentChannelInfo.ids.length });
                             }
                             catch (error) {
                                 await this.telegramService.deleteClient(mobile);
