@@ -331,11 +331,8 @@ export class BufferClientService {
                     try {
                         const client = await this.telegramService.createClient(mobile, false, false);
                         this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
-
-                        await client.leaveChannels(channelsToProcess).catch(error => {
-                            this.logger.error(`Error leaving channels for ${mobile}:`, error.stack);
-                        });
-
+                        await client.leaveChannels(channelsToProcess);
+                        this.logger.debug(`${mobile} left channels successfully`);
                     } catch (error) {
                         const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
                         if (

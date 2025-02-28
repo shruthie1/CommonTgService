@@ -341,10 +341,8 @@ export class PromoteClientService {
                     try {
                         const client = await this.telegramService.createClient(mobile, false, false);
                         this.logger.debug(`${mobile}: Attempting to leave ${channelsToProcess.length} channels`);
-
-                        await client.leaveChannels(channelsToProcess).catch(error => {
-                            this.logger.error(`Error leaving channels for mobile ${mobile}:`, error);
-                        });
+                        await client.leaveChannels(channelsToProcess);
+                        this.logger.debug(`${mobile}: Successfully left ${channelsToProcess.length} channels`);
                     } catch (error) {
                         const errorDetails = parseError(error);
                         this.logger.error(`Error in leave channel process for ${mobile}:`, errorDetails);
