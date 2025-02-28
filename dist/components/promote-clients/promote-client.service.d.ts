@@ -41,6 +41,7 @@ export declare class PromoteClientService {
     private clientService;
     private channelsService;
     private bufferClientService;
+    private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
     private leaveChannelMap;

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var PromoteClientService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoteClientService = void 0;
 const channels_service_1 = require("../channels/channels.service");
@@ -26,7 +27,7 @@ const buffer_client_service_1 = require("../buffer-clients/buffer-client.service
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
-let PromoteClientService = class PromoteClientService {
+let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
@@ -35,6 +36,7 @@ let PromoteClientService = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
+        this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
         this.isLeaveChannelProcessing = false;
@@ -118,75 +120,84 @@ let PromoteClientService = class PromoteClientService {
     }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (!this.telegramService.getActiveClientSetup()) {
-            console.log("Joining Channel Started");
+            this.logger.log('Starting join channel process');
             this.clearJoinChannelInterval();
             try {
                 const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
+                this.logger.debug(`Using existing keys: ${existingkeys.join(', ')}`);
                 await this.telegramService.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
-                const clients = await this.promoteClientModel.find({ channels: { "$lt": 250 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
+                const clients = await this.promoteClientModel.find({
+                    channels: { "$lt": 250 },
+                    mobile: { $nin: existingkeys }
+                }).sort({ channels: 1 }).limit(4);
+                this.logger.debug(`Found ${clients.length} clients to process`);
                 if (clients.length > 0) {
                     for (const document of clients) {
                         try {
+                            this.logger.debug(`Processing client: ${document.mobile}`);
                             const client = await this.telegramService.createClient(document.mobile, false, false);
-                            console.log("Started Joining for : ", document.mobile);
                             const channels = await client.channelInfo(true);
-                            console.log("Existing Channels Length : ", channels.ids.length);
+                            this.logger.debug(`${document.mobile}: Found ${channels.ids.length} existing channels`);
                             await this.update(document.mobile, { channels: channels.ids.length });
-                            console.log("Channels to leave : ", channels.canSendFalseChats, channels.canSendFalseChats.length);
-                            let result = [];
                             if (channels.canSendFalseCount < 10) {
                                 if (channels.ids.length < 220) {
-                                    result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                                    this.logger.debug(`${document.mobile}: Getting channels from channels service`);
+                                    const result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
+                                    this.joinChannelMap.set(document.mobile, result);
+                                    this.joinChannelQueue();
                                 }
                                 else {
-                                    result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                                    this.logger.debug(`${document.mobile}: Getting channels from active channels service`);
+                                    const result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
+                                    this.joinChannelMap.set(document.mobile, result);
+                                    this.joinChannelQueue();
                                 }
-                                this.joinChannelMap.set(document.mobile, result);
-                                this.joinChannelQueue();
-                                await this.telegramService.deleteClient(document.mobile);
                             }
                             else {
+                                this.logger.debug(`${document.mobile}: Too many channels with no send permissions, queueing for leave`);
                                 const channelsToLeave = channels.canSendFalseChats.slice(200);
                                 this.leaveChannelMap.set(document.mobile, channelsToLeave);
                                 this.leaveChannelQueue();
-                                await this.telegramService.deleteClient(document.mobile);
                             }
                         }
                         catch (error) {
+                            const errorDetails = (0, parseError_1.parseError)(error);
+                            this.logger.error(`Error processing client ${document.mobile}:`, errorDetails);
                             if (error.message === "SESSION_REVOKED" ||
                                 error.message === "AUTH_KEY_UNREGISTERED" ||
                                 error.message === "USER_DEACTIVATED" ||
                                 error.message === "USER_DEACTIVATED_BAN") {
-                                console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                this.logger.warn(`${document.mobile}: Session invalid, removing client`);
                                 await this.remove(document.mobile);
                             }
+                        }
+                        finally {
                             await this.telegramService.deleteClient(document.mobile);
-                            const parsedError = (0, parseError_1.parseError)(error);
-                            console.error(`Error while joining channels for mobile: ${document.mobile}`, parsedError);
                         }
                     }
                 }
-                console.log("Joining Channel Triggered Successfully for", clients.length);
+                this.logger.log(`Join channel process triggered successfully for ${clients.length} clients`);
                 return `Initiated Joining channels for ${clients.length}`;
             }
             catch (error) {
-                console.error("Error during the joinchannelForPromoteClients process: ", error);
+                this.logger.error('Error during joinchannelForPromoteClients:', error);
                 throw new Error("Failed to initiate channel joining process");
             }
         }
         else {
-            console.log("Ignored active check for promote channels as an active client setup exists");
+            this.logger.warn('Ignored active check for promote channels as an active client setup exists');
             return "Active client setup exists, skipping promotion";
         }
     }
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            console.log("Join channel process is already running");
+            this.logger.debug('Join channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.joinChannelMap.keys());
         if (existingKeys.length === 0) {
+            this.logger.debug('No channels to join, skipping queue');
             return;
         }
         this.isJoinChannelProcessing = true;
@@ -194,29 +205,31 @@ let PromoteClientService = class PromoteClientService {
             try {
                 const keys = Array.from(this.joinChannelMap.keys());
                 if (keys.length === 0) {
+                    this.logger.log('Join channel map is empty, clearing interval');
                     this.clearJoinChannelInterval();
                     return;
                 }
-                console.log("In JOIN CHANNEL interval: ", new Date().toISOString());
+                this.logger.debug(`Processing join channel interval at ${new Date().toISOString()}`);
                 for (const mobile of keys) {
                     const channels = this.joinChannelMap.get(mobile);
                     if (!channels || channels.length === 0) {
+                        this.logger.debug(`No more channels to join for ${mobile}, removing from map`);
                         this.removeFromPromoteMap(mobile);
                         continue;
                     }
                     const channel = channels.shift();
-                    console.log(mobile, " Pending Channels: ", channels.length);
+                    this.logger.debug(`${mobile}: Pending channels to join: ${channels.length}`);
                     this.joinChannelMap.set(mobile, channels);
                     try {
                         await this.telegramService.createClient(mobile, false, false);
-                        console.log(mobile, " Trying to join: ", channel.username);
+                        this.logger.debug(`${mobile}: Attempting to join channel: @${channel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, channel);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        console.error(`${mobile} Error while joining @${channel.username}`, errorDetails);
+                        this.logger.error(`${mobile}: Error joining @${channel.username}:`, errorDetails);
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                            console.log(`${mobile} has FloodWaitError or joined too many channels. Handling...`);
+                            this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -225,7 +238,7 @@ let PromoteClientService = class PromoteClientService {
                             errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
                             errorDetails.message === "USER_DEACTIVATED" ||
                             errorDetails.message === "USER_DEACTIVATED_BAN") {
-                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            this.logger.warn(`${mobile}: Session invalid, removing client`);
                             await this.remove(mobile);
                         }
                     }
@@ -235,38 +248,43 @@ let PromoteClientService = class PromoteClientService {
                 }
             }
             catch (error) {
-                console.error("Error in join channel interval:", error);
+                this.logger.error('Error in join channel interval:', error);
             }
         }, this.JOIN_CHANNEL_INTERVAL);
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
+            this.logger.debug('Clearing join channel interval');
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             this.isJoinChannelProcessing = false;
             setTimeout(() => {
+                this.logger.debug('Triggering join channel process after timeout');
                 this.joinchannelForPromoteClients(false);
             }, 30000);
         }
     }
     removeFromLeaveMap(key) {
+        this.logger.debug(`Removing mobile ${key} from leave map`);
         this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
+            this.logger.log('Leave map is now empty');
             this.clearLeaveChannelInterval();
         }
     }
     clearLeaveMap() {
-        console.log("LeaveMap cleared");
+        this.logger.debug('Clearing entire leave map');
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            console.log("Leave channel process is already running");
+            this.logger.debug('Leave channel process is already running, skipping');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());
         if (existingKeys.length === 0) {
+            this.logger.debug('No channels to leave, skipping queue');
             return;
         }
         this.isLeaveChannelProcessing = true;
@@ -274,35 +292,40 @@ let PromoteClientService = class PromoteClientService {
             try {
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
+                    this.logger.log('Leave channel map is empty, clearing interval');
                     this.clearLeaveChannelInterval();
                     return;
                 }
-                console.log("In LEAVE CHANNEL interval: ", new Date().toISOString(), keys.length);
+                this.logger.debug(`Processing leave channel interval at ${new Date().toISOString()}`);
                 for (const mobile of keys) {
+                    this.logger.debug(`Processing leave channels for mobile: ${mobile}`);
                     const channels = this.leaveChannelMap.get(mobile);
                     if (!channels || channels.length === 0) {
+                        this.logger.debug(`No channels to leave for mobile: ${mobile}`);
                         this.removeFromLeaveMap(mobile);
                         continue;
                     }
                     const channelsToProcess = channels.splice(0, 10);
-                    console.log(mobile, " Pending Channels to Leave:", channels.length);
+                    this.logger.debug(`${mobile}: Processing ${channelsToProcess.length} channels, ${channels.length} remaining`);
                     this.leaveChannelMap.set(mobile, channels);
                     try {
                         const client = await this.telegramService.createClient(mobile, false, false);
-                        console.log(mobile, " Trying to leave channels:", channelsToProcess.length);
+                        this.logger.debug(`${mobile}: Attempting to leave ${channelsToProcess.length} channels`);
                         await client.leaveChannels(channelsToProcess).catch(error => {
-                            console.log(`Error leaving channels for mobile ${mobile}:`, error);
+                            this.logger.error(`Error leaving channels for mobile ${mobile}:`, error);
                         });
                         const remainingChannels = await client.channelInfo(true);
                         await this.update(mobile, { channels: remainingChannels.ids.length });
+                        this.logger.debug(`${mobile}: Successfully updated channel count to ${remainingChannels.ids.length}`);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
+                        const errorDetails = (0, parseError_1.parseError)(error);
+                        this.logger.error(`Error in leave channel process for ${mobile}:`, errorDetails);
                         if (errorDetails.message === "SESSION_REVOKED" ||
                             errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
                             errorDetails.message === "USER_DEACTIVATED" ||
                             errorDetails.message === "USER_DEACTIVATED_BAN") {
-                            console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                            this.logger.warn(`${mobile}: Session invalid, removing client`);
                             await this.remove(mobile);
                             this.removeFromLeaveMap(mobile);
                         }
@@ -313,7 +336,7 @@ let PromoteClientService = class PromoteClientService {
                 }
             }
             catch (error) {
-                console.error("Error in leave channel interval:", error);
+                this.logger.error('Error in leave channel interval:', error);
             }
         }, 60000);
     }
@@ -321,6 +344,7 @@ let PromoteClientService = class PromoteClientService {
         if (this.leaveChannelIntervalId) {
             clearInterval(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
+            console.log("Leave channel interval cleared.");
         }
         this.isLeaveChannelProcessing = false;
     }
@@ -495,7 +519,7 @@ let PromoteClientService = class PromoteClientService {
     }
 };
 exports.PromoteClientService = PromoteClientService;
-exports.PromoteClientService = PromoteClientService = __decorate([
+exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('promoteClientModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),

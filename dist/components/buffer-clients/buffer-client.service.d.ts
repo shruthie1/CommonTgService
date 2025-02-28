@@ -41,6 +41,7 @@ export declare class BufferClientService {
     private clientService;
     private channelsService;
     private promoteClientService;
+    private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
     private leaveChannelMap;
