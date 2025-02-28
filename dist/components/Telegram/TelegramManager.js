@@ -442,8 +442,9 @@ class TelegramManager {
         console.log("ChatsLength: ", chats);
         for (const id of chats) {
             try {
+                const channelId = id.startsWith('-100') ? id : `-100${id}`;
                 await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
-                    channel: id
+                    channel: channelId
                 }));
                 console.log("Left channel :", id);
                 if (chats.length > 1) {
