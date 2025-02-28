@@ -154,7 +154,8 @@ export class BufferClientService {
                             this.joinChannelQueue();
                             await this.telegramService.deleteClient(document.mobile);
                         } else {
-                            client.leaveChannels(channels.canSendFalseChats)
+                            this.joinChannelMap.delete(document.mobile);
+                            client.leaveChannels(channels.canSendFalseChats);
                         }
                         // console.log("DbChannelsLen: ", result.length);
                         // let resp = '';

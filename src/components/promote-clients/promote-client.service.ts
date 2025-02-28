@@ -156,6 +156,7 @@ export class PromoteClientService {
                                 this.joinChannelQueue();
                                 await this.telegramService.deleteClient(document.mobile);
                             } else {
+                                this.joinChannelMap.delete(document.mobile);
                                 client.leaveChannels(channels.canSendFalseChats);
                             }
                         } catch (error) {
