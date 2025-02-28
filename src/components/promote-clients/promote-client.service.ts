@@ -19,6 +19,8 @@ import { notifbot } from '../../utils/logbots';
 export class PromoteClientService {
     private joinChannelMap: Map<string, Channel[]> = new Map();
     private joinChannelIntervalId: NodeJS.Timeout;
+    private leaveChannelMap: Map<string, string[]> = new Map();
+    private leaveChannelIntervalId: NodeJS.Timeout;
     constructor(@InjectModel('promoteClientModule') private promoteClientModel: Model<PromoteClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
@@ -156,8 +158,13 @@ export class PromoteClientService {
                                 this.joinChannelQueue();
                                 await this.telegramService.deleteClient(document.mobile);
                             } else {
-                                this.joinChannelMap.delete(document.mobile);
-                                client.leaveChannels(channels.canSendFalseChats);
+                                if (channels.ids.length > 300) {
+                                    // Keep top 200 channels, leave the rest
+                                    const channelsToLeave = channels.canSendFalseChats.slice(200);
+                                    this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                                    this.leaveChannelQueue();
+                                    await this.telegramService.deleteClient(document.mobile);
+                                }
                             }
                         } catch (error) {
                             if (error.message === "SESSION_REVOKED" ||
@@ -240,6 +247,65 @@ export class PromoteClientService {
             setTimeout(() => {
                 this.joinchannelForPromoteClients(false)
             }, 30000);
+        }
+    }
+
+    removeFromLeaveMap(key: string) {
+        this.leaveChannelMap.delete(key)
+    }
+
+    clearLeaveMap() {
+        console.log("LeaveMap cleared")
+        this.leaveChannelMap.clear()
+    }
+
+    async leaveChannelQueue() {
+        const existingKeys = Array.from(this.leaveChannelMap.keys())
+        if (existingKeys.length > 0) {
+            this.leaveChannelIntervalId = setInterval(async () => {
+                const keys = Array.from(this.leaveChannelMap.keys());
+                if (keys.length > 0) {
+                    console.log("In LEAVE CHANNEL interval: ", new Date().toISOString());
+                    for (const mobile of keys) {
+                        const channels = this.leaveChannelMap.get(mobile);
+                        if (channels && channels.length > 0) {
+                            const channelId = channels.shift();
+                            console.log(mobile, " Pending Channels to Leave:", channels.length)
+                            this.leaveChannelMap.set(mobile, channels);
+                            try {
+                                await this.telegramService.createClient(mobile, false, false);
+                                console.log(mobile, " Trying to leave channel:", channelId);
+                                await this.telegramService.leaveChannel(mobile, channelId);
+                                const currentChannelInfo = await this.telegramService.getChannelInfo(mobile, true);
+                                await this.update(mobile, { channels: currentChannelInfo.ids.length });
+                            } catch (error) {
+                                await this.telegramService.deleteClient(mobile);
+                                const errorDetails = parseError(error, `${mobile} Channel ${channelId} Leave Channel ERR: `, false);
+                                if (errorDetails.message === "SESSION_REVOKED" ||
+                                    errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
+                                    errorDetails.message === "USER_DEACTIVATED" ||
+                                    errorDetails.message === "USER_DEACTIVATED_BAN") {
+                                    console.log("Session Revoked or Auth Key Unregistered. Removing Client");
+                                    await this.remove(mobile);
+                                    this.removeFromLeaveMap(mobile);
+                                }
+                            }
+                            await this.telegramService.deleteClient(mobile);
+                        } else {
+                            this.leaveChannelMap.delete(mobile);
+                        }
+                    }
+                } else {
+                    this.clearLeaveChannelInterval()
+                }
+            }, 20 * 1000);
+        }
+    }
+
+    clearLeaveChannelInterval() {
+        if (this.leaveChannelIntervalId) {
+            clearInterval(this.leaveChannelIntervalId);
+            this.leaveChannelIntervalId = null;
         }
     }
 

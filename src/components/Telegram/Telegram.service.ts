@@ -457,7 +457,6 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.leaveChannels(leaveChannelIds);
     }
 
-
     async leaveChannel(mobile: string, channel: string): Promise<void> {
         await this.executeWithConnection(mobile, 'Leave channel',
             (client) => client.leaveChannels([channel]),
