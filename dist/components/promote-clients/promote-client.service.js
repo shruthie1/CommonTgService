@@ -142,7 +142,8 @@ let PromoteClientService = class PromoteClientService {
                                 await this.telegramService.deleteClient(document.mobile);
                             }
                             else {
-                                await client.leaveChannels(channels.canSendFalseChats);
+                                this.joinChannelMap.delete(document.mobile);
+                                client.leaveChannels(channels.canSendFalseChats);
                             }
                         }
                         catch (error) {
