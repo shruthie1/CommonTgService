@@ -510,7 +510,7 @@ class TelegramManager {
                         channel: channelId
                     })
                 );
-                console.log("Left channel :", id);
+                console.log(`${this.phoneNumber} Left channel :`, id);
                 if (chats.length > 1) {
                     await sleep(3000);
                 }
