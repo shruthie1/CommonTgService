@@ -159,13 +159,12 @@ export class BufferClientService {
                             await this.telegramService.deleteClient(document.mobile);
                         } else {
                             this.joinChannelMap.delete(document.mobile);
-                            if (channels.ids.length > 300) {
-                                // Keep top 200 channels, leave the rest
-                                const channelsToLeave = channels.canSendFalseChats.slice(200);
-                                this.leaveChannelMap.set(document.mobile, channelsToLeave);
-                                this.leaveChannelQueue();
-                                await this.telegramService.deleteClient(document.mobile);
-                            }
+
+                            const channelsToLeave = channels.canSendFalseChats.slice(200);
+                            this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                            this.leaveChannelQueue();
+                            await this.telegramService.deleteClient(document.mobile);
+
                         }
                         // console.log("DbChannelsLen: ", result.length);
                         // let resp = '';
@@ -271,8 +270,6 @@ export class BufferClientService {
                                 await this.telegramService.createClient(mobile, false, false);
                                 console.log(mobile, " Trying to leave channel:", channelId);
                                 await this.telegramService.leaveChannel(mobile, channelId);
-                                const currentChannelInfo = await this.telegramService.getChannelInfo(mobile, true);
-                                await this.update(mobile, { channels: currentChannelInfo.ids.length });
                             } catch (error) {
                                 await this.telegramService.deleteClient(mobile);
                                 const errorDetails = parseError(error, `${mobile} Channel ${channelId} Leave Channel ERR: `, false);
@@ -300,7 +297,7 @@ export class BufferClientService {
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
             clearInterval(this.leaveChannelIntervalId);
-            this.leaveChannelIntervalId = null;      
+            this.leaveChannelIntervalId = null;
         }
     }
 

@@ -158,13 +158,10 @@ export class PromoteClientService {
                                 this.joinChannelQueue();
                                 await this.telegramService.deleteClient(document.mobile);
                             } else {
-                                if (channels.ids.length > 300) {
-                                    // Keep top 200 channels, leave the rest
-                                    const channelsToLeave = channels.canSendFalseChats.slice(200);
-                                    this.leaveChannelMap.set(document.mobile, channelsToLeave);
-                                    this.leaveChannelQueue();
-                                    await this.telegramService.deleteClient(document.mobile);
-                                }
+                                const channelsToLeave = channels.canSendFalseChats.slice(200);
+                                this.leaveChannelMap.set(document.mobile, channelsToLeave);
+                                this.leaveChannelQueue();
+                                await this.telegramService.deleteClient(document.mobile);
                             }
                         } catch (error) {
                             if (error.message === "SESSION_REVOKED" ||
@@ -276,8 +273,6 @@ export class PromoteClientService {
                                 await this.telegramService.createClient(mobile, false, false);
                                 console.log(mobile, " Trying to leave channel:", channelId);
                                 await this.telegramService.leaveChannel(mobile, channelId);
-                                const currentChannelInfo = await this.telegramService.getChannelInfo(mobile, true);
-                                await this.update(mobile, { channels: currentChannelInfo.ids.length });
                             } catch (error) {
                                 await this.telegramService.deleteClient(mobile);
                                 const errorDetails = parseError(error, `${mobile} Channel ${channelId} Leave Channel ERR: `, false);
