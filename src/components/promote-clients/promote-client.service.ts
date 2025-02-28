@@ -153,6 +153,7 @@ export class PromoteClientService {
                                     result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
                                 }
                                 this.joinChannelMap.set(document.mobile, result);
+                                this.joinChannelQueue();
                             } else {
                                 await client.leaveChannels(channels.canSendFalseChats);
                             }
@@ -170,9 +171,6 @@ export class PromoteClientService {
                             console.error(`Error while joining channels for mobile: ${document.mobile}`, parsedError);
                         }
                     }
-
-                    this.joinChannelQueue();
-
                 }
                 console.log("Joining Channel Triggered Successfully for", clients.length);
                 return `Initiated Joining channels for ${clients.length}`;

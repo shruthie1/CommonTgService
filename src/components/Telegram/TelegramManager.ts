@@ -504,20 +504,23 @@ class TelegramManager {
         console.log("ChatsLength: ", chats)
         for (const id of chats) {
             try {
-                await this.client.invoke(
-                    new Api.channels.LeaveChannel({
-                        channel: id
-                    })
-                );
-                console.log("Left channel :", id)
-                if (chats.length > 1) {
-                    await sleep(30000);
+                if (this.client) {
+                    await this.client.invoke(
+                        new Api.channels.LeaveChannel({
+                            channel: id
+                        })
+                    );
+                    console.log("Left channel :", id);
+                    if (chats.length > 1) {
+                        await sleep(30000);
+                    }
                 }
             } catch (error) {
                 const errorDetails = parseError(error);
                 console.log("Failed to leave channel :", errorDetails.message)
             }
         }
+        console.log("Left All Channels");
     }
 
     async getEntity(entity: Api.TypeEntityLike) {

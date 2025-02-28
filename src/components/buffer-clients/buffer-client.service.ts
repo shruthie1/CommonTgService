@@ -152,8 +152,9 @@ export class BufferClientService {
                             }
                             this.joinChannelMap.set(document.mobile, result);
                             await this.telegramService.deleteClient(document.mobile);
+                            this.joinChannelQueue();
                         } else {
-                            client.leaveChannels(channels.canSendFalseChats)
+                            await client.leaveChannels(channels.canSendFalseChats)
                         }
                         // console.log("DbChannelsLen: ", result.length);
                         // let resp = '';
@@ -170,7 +171,6 @@ export class BufferClientService {
                         parseError(error)
                     }
                 }
-                this.joinChannelQueue();
             }
             console.log("Joining Channel Triggered Succesfully for ", clients.length);
             return `Initiated Joining channels ${clients.length}`
