@@ -51,15 +51,14 @@ export class TelegramController {
     }
 
     // Connection Management
-    @Post('connect/:mobile')
+    @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Successfully connected' })
     @ApiResponse({ status: 400, description: 'Connection failed' })
     async connect(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(() =>
-            this.telegramService.createClient(mobile)
-        );
+        await this.telegramService.createClient(mobile)
+        return { message: 'Connected successfully' };
     }
 
     @Get('disconnect/:mobile')
@@ -67,19 +66,16 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Successfully disconnected' })
     async disconnect(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteClient(mobile);
-        });
+        await this.telegramService.deleteClient(mobile);
+        return { message: 'Disconnected successfully' };
     }
 
     @Post('disconnect-all')
     @ApiOperation({ summary: 'Disconnect all clients' })
     @ApiResponse({ status: 200, description: 'All clients disconnected successfully' })
     async disconnectAllClients() {
-        return this.handleTelegramOperation(() =>
-            this.telegramService.disconnectAll()
-        );
+        this.telegramService.disconnectAll();
+        return { message: 'All clients disconnected successfully' };
     }
     // Profile Management
     @Get('me/:mobile')
