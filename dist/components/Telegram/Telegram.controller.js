@@ -37,16 +37,16 @@ let TelegramController = class TelegramController {
         }
     }
     async connect(mobile) {
-        return this.handleTelegramOperation(() => this.telegramService.createClient(mobile));
+        await this.telegramService.createClient(mobile);
+        return { message: 'Connected successfully' };
     }
     async disconnect(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteClient(mobile);
-        });
+        await this.telegramService.deleteClient(mobile);
+        return { message: 'Disconnected successfully' };
     }
     async disconnectAllClients() {
-        return this.handleTelegramOperation(() => this.telegramService.disconnectAll());
+        this.telegramService.disconnectAll();
+        return { message: 'All clients disconnected successfully' };
     }
     async getMe(mobile) {
         return this.handleTelegramOperation(async () => {
@@ -529,7 +529,7 @@ let TelegramController = class TelegramController {
 };
 exports.TelegramController = TelegramController;
 __decorate([
-    (0, common_1.Post)('connect/:mobile'),
+    (0, common_1.Get)('connect/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Connect to Telegram' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully connected' }),
