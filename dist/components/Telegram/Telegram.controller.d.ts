@@ -10,9 +10,15 @@ export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
     private handleTelegramOperation;
-    connect(mobile: string): Promise<import("./TelegramManager").default>;
-    disconnect(mobile: string): Promise<boolean>;
-    disconnectAllClients(): Promise<void>;
+    connect(mobile: string): Promise<{
+        message: string;
+    }>;
+    disconnect(mobile: string): Promise<{
+        message: string;
+    }>;
+    disconnectAllClients(): Promise<{
+        message: string;
+    }>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
     getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
