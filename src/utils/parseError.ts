@@ -105,7 +105,10 @@ export function parseError(
 
   const fullMessage = `${prefixStr} :: ${extractMessage(message)}`;
   const response = { status, message: err.errorMessage ? err.errorMessage : String(fullMessage), error };
-  console.log("parsedErr: ", fullMessage);
+  console.log("ParsedErr: ",{
+    fullMessage,
+    ...response
+  });
   if (sendErr) {
     try {
       const shouldSend = !fullMessage.includes("INPUT_USER_DEACTIVATED") &&
