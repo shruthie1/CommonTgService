@@ -50,21 +50,21 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
             if (isTimeout) {
                 console.error(`Request timeout (${options.timeout}ms): ${url}`);
                 notify(`Timeout on attempt ${attempt}`, {
-                    message: `host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
+                    message: `${process.env.clientId} host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
                     status: 408
                 });
             }
             else {
                 notify(`Attempt ${attempt} failed`, {
-                    message: `host=${host}\nendpoint=${endpoint}\n${message.length < 250 ? `msg: ${message}` : "msg: Message too long"}`,
+                    message: `${process.env.clientId} host=${host}\nendpoint=${endpoint}\n${message.length < 250 ? `msg: ${message}` : "msg: Message too long"}`,
                     status: parsedError.status
                 });
             }
             if (parsedError.status === 403) {
-                notify(`Attempting bypass for`, { message: `host=${host}\nendpoint=${endpoint}` });
+                notify(`Attempting bypass for`, { message: `${process.env.clientId}  host=${host}\nendpoint=${endpoint}` });
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
-                    notify(`Successfully executed 403 request`, { message: `host=${host}\nendpoint=${endpoint}` });
+                    notify(`Successfully executed 403 request`, { message: `${process.env.clientId} host=${host}\nendpoint=${endpoint}` });
                     return bypassResponse;
                 }
                 catch (bypassError) {
@@ -82,7 +82,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries = 3) {
             return undefined;
         }
     }
-    const errorData = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(lastError, `host: ${host}\nendpoint:${endpoint}`, false));
+    const errorData = (0, parseError_1.extractMessage)((0, parseError_1.parseError)(lastError, `${process.env.clientId} host: ${host}\nendpoint:${endpoint}`, false));
     notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
     return undefined;
 }
