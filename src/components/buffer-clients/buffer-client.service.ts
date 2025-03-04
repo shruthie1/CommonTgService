@@ -263,10 +263,10 @@ export class BufferClientService {
                             await this.update(mobile, { channels: channelsInfo.ids.length });
                         }
 
-                        if (errorDetails.message === "SESSION_REVOKED" ||
-                            errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
-                            errorDetails.message === "USER_DEACTIVATED" ||
-                            errorDetails.message === "USER_DEACTIVATED_BAN") {
+                        if (error.errorMessage === "SESSION_REVOKED" ||
+                            error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
+                            error.errorMessage === "USER_DEACTIVATED" ||
+                            error.errorMessage === "USER_DEACTIVATED_BAN") {
                             this.logger.error(`Session invalid for ${mobile}, removing client`);
                             await this.remove(mobile);
                         }
