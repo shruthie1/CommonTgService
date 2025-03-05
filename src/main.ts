@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,7 +13,11 @@ async function bootstrap() {
     .setVersion('1.0')
     .build();
 
-  app.use((req, res, next) => {
+  interface CustomRequest extends Request {}
+  interface CustomResponse extends Response {}
+  interface CustomNextFunction extends NextFunction {}
+
+  app.use((req: CustomRequest, res: CustomResponse, next: CustomNextFunction) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
@@ -29,6 +34,22 @@ async function bootstrap() {
   mongoose.set('debug', true)
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transformOptions: {
+      enableImplicitConversion: true
+    },
+    validationError: {
+      target: false,
+      value: undefined
+    },
+    exceptionFactory: (errors) => {
+      const messages = errors.map(error => {
+        return error.constraints ? Object.values(error.constraints) : [];
+      }).flat();
+      return new Error(messages.join
+        ('\n'));
+    },
   }));
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);

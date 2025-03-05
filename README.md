@@ -24,19 +24,68 @@
 
 # Common Telegram Service for NestJS
 
+A comprehensive NestJS service for handling Telegram-related functionality, including channel management, client handling, statistics, and more.
+
 ## Installation
 
-Add this package as a dependency in your NestJS project's package.json, using the `dist` branch:
-
-```json
-{
-  "dependencies": {
-    "common-tg-service": "github:your-username/common-tg-service#dist"
-  }
-}
+```bash
+npm install @your-org/common-tg-service
 ```
 
-This will only download the compiled dist files and package.json, making updates much faster.
+## Features
+
+- Telegram Bot Integration
+- Channel Management
+- Client Management (Active, Archived, Buffer)
+- Statistics and Analytics
+- Promotion Management
+- Transaction Handling
+- User Data Management
+- File Management
+- UPI Integration
+
+## Quick Start
+
+```typescript
+import { TelegramModule } from '@your-org/common-tg-service';
+
+@Module({
+  imports: [
+    TelegramModule.forRoot({
+      // your config here
+    }),
+    // ... other modules
+  ],
+})
+export class AppModule {}
+```
+
+## Available Modules
+
+- `TelegramModule` - Core Telegram functionality
+- `ActiveChannelsModule` - Manage active Telegram channels
+- `ClientModule` - Client management functionality
+- `PromoteClientModule` - Client promotion features
+- `StatModule` - Statistics tracking
+- And many more...
+
+## Environment Variables
+
+Ensure you have the following environment variables set:
+
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token
+MONGODB_URI=your_mongodb_uri
+# ... other required environment variables
+```
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
+## License
+
+[MIT](./LICENSE)
 
 ## Peer Dependencies
 

@@ -10,8 +10,8 @@ export class MailReader {
 
     private constructor() {
         this.imap = new Imap({
-            user: process.env.GMAIL_ADD,
-            password: process.env.GMAIL_PASS,
+            user: process.env.GMAIL_ADD || '',
+            password: process.env.GMAIL_PASS || '',
             host: 'imap.gmail.com',
             port: 993,
             tls: true,
@@ -25,7 +25,7 @@ export class MailReader {
             this.isReady = true;
         });
 
-        this.imap.on('error', (err) => {
+        this.imap.on('error', (err: Error) => {
             console.error('SomeError:', err);
             this.isReady = false;
         });

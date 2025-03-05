@@ -19,7 +19,7 @@ export class UsersService {
     private clientsService: ClientService
   ) {}
 
-  async create(user: CreateUserDto): Promise<User> {
+  async create(user: CreateUserDto): Promise<User | undefined> {
     const activeClientSetup = this.telegramService.getActiveClientSetup();
     console.log("New User received - ", user?.mobile);
     console.log("ActiveClientSetup::", activeClientSetup);

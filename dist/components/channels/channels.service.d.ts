@@ -37,7 +37,7 @@ export declare class ChannelsService {
     update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel>;
     remove(channelId: string): Promise<void>;
     search(filter: any): Promise<Channel[]>;
-    getChannels(limit?: number, skip?: number, keywords?: any[], notIds?: any[]): Promise<Channel[]>;
+    getChannels(limit?: number, skip?: number, keywords?: never[], notIds?: never[]): Promise<Channel[]>;
     executeQuery(query: any, sort?: any, limit?: number): Promise<Channel[]>;
-    getActiveChannels(limit?: number, skip?: number, notIds?: any[]): Promise<Channel[]>;
+    getActiveChannels(limit?: number, skip?: number, notIds?: never[]): Promise<Channel[]>;
 }

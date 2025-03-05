@@ -151,7 +151,7 @@ function shouldRetry(error: any, parsedError: any): boolean {
             'ENETUNREACH'
         ];
 
-        if (networkErrors.includes(error.code)) {
+        if (error.code && networkErrors.includes(error.code)) {
             return true;
         }
 

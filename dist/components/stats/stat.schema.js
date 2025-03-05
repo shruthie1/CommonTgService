@@ -63,7 +63,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
     (0, mongoose_1.Prop)({ required: false }),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], Stat.prototype, "didPay", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),

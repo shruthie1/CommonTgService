@@ -1,0 +1,58 @@
+name: Publish to NPM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    name: Publish Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 18
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Configure NPM Authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          chmod 0600 ~/.npmrc
+
+      - name: Verify Authentication
+        run: npm whoami
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Determine branch name
+        id: branch_name
+        run: echo "::set-output name=branch::$(echo $GITHUB_REF | awk -F'/' '{print $3}')"
+
+      - name: Auto-Bump Version
+        id: version_bump
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git pull origin ${{ steps.branch_name.outputs.branch }}  # Pull the latest changes from the current branch
+          git diff --quiet || (git add . && git commit -m "chore: commit pre-bump changes")
+          npm version patch -m "Bump version to %s [skip ci]"
+          git status
+          git add .  # Stage all changes, including package-lock.json and dist folder
+          git commit -m "Bump version" || echo "No changes to commit"
+          git push origin HEAD:${{ steps.branch_name.outputs.branch }}
+
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

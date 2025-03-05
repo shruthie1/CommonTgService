@@ -20,7 +20,7 @@ export declare class TelegramController {
         message: string;
     }>;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
-    getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
+    getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity | undefined>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
@@ -37,14 +37,14 @@ export declare class TelegramController {
             message: string;
             date: number;
             sender: {
-                id: string;
-                is_self: boolean;
-                username: string;
+                id: string | undefined;
+                is_self: boolean | undefined;
+                username: string | null;
             };
             media: {
                 type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
-            };
+            } | null;
         }[];
         total: number;
     }>;
@@ -93,7 +93,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata | undefined>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;
@@ -131,26 +131,32 @@ export declare class TelegramController {
         messages: {
             messageId: number;
             type: "document" | "video" | "photo";
-            thumb: any;
+            thumb: string | null;
             caption: string;
             date: number;
             mediaDetails: {
                 size: import("big-integer").BigInteger;
                 mimeType: string;
-                fileName: string;
-                duration: number;
-                width: number;
-                height: number;
-            };
+                fileName: string | null;
+                duration: number | null;
+                width: number | null;
+                height: number | null;
+            } | null;
         }[];
-        total: number;
+        total: number | undefined;
         hasMore: boolean;
     }>;
-    getGroupMembers(mobile: string, groupId: string): Promise<any[]>;
+    getGroupMembers(mobile: string, groupId: string): Promise<{
+        tgId: import("big-integer").BigInteger;
+        name: string;
+        username: string;
+    }[] | undefined>;
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, chatId: string): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
-    getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<any[]>;
+    getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<{
+        id: import("big-integer").BigInteger;
+    }[]>;
     getLastActiveTime(mobile: string): Promise<string>;
     createGroupWithOptions(mobile: string, options: createGroupDto): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
     updateGroupSettings(mobile: string, settings: GroupSettingsDto): Promise<boolean>;
@@ -172,7 +178,7 @@ export declare class TelegramController {
     getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<any>;
     validateSession(mobile: string): Promise<{
         isValid: boolean;
-        isConnected: boolean;
+        isConnected: boolean | undefined;
         phoneNumber: string;
     }>;
     promoteToAdmin(mobile: string, adminOp: AdminOperationDto): Promise<void>;
@@ -183,7 +189,7 @@ export declare class TelegramController {
     }): Promise<void>;
     getGroupAdmins(mobile: string, groupId: string): Promise<{
         userId: string;
-        rank?: string;
+        rank?: string | undefined;
         permissions: {
             changeInfo: boolean;
             postMessages: boolean;
@@ -245,14 +251,14 @@ export declare class TelegramController {
         id: number;
         name: string;
         options: {
-            includeContacts: boolean;
-            includeNonContacts: boolean;
-            includeGroups: boolean;
-            includeBroadcasts: boolean;
-            includeBots: boolean;
-            excludeMuted: boolean;
-            excludeRead: boolean;
-            excludeArchived: boolean;
+            includeContacts: boolean | undefined;
+            includeNonContacts: boolean | undefined;
+            includeGroups: boolean | undefined;
+            includeBroadcasts: boolean | undefined;
+            includeBots: boolean | undefined;
+            excludeMuted: boolean | undefined;
+            excludeRead: boolean | undefined;
+            excludeArchived: boolean | undefined;
         };
     }>;
     getChatFolders(mobile: string): Promise<{
@@ -294,15 +300,15 @@ export declare class TelegramController {
     hasPassword(mobile: string): Promise<boolean>;
     getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number): Promise<{
         id: string;
-        title: string;
-        username: string;
+        title: string | null;
+        username: string | null | undefined;
         type: string;
         unreadCount: number;
         lastMessage: {
             id: number;
             text: string;
             date: Date;
-        };
+        } | null;
     }[]>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
@@ -325,9 +331,9 @@ export declare class TelegramController {
     }>;
     getTopPrivateChats(mobile: string): Promise<{
         chatId: string;
-        username?: string;
-        firstName?: string;
-        lastName?: string;
+        username?: string | undefined;
+        firstName?: string | undefined;
+        lastName?: string | undefined;
         totalMessages: number;
         interactionScore: number;
         calls: {

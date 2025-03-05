@@ -1,11 +1,43 @@
-node_modules
-src
-test
-.git
-.github
-*.md
-*.log
+# Source
+src/
+test/
+coverage/
+.nyc_output/
+
+# Config files
+.env*
+.eslintrc
+.prettierrc
 .gitignore
+nest-cli.json
 tsconfig.json
 tsconfig.build.json
-.prettierrc
+webpack*.config.*
+upload-build.js
+jest*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Cache
+.npm/
+.eslintcache
+
+# Development tools
+nodemon.json
+.travis.yml
+.gitlab-ci.yml
+.github/
+.git/
+
+# Temp files
+.DS_Store
+Thumbs.db

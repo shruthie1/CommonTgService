@@ -1,7 +1,7 @@
 import { fetchWithTimeout } from "./fetchWithTimeout";
 import { notifbot } from "./logbots";
 
-export const extractMessage = (data: any) => {
+export const extractMessage = (data: any): string => {
   if (Array.isArray(data)) {
     return `${data.map((item) => extractMessage(item)).join('\n')}`;
   }
@@ -11,7 +11,7 @@ export const extractMessage = (data: any) => {
     typeof data === 'number' ||
     typeof data === 'boolean'
   ) {
-    return data;
+    return String(data);
   }
 
   if (typeof data === 'object' && data !== null) {

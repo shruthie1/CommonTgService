@@ -52,7 +52,7 @@ __decorate([
 ], CreateStatDto.prototype, "secondShow", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], CreateStatDto.prototype, "didPay", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),

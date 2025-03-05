@@ -30,7 +30,7 @@ declare class TelegramManager {
     private filterHandler;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
-        days?: number;
+        days?: number | undefined;
         archiveOld: boolean;
         formalities: boolean;
         newMobile: string;
@@ -59,7 +59,11 @@ declare class TelegramManager {
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
-    getGrpMembers(entity: EntityLike): Promise<any[]>;
+    getGrpMembers(entity: EntityLike): Promise<{
+        tgId: bigInt.BigInteger;
+        name: string;
+        username: string;
+    }[] | undefined>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
@@ -86,9 +90,9 @@ declare class TelegramManager {
     }[], namePrefix: string): Promise<void>;
     addContacts(mobiles: string[], namePrefix: string): Promise<void>;
     leaveChannels(chats: string[]): Promise<void>;
-    getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity>;
-    joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates>;
-    connected(): boolean;
+    getEntity(entity: Api.TypeEntityLike): Promise<import("telegram/define").Entity | undefined>;
+    joinChannel(entity: Api.TypeEntityLike): Promise<Api.TypeUpdates | undefined>;
+    connected(): boolean | undefined;
     connect(): Promise<boolean>;
     removeOtherAuths(): Promise<void>;
     private isAuthMine;
@@ -109,13 +113,13 @@ declare class TelegramManager {
     handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
-    downloadProfilePic(photoIndex: number): Promise<string>;
+    downloadProfilePic(photoIndex: number): Promise<string | undefined>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
     deleteChat(chatId: string): Promise<void>;
     blockUser(chatId: string): Promise<void>;
     getMediaMetadata(chatId?: string, offset?: number, limit?: number): any;
-    downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
+    downloadMediaFile(messageId: number, chatId: string | undefined, res: any): Promise<any>;
     private downloadWithTimeout;
     private getMediaDetails;
     private downloadFileFromUrl;
@@ -124,13 +128,13 @@ declare class TelegramManager {
     updatePrivacy(): Promise<void>;
     getFileUrl(url: string, filename: string): Promise<string>;
     updateProfilePic(image: any): Promise<void>;
-    hasPassword(): Promise<boolean>;
+    hasPassword(): Promise<boolean | undefined>;
     set2fa(): Promise<void>;
     sendPhotoChat(id: string, url: string, caption: string, filename: string): Promise<void>;
     sendFileChat(id: string, url: string, caption: string, filename: string): Promise<void>;
     deleteProfilePhotos(): Promise<void>;
     createNewSession(): Promise<string>;
-    waitForOtp(): Promise<string>;
+    waitForOtp(): Promise<string | undefined>;
     createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel>;
     updateGroupSettings(settings: {
         groupId: string;
@@ -279,14 +283,14 @@ declare class TelegramManager {
             message: string;
             date: number;
             sender: {
-                id: string;
-                is_self: boolean;
-                username: string;
+                id: string | undefined;
+                is_self: boolean | undefined;
+                username: string | null;
             };
             media: {
                 type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
-            };
+            } | null;
         }[];
         total: number;
     }>;
@@ -303,19 +307,19 @@ declare class TelegramManager {
         messages: {
             messageId: number;
             type: "document" | "video" | "photo";
-            thumb: any;
+            thumb: string | null;
             caption: string;
             date: number;
             mediaDetails: {
                 size: bigInt.BigInteger;
                 mimeType: string;
-                fileName: string;
-                duration: number;
-                width: number;
-                height: number;
-            };
+                fileName: string | null;
+                duration: number | null;
+                width: number | null;
+                height: number | null;
+            } | null;
         }[];
-        total: number;
+        total: number | undefined;
         hasMore: boolean;
     }>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
@@ -367,14 +371,14 @@ declare class TelegramManager {
         id: number;
         name: string;
         options: {
-            includeContacts: boolean;
-            includeNonContacts: boolean;
-            includeGroups: boolean;
-            includeBroadcasts: boolean;
-            includeBots: boolean;
-            excludeMuted: boolean;
-            excludeRead: boolean;
-            excludeArchived: boolean;
+            includeContacts: boolean | undefined;
+            includeNonContacts: boolean | undefined;
+            includeGroups: boolean | undefined;
+            includeBroadcasts: boolean | undefined;
+            includeBots: boolean | undefined;
+            excludeMuted: boolean | undefined;
+            excludeRead: boolean | undefined;
+            excludeArchived: boolean | undefined;
         };
     }>;
     getChatFolders(): Promise<{
@@ -413,15 +417,15 @@ declare class TelegramManager {
         folderId?: number;
     }): Promise<{
         id: string;
-        title: string;
-        username: string;
+        title: string | null;
+        username: string | null | undefined;
         type: string;
         unreadCount: number;
         lastMessage: {
             id: number;
             text: string;
             date: Date;
-        };
+        } | null;
     }[]>;
     updateChatSettings(settings: {
         chatId: string;

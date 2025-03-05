@@ -58,7 +58,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(({ value }) => value === '' ? undefined : value),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], VerifyCodeDto.prototype, "password", void 0);
 class TgSignupResponse {
 }
