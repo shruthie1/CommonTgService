@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType, createGroupDto } from './dto';
