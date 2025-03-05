@@ -41,11 +41,11 @@ __decorate([
 ], CreateUserDto.prototype, "firstName", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Last name of the user', example: null }),
-    __metadata("design:type", Object)
+    __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastName", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Username of the user', example: null }),
-    __metadata("design:type", Object)
+    __metadata("design:type", String)
 ], CreateUserDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of channels', example: 56 }),
@@ -97,7 +97,7 @@ __decorate([
 ], CreateUserDto.prototype, "videoCount", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Gender of the user', example: null }),
-    __metadata("design:type", Object)
+    __metadata("design:type", String)
 ], CreateUserDto.prototype, "gender", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of other photos', example: 0 }),

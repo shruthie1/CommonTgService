@@ -35,7 +35,7 @@ export declare class UsersService {
     private telegramService;
     private clientsService;
     constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService);
-    create(user: CreateUserDto): Promise<User>;
+    create(user: CreateUserDto): Promise<User | undefined>;
     findAll(): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, user: UpdateUserDto): Promise<number>;

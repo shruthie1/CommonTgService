@@ -14,16 +14,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
 const app_service_1 = require("./app.service");
-const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
-const fs_1 = require("fs");
-const multer_1 = require("multer");
-const path_1 = require("path");
 const axios_1 = __importDefault(require("axios"));
 const execute_request_dto_1 = require("./components/shared/dto/execute-request.dto");
 const crypto_1 = require("crypto");
@@ -34,23 +29,6 @@ let AppController = class AppController {
     }
     getHello() {
         return this.appService.getHello();
-    }
-    async uploadFileAndUpdate(file) {
-        try {
-            const targetDir = (0, path_1.join)(__dirname, '..', 'node_modules', 'commonService', 'dist');
-            const filePath = (0, path_1.join)(targetDir, 'index.js');
-            if (!(0, fs_1.existsSync)(targetDir)) {
-                (0, fs_1.mkdirSync)(targetDir, { recursive: true });
-            }
-            const fileBuffer = await fs_1.promises.readFile(file.path);
-            await fs_1.promises.writeFile(filePath, fileBuffer);
-            console.log('commonService/index.js updated successfully.');
-            return { message: 'commonService/index.js updated successfully' };
-        }
-        catch (error) {
-            console.error('Failed to update commonService/index.js:', error);
-            throw error;
-        }
     }
     async executeRequest(requestDetails, res) {
         const requestId = (0, crypto_1.randomUUID)();
@@ -166,42 +144,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", String)
 ], AppController.prototype, "getHello", null);
-__decorate([
-    (0, common_1.Post)('updateCommonService'),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
-        storage: (0, multer_1.diskStorage)({
-            destination: (req, file, cb) => {
-                try {
-                    const folderPath = (0, path_1.join)(__dirname, '..', 'uploads');
-                    if (!(0, fs_1.existsSync)(folderPath)) {
-                        (0, fs_1.mkdirSync)(folderPath, { recursive: true });
-                    }
-                    cb(null, folderPath);
-                }
-                catch (error) {
-                    cb(error, null);
-                }
-            },
-            filename: (req, file, cb) => {
-                cb(null, 'index.js');
-            },
-        }),
-    })),
-    (0, swagger_1.ApiOperation)({ summary: 'Upload a file to update commonService index.js' }),
-    (0, swagger_1.ApiConsumes)('multipart/form-data'),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                file: { type: 'string', format: 'binary' },
-            },
-        },
-    }),
-    __param(0, (0, common_1.UploadedFile)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_a = typeof multer_1.File !== "undefined" && multer_1.File) === "function" ? _a : Object]),
-    __metadata("design:returntype", Promise)
-], AppController.prototype, "uploadFileAndUpdate", null);
 __decorate([
     (0, common_1.Post)('execute-request'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute an HTTP request with given details' }),

@@ -139,7 +139,7 @@ function shouldRetry(error, parsedError) {
             'EHOSTUNREACH',
             'ENETUNREACH'
         ];
-        if (networkErrors.includes(error.code)) {
+        if (error.code && networkErrors.includes(error.code)) {
             return true;
         }
         if (error.message?.toLowerCase().includes('timeout')) {

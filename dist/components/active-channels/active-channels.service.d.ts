@@ -37,22 +37,22 @@ export declare class ActiveChannelsService {
     findAll(): Promise<ActiveChannel[]>;
     findOne(channelId: string): Promise<ActiveChannel>;
     update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel>;
-    removeFromAvailableMsgs(channelId: string, msg: string): Promise<(import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
+    removeFromAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
         _id: unknown;
     }> & {
         __v: number;
-    }) | null>;
-    addToAvailableMsgs(channelId: string, msg: string): Promise<(import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
+    }>;
+    addToAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument> & ActiveChannel & import("mongoose").Document<unknown, any, any> & Required<{
         _id: unknown;
     }> & {
         __v: number;
-    }) | null>;
+    }>;
     remove(channelId: string): Promise<void>;
     search(filter: any): Promise<ActiveChannel[]>;
     addReactions(channelId: string, reactions: string[]): Promise<ActiveChannel>;
     getRandomReaction(channelId: string): Promise<string>;
     removeReaction(channelId: string, reaction: string): Promise<ActiveChannel>;
-    getActiveChannels(limit?: number, skip?: number, notIds?: never[]): Promise<ActiveChannel[]>;
+    getActiveChannels(limit?: number, skip?: number, notIds?: any[]): Promise<ActiveChannel[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]>;
     resetWordRestrictions(): Promise<void>;
     resetAvailableMsgs(): Promise<void>;

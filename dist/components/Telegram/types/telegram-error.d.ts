@@ -1,8 +1,8 @@
 export declare class TelegramError extends Error {
-    readonly code?: string | undefined;
+    readonly code?: string;
     readonly details?: unknown;
     status: any;
-    constructor(message: string, code?: string | undefined, details?: unknown);
+    constructor(message: string, code?: string, details?: unknown);
 }
 export declare enum TelegramErrorCode {
     CLIENT_NOT_FOUND = "CLIENT_NOT_FOUND",

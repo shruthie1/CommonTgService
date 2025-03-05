@@ -10,7 +10,7 @@ const extractMessage = (data) => {
     if (typeof data === 'string' ||
         typeof data === 'number' ||
         typeof data === 'boolean') {
-        return data;
+        return String(data);
     }
     if (typeof data === 'object' && data !== null) {
         const messages = [];

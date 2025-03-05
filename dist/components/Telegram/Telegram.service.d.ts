@@ -26,7 +26,7 @@ export declare class TelegramService implements OnModuleDestroy {
     constructor(usersService: UsersService, bufferClientService: BufferClientService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
     getActiveClientSetup(): {
-        days?: number | undefined;
+        days?: number;
         archiveOld: boolean;
         formalities: boolean;
         newMobile: string;
@@ -55,11 +55,7 @@ export declare class TelegramService implements OnModuleDestroy {
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
-    getGrpMembers(mobile: string, entity: EntityLike): Promise<{
-        tgId: import("big-integer").BigInteger;
-        name: string;
-        username: string;
-    }[] | undefined>;
+    getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
     addContact(mobile: string, data: {
         mobile: string;
         tgId: string;
@@ -82,7 +78,7 @@ export declare class TelegramService implements OnModuleDestroy {
     forwardSecrets(mobile: string, fromChatId: string): Promise<void>;
     joinChannelAndForward(mobile: string, fromChatId: string, channel: string): Promise<void>;
     blockUser(mobile: string, chatId: string): Promise<void>;
-    joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates | undefined>;
+    joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
     getCallLog(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;
@@ -93,14 +89,14 @@ export declare class TelegramService implements OnModuleDestroy {
     getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
     getMe(mobile: string): Promise<Api.User>;
-    getEntity(mobile: string, entity: EntityLike): Promise<import("telegram/define").Entity | undefined>;
+    getEntity(mobile: string, entity: EntityLike): Promise<import("telegram/define").Entity>;
     createNewSession(mobile: string): Promise<string>;
     set2Fa(mobile: string): Promise<string>;
     updatePrivacyforDeletedAccount(mobile: string): Promise<void>;
     deleteProfilePhotos(mobile: string): Promise<void>;
     setProfilePic(mobile: string, name: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
-    downloadProfilePic(mobile: string, index: number): Promise<string | undefined>;
+    downloadProfilePic(mobile: string, index: number): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
     getMediaMetadata(mobile: string, chatId?: string, offset?: number, limit?: number): Promise<any>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
@@ -109,9 +105,7 @@ export declare class TelegramService implements OnModuleDestroy {
     leaveChannel(mobile: string, channel: string): Promise<void>;
     deleteChat(mobile: string, chatId: string): Promise<void>;
     updateNameandBio(mobile: string, firstName: string, about?: string): Promise<void>;
-    getDialogs(mobile: string, query: DialogsQueryDto): Promise<{
-        id: import("big-integer").BigInteger;
-    }[]>;
+    getDialogs(mobile: string, query: DialogsQueryDto): Promise<any[]>;
     getConnectionStatus(): Promise<{
         activeConnections: number;
         rateLimited: number;
@@ -187,7 +181,7 @@ export declare class TelegramService implements OnModuleDestroy {
     unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void>;
     getGroupAdmins(mobile: string, groupId: string): Promise<{
         userId: string;
-        rank?: string | undefined;
+        rank?: string;
         permissions: {
             changeInfo: boolean;
             postMessages: boolean;
@@ -227,14 +221,14 @@ export declare class TelegramService implements OnModuleDestroy {
             message: string;
             date: number;
             sender: {
-                id: string | undefined;
-                is_self: boolean | undefined;
-                username: string | null;
+                id: string;
+                is_self: boolean;
+                username: string;
             };
             media: {
                 type: "document" | "video" | "photo";
                 thumbnailUrl: string | Buffer;
-            } | null;
+            };
         }[];
         total: number;
     }>;
@@ -251,19 +245,19 @@ export declare class TelegramService implements OnModuleDestroy {
         messages: {
             messageId: number;
             type: "document" | "video" | "photo";
-            thumb: string | null;
+            thumb: any;
             caption: string;
             date: number;
             mediaDetails: {
                 size: import("big-integer").BigInteger;
                 mimeType: string;
-                fileName: string | null;
-                duration: number | null;
-                width: number | null;
-                height: number | null;
-            } | null;
+                fileName: string;
+                duration: number;
+                width: number;
+                height: number;
+            };
         }[];
-        total: number | undefined;
+        total: number;
         hasMore: boolean;
     }>;
     exportContacts(mobile: string, format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
@@ -312,14 +306,14 @@ export declare class TelegramService implements OnModuleDestroy {
         id: number;
         name: string;
         options: {
-            includeContacts: boolean | undefined;
-            includeNonContacts: boolean | undefined;
-            includeGroups: boolean | undefined;
-            includeBroadcasts: boolean | undefined;
-            includeBots: boolean | undefined;
-            excludeMuted: boolean | undefined;
-            excludeRead: boolean | undefined;
-            excludeArchived: boolean | undefined;
+            includeContacts: boolean;
+            includeNonContacts: boolean;
+            includeGroups: boolean;
+            includeBroadcasts: boolean;
+            includeBots: boolean;
+            excludeMuted: boolean;
+            excludeRead: boolean;
+            excludeArchived: boolean;
         };
     }>;
     getChatFolders(mobile: string): Promise<{
@@ -397,15 +391,15 @@ export declare class TelegramService implements OnModuleDestroy {
         folderId?: number;
     }): Promise<{
         id: string;
-        title: string | null;
-        username: string | null | undefined;
+        title: string;
+        username: string;
         type: string;
         unreadCount: number;
         lastMessage: {
             id: number;
             text: string;
             date: Date;
-        } | null;
+        };
     }[]>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {

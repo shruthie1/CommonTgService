@@ -12,8 +12,8 @@ class MailReader {
         this.isReady = false;
         this.result = '';
         this.imap = new imap_1.default({
-            user: process.env.GMAIL_ADD,
-            password: process.env.GMAIL_PASS,
+            user: process.env.GMAIL_ADD || '',
+            password: process.env.GMAIL_PASS || '',
             host: 'imap.gmail.com',
             port: 993,
             tls: true,
