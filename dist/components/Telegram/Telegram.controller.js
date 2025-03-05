@@ -1021,11 +1021,11 @@ __decorate([
     (0, common_1.Post)('group/create/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new group with advanced options' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.GroupSettingsDto }),
+    (0, swagger_1.ApiBody)({ type: dto_1.createGroupDto }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.GroupSettingsDto]),
+    __metadata("design:paramtypes", [String, dto_1.createGroupDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "createGroupWithOptions", null);
 __decorate([

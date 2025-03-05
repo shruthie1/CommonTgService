@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
-import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType } from './dto';
+import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType, createGroupDto } from './dto';
 import { MessageType } from './dto/message-search.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
@@ -48,7 +48,7 @@ export declare class TelegramController {
         }[];
         total: number;
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
     joinChannel(mobile: string, channel: string, forward?: boolean, fromChatId?: string): Promise<void | import("telegram").Api.TypeUpdates>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
@@ -93,7 +93,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;
@@ -152,7 +152,7 @@ export declare class TelegramController {
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
     getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<any[]>;
     getLastActiveTime(mobile: string): Promise<string>;
-    createGroupWithOptions(mobile: string, options: GroupSettingsDto): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
+    createGroupWithOptions(mobile: string, options: createGroupDto): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
     updateGroupSettings(mobile: string, settings: GroupSettingsDto): Promise<boolean>;
     addGroupMembers(memberOp: GroupMemberOperationDto, mobile: string): Promise<void>;
     removeGroupMembers(memberOp: GroupMemberOperationDto, mobile: string): Promise<void>;
@@ -278,6 +278,7 @@ export declare class TelegramController {
         slowMode?: number;
         linkedChat?: string;
         defaultSendAs?: string;
+        username?: string;
     }): Promise<boolean>;
     sendMediaBatch(mobile: string, options: {
         chatId: string;

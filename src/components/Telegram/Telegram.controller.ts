@@ -20,7 +20,8 @@ import {
     ContactExportImportDto,
     ContactBlockListDto,
     AddContactsDto,
-    MediaType
+    MediaType,
+    createGroupDto
 } from './dto';
 import { MessageType } from './dto/message-search.dto';
 import { MediaMetadataDto } from './dto/metadata-operations.dto';
@@ -712,10 +713,10 @@ export class TelegramController {
     @Post('group/create/:mobile')
     @ApiOperation({ summary: 'Create a new group with advanced options' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiBody({ type: GroupSettingsDto })
+    @ApiBody({ type: createGroupDto })
     async createGroupWithOptions(
         @Param('mobile') mobile: string,
-        @Body() options: GroupSettingsDto
+        @Body() options: createGroupDto
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
@@ -1129,6 +1130,7 @@ export class TelegramController {
             slowMode?: number;
             linkedChat?: string;
             defaultSendAs?: string;
+            username?: string;
         }
     ) {
         return this.handleTelegramOperation(async () => {

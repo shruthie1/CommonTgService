@@ -587,6 +587,7 @@ export class TelegramService implements OnModuleDestroy {
         mobile: string,
         settings: {
             groupId: string;
+            username?: string;
             title?: string;
             description?: string;
             slowMode?: number;
@@ -923,6 +924,7 @@ export class TelegramService implements OnModuleDestroy {
         mobile: string,
         settings: {
             chatId: string;
+            username?: string;
             title?: string;
             about?: string;
             photo?: string;
@@ -931,6 +933,11 @@ export class TelegramService implements OnModuleDestroy {
             defaultSendAs?: string;
         }
     ) {
+
+        if (!settings.chatId) {
+            throw new Error('chatId is required');
+        }
+
         return this.executeWithConnection(mobile, 'Update chat settings', (client) =>
             client.updateChatSettings(settings)
         );

@@ -35,7 +35,8 @@ export declare class AdminOperationDto extends BaseGroupOperationDto {
     rank?: string;
 }
 export declare class GroupSettingsDto extends BaseGroupOperationDto {
-    title: string;
+    title?: string;
+    username?: string;
     description?: string;
     address?: string;
     slowMode?: number;
@@ -56,4 +57,21 @@ export declare class ChatCleanupDto extends BaseGroupOperationDto {
     beforeDate?: Date;
     onlyMedia?: boolean;
     excludePinned?: boolean;
+}
+export declare class createGroupDto {
+    title: string;
+    description?: string;
+    address?: string;
+    slowMode?: number;
+    megagroup?: boolean;
+    forImport?: boolean;
+    memberRestrictions?: {
+        sendMessages?: boolean;
+        sendMedia?: boolean;
+        sendStickers?: boolean;
+        sendGifs?: boolean;
+        sendGames?: boolean;
+        sendInline?: boolean;
+        embedLinks?: boolean;
+    };
 }

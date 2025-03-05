@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsNumber, IsBoolean, IsObject, ValidateNested, IsNotEmpty, IsEnum, IsDateString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 
 export enum AdminPermission {
@@ -19,61 +19,51 @@ export class AdminPermissionsDto {
   @ApiProperty({ description: 'Permission to change group info', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   changeInfo?: boolean = true;
 
   @ApiProperty({ description: 'Permission to post messages', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   postMessages?: boolean = true;
 
   @ApiProperty({ description: 'Permission to edit messages', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   editMessages?: boolean = true;
 
   @ApiProperty({ description: 'Permission to delete messages', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   deleteMessages?: boolean = true;
 
   @ApiProperty({ description: 'Permission to ban users', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   banUsers?: boolean = true;
 
   @ApiProperty({ description: 'Permission to invite users', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   inviteUsers?: boolean = true;
 
   @ApiProperty({ description: 'Permission to pin messages', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   pinMessages?: boolean = true;
 
   @ApiProperty({ description: 'Permission to add new admins', default: false })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   addAdmins?: boolean = false;
 
   @ApiProperty({ description: 'Permission to remain anonymous', default: false })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   anonymous?: boolean = false;
 
   @ApiProperty({ description: 'Permission to manage voice chats', default: true })
   @IsOptional()
   @IsBoolean()
-  @IsEnum(AdminPermission)
   manageCall?: boolean = true;
 }
 
@@ -114,37 +104,42 @@ export class AdminOperationDto extends BaseGroupOperationDto {
 }
 
 export class GroupSettingsDto extends BaseGroupOperationDto {
-  @ApiProperty({ description: 'Group title', required: true })
+  @ApiPropertyOptional({ description: 'Group title', required: false })
   @IsString()
-  @IsNotEmpty()
-  title: string;
+  @IsOptional()
+  title?: string;
 
-  @ApiProperty({ description: 'Group description', required: false })
+  @ApiPropertyOptional({ description: 'Group username', required: false })
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @ApiPropertyOptional({ description: 'Group description', required: false })
   @IsOptional()
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Address or location of the group', required: false })
+  @ApiPropertyOptional({ description: 'Address or location of the group', required: false })
   @IsOptional()
   @IsString()
   address?: string;
 
-  @ApiProperty({ description: 'Slow mode delay in seconds', required: false })
+  @ApiPropertyOptional({ description: 'Slow mode delay in seconds', required: false })
   @IsOptional()
   @IsNumber()
   slowMode?: number;
 
-  @ApiProperty({ description: 'Whether the group is a megagroup', default: true })
+  @ApiPropertyOptional({ description: 'Whether the group is a megagroup', default: true })
   @IsOptional()
   @IsBoolean()
   megagroup?: boolean = true;
 
-  @ApiProperty({ description: 'Whether the group is for import', default: false })
+  @ApiPropertyOptional({ description: 'Whether the group is for import', default: false })
   @IsOptional()
   @IsBoolean()
   forImport?: boolean = false;
 
-  @ApiProperty({ description: 'Member restrictions', required: false })
+  @ApiPropertyOptional({ description: 'Member restrictions', required: false })
   @IsOptional()
   @IsObject()
   memberRestrictions?: {
@@ -178,4 +173,49 @@ export class ChatCleanupDto extends BaseGroupOperationDto {
   @IsOptional()
   @IsBoolean()
   excludePinned?: boolean;
+}
+
+export class createGroupDto {
+  @ApiProperty({ description: 'Group title', required: true })
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiPropertyOptional({ description: 'Group description', required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Address or location of the group', required: false })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ description: 'Slow mode delay in seconds', required: false })
+  @IsOptional()
+  @IsNumber()
+  slowMode?: number = 0;
+
+  @ApiPropertyOptional({ description: 'Whether the group is a megagroup', default: true })
+  @IsOptional()
+  @IsBoolean()
+  megagroup?: boolean = true;
+
+  @ApiPropertyOptional({ description: 'Whether the group is for import', default: false })
+  @IsOptional()
+  @IsBoolean()
+  forImport?: boolean = false;
+
+  @ApiPropertyOptional({ description: 'Member restrictions', required: false })
+  @IsOptional()
+  @IsObject()
+  memberRestrictions?: {
+    sendMessages?: boolean;
+    sendMedia?: boolean;
+    sendStickers?: boolean;
+    sendGifs?: boolean;
+    sendGames?: boolean;
+    sendInline?: boolean;
+    embedLinks?: boolean;
+  };
 }

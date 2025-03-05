@@ -1475,15 +1475,14 @@ class TelegramManager {
     async createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel> {
         if (!this.client) throw new Error('Client not initialized');
 
-        const result = await this.client.invoke(new Api.channels.CreateChannel({
-            title: options.title,
-            about: options.description || '',
-            broadcast: false,
-            megagroup: true,
-            forImport: false,
-            geoPoint: undefined,
-            address: '',
-        }));
+        const result: any = await this.client.invoke(
+            new Api.channels.CreateChannel({
+                title: options.title,
+                about: options.description,
+                megagroup: options.megagroup,
+                forImport: options.forImport,
+            })
+        );
 
         // Find the channel in updates safely
         let channelId: bigInt.BigInteger | undefined;
@@ -1539,24 +1538,33 @@ class TelegramManager {
         description?: string;
         slowMode?: number;
         memberRestrictions?: any;
+        username?: string;
     }) {
         if (!this.client) throw new Error('Client not initialized');
 
         const channel = await this.client.getEntity(settings.groupId);
 
-        if (settings.title || settings.description) {
+        if (settings.title) {
             await this.client.invoke(new Api.channels.EditTitle({
                 channel: channel,
                 title: settings.title || ''
-            }));
+            }))
+        };
 
-            if (settings.description) {
-                await this.client.invoke(new Api.messages.EditChatAbout({
-                    peer: channel,
-                    about: settings.description
-                }));
-            }
+        if (settings.description) {
+            await this.client.invoke(new Api.messages.EditChatAbout({
+                peer: channel,
+                about: settings.description
+            }));
         }
+
+        if (settings.username) {
+            await this.client.invoke(new Api.channels.UpdateUsername({
+                channel: channel,
+                username: settings.username
+            }));
+        }
+
 
         if (settings.slowMode !== undefined) {
             await this.client.invoke(new Api.channels.ToggleSlowMode({
@@ -2765,6 +2773,7 @@ class TelegramManager {
 
     async updateChatSettings(settings: {
         chatId: string;
+        username?: string;
         title?: string;
         about?: string;
         photo?: string;
@@ -2819,6 +2828,13 @@ class TelegramManager {
             updates.push(this.client.invoke(new Api.channels.SetDiscussionGroup({
                 broadcast: chat,
                 group: linkedChannel
+            })));
+        }
+
+        if (settings.username) {
+            updates.push(this.client.invoke(new Api.channels.UpdateUsername({
+                channel: chat,
+                username: settings.username
             })));
         }
 

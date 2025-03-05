@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ChatCleanupDto = exports.GroupSettingsDto = exports.AdminOperationDto = exports.GroupMemberOperationDto = exports.BaseGroupOperationDto = exports.AdminPermissionsDto = exports.AdminPermission = void 0;
+exports.createGroupDto = exports.ChatCleanupDto = exports.GroupSettingsDto = exports.AdminOperationDto = exports.GroupMemberOperationDto = exports.BaseGroupOperationDto = exports.AdminPermissionsDto = exports.AdminPermission = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
@@ -45,70 +45,60 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to change group info', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "changeInfo", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to post messages', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "postMessages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to edit messages', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "editMessages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to delete messages', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "deleteMessages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to ban users', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "banUsers", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to invite users', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "inviteUsers", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to pin messages', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "pinMessages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to add new admins', default: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "addAdmins", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to remain anonymous', default: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "anonymous", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Permission to manage voice chats', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    (0, class_validator_1.IsEnum)(AdminPermission),
     __metadata("design:type", Boolean)
 ], AdminPermissionsDto.prototype, "manageCall", void 0);
 class BaseGroupOperationDto {
@@ -164,43 +154,49 @@ class GroupSettingsDto extends BaseGroupOperationDto {
 }
 exports.GroupSettingsDto = GroupSettingsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group title', required: true }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Group title', required: false }),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], GroupSettingsDto.prototype, "title", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group description', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Group username', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GroupSettingsDto.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Group description', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GroupSettingsDto.prototype, "description", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Address or location of the group', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Address or location of the group', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GroupSettingsDto.prototype, "address", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Slow mode delay in seconds', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Slow mode delay in seconds', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], GroupSettingsDto.prototype, "slowMode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether the group is a megagroup', default: true }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is a megagroup', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], GroupSettingsDto.prototype, "megagroup", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether the group is for import', default: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is for import', default: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], GroupSettingsDto.prototype, "forImport", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Member restrictions', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Member restrictions', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
@@ -233,4 +229,54 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], ChatCleanupDto.prototype, "excludePinned", void 0);
+class createGroupDto {
+    constructor() {
+        this.slowMode = 0;
+        this.megagroup = true;
+        this.forImport = false;
+    }
+}
+exports.createGroupDto = createGroupDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Group title', required: true }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], createGroupDto.prototype, "title", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Group description', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], createGroupDto.prototype, "description", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Address or location of the group', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], createGroupDto.prototype, "address", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Slow mode delay in seconds', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], createGroupDto.prototype, "slowMode", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is a megagroup', default: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], createGroupDto.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is for import', default: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], createGroupDto.prototype, "forImport", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Member restrictions', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], createGroupDto.prototype, "memberRestrictions", void 0);
 //# sourceMappingURL=group-operations.dto.js.map

@@ -138,6 +138,7 @@ declare class TelegramManager {
         description?: string;
         slowMode?: number;
         memberRestrictions?: any;
+        username?: string;
     }): Promise<boolean>;
     scheduleMessageSend(opts: MessageScheduleOptions): Promise<Api.Message>;
     getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]>;
@@ -424,6 +425,7 @@ declare class TelegramManager {
     }[]>;
     updateChatSettings(settings: {
         chatId: string;
+        username?: string;
         title?: string;
         about?: string;
         photo?: string;

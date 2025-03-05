@@ -129,6 +129,7 @@ export declare class TelegramService implements OnModuleDestroy {
     createGroupWithOptions(mobile: string, options: GroupOptions): Promise<Api.Chat | Api.Channel>;
     updateGroupSettings(mobile: string, settings: {
         groupId: string;
+        username?: string;
         title?: string;
         description?: string;
         slowMode?: number;
@@ -361,6 +362,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<Api.TypeUpdates>;
     updateChatSettings(mobile: string, settings: {
         chatId: string;
+        username?: string;
         title?: string;
         about?: string;
         photo?: string;

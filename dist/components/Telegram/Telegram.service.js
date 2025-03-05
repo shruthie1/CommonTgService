@@ -635,6 +635,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return this.executeWithConnection(mobile, 'Edit message', (client) => client.editMessage(options));
     }
     async updateChatSettings(mobile, settings) {
+        if (!settings.chatId) {
+            throw new Error('chatId is required');
+        }
         return this.executeWithConnection(mobile, 'Update chat settings', (client) => client.updateChatSettings(settings));
     }
     async sendMediaBatch(mobile, options) {
