@@ -11,23 +11,33 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateTransactionDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
+const class_validator_1 = require("class-validator");
 class CreateTransactionDto {
+    constructor() {
+        this.profile = "undefined";
+        this.chatId = "undefined";
+        this.ip = "undefined";
+    }
 }
 exports.CreateTransactionDto = CreateTransactionDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Unique transaction ID (UTR).' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "transactionId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Amount involved in the transaction.' }),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateTransactionDto.prototype, "amount", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Issue type reported by the user.' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "issue", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Description of issue reported by the user.' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "description", void 0);
 __decorate([
@@ -35,18 +45,26 @@ __decorate([
         description: 'Refund method selected by the user.',
         required: false
     }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "refundMethod", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'User profile ID.' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'User profile ID.', required: false }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'User chat ID.' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'User chat ID.', }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'IP address of the user.' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'IP address of the user.', required: false }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "ip", void 0);
 //# sourceMappingURL=create-transaction.dto.js.map

@@ -32,7 +32,7 @@ export declare class Transaction extends Document {
     refundMethod?: string;
     profile: string;
     chatId: string;
-    ipAddress: string;
+    ip: string;
 }
 export declare const TransactionSchema: import("mongoose").Schema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & Required<{
     _id: unknown;

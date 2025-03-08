@@ -22,6 +22,7 @@ let TransactionService = class TransactionService {
         this.transactionModel = transactionModel;
     }
     async create(createTransactionDto) {
+        console.log('createTransactionDto', createTransactionDto);
         const newTransaction = new this.transactionModel(createTransactionDto);
         return await newTransaction.save();
     }

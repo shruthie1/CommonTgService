@@ -38,13 +38,7 @@ async function bootstrap() {
         validationError: {
             target: false,
             value: undefined
-        },
-        exceptionFactory: (errors) => {
-            const messages = errors.map(error => {
-                return error.constraints ? Object.values(error.constraints) : [];
-            }).flat();
-            return new Error(messages.join('\n'));
-        },
+        }
     }));
     process.on('unhandledRejection', (reason, promise) => {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);

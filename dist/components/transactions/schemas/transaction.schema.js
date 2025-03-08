@@ -46,7 +46,7 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
-], Transaction.prototype, "ipAddress", void 0);
+], Transaction.prototype, "ip", void 0);
 exports.Transaction = Transaction = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Transaction);

@@ -12,6 +12,7 @@ export class TransactionService {
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
+    console.log('createTransactionDto', createTransactionDto);
     const newTransaction = new this.transactionModel(createTransactionDto);
     return await newTransaction.save();
   }

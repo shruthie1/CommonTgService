@@ -25,7 +25,10 @@ export class Transaction extends Document {
   chatId: string;
 
   @Prop({ required: false })
-  ipAddress: string;
+  ip: string;
+
+  @Prop({ required: false, default: 'pending' })
+  status: string;
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
