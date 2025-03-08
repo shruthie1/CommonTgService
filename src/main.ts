@@ -36,9 +36,9 @@ async function bootstrap() {
     transform: true,
     // whitelist: true,
     // forbidNonWhitelisted: true,
-    // transformOptions: {
-    //   enableImplicitConversion: true
-    // },
+    transformOptions: {
+      enableImplicitConversion: true
+    },
     // validationError: {
     //   target: false,
     //   value: undefined
