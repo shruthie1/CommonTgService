@@ -33,7 +33,7 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
   mongoose.set('debug', true)
   app.useGlobalPipes(new ValidationPipe({
-    // transform: true,
+    transform: true,
     // whitelist: true,
     // forbidNonWhitelisted: true,
     // transformOptions: {
