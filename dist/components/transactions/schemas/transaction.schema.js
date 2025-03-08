@@ -47,6 +47,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], Transaction.prototype, "ip", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'pending' }),
+    __metadata("design:type", String)
+], Transaction.prototype, "status", void 0);
 exports.Transaction = Transaction = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Transaction);

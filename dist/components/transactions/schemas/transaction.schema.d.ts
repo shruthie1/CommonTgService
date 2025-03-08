@@ -33,6 +33,7 @@ export declare class Transaction extends Document {
     profile: string;
     chatId: string;
     ip: string;
+    status: string;
 }
 export declare const TransactionSchema: import("mongoose").Schema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & Required<{
     _id: unknown;

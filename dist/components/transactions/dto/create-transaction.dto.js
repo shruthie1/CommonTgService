@@ -17,6 +17,7 @@ class CreateTransactionDto {
         this.profile = "undefined";
         this.chatId = "undefined";
         this.ip = "undefined";
+        this.status = "pending";
     }
 }
 exports.CreateTransactionDto = CreateTransactionDto;
@@ -67,4 +68,10 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "ip", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Transaction status.', required: false }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateTransactionDto.prototype, "status", void 0);
 //# sourceMappingURL=create-transaction.dto.js.map

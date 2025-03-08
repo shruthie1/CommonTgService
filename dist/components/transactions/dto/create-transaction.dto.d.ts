@@ -7,4 +7,5 @@ export declare class CreateTransactionDto {
     profile: string;
     chatId: string;
     ip: string;
+    status: string;
 }
