@@ -33,16 +33,16 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
   mongoose.set('debug', true)
   app.useGlobalPipes(new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transformOptions: {
-      enableImplicitConversion: true
-    },
-    validationError: {
-      target: false,
-      value: undefined
-    }
+    // transform: true,
+    // whitelist: true,
+    // forbidNonWhitelisted: true,
+    // transformOptions: {
+    //   enableImplicitConversion: true
+    // },
+    // validationError: {
+    //   target: false,
+    //   value: undefined
+    // }
   }));
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
