@@ -213,12 +213,14 @@ let ClientService = class ClientService {
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
             await this.telegramService.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
-            let updatedUsername;
+            const client = await this.findOne(clientId);
             await this.telegramService.createClient(newMobile, false, true);
-            const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-            const userCaps = username[0].toUpperCase() + username.slice(1);
-            let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
-            updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
+            const firstName = (client.name).split(' ')[0];
+            const middleName = (client.name).split(' ')[1];
+            const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
+            const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
+            const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
+            const updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await this.telegramService.deleteClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
@@ -307,9 +309,12 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
             if (!me.username || me.username !== client.username || !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
-                const username = (clientId?.match(/[a-zA-Z]+/g)).toString();
-                const userCaps = username[0].toUpperCase() + username.slice(1);
-                let baseUsername = `${userCaps}_Red` + (0, utils_1.fetchNumbersFromString)(clientId);
+                const client = await this.findOne(clientId);
+                const firstName = (client.name).split(' ')[0];
+                const middleName = (client.name).split(' ')[1];
+                const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
+                const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
+                const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername });
             }
