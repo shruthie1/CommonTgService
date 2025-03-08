@@ -30,15 +30,9 @@ async function bootstrap() {
     mongoose_1.default.set('debug', true);
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
         transformOptions: {
             enableImplicitConversion: true
         },
-        validationError: {
-            target: false,
-            value: undefined
-        }
     }));
     process.on('unhandledRejection', (reason, promise) => {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
