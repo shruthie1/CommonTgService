@@ -15,8 +15,8 @@ export class Transaction extends Document {
   @Prop({ required: false })
   description: string;
 
-  @Prop()
-  refundMethod: string;
+  @Prop({ required: false })
+  refundMethod?: string;
 
   @Prop({ required: false })
   profile: string;

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTransactionDto {
   @ApiProperty({ description: 'Unique transaction ID (UTR).' })
@@ -9,12 +9,15 @@ export class CreateTransactionDto {
 
   @ApiProperty({ description: 'Issue type reported by the user.' })
   issue: string;
-  
+
   @ApiProperty({ description: 'Description of issue reported by the user.' })
   description: string;
 
-  @ApiProperty({ description: 'Refund method selected by the user.' })
-  refundMethod: string;
+  @ApiPropertyOptional({
+    description: 'Refund method selected by the user.',
+    required: false
+  })
+  refundMethod?: string;
 
   @ApiProperty({ description: 'User profile ID.' })
   profile: string;
