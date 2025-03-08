@@ -32,7 +32,7 @@ __decorate([
     __metadata("design:type", String)
 ], Transaction.prototype, "description", void 0);
 __decorate([
-    (0, mongoose_1.Prop)(),
+    (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], Transaction.prototype, "refundMethod", void 0);
 __decorate([

@@ -31,7 +31,10 @@ __decorate([
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "description", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Refund method selected by the user.' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Refund method selected by the user.',
+        required: false
+    }),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "refundMethod", void 0);
 __decorate([

@@ -3,7 +3,7 @@ export declare class CreateTransactionDto {
     amount: number;
     issue: string;
     description: string;
-    refundMethod: string;
+    refundMethod?: string;
     profile: string;
     chatId: string;
     ip: string;

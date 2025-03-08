@@ -29,7 +29,7 @@ export declare class Transaction extends Document {
     amount: number;
     issue: string;
     description: string;
-    refundMethod: string;
+    refundMethod?: string;
     profile: string;
     chatId: string;
     ipAddress: string;
