@@ -1157,11 +1157,6 @@ __decorate([
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),
-    (0, common_1.UsePipes)(new common_1.ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true
-    })),
     __metadata("design:paramtypes", [Telegram_service_1.TelegramService])
 ], TelegramController);
 //# sourceMappingURL=Telegram.controller.js.map
