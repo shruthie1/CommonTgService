@@ -5,7 +5,7 @@ import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperation
 import { MessageType } from './dto/message-search.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
-import { ChatStatistics } from 'src/interfaces/telegram';
+import { ChatStatistics } from '../../interfaces/telegram';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
