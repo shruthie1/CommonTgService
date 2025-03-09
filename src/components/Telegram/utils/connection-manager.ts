@@ -6,13 +6,20 @@ import { UsersService } from 'src/components/users/users.service';
 import { TelegramClient } from 'telegram';
 import { contains } from '../../../utils';
 
+interface ClientInfo {
+    client: TelegramManager;
+    lastUsed: number;
+    autoDisconnect: boolean;
+}
+
+interface GetClientOptions {
+    autoDisconnect?: boolean;
+    handler?: boolean;
+}
+
 class ConnectionManager {
     private static instance: ConnectionManager;
-    private clients: Map<string, {
-        client: TelegramManager;
-        lastUsed: number;
-        autoDisconnect?: boolean;
-    }>;
+    private clients: Map<string, ClientInfo>;
     private readonly logger: TelegramLogger;
     private cleanupInterval: NodeJS.Timeout | null = null;
     private usersService: UsersService;
@@ -55,13 +62,14 @@ class ConnectionManager {
         }
     }
 
-    public async getClient(mobile: string, options: { autoDisconnect?: boolean; handler?: boolean, excludeFromCleanup?: boolean } = {}): Promise<TelegramManager | undefined> {
+    public async getClient(mobile: string, options: GetClientOptions = {}): Promise<TelegramManager | undefined> {
         if (!mobile) {
             this.logger.logDebug('system', 'getClient called with empty mobile number');
             return undefined;
         }
 
-        const { autoDisconnect = true, handler = true } = options;
+        const { autoDisconnect = true, handler = true, } = options;
+
         this.logger.logOperation(mobile, 'Getting/Creating client', { autoDisconnect, handler });
         const clientInfo = this.clients.get(mobile);
         if (clientInfo?.client) {
@@ -76,6 +84,7 @@ class ConnectionManager {
                     return clientInfo.client;
                 } catch (error) {
                     this.logger.logError(mobile, 'Failed to reconnect client', error);
+                    await this.unregisterClient(mobile); // Clean up failed connection
                 }
             }
         }
@@ -100,7 +109,7 @@ class ConnectionManager {
                 await this.registerClient(
                     mobile,
                     telegramManager,
-                    { autoDisconnect: autoDisconnect }
+                    { autoDisconnect }
                 );
                 this.logger.logOperation(mobile, 'Client created successfully');
                 return telegramManager;
@@ -160,7 +169,7 @@ class ConnectionManager {
                 await clientInfo.client?.disconnect();
                 this.logger.logOperation(mobile, 'Client unregistered successfully');
             } else {
-                this.logger.logDebug(mobile, 'Client not found for unregistration');
+                this.logger.logError(mobile, 'Client not found for unregistration', new Error('Client not found'));
             }
         } catch (error) {
             this.logger.logError(mobile, 'Error in unregisterClient', error);
