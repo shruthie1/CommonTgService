@@ -19,9 +19,7 @@ declare class ConnectionManager {
     getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager | undefined>;
     hasClient(number: string): boolean;
     disconnectAll(): Promise<void>;
-    registerClient(mobile: string, telegramManager: TelegramManager, options?: {
-        autoDisconnect: boolean;
-    }): Promise<void>;
+    private registerClient;
     unregisterClient(mobile: string): Promise<void>;
     getActiveConnectionCount(): number;
     startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
