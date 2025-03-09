@@ -47,7 +47,7 @@ class ConnectionManager {
             this.logger.logDebug('system', 'getClient called with empty mobile number');
             return undefined;
         }
-        const { autoDisconnect = true, handler = true } = options;
+        const { autoDisconnect = true, handler = true, } = options;
         this.logger.logOperation(mobile, 'Getting/Creating client', { autoDisconnect, handler });
         const clientInfo = this.clients.get(mobile);
         if (clientInfo?.client) {
@@ -64,6 +64,7 @@ class ConnectionManager {
                 }
                 catch (error) {
                     this.logger.logError(mobile, 'Failed to reconnect client', error);
+                    await this.unregisterClient(mobile);
                 }
             }
         }
@@ -80,7 +81,7 @@ class ConnectionManager {
             client = await telegramManager.createClient(handler);
             await client.getMe();
             if (client) {
-                await this.registerClient(mobile, telegramManager, { autoDisconnect: autoDisconnect });
+                await this.registerClient(mobile, telegramManager, { autoDisconnect });
                 this.logger.logOperation(mobile, 'Client created successfully');
                 return telegramManager;
             }
@@ -129,7 +130,7 @@ class ConnectionManager {
                 this.logger.logOperation(mobile, 'Client unregistered successfully');
             }
             else {
-                this.logger.logDebug(mobile, 'Client not found for unregistration');
+                this.logger.logError(mobile, 'Client not found for unregistration', new Error('Client not found'));
             }
         }
         catch (error) {

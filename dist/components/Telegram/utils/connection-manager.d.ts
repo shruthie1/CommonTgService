@@ -1,6 +1,10 @@
 /// <reference types="node" />
 import TelegramManager from '../TelegramManager';
 import { UsersService } from 'src/components/users/users.service';
+interface GetClientOptions {
+    autoDisconnect?: boolean;
+    handler?: boolean;
+}
 declare class ConnectionManager {
     private static instance;
     private clients;
@@ -12,11 +16,7 @@ declare class ConnectionManager {
     static getInstance(): ConnectionManager;
     private cleanupInactiveConnections;
     private updateLastUsed;
-    getClient(mobile: string, options?: {
-        autoDisconnect?: boolean;
-        handler?: boolean;
-        excludeFromCleanup?: boolean;
-    }): Promise<TelegramManager | undefined>;
+    getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager | undefined>;
     hasClient(number: string): boolean;
     disconnectAll(): Promise<void>;
     registerClient(mobile: string, telegramManager: TelegramManager, options?: {
