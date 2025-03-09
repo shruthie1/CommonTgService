@@ -27,5 +27,5 @@ declare class ConnectionManager {
     startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
     stopCleanupInterval(): void;
 }
-declare const connectionManager: ConnectionManager;
-export default connectionManager;
+export declare const connectionManager: ConnectionManager;
+export {};

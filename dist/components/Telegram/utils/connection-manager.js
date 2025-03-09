@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.connectionManager = void 0;
 const TelegramManager_1 = __importDefault(require("../TelegramManager"));
 const parseError_1 = require("../../../utils/parseError");
 const telegram_logger_1 = require("./telegram-logger");
@@ -158,6 +159,5 @@ class ConnectionManager {
         }
     }
 }
-const connectionManager = ConnectionManager.getInstance();
-exports.default = connectionManager;
+exports.connectionManager = ConnectionManager.getInstance();
 //# sourceMappingURL=connection-manager.js.map
