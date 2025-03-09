@@ -182,8 +182,8 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     TelegramService_1.clientsMap.delete(mobile);
                     this.metadataTracker.removeClient(mobile);
                 }
-                const errorDetails = (0, parseError_1.parseError)(error);
-                if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
+                const errorDetails = (0, parseError_1.parseError)(error, mobile);
+                if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
                     console.log("Deleting User: ", user.mobile);
                     await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
                 }
@@ -308,7 +308,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             catch (error) {
                 console.log("Error in forwardMedia: ", error);
             }
-        }, 300000);
+        }, 5 * 60000);
         return "Media forward initiated";
     }
     async blockUser(mobile, chatId) {
