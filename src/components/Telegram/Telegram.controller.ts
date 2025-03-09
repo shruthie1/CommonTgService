@@ -272,7 +272,7 @@ export class TelegramController {
         @Query('fromChatId') fromChatId?: string
     ) {
         return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
+            await this.telegramService.createClient(mobile, false, false);
             return this.telegramService.forwardMedia(
                 mobile,
                 channel,

@@ -393,7 +393,6 @@ export class TgSignupService implements OnModuleDestroy {
             }
 
             await this.usersService.create(userData);
-
             return {
                 status: 200,
                 message: 'Registration successful',
