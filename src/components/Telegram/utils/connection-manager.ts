@@ -147,7 +147,7 @@ class ConnectionManager {
         this.logger.logOperation('system', 'All clients disconnected');
     }
 
-    public async registerClient(
+    private async registerClient(
         mobile: string,
         telegramManager: TelegramManager,
         options: { autoDisconnect: boolean } = { autoDisconnect: true }
