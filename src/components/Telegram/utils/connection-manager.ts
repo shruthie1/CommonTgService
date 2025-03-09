@@ -2,7 +2,7 @@ import TelegramManager from '../TelegramManager';
 import { parseError } from '../../../utils/parseError';
 import { TelegramLogger } from './telegram-logger';
 import { BadRequestException } from '@nestjs/common';
-import { UsersService } from 'src/components/users/users.service';
+import { UsersService } from '../../../components/users/users.service';
 import { TelegramClient } from 'telegram';
 import { contains } from '../../../utils';
 
