@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import TelegramManager from '../TelegramManager';
-import { UsersService } from 'src/components/users/users.service';
+import { UsersService } from '../../../components/users/users.service';
 interface GetClientOptions {
     autoDisconnect?: boolean;
     handler?: boolean;
