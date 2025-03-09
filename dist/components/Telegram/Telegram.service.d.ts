@@ -75,7 +75,7 @@ export declare class TelegramService implements OnModuleDestroy {
         id: any;
         accessHash: any;
     }>;
-    forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<void>;
+    forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
     getCallLog(mobile: string): Promise<{

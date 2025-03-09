@@ -61,7 +61,7 @@ export declare class TelegramController {
         };
     }>;
     getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
-    forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<void>;
+    forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
