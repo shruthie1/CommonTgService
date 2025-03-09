@@ -6,12 +6,6 @@ import { parseError } from '../../utils/parseError';
 
 @Controller('tgsignup')
 @ApiTags('tgsignup')
-@UsePipes(new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transformOptions: { enableImplicitConversion: true }
-}))
 @ApiExtraModels(SendCodeDto, VerifyCodeDto, TgSignupResponse)
 export class TgSignupController {
     private readonly logger = new Logger(TgSignupController.name);

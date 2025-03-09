@@ -32,6 +32,7 @@ import { ChatStatistics } from 'src/interfaces/telegram';
 import { ConnectionStatusDto } from './dto/common-responses.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
+import connectionManager from './utils/connection-manager';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -43,25 +44,13 @@ import * as multer from 'multer';
 export class TelegramController {
     constructor(private readonly telegramService: TelegramService) {}
 
-    private async handleTelegramOperation<T>(operation: () => Promise<T>): Promise<T> {
-        try {
-            return await operation();
-        } catch (error) {
-            if (error instanceof BadRequestException) {
-                throw error;
-            }
-            throw new BadRequestException(error.message || 'Telegram operation failed');
-        }
-    }
-
-    // Connection Management
     @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Successfully connected' })
     @ApiResponse({ status: 400, description: 'Connection failed' })
     async connect(@Param('mobile') mobile: string) {
-        await this.telegramService.createClient(mobile)
+        await connectionManager.getClient(mobile);
         return { message: 'Connected successfully' };
     }
 
@@ -70,7 +59,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Successfully disconnected' })
     async disconnect(@Param('mobile') mobile: string) {
-        await this.telegramService.deleteClient(mobile);
+        await connectionManager.unregisterClient(mobile);
         return { message: 'Disconnected successfully' };
     }
 
@@ -78,19 +67,17 @@ export class TelegramController {
     @ApiOperation({ summary: 'Disconnect all clients' })
     @ApiResponse({ status: 200, description: 'All clients disconnected successfully' })
     async disconnectAllClients() {
-        this.telegramService.disconnectAll();
+        await connectionManager.disconnectAll();
         return { message: 'All clients disconnected successfully' };
     }
+
     // Profile Management
     @Get('me/:mobile')
     @ApiOperation({ summary: 'Get current user profile' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
     async getMe(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMe(mobile);
-        });
+        return this.telegramService.getMe(mobile);
     }
 
     @Get('entity/:mobile/:entity')
@@ -99,10 +86,7 @@ export class TelegramController {
     @ApiParam({ name: 'entity', description: 'Entity identifier', required: true })
     @ApiResponse({ status: 200, description: 'Entity retrieved successfully' })
     async getEntity(@Param('mobile') mobile: string, @Param('entity') entity: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getEntity(mobile, entity);
-        });
+        return this.telegramService.getEntity(mobile, entity);
     }
 
     @Post('profile/update/:mobile')
@@ -113,14 +97,11 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() updateProfileDto: UpdateProfileDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateNameandBio(
-                mobile,
-                updateProfileDto.firstName,
-                updateProfileDto.about
-            );
-        });
+        return this.telegramService.updateNameandBio(
+            mobile,
+            updateProfileDto.firstName,
+            updateProfileDto.about
+        );
     }
 
     @Post('profile/photo/:mobile')
@@ -131,20 +112,14 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() photoDto: ProfilePhotoDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.setProfilePic(mobile, photoDto.name);
-        });
+        return this.telegramService.setProfilePic(mobile, photoDto.name);
     }
 
     @Delete('profile/photos/:mobile')
     @ApiOperation({ summary: 'Delete all profile photos' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async deleteProfilePhotos(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteProfilePhotos(mobile);
-        });
+        return this.telegramService.deleteProfilePhotos(mobile);
     }
 
     // Message Operations
@@ -158,10 +133,7 @@ export class TelegramController {
         @Query('chatId') chatId: string,
         @Query('limit') limit?: number
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessages(mobile, chatId, limit);
-        });
+        return this.telegramService.getMessages(mobile, chatId, limit);
     }
 
     @Post('messages/forward/:mobile')
@@ -172,15 +144,12 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() forwardDto: ForwardBatchDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.forwardBulkMessages(
-                mobile,
-                forwardDto.fromChatId,
-                forwardDto.toChatId,
-                forwardDto.messageIds
-            );
-        });
+        return this.telegramService.forwardBulkMessages(
+            mobile,
+            forwardDto.fromChatId,
+            forwardDto.toChatId,
+            forwardDto.messageIds
+        );
     }
 
     @Post('batch-process/:mobile')
@@ -191,7 +160,6 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() batchOp: BatchProcessDto
     ) {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.processBatch(
             batchOp.items,
             batchOp.batchSize || 20,
@@ -240,10 +208,7 @@ export class TelegramController {
         @Query('minId') minId?: number,
         @Query('maxId') maxId?: number,
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
-        });
+        return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
     }
 
     // Channel Operations
@@ -255,10 +220,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('includeIds') includeIds?: boolean
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChannelInfo(mobile, includeIds);
-        });
+        return this.telegramService.getChannelInfo(mobile, includeIds);
     }
 
     @Post('forwardMediatoMe/:mobile')
@@ -271,14 +233,12 @@ export class TelegramController {
         @Query('channel') channel?: string,
         @Query('fromChatId') fromChatId?: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile, false, false);
-            return this.telegramService.forwardMedia(
-                mobile,
-                channel,
-                fromChatId
-            );
-        });
+        await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+        return this.telegramService.forwardMedia(
+            mobile,
+            channel,
+            fromChatId
+        );
     }
 
     @Post('channels/leave/:mobile')
@@ -289,10 +249,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('channel') channel: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.leaveChannel(mobile, channel);
-        });
+        return this.telegramService.leaveChannel(mobile, channel);
     }
 
     // Security & Privacy
@@ -300,20 +257,14 @@ export class TelegramController {
     @ApiOperation({ summary: 'Setup two-factor authentication' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async setup2FA(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.set2Fa(mobile);
-        });
+        return this.telegramService.set2Fa(mobile);
     }
 
     @Post('privacy/:mobile')
     @ApiOperation({ summary: 'Update privacy settings' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async updatePrivacy(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updatePrivacy(mobile);
-        });
+        return this.telegramService.updatePrivacy(mobile);
     }
 
     @Post('privacy/batch/:mobile')
@@ -324,10 +275,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() settings: PrivacySettingsDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updatePrivacyBatch(mobile, settings);
-        });
+        return this.telegramService.updatePrivacyBatch(mobile, settings);
     }
 
     // Session Management
@@ -336,10 +284,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Active sessions retrieved successfully' })
     async getActiveSessions(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getAuths(mobile);
-        });
+        return this.telegramService.getAuths(mobile);
     }
 
     @Delete('sessions/:mobile')
@@ -347,10 +292,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Other sessions terminated successfully' })
     async terminateOtherSessions(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.removeOtherAuths(mobile);
-        });
+        return this.telegramService.removeOtherAuths(mobile);
     }
 
     @Post('sessions/new/:mobile')
@@ -358,20 +300,14 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'New session created successfully' })
     async createNewSession(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createNewSession(mobile);
-        });
+        return this.telegramService.createNewSession(mobile);
     }
 
     @Get('session/info/:mobile')
     @ApiOperation({ summary: 'Get session information' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async getSessionInfo(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getSessionInfo(mobile);
-        });
+        return this.telegramService.getSessionInfo(mobile);
     }
 
     @Post('session/terminate/:mobile')
@@ -385,10 +321,7 @@ export class TelegramController {
             exceptCurrent?: boolean;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.terminateSession(mobile, data);
-        });
+        return this.telegramService.terminateSession(mobile, data);
     }
 
     // Monitoring & Health
@@ -401,42 +334,11 @@ export class TelegramController {
         };
     }
 
-    @Get('monitoring/client/:mobile')
-    @ApiOperation({ summary: 'Get client metadata' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Client metadata retrieved successfully' })
-    async getClientMetadata(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getClientMetadata(mobile);
-        });
-    }
-
-    @Get('monitoring/statistics')
-    @ApiOperation({ summary: 'Get client statistics' })
-    @ApiResponse({ status: 200, description: 'Statistics retrieved successfully' })
-    async getClientStatistics() {
-        return await this.telegramService.getClientStatistics();
-    }
-
-    @Get('monitoring/health')
-    @ApiOperation({ summary: 'Get service health' })
-    @ApiResponse({ status: 200, description: 'Health status retrieved successfully' })
-    async getHealthStatus() {
-        return {
-            connections: await this.telegramService.getConnectionStatus(),
-            statistics: await this.telegramService.getClientStatistics()
-        };
-    }
-
     @Get('monitoring/calllog/:mobile')
     @ApiOperation({ summary: 'Get call log statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async getCallLogStats(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getCallLog(mobile);
-        });
+        return this.telegramService.getCallLog(mobile);
     }
 
     // Contact Management
@@ -449,14 +351,11 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() contactsDto: AddContactsDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.addContacts(
-                mobile,
-                contactsDto.phoneNumbers,
-                contactsDto.prefix
-            );
-        });
+        return this.telegramService.addContacts(
+            mobile,
+            contactsDto.phoneNumbers,
+            contactsDto.prefix
+        );
     }
 
     @Get('contacts/:mobile')
@@ -464,12 +363,10 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Contacts retrieved successfully' })
     async getContacts(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            return client.getContacts();
-        });
+        return await this.telegramService.getContacts(mobile);
     }
 
+    //To Cleanup
     @Post('media/send/:mobile')
     @ApiOperation({ summary: 'Send media message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -478,23 +375,21 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() sendMediaDto: SendMediaDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            if (sendMediaDto.type === MediaType.PHOTO) {
-                return client.sendPhotoChat(
-                    sendMediaDto.chatId,
-                    sendMediaDto.url,
-                    sendMediaDto.caption,
-                    sendMediaDto.filename
-                );
-            }
-            return client.sendFileChat(
+        const client = await connectionManager.getClient(mobile);
+        if (sendMediaDto.type === MediaType.PHOTO) {
+            return client.sendPhotoChat(
                 sendMediaDto.chatId,
                 sendMediaDto.url,
                 sendMediaDto.caption,
                 sendMediaDto.filename
             );
-        });
+        }
+        return client.sendFileChat(
+            sendMediaDto.chatId,
+            sendMediaDto.url,
+            sendMediaDto.caption,
+            sendMediaDto.filename
+        );
     }
 
     @Get('media/download/:mobile')
@@ -508,10 +403,7 @@ export class TelegramController {
         @Query('messageId') messageId: number,
         @Res() res: Response
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
-        });
+        return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
 
     @Post('media/album/:mobile')
@@ -522,10 +414,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() albumDto: MediaAlbumOptions
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendMediaAlbum(mobile, albumDto);
-        });
+        return this.telegramService.sendMediaAlbum(mobile, albumDto);
     }
 
     @Get('media/metadata/:mobile')
@@ -549,18 +438,15 @@ export class TelegramController {
         @Query('maxId') maxId?: number,
         @Query('all') all?: boolean
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, {
-                chatId,
-                types,
-                startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined,
-                limit,
-                minId,
-                maxId,
-                all
-            });
+        return this.telegramService.getMediaMetadata(mobile, {
+            chatId,
+            types,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            limit,
+            minId,
+            maxId,
+            all
         });
     }
 
@@ -585,17 +471,14 @@ export class TelegramController {
         @Query('minId') minId?: number,
         @Query('maxId') maxId?: number
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getFilteredMedia(mobile, {
-                chatId,
-                types,
-                startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined,
-                limit,
-                minId,
-                maxId
-            });
+        return this.telegramService.getFilteredMedia(mobile, {
+            chatId,
+            types,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            limit,
+            minId,
+            maxId
         });
     }
 
@@ -607,10 +490,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('groupId') groupId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGrpMembers(mobile, groupId);
-        });
+        return this.telegramService.getGrpMembers(mobile, groupId);
     }
 
     @Post('chat/block/:mobile')
@@ -621,10 +501,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.blockUser(mobile, chatId);
-        });
+        return this.telegramService.blockUser(mobile, chatId);
     }
 
     @Delete('chat/:mobile')
@@ -635,10 +512,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteChat(mobile, chatId);
-        });
+        return this.telegramService.deleteChat(mobile, chatId);
     }
 
     // Additional Message Operations
@@ -654,10 +528,7 @@ export class TelegramController {
         @Query('message') message: string,
         @Query('url') url: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
-        });
+        return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
 
     // Dialog Management
@@ -673,10 +544,7 @@ export class TelegramController {
         @Query('offsetId') offsetId: number = 0,
         @Query('archived') archived: boolean = false
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
-        });
+        return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
     }
 
     @Get('last-active/:mobile')
@@ -684,10 +552,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Last active time retrieved successfully' })
     async getLastActiveTime(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getLastActiveTime(mobile);
-        });
+        return this.telegramService.getLastActiveTime(mobile);
     }
 
     // Enhanced Group Management
@@ -699,10 +564,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() options: createGroupDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createGroupWithOptions(mobile, options);
-        });
+        return this.telegramService.createGroupWithOptions(mobile, options);
     }
 
     @Post('group/settings/:mobile')
@@ -713,10 +575,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() settings: GroupSettingsDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateGroupSettings(mobile, settings);
-        });
+        return this.telegramService.updateGroupSettings(mobile, settings);
     }
 
     @Post('group/members/:mobile')
@@ -727,14 +586,11 @@ export class TelegramController {
         @Body() memberOp: GroupMemberOperationDto,
         @Param('mobile') mobile: string,
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.addGroupMembers(
-                mobile,
-                memberOp.groupId,
-                memberOp.members
-            );
-        });
+        return this.telegramService.addGroupMembers(
+            mobile,
+            memberOp.groupId,
+            memberOp.members
+        );
     }
 
     @Delete('group/members/:mobile')
@@ -745,14 +601,11 @@ export class TelegramController {
         @Body() memberOp: GroupMemberOperationDto,
         @Param('mobile') mobile: string,
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.removeGroupMembers(
-                mobile,
-                memberOp.groupId,
-                memberOp.members
-            );
-        });
+        return this.telegramService.removeGroupMembers(
+            mobile,
+            memberOp.groupId,
+            memberOp.members
+        );
     }
 
     @Post('group/admin/:mobile')
@@ -763,24 +616,21 @@ export class TelegramController {
         @Body() adminOp: AdminOperationDto,
         @Param('mobile') mobile: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            if (adminOp.isPromote) {
-                return this.telegramService.promoteToAdmin(
-                    mobile,
-                    adminOp.groupId,
-                    adminOp.userId,
-                    adminOp.permissions,
-                    adminOp.rank
-                );
-            } else {
-                return this.telegramService.demoteAdmin(
-                    mobile,
-                    adminOp.groupId,
-                    adminOp.userId
-                );
-            }
-        });
+        if (adminOp.isPromote) {
+            return this.telegramService.promoteToAdmin(
+                mobile,
+                adminOp.groupId,
+                adminOp.userId,
+                adminOp.permissions,
+                adminOp.rank
+            );
+        } else {
+            return this.telegramService.demoteAdmin(
+                mobile,
+                adminOp.groupId,
+                adminOp.userId
+            );
+        }
     }
 
     @Post('chat/cleanup/:mobile')
@@ -791,7 +641,6 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() cleanup: ChatCleanupDto
     ) {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.cleanupChat(mobile, {
             chatId: cleanup.chatId,
             beforeDate: cleanup.beforeDate ? new Date(cleanup.beforeDate) : undefined,
@@ -810,7 +659,6 @@ export class TelegramController {
         @Query('chatId') chatId: string,
         @Query('period') period: 'day' | 'week' | 'month' = 'week'
     ): Promise<ChatStatistics> {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.getChatStatistics(mobile, chatId, period);
     }
 
@@ -840,10 +688,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getScheduledMessages(mobile, chatId);
-        });
+        return this.telegramService.getScheduledMessages(mobile, chatId);
     }
 
     // Enhanced Media Operations
@@ -859,10 +704,7 @@ export class TelegramController {
             caption?: string;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendVoiceMessage(mobile, voice);
-        });
+        return this.telegramService.sendVoiceMessage(mobile, voice);
     }
 
     @Post('media/view-once/:mobile')
@@ -894,29 +736,26 @@ export class TelegramController {
         @UploadedFile() file: Express.Multer.File,
         @Body() viewOnceDto: ViewOnceMediaDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
 
-            // Handle file upload case
-            if (viewOnceDto.sourceType === MediaSourceType.BINARY && file) {
-                return this.telegramService.sendViewOnceMedia(mobile, {
-                    chatId: viewOnceDto.chatId,
-                    sourceType: viewOnceDto.sourceType,
-                    binaryData: file.buffer,
-                    caption: viewOnceDto.caption,
-                    filename: viewOnceDto.filename || file.originalname
-                });
-            }
-
-            // Handle JSON payload case (URL or base64)
+        // Handle file upload case
+        if (viewOnceDto.sourceType === MediaSourceType.BINARY && file) {
             return this.telegramService.sendViewOnceMedia(mobile, {
                 chatId: viewOnceDto.chatId,
                 sourceType: viewOnceDto.sourceType,
-                path: viewOnceDto.path,
-                base64Data: viewOnceDto.base64Data,
+                binaryData: file.buffer,
                 caption: viewOnceDto.caption,
-                filename: viewOnceDto.filename
+                filename: viewOnceDto.filename || file.originalname
             });
+        }
+
+        // Handle JSON payload case (URL or base64)
+        return this.telegramService.sendViewOnceMedia(mobile, {
+            chatId: viewOnceDto.chatId,
+            sourceType: viewOnceDto.sourceType,
+            path: viewOnceDto.path,
+            base64Data: viewOnceDto.base64Data,
+            caption: viewOnceDto.caption,
+            filename: viewOnceDto.filename
         });
     }
 
@@ -933,29 +772,7 @@ export class TelegramController {
         @Query('offset') offset?: number,
         @Query('limit') limit?: number
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
-        });
-    }
-
-    @Get('session/validate/:mobile')
-    @ApiOperation({ summary: 'Validate session status' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Session status retrieved successfully' })
-    async validateSession(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            const isConnected = await client.connected();
-            if (!isConnected) {
-                await client.connect();
-            }
-            return {
-                isValid: true,
-                isConnected,
-                phoneNumber: client.phoneNumber
-            };
-        });
+        return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
     }
 
     @Post('group/admin/promote/:mobile')
@@ -966,16 +783,13 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() adminOp: AdminOperationDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.promoteToAdmin(
-                mobile,
-                adminOp.groupId,
-                adminOp.userId,
-                adminOp.permissions,
-                adminOp.rank
-            );
-        });
+        return this.telegramService.promoteToAdmin(
+            mobile,
+            adminOp.groupId,
+            adminOp.userId,
+            adminOp.permissions,
+            adminOp.rank
+        );
     }
 
     @Post('group/admin/demote/:mobile')
@@ -986,14 +800,11 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() memberOp: GroupMemberOperationDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.demoteAdmin(
-                mobile,
-                memberOp.groupId,
-                memberOp.members[0]
-            );
-        });
+        return this.telegramService.demoteAdmin(
+            mobile,
+            memberOp.groupId,
+            memberOp.members[0]
+        );
     }
 
     @Post('group/unblock/:mobile')
@@ -1006,10 +817,7 @@ export class TelegramController {
             userId: string;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
-        });
+        return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
     }
 
     @Get('group/admins/:mobile')
@@ -1020,10 +828,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('groupId') groupId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGroupAdmins(mobile, groupId);
-        });
+        return this.telegramService.getGroupAdmins(mobile, groupId);
     }
 
     @Get('group/banned/:mobile')
@@ -1034,10 +839,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Query('groupId') groupId: string
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGroupBannedUsers(mobile, groupId);
-        });
+        return this.telegramService.getGroupBannedUsers(mobile, groupId);
     }
 
     // Advanced Contact Management
@@ -1050,19 +852,16 @@ export class TelegramController {
         @Body() exportDto: ContactExportImportDto,
         @Res() res: Response
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            const data = await this.telegramService.exportContacts(
-                mobile,
-                exportDto.format,
-                exportDto.includeBlocked
-            );
+        const data = await this.telegramService.exportContacts(
+            mobile,
+            exportDto.format,
+            exportDto.includeBlocked
+        );
 
-            const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportDto.format}`;
-            res.setHeader('Content-Type', exportDto.format === 'vcard' ? 'text/vcard' : 'text/csv');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(data);
-        });
+        const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportDto.format}`;
+        res.setHeader('Content-Type', exportDto.format === 'vcard' ? 'text/vcard' : 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(data);
     }
 
     @Post('contacts/import/:mobile')
@@ -1072,10 +871,7 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() contacts: { firstName: string; lastName?: string; phone: string }[]
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.importContacts(mobile, contacts);
-        });
+        return this.telegramService.importContacts(mobile, contacts);
     }
 
     @Post('contacts/block/:mobile')
@@ -1086,14 +882,11 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() blockList: ContactBlockListDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.manageBlockList(
-                mobile,
-                blockList.userIds,
-                blockList.block
-            );
-        });
+        return this.telegramService.manageBlockList(
+            mobile,
+            blockList.userIds,
+            blockList.block
+        );
     }
 
     @Get('contacts/statistics/:mobile')
@@ -1101,10 +894,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Contact statistics retrieved successfully' })
     async getContactStatistics(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getContactStatistics(mobile);
-        });
+        return this.telegramService.getContactStatistics(mobile);
     }
 
     // Chat Folder Management
@@ -1116,20 +906,14 @@ export class TelegramController {
         @Param('mobile') mobile: string,
         @Body() folder: CreateChatFolderDto
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createChatFolder(mobile, folder);
-        });
+        return this.telegramService.createChatFolder(mobile, folder);
     }
 
     @Get('folders/:mobile')
     @ApiOperation({ summary: 'Get all chat folders' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async getChatFolders(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChatFolders(mobile);
-        });
+        return this.telegramService.getChatFolders(mobile);
     }
 
     @Put('messages/:mobile')
@@ -1147,10 +931,7 @@ export class TelegramController {
             };
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.editMessage(mobile, options);
-        });
+        return this.telegramService.editMessage(mobile, options);
     }
 
     @Post('chat/settings/:mobile')
@@ -1169,10 +950,7 @@ export class TelegramController {
             username?: string;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateChatSettings(mobile, settings);
-        });
+        return this.telegramService.updateChatSettings(mobile, settings);
     }
 
     @Post('media/batch/:mobile')
@@ -1192,20 +970,14 @@ export class TelegramController {
             scheduleDate?: number;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendMediaBatch(mobile, options);
-        });
+        return this.telegramService.sendMediaBatch(mobile, options);
     }
 
     @Get('security/2fa-status/:mobile')
     @ApiOperation({ summary: 'Check if 2FA password is set' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async hasPassword(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.hasPassword(mobile);
-        });
+        return this.telegramService.hasPassword(mobile);
     }
 
     @Get('chats/:mobile')
@@ -1219,15 +991,12 @@ export class TelegramController {
         @Query('offsetPeer') offsetPeer?: string,
         @Query('folderId') folderId?: number
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChats(mobile, {
-                limit,
-                offsetDate,
-                offsetId,
-                offsetPeer,
-                folderId
-            });
+        return this.telegramService.getChats(mobile, {
+            limit,
+            offsetDate,
+            offsetId,
+            offsetPeer,
+            folderId
         });
     }
 
@@ -1239,10 +1008,7 @@ export class TelegramController {
         @Query('url') url: string,
         @Query('filename') filename: string
     ): Promise<string> {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getFileUrl(mobile, url, filename);
-        });
+        return this.telegramService.getFileUrl(mobile, url, filename);
     }
 
     @Get('messages/stats/:mobile')
@@ -1256,19 +1022,13 @@ export class TelegramController {
             fromDate?: Date;
         }
     ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessageStats(mobile, options);
-        });
+        return this.telegramService.getMessageStats(mobile, options);
     }
 
     @Get('chats/top-private/:mobile')
     @ApiOperation({ summary: 'Get top 5 private chats with detailed statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     async getTopPrivateChats(@Param('mobile') mobile: string) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getTopPrivateChats(mobile);
-        });
+        return this.telegramService.getTopPrivateChats(mobile);
     }
 }

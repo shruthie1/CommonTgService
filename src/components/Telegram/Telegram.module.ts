@@ -5,7 +5,6 @@ import { UsersModule } from '../users/users.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { ActiveChannelsModule } from '../active-channels/active-channels.module';
 import { ChannelsModule } from '../channels/channels.module';
-import { ConnectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
 import { TelegramValidationConfig } from './config/telegram-validation.config';
 
@@ -20,10 +19,6 @@ import { TelegramValidationConfig } from './config/telegram-validation.config';
     providers: [
         TelegramService,
         TelegramValidationConfig,
-        {
-            provide: 'CONNECTION_MANAGER',
-            useValue: ConnectionManager.getInstance()
-        },
         {
             provide: 'TELEGRAM_LOGGER',
             useValue: TelegramLogger.getInstance()

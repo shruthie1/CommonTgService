@@ -34,6 +34,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramController = void 0;
 const common_1 = require("@nestjs/common");
@@ -46,77 +49,45 @@ const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const common_responses_dto_1 = require("./dto/common-responses.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
+const connection_manager_1 = __importDefault(require("./utils/connection-manager"));
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
     }
-    async handleTelegramOperation(operation) {
-        try {
-            return await operation();
-        }
-        catch (error) {
-            if (error instanceof common_1.BadRequestException) {
-                throw error;
-            }
-            throw new common_1.BadRequestException(error.message || 'Telegram operation failed');
-        }
-    }
     async connect(mobile) {
-        await this.telegramService.createClient(mobile);
+        await connection_manager_1.default.getClient(mobile);
         return { message: 'Connected successfully' };
     }
     async disconnect(mobile) {
-        await this.telegramService.deleteClient(mobile);
+        await connection_manager_1.default.unregisterClient(mobile);
         return { message: 'Disconnected successfully' };
     }
     async disconnectAllClients() {
-        this.telegramService.disconnectAll();
+        await connection_manager_1.default.disconnectAll();
         return { message: 'All clients disconnected successfully' };
     }
     async getMe(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMe(mobile);
-        });
+        return this.telegramService.getMe(mobile);
     }
     async getEntity(mobile, entity) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getEntity(mobile, entity);
-        });
+        return this.telegramService.getEntity(mobile, entity);
     }
     async updateProfile(mobile, updateProfileDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateNameandBio(mobile, updateProfileDto.firstName, updateProfileDto.about);
-        });
+        return this.telegramService.updateNameandBio(mobile, updateProfileDto.firstName, updateProfileDto.about);
     }
     async setProfilePhoto(mobile, photoDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.setProfilePic(mobile, photoDto.name);
-        });
+        return this.telegramService.setProfilePic(mobile, photoDto.name);
     }
     async deleteProfilePhotos(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteProfilePhotos(mobile);
-        });
+        return this.telegramService.deleteProfilePhotos(mobile);
     }
     async getMessages(mobile, chatId, limit) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessages(mobile, chatId, limit);
-        });
+        return this.telegramService.getMessages(mobile, chatId, limit);
     }
     async forwardMessage(mobile, forwardDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.forwardBulkMessages(mobile, forwardDto.fromChatId, forwardDto.toChatId, forwardDto.messageIds);
-        });
+        return this.telegramService.forwardBulkMessages(mobile, forwardDto.fromChatId, forwardDto.toChatId, forwardDto.messageIds);
     }
     async processBatchMessages(mobile, batchOp) {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.processBatch(batchOp.items, batchOp.batchSize || 20, async (batch) => {
             switch (batchOp.operation) {
                 case dto_1.BatchOperationType.FORWARD:
@@ -137,238 +108,131 @@ let TelegramController = class TelegramController {
         }, batchOp.delayMs);
     }
     async searchMessages(mobile, chatId, query, types, limit, minId, maxId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
-        });
+        return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
     }
     async getChannelInfo(mobile, includeIds) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChannelInfo(mobile, includeIds);
-        });
+        return this.telegramService.getChannelInfo(mobile, includeIds);
     }
     async forwardMedia(mobile, channel, fromChatId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile, false, false);
-            return this.telegramService.forwardMedia(mobile, channel, fromChatId);
-        });
+        await connection_manager_1.default.getClient(mobile, { autoDisconnect: false, handler: false });
+        return this.telegramService.forwardMedia(mobile, channel, fromChatId);
     }
     async leaveChannel(mobile, channel) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.leaveChannel(mobile, channel);
-        });
+        return this.telegramService.leaveChannel(mobile, channel);
     }
     async setup2FA(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.set2Fa(mobile);
-        });
+        return this.telegramService.set2Fa(mobile);
     }
     async updatePrivacy(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updatePrivacy(mobile);
-        });
+        return this.telegramService.updatePrivacy(mobile);
     }
     async updatePrivacyBatch(mobile, settings) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updatePrivacyBatch(mobile, settings);
-        });
+        return this.telegramService.updatePrivacyBatch(mobile, settings);
     }
     async getActiveSessions(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getAuths(mobile);
-        });
+        return this.telegramService.getAuths(mobile);
     }
     async terminateOtherSessions(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.removeOtherAuths(mobile);
-        });
+        return this.telegramService.removeOtherAuths(mobile);
     }
     async createNewSession(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createNewSession(mobile);
-        });
+        return this.telegramService.createNewSession(mobile);
     }
     async getSessionInfo(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getSessionInfo(mobile);
-        });
+        return this.telegramService.getSessionInfo(mobile);
     }
     async terminateSession(mobile, data) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.terminateSession(mobile, data);
-        });
+        return this.telegramService.terminateSession(mobile, data);
     }
     async getConnectionStatus() {
         return {
             status: await this.telegramService.getConnectionStatus()
         };
     }
-    async getClientMetadata(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getClientMetadata(mobile);
-        });
-    }
-    async getClientStatistics() {
-        return await this.telegramService.getClientStatistics();
-    }
-    async getHealthStatus() {
-        return {
-            connections: await this.telegramService.getConnectionStatus(),
-            statistics: await this.telegramService.getClientStatistics()
-        };
-    }
     async getCallLogStats(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getCallLog(mobile);
-        });
+        return this.telegramService.getCallLog(mobile);
     }
     async addContactsBulk(mobile, contactsDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
-        });
+        return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
     }
     async getContacts(mobile) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            return client.getContacts();
-        });
+        return await this.telegramService.getContacts(mobile);
     }
     async sendMedia(mobile, sendMediaDto) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            if (sendMediaDto.type === dto_1.MediaType.PHOTO) {
-                return client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
-            }
-            return client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
-        });
+        const client = await connection_manager_1.default.getClient(mobile);
+        if (sendMediaDto.type === dto_1.MediaType.PHOTO) {
+            return client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
+        }
+        return client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
     }
     async downloadMedia(mobile, chatId, messageId, res) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
-        });
+        return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
     async sendMediaAlbum(mobile, albumDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendMediaAlbum(mobile, albumDto);
-        });
+        return this.telegramService.sendMediaAlbum(mobile, albumDto);
     }
     async getMediaMetadata(mobile, chatId, types, startDate, endDate, limit, minId, maxId, all) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, {
-                chatId,
-                types,
-                startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined,
-                limit,
-                minId,
-                maxId,
-                all
-            });
+        return this.telegramService.getMediaMetadata(mobile, {
+            chatId,
+            types,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            limit,
+            minId,
+            maxId,
+            all
         });
     }
     async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, minId, maxId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getFilteredMedia(mobile, {
-                chatId,
-                types,
-                startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined,
-                limit,
-                minId,
-                maxId
-            });
+        return this.telegramService.getFilteredMedia(mobile, {
+            chatId,
+            types,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            limit,
+            minId,
+            maxId
         });
     }
     async getGroupMembers(mobile, groupId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGrpMembers(mobile, groupId);
-        });
+        return this.telegramService.getGrpMembers(mobile, groupId);
     }
     async blockChat(mobile, chatId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.blockUser(mobile, chatId);
-        });
+        return this.telegramService.blockUser(mobile, chatId);
     }
     async deleteChatHistory(mobile, chatId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.deleteChat(mobile, chatId);
-        });
+        return this.telegramService.deleteChat(mobile, chatId);
     }
     async sendMessageWithInlineButton(mobile, chatId, message, url) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
-        });
+        return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
     async getAllDialogs(mobile, limit = 500, offsetId = 0, archived = false) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
-        });
+        return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
     }
     async getLastActiveTime(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getLastActiveTime(mobile);
-        });
+        return this.telegramService.getLastActiveTime(mobile);
     }
     async createGroupWithOptions(mobile, options) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createGroupWithOptions(mobile, options);
-        });
+        return this.telegramService.createGroupWithOptions(mobile, options);
     }
     async updateGroupSettings(mobile, settings) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateGroupSettings(mobile, settings);
-        });
+        return this.telegramService.updateGroupSettings(mobile, settings);
     }
     async addGroupMembers(memberOp, mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.addGroupMembers(mobile, memberOp.groupId, memberOp.members);
-        });
+        return this.telegramService.addGroupMembers(mobile, memberOp.groupId, memberOp.members);
     }
     async removeGroupMembers(memberOp, mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.removeGroupMembers(mobile, memberOp.groupId, memberOp.members);
-        });
+        return this.telegramService.removeGroupMembers(mobile, memberOp.groupId, memberOp.members);
     }
     async handleAdminOperation(adminOp, mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            if (adminOp.isPromote) {
-                return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
-            }
-            else {
-                return this.telegramService.demoteAdmin(mobile, adminOp.groupId, adminOp.userId);
-            }
-        });
+        if (adminOp.isPromote) {
+            return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
+        }
+        else {
+            return this.telegramService.demoteAdmin(mobile, adminOp.groupId, adminOp.userId);
+        }
     }
     async cleanupChat(mobile, cleanup) {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.cleanupChat(mobile, {
             chatId: cleanup.chatId,
             beforeDate: cleanup.beforeDate ? new Date(cleanup.beforeDate) : undefined,
@@ -377,7 +241,6 @@ let TelegramController = class TelegramController {
         });
     }
     async getChatStatistics(mobile, chatId, period = 'week') {
-        await this.telegramService.createClient(mobile);
         return this.telegramService.getChatStatistics(mobile, chatId, period);
     }
     async scheduleMessage(mobile, schedule) {
@@ -390,182 +253,99 @@ let TelegramController = class TelegramController {
         });
     }
     async getScheduledMessages(mobile, chatId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getScheduledMessages(mobile, chatId);
-        });
+        return this.telegramService.getScheduledMessages(mobile, chatId);
     }
     async sendVoiceMessage(mobile, voice) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendVoiceMessage(mobile, voice);
-        });
+        return this.telegramService.sendVoiceMessage(mobile, voice);
     }
     async sendViewOnceMedia(mobile, file, viewOnceDto) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            if (viewOnceDto.sourceType === dto_1.MediaSourceType.BINARY && file) {
-                return this.telegramService.sendViewOnceMedia(mobile, {
-                    chatId: viewOnceDto.chatId,
-                    sourceType: viewOnceDto.sourceType,
-                    binaryData: file.buffer,
-                    caption: viewOnceDto.caption,
-                    filename: viewOnceDto.filename || file.originalname
-                });
-            }
+        if (viewOnceDto.sourceType === dto_1.MediaSourceType.BINARY && file) {
             return this.telegramService.sendViewOnceMedia(mobile, {
                 chatId: viewOnceDto.chatId,
                 sourceType: viewOnceDto.sourceType,
-                path: viewOnceDto.path,
-                base64Data: viewOnceDto.base64Data,
+                binaryData: file.buffer,
                 caption: viewOnceDto.caption,
-                filename: viewOnceDto.filename
+                filename: viewOnceDto.filename || file.originalname
             });
+        }
+        return this.telegramService.sendViewOnceMedia(mobile, {
+            chatId: viewOnceDto.chatId,
+            sourceType: viewOnceDto.sourceType,
+            path: viewOnceDto.path,
+            base64Data: viewOnceDto.base64Data,
+            caption: viewOnceDto.caption,
+            filename: viewOnceDto.filename
         });
     }
     async getChatHistory(mobile, chatId, offset, limit) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
-        });
-    }
-    async validateSession(mobile) {
-        return this.handleTelegramOperation(async () => {
-            const client = await this.telegramService.createClient(mobile);
-            const isConnected = await client.connected();
-            if (!isConnected) {
-                await client.connect();
-            }
-            return {
-                isValid: true,
-                isConnected,
-                phoneNumber: client.phoneNumber
-            };
-        });
+        return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
     }
     async promoteToAdmin(mobile, adminOp) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
-        });
+        return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
     }
     async demoteAdmin(mobile, memberOp) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.demoteAdmin(mobile, memberOp.groupId, memberOp.members[0]);
-        });
+        return this.telegramService.demoteAdmin(mobile, memberOp.groupId, memberOp.members[0]);
     }
     async unblockGroupUser(mobile, data) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
-        });
+        return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
     }
     async getGroupAdmins(mobile, groupId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGroupAdmins(mobile, groupId);
-        });
+        return this.telegramService.getGroupAdmins(mobile, groupId);
     }
     async getGroupBannedUsers(mobile, groupId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getGroupBannedUsers(mobile, groupId);
-        });
+        return this.telegramService.getGroupBannedUsers(mobile, groupId);
     }
     async exportContacts(mobile, exportDto, res) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            const data = await this.telegramService.exportContacts(mobile, exportDto.format, exportDto.includeBlocked);
-            const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportDto.format}`;
-            res.setHeader('Content-Type', exportDto.format === 'vcard' ? 'text/vcard' : 'text/csv');
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(data);
-        });
+        const data = await this.telegramService.exportContacts(mobile, exportDto.format, exportDto.includeBlocked);
+        const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportDto.format}`;
+        res.setHeader('Content-Type', exportDto.format === 'vcard' ? 'text/vcard' : 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(data);
     }
     async importContacts(mobile, contacts) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.importContacts(mobile, contacts);
-        });
+        return this.telegramService.importContacts(mobile, contacts);
     }
     async manageBlockList(mobile, blockList) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.manageBlockList(mobile, blockList.userIds, blockList.block);
-        });
+        return this.telegramService.manageBlockList(mobile, blockList.userIds, blockList.block);
     }
     async getContactStatistics(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getContactStatistics(mobile);
-        });
+        return this.telegramService.getContactStatistics(mobile);
     }
     async createChatFolder(mobile, folder) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.createChatFolder(mobile, folder);
-        });
+        return this.telegramService.createChatFolder(mobile, folder);
     }
     async getChatFolders(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChatFolders(mobile);
-        });
+        return this.telegramService.getChatFolders(mobile);
     }
     async editMessage(mobile, options) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.editMessage(mobile, options);
-        });
+        return this.telegramService.editMessage(mobile, options);
     }
     async updateChatSettings(mobile, settings) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.updateChatSettings(mobile, settings);
-        });
+        return this.telegramService.updateChatSettings(mobile, settings);
     }
     async sendMediaBatch(mobile, options) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.sendMediaBatch(mobile, options);
-        });
+        return this.telegramService.sendMediaBatch(mobile, options);
     }
     async hasPassword(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.hasPassword(mobile);
-        });
+        return this.telegramService.hasPassword(mobile);
     }
     async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getChats(mobile, {
-                limit,
-                offsetDate,
-                offsetId,
-                offsetPeer,
-                folderId
-            });
+        return this.telegramService.getChats(mobile, {
+            limit,
+            offsetDate,
+            offsetId,
+            offsetPeer,
+            folderId
         });
     }
     async getFileUrl(mobile, url, filename) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getFileUrl(mobile, url, filename);
-        });
+        return this.telegramService.getFileUrl(mobile, url, filename);
     }
     async getMessageStats(mobile, options) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMessageStats(mobile, options);
-        });
+        return this.telegramService.getMessageStats(mobile, options);
     }
     async getTopPrivateChats(mobile) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getTopPrivateChats(mobile);
-        });
+        return this.telegramService.getTopPrivateChats(mobile);
     }
 };
 exports.TelegramController = TelegramController;
@@ -828,32 +608,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getConnectionStatus", null);
-__decorate([
-    (0, common_1.Get)('monitoring/client/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get client metadata' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Client metadata retrieved successfully' }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getClientMetadata", null);
-__decorate([
-    (0, common_1.Get)('monitoring/statistics'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get client statistics' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Statistics retrieved successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getClientStatistics", null);
-__decorate([
-    (0, common_1.Get)('monitoring/health'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get service health' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Health status retrieved successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getHealthStatus", null);
 __decorate([
     (0, common_1.Get)('monitoring/calllog/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get call log statistics' }),
@@ -1200,16 +954,6 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChatHistory", null);
-__decorate([
-    (0, common_1.Get)('session/validate/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Validate session status' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Session status retrieved successfully' }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "validateSession", null);
 __decorate([
     (0, common_1.Post)('group/admin/promote/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Promote members to admin' }),

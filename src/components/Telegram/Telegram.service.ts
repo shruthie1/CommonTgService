@@ -1,54 +1,44 @@
-import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
-import { contains, sleep } from "../../utils";
 import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
-import { Api, TelegramClient } from 'telegram';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { parseError } from '../../utils/parseError';
-import { TelegramError, TelegramErrorCode } from './types/telegram-error';
 import { ChannelInfo } from './types/telegram-responses';
-import { ConnectionManager } from './utils/connection-manager';
+import connectionManager from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
-import { ClientMetadataTracker } from './utils/client-metadata';
-import { ClientMetadata } from './types/client-operations';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
+import { sleep } from 'telegram/Helpers';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
-    private static clientsMap: Map<string, TelegramManager> = new Map();
-    private readonly connectionManager: ConnectionManager;
     private readonly logger: TelegramLogger;
-    private readonly metadataTracker: ClientMetadataTracker;
     private cleanupInterval: NodeJS.Timer;
 
     constructor(
         @Inject(forwardRef(() => UsersService))
         private usersService: UsersService,
-        private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => ActiveChannelsService))
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
     ) {
-        this.connectionManager = ConnectionManager.getInstance();
         this.logger = TelegramLogger.getInstance();
-        this.metadataTracker = ClientMetadataTracker.getInstance();
-        this.cleanupInterval = this.connectionManager.startCleanupInterval();
+        this.cleanupInterval = connectionManager.startCleanupInterval();
+        connectionManager.setUsersService(this.usersService);
     }
 
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval as NodeJS.Timeout);
-        await this.disconnectAll();
+        await connectionManager.disconnectAll();
     }
     public getActiveClientSetup() {
         return TelegramManager.getActiveClientSetup();
@@ -58,162 +48,34 @@ export class TelegramService implements OnModuleDestroy {
         TelegramManager.setActiveClientSetup(data);
     }
 
-    private async executeWithConnection<T>(mobile: string, operation: string, handler: (client: TelegramManager) => Promise<T>): Promise<T> {
-        this.logger.logOperation(mobile, `Starting operation: ${operation}`);
-        const client = await this.getClientOrThrow(mobile);
-        this.connectionManager.updateLastUsed(mobile);
-
-        try {
-            const result = await this.connectionManager.executeWithRateLimit(mobile, () => handler(client));
-            this.metadataTracker.recordOperation(mobile, operation, true);
-            this.logger.logOperation(mobile, `Completed operation: ${operation}`);
-            return result;
-        } catch (error) {
-            this.metadataTracker.recordOperation(mobile, operation, false);
-            throw error;
-        }
-    }
-
-    private async getClientOrThrow(mobile: string): Promise<TelegramManager> {
-        const client = await this.getClient(mobile);
-        if (!client) {
-            throw new TelegramError('Client not found', TelegramErrorCode.CLIENT_NOT_FOUND);
-        }
-        return client;
-    }
-
-    public async getClient(mobile: string): Promise<TelegramManager | undefined> {
-        const client = TelegramService.clientsMap.get(mobile);
-        try {
-            if (client && client.connected()) {
-                await client.connect();
-                return client;
-            }
-        } catch (error) {
-            console.error('Client connection error:', parseError(error, `${mobile}`));
-        }
-        return undefined;
-    }
-
-    public hasClient(number: string) {
-        return TelegramService.clientsMap.has(number);
-    }
-
-    async deleteClient(number: string) {
-        await this.connectionManager.releaseConnection(number);
-        return TelegramService.clientsMap.delete(number);
-    }
-
-    async disconnectAll() {
-        this.logger.logOperation('system', 'Disconnecting all clients');
-        const clients = Array.from(TelegramService.clientsMap.keys());
-        await Promise.all(
-            clients.map(mobile => {
-                this.logger.logOperation(mobile, 'Disconnecting client');
-                return this.connectionManager.releaseConnection(mobile);
-            })
-        );
-        TelegramService.clientsMap.clear();
-        this.bufferClientService.clearJoinChannelInterval();
-        this.logger.logOperation('system', 'All clients disconnected');
-    }
-
-    async createClient(mobile: string, autoDisconnect = true, handler = true): Promise<TelegramManager> {
-        this.logger.logOperation(mobile, 'Creating new client', { autoDisconnect, handler });
-        const user = (await this.usersService.search({ mobile }))[0];
-        if (!user) {
-            throw new BadRequestException('user not found');
-        }
-        if (!this.hasClient(mobile)) {
-            let telegramManager = new TelegramManager(user.session, user.mobile);
-            let client: TelegramClient
-            try {
-                client = await telegramManager.createClient(handler);
-                await client.getMe();
-                if (client) {
-                    TelegramService.clientsMap.set(mobile, telegramManager);
-                    await this.connectionManager.acquireConnection(mobile, telegramManager);
-                    this.metadataTracker.initializeClient(mobile);
-                    this.logger.logOperation(mobile, 'Client created successfully');
-                    if (autoDisconnect) {
-                        this.logger.logOperation(mobile, 'Auto Disconnecting initiated');
-                        setTimeout(async () => {
-                            this.logger.logOperation(mobile, 'Auto-disconnecting client');
-                            if (client.connected || await this.getClient(mobile)) {
-                                console.log("SELF destroy client : ", mobile);
-                                await telegramManager.disconnect();
-                            } else {
-                                console.log("Client Already Disconnected : ", mobile);
-                            }
-                            await this.connectionManager.releaseConnection(mobile);
-                            TelegramService.clientsMap.delete(mobile);
-                            this.metadataTracker.removeClient(mobile);
-                        }, 180000)
-                    } else {
-                        setInterval(async () => {
-                            //console.log("destroying loop :", mobile)
-                            //client._destroyed = true
-                            // if (!client.connected) {
-                            // await client.connect();
-                            //}
-                        }, 20000);
-                    }
-                    return telegramManager;
-                } else {
-                    throw new BadRequestException('Client Expired');
-                }
-            } catch (error) {
-                this.logger.logError(mobile, 'Client creation failed', error);
-                console.log("Parsing Error");
-                if (telegramManager) {
-                    await this.connectionManager.releaseConnection(mobile);
-                    telegramManager = null;
-                    TelegramService.clientsMap.delete(mobile);
-                    this.metadataTracker.removeClient(mobile);
-                }
-                const errorDetails = parseError(error, mobile);
-                if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
-                    console.log("Deleting User: ", user.mobile);
-                    await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
-                } else {
-                    console.log('Not Deleting user');
-                }
-                throw new BadRequestException(errorDetails.message)
-            }
-        } else {
-            console.log("Client Already exists")
-            return await this.getClient(mobile)
-        }
-    }
-
     async getMessages(mobile: string, username: string, limit: number = 8) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return telegramClient.getMessages(username, limit);
     }
 
 
     async getMessagesNew(mobile: string, username: string, offset: number, limit: number) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return telegramClient.getMessagesNew(username, offset, limit);
     }
 
     async sendInlineMessage(mobile: string, chatId: string, message: string, url: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return telegramClient.sendInlineMessage(chatId, message, url);
     }
 
     async getChatId(mobile: string, username: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.getchatId(username);
     }
 
     async getLastActiveTime(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.getLastActiveTime();
     }
 
     async tryJoiningChannel(mobile: string, chatEntity: Channel) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -261,7 +123,7 @@ export class TelegramService implements OnModuleDestroy {
 
     async getGrpMembers(mobile: string, entity: EntityLike) {
         try {
-            const telegramClient = await this.getClient(mobile);
+            const telegramClient = await connectionManager.getClient(mobile);
             return await telegramClient.getGrpMembers(entity)
         } catch (err) {
             console.error("Error fetching group members:", err);
@@ -270,7 +132,7 @@ export class TelegramService implements OnModuleDestroy {
 
     async addContact(mobile: string, data: { mobile: string, tgId: string }[], prefix: string) {
         try {
-            const telegramClient = await this.getClient(mobile);
+            const telegramClient = await connectionManager.getClient(mobile);
             return await telegramClient.addContact(data, prefix)
         } catch (err) {
             console.error("Error fetching adding Contacts:", err);
@@ -280,7 +142,7 @@ export class TelegramService implements OnModuleDestroy {
 
     async addContacts(mobile: string, phoneNumbers: string[], prefix: string) {
         try {
-            const telegramClient = await this.getClient(mobile);
+            const telegramClient = await connectionManager.getClient(mobile);
             return await telegramClient.addContacts(phoneNumbers, prefix)
         } catch (err) {
             console.error("Error fetching adding Contacts:", err);
@@ -288,21 +150,20 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async getSelfMsgsInfo(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.getSelfMSgsInfo();
     }
 
     async createGroup(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.createGroup();
     }
 
     async forwardMedia(mobile: string, channel: string, fromChatId: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         telegramClient.forwardMedia(channel, fromChatId);
         setTimeout(async () => {
             try {
-                await this.createClient(mobile);
                 await this.leaveChannel(mobile, "2302868706");
             } catch (error) {
                 console.log("Error in forwardMedia: ", error);
@@ -312,75 +173,73 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async blockUser(mobile: string, chatId: string) {
-        const telegramClient = await this.getClient(mobile);
+        const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.blockUser(chatId);
     }
 
 
     async joinChannel(mobile: string, channelId: string) {
-        const telegramClient = await this.getClient(mobile);
+        const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.joinChannel(channelId);
     }
 
     async getCallLog(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.getCallLog();
     }
 
     async getmedia(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.getMediaMessages();
     }
 
     async getChannelInfo(mobile: string, sendIds: boolean = false): Promise<ChannelInfo> {
-        return this.executeWithConnection(mobile, 'Get channel info', async (client) => {
-            return await client.channelInfo(sendIds);
-        });
+        const telegramClient = await connectionManager.getClient(mobile)
+        return await telegramClient.channelInfo(sendIds);
     }
 
     async getMe(mobile: string) {
-        return this.executeWithConnection(mobile, 'Get profile info', async (client) => {
-            return await client.getMe();
-        });
+        const telegramClient = await connectionManager.getClient(mobile)
+        return await telegramClient.getMe();
     }
 
     async getEntity(mobile: string, entity: EntityLike) {
-        return this.executeWithConnection(mobile, 'Get entity info', async (client) => {
-            return await client.getEntity(entity); // Assuming 'getEntity()' is a valid method
-        });
+        const telegramClient = await connectionManager.getClient(mobile)
+        return await telegramClient.getEntity(entity); // Assuming 'getEntity()' is a valid method
     }
 
     async createNewSession(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.createNewSession();
     }
 
     async set2Fa(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         try {
             await telegramClient.set2fa();
-            await telegramClient.disconnect();
             return '2Fa set successfully'
         } catch (error) {
             const errorDetails = parseError(error)
             throw new HttpException(errorDetails.message, errorDetails.status)
+        } finally {
+            await connectionManager.unregisterClient(mobile)
         }
     }
 
     async updatePrivacyforDeletedAccount(mobile: string) {
-        const telegramClient = await this.getClient(mobile);
+        const telegramClient = await connectionManager.getClient(mobile);
         await telegramClient.updatePrivacyforDeletedAccount()
     }
 
     async deleteProfilePhotos(mobile: string) {
-        const telegramClient = await this.getClient(mobile);
+        const telegramClient = await connectionManager.getClient(mobile);
         await telegramClient.deleteProfilePhotos()
     }
 
     async setProfilePic(
         mobile: string, name: string,
     ) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         await telegramClient.deleteProfilePhotos();
         try {
             await CloudinaryService.getInstance(name);
@@ -393,18 +252,19 @@ export class TelegramService implements OnModuleDestroy {
             await sleep(3000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await sleep(1000);
-            await telegramClient.disconnect();
             return 'Profile pic set successfully'
         } catch (error) {
             const errorDetails = parseError(error)
             throw new HttpException(errorDetails.message, errorDetails.status)
+        } finally {
+            await connectionManager.unregisterClient(mobile);
         }
     }
 
     async updatePrivacy(
         mobile: string,
     ) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         try {
             await telegramClient.updatePrivacy()
             return "Privacy updated successfully";
@@ -417,7 +277,7 @@ export class TelegramService implements OnModuleDestroy {
     async downloadProfilePic(
         mobile: string, index: number
     ) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         try {
             return await telegramClient.downloadProfilePic(index)
         } catch (error) {
@@ -429,7 +289,7 @@ export class TelegramService implements OnModuleDestroy {
     async updateUsername(
         mobile: string, username: string,
     ) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         try {
             return await telegramClient.updateUsername(username)
         } catch (error) {
@@ -449,40 +309,40 @@ export class TelegramService implements OnModuleDestroy {
             minId?: number;
             all?: boolean;
         }) {
-        return this.executeWithConnection(mobile, 'Get media metadata', async (client) => {
-            if (params) {
-                return await client.getAllMediaMetaData(params);
-            } else {
-                return await client.getMediaMetadata(params);
-            }
-        });
+        const telegramClient = await connectionManager.getClient(mobile)
+        if (params) {
+            return await telegramClient.getAllMediaMetaData(params);
+        } else {
+            return await telegramClient.getMediaMetadata(params);
+        }
     }
 
     async downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.downloadMediaFile(messageId, chatId, res)
     }
 
     async forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number) {
-        const telegramClient = await this.getClient(mobile);
+        const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.forwardMessage(toChatId, fromChatId, messageId);
     }
 
     async leaveChannels(mobile: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         const channelinfo = await telegramClient.channelInfo(false);
         const leaveChannelIds = channelinfo.canSendFalseChats
-        return await telegramClient.leaveChannels(leaveChannelIds);
+        telegramClient.leaveChannels(leaveChannelIds);
+        return "Left channels initiated";
     }
 
-    async leaveChannel(mobile: string, channel: string): Promise<void> {
-        await this.executeWithConnection(mobile, 'Leave channel',
-            (client) => client.leaveChannels([channel]),
-        );
+    async leaveChannel(mobile: string, channel: string) {
+        const telegramClient = await connectionManager.getClient(mobile)
+        telegramClient.leaveChannels([channel]);
+        return "Left channel initiated";
     }
 
     async deleteChat(mobile: string, chatId: string) {
-        const telegramClient = await this.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile)
         return await telegramClient.deleteChat(chatId);
     }
     async updateNameandBio(
@@ -490,22 +350,20 @@ export class TelegramService implements OnModuleDestroy {
         firstName: string,
         about?: string,
     ): Promise<void> {
-        await this.executeWithConnection(mobile, 'Update profile',
-            (client) => client.updateProfile(firstName, about),
-        );
+        const telegramClient = await connectionManager.getClient(mobile)
+        return await telegramClient.updateProfile(firstName, about);
     }
 
     async getDialogs(mobile: string, query: DialogsQueryDto) {
-        return this.executeWithConnection(mobile, 'Get dialogs', async (client) => {
-            const { limit = 10, offsetId, archived = false } = query;
-            const dialogs = await client.getDialogs({ limit, offsetId, archived });
-            const chatData = [];
-            for (const chat of dialogs) {
-                const chatEntity = await chat.entity.toJSON();
-                chatData.push(chatEntity);
-            }
-            return chatData;
-        });
+        const telegramClient = await connectionManager.getClient(mobile);
+        const { limit = 10, offsetId, archived = false } = query;
+        const dialogs = await telegramClient.getDialogs({ limit, offsetId, archived });
+        const chatData = [];
+        for (const chat of dialogs) {
+            const chatEntity = await chat.entity.toJSON();
+            chatData.push(chatEntity);
+        }
+        return chatData;
     }
 
     async getConnectionStatus(): Promise<{
@@ -514,7 +372,7 @@ export class TelegramService implements OnModuleDestroy {
         totalOperations: number;
     }> {
         const status = {
-            activeConnections: this.connectionManager.getActiveConnectionCount(),
+            activeConnections: connectionManager.getActiveConnectionCount(),
             rateLimited: 0,
             totalOperations: 0
         };
@@ -528,44 +386,27 @@ export class TelegramService implements OnModuleDestroy {
         fromChatId: string,
         toChatId: string,
         messageIds: number[]
-    ): Promise<void> {
-        await this.executeWithConnection(mobile, 'Forward bulk messages',
-            (client) => client.forwardMessages(fromChatId, toChatId, messageIds),
-        );
+    ) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.forwardMessages(fromChatId, toChatId, messageIds)
     }
 
     async getAuths(mobile: string): Promise<any[]> {
-        return this.executeWithConnection(mobile, 'Get authorizations', async (client) => {
-            const auths = await client.getAuths();
-            this.logger.logOperation(mobile, 'Retrieved authorizations', {
-                count: auths?.length || 0
-            });
-            return auths;
+        const telegramClient = await connectionManager.getClient(mobile);
+        const auths = await telegramClient.getAuths();
+        this.logger.logOperation(mobile, 'Retrieved authorizations', {
+            count: auths?.length || 0
         });
+        return auths;
     }
 
-    async removeOtherAuths(mobile: string): Promise<void> {
-        return this.executeWithConnection(mobile, 'Remove other authorizations', async (client) => {
-            await client.removeOtherAuths();
-            this.logger.logOperation(mobile, 'Removed other authorizations');
-        });
+    async removeOtherAuths(mobile: string) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        await telegramClient.removeOtherAuths();
+        this.logger.logOperation(mobile, 'Removed other authorizations');
+        return "Removed other authorizations";
     }
 
-    async getClientMetadata(mobile: string): Promise<ClientMetadata | undefined> {
-        return this.metadataTracker.getMetadata(mobile);
-    }
-
-    async getClientStatistics() {
-        return this.metadataTracker.getStatistics();
-    }
-
-    private async handleReconnect(mobile: string): Promise<void> {
-        this.metadataTracker.recordReconnect(mobile);
-        this.logger.logWarning(mobile, 'Client reconnection triggered');
-        // Additional reconnection logic if needed
-    }
-
-    // Helper method to handle batch operations with rate limiting
     public async processBatch<T>(
         items: T[],
         batchSize: number,
@@ -594,11 +435,10 @@ export class TelegramService implements OnModuleDestroy {
 
     // Enhanced Group Management
     async createGroupWithOptions(mobile: string, options: GroupOptions) {
-        return this.executeWithConnection(mobile, 'Create group with options', async (client) => {
-            const result = await client.createGroupWithOptions(options);
-            this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
-            return result;
-        });
+        const telegramClient = await connectionManager.getClient(mobile);
+        const result = await telegramClient.createGroupWithOptions(options);
+        this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
+        return result;
     }
 
     async updateGroupSettings(
@@ -612,37 +452,30 @@ export class TelegramService implements OnModuleDestroy {
             memberRestrictions?: any;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Update group settings', (client) =>
-            client.updateGroupSettings(settings)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.updateGroupSettings(settings)
     }
 
     // Message Scheduling
-    async scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<void> {
-        await this.executeWithConnection(mobile, 'Schedule message',
-            async (client) => {
-                await client.scheduleMessageSend({
-                    chatId: options.chatId,
-                    message: options.message,
-                    scheduledTime: options.scheduledTime,
-                    replyTo: options.replyTo,
-                    silent: options.silent
-                });
-            },
-        );
+    async scheduleMessage(mobile: string, options: MessageScheduleOptions) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.scheduleMessageSend({
+            chatId: options.chatId,
+            message: options.message,
+            scheduledTime: options.scheduledTime,
+            replyTo: options.replyTo,
+            silent: options.silent
+        });
     }
 
     async getScheduledMessages(mobile: string, chatId: string) {
-        return this.executeWithConnection(mobile, 'Get scheduled messages', (client) =>
-            client.getScheduledMessages(chatId)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.getScheduledMessages(chatId)
     }
 
-    // Enhanced Media Operations
     async sendMediaAlbum(mobile: string, album: MediaAlbumOptions) {
-        return this.executeWithConnection(mobile, 'Send media album', (client) =>
-            client.sendMediaAlbum(album)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.sendMediaAlbum(album)
     }
 
     async sendVoiceMessage(
@@ -654,12 +487,10 @@ export class TelegramService implements OnModuleDestroy {
             caption?: string;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Send voice message', (client) =>
-            client.sendVoiceMessage(voice)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.sendVoiceMessage(voice)
     }
 
-    // Advanced Chat Operations
     async cleanupChat(
         mobile: string,
         cleanup: {
@@ -669,15 +500,13 @@ export class TelegramService implements OnModuleDestroy {
             excludePinned?: boolean;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Clean up chat', (client) =>
-            client.cleanupChat(cleanup)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.cleanupChat(cleanup)
     }
 
     async getChatStatistics(mobile: string, chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics> {
-        return this.executeWithConnection(mobile, 'Get chat statistics',
-            (client) => client.getChatStatistics(chatId, period),
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.getChatStatistics(chatId, period)
     }
 
     // Enhanced Privacy Features
@@ -692,65 +521,26 @@ export class TelegramService implements OnModuleDestroy {
             groups?: 'everybody' | 'contacts' | 'nobody';
         }
     ) {
-        return this.executeWithConnection(mobile, 'Update privacy settings batch', (client) =>
-            client.updatePrivacyBatch(settings)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.updatePrivacyBatch(settings)
     }
     // Content Filtering
     async setContentFilters(
         mobile: string,
         filters: ContentFilter
     ) {
-        return this.executeWithConnection(mobile, 'Set content filters', (client) =>
-            client.setContentFilters(filters)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.setContentFilters(filters)
     }
 
-    // Helper method for batch operations with progress tracking
-    private async processBatchWithProgress<T>(
-        items: T[],
-        operation: (item: T) => Promise<void>,
-        batchSize: number = 10,
-        delayMs: number = 2000
-    ): Promise<{ completed: number; total: number; errors: Error[] }> {
-        const result = {
-            completed: 0,
-            total: items.length,
-            errors: [] as Error[]
-        };
-
-        for (let i = 0; i < items.length; i += batchSize) {
-            const batch = items.slice(i, i + batchSize);
-            await Promise.all(
-                batch.map(async (item) => {
-                    try {
-                        await operation(item);
-                        result.completed++;
-                    } catch (error) {
-                        result.errors.push(error);
-                    }
-                })
-            );
-
-            if (i + batchSize < items.length) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
-        }
-
-        return result;
-    }
-
-    // Group Member Management
     async addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
-        await this.executeWithConnection(mobile, 'Add group members',
-            (client) => client.addGroupMembers(groupId, members),
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.addGroupMembers(groupId, members)
     }
 
     async removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
-        await this.executeWithConnection(mobile, 'Remove group members',
-            (client) => client.removeGroupMembers(groupId, members),
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.removeGroupMembers(groupId, members)
     }
 
     async promoteToAdmin(
@@ -771,35 +561,32 @@ export class TelegramService implements OnModuleDestroy {
         },
         rank?: string
     ): Promise<void> {
-        await this.executeWithConnection(mobile, 'Promote to admin',
-            (client) => client.promoteToAdmin(groupId, userId, permissions, rank)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.promoteToAdmin(groupId, userId, permissions, rank)
     }
 
     async demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void> {
-        return this.executeWithConnection(mobile, 'Demote admin', async (client) => {
-            await client.demoteAdmin(groupId, userId);
-            this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
-        });
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
+        return await telegramClient.demoteAdmin(groupId, userId);
     }
 
     async unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void> {
-        return this.executeWithConnection(mobile, 'Unblock group user', async (client) => {
-            await client.unblockGroupUser(groupId, userId);
-            this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
-        });
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
+        return await telegramClient.unblockGroupUser(groupId, userId);
     }
 
     async getGroupAdmins(mobile: string, groupId: string) {
-        return this.executeWithConnection(mobile, 'Get group admins', (client) =>
-            client.getGroupAdmins(groupId)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get group admins', { groupId });
+        return await telegramClient.getGroupAdmins(groupId);
     }
 
     async getGroupBannedUsers(mobile: string, groupId: string) {
-        return this.executeWithConnection(mobile, 'Get group banned users', (client) =>
-            client.getGroupBannedUsers(groupId)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get group banned users', { groupId });
+        return await telegramClient.getGroupBannedUsers(groupId);
     }
 
     async searchMessages(
@@ -813,9 +600,9 @@ export class TelegramService implements OnModuleDestroy {
             limit?: number;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Search messages', (client) =>
-            client.searchMessages(params)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Search messages', params);
+        return await telegramClient.searchMessages(params);
     }
 
     async getFilteredMedia(
@@ -831,9 +618,9 @@ export class TelegramService implements OnModuleDestroy {
             minId?: number;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Get filtered media', (client) =>
-            client.getFilteredMedia(params)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get filtered media', params);
+        return await telegramClient.getFilteredMedia(params);
     }
 
     // Contact Management
@@ -842,18 +629,18 @@ export class TelegramService implements OnModuleDestroy {
         format: 'vcard' | 'csv',
         includeBlocked: boolean = false
     ) {
-        return this.executeWithConnection(mobile, 'Export contacts', (client) =>
-            client.exportContacts(format, includeBlocked)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Export contacts', { format, includeBlocked });
+        return await telegramClient.exportContacts(format, includeBlocked);
     }
 
     async importContacts(
         mobile: string,
         contacts: { firstName: string; lastName?: string; phone: string }[]
     ) {
-        return this.executeWithConnection(mobile, 'Import contacts', (client) =>
-            client.importContacts(contacts)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Import contacts', { contactCount: contacts.length });
+        return await telegramClient.importContacts(contacts);
     }
 
     async manageBlockList(
@@ -861,15 +648,15 @@ export class TelegramService implements OnModuleDestroy {
         userIds: string[],
         block: boolean
     ) {
-        return this.executeWithConnection(mobile, block ? 'Block users' : 'Unblock users', (client) =>
-            client.manageBlockList(userIds, block)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, block ? 'Block users' : 'Unblock users', { userIds });
+        return await telegramClient.manageBlockList(userIds, block);
     }
 
     async getContactStatistics(mobile: string) {
-        return this.executeWithConnection(mobile, 'Get contact statistics', (client) =>
-            client.getContactStatistics()
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get contact statistics');
+        return await telegramClient.getContactStatistics();
     }
 
     // Chat Folder Management
@@ -889,22 +676,22 @@ export class TelegramService implements OnModuleDestroy {
             excludeArchived?: boolean;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Create chat folder', (client) =>
-            client.createChatFolder(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Create chat folder', { name: options.name });
+        return await telegramClient.createChatFolder(options);
     }
 
     async getChatFolders(mobile: string) {
-        return this.executeWithConnection(mobile, 'Get chat folders', (client) =>
-            client.getChatFolders()
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get chat folders');
+        return await telegramClient.getChatFolders();
     }
 
     // Session Management
     async getSessionInfo(mobile: string) {
-        return this.executeWithConnection(mobile, 'Get session info', (client) =>
-            client.getSessionInfo()
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get session info');
+        return await telegramClient.getSessionInfo();
     }
 
     async terminateSession(
@@ -915,9 +702,9 @@ export class TelegramService implements OnModuleDestroy {
             exceptCurrent?: boolean;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Terminate session', (client) =>
-            client.terminateSession(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Terminate session', options);
+        return await telegramClient.terminateSession(options);
     }
 
     // Message Management
@@ -933,9 +720,9 @@ export class TelegramService implements OnModuleDestroy {
             };
         }
     ) {
-        return this.executeWithConnection(mobile, 'Edit message', (client) =>
-            client.editMessage(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Edit message', { chatId: options.chatId, messageId: options.messageId });
+        return await telegramClient.editMessage(options);
     }
 
     // Chat Management
@@ -952,14 +739,13 @@ export class TelegramService implements OnModuleDestroy {
             defaultSendAs?: string;
         }
     ) {
-
         if (!settings.chatId) {
             throw new Error('chatId is required');
         }
 
-        return this.executeWithConnection(mobile, 'Update chat settings', (client) =>
-            client.updateChatSettings(settings)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Update chat settings', { chatId: settings.chatId });
+        return await telegramClient.updateChatSettings(settings);
     }
 
     // Media Handling
@@ -977,23 +763,23 @@ export class TelegramService implements OnModuleDestroy {
             scheduleDate?: number;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Send media batch', (client) =>
-            client.sendMediaBatch(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
+        return await telegramClient.sendMediaBatch(options);
     }
 
     // Password Management
     async hasPassword(mobile: string): Promise<boolean> {
-        return this.executeWithConnection(mobile, 'Check password status', (client) =>
-            client.hasPassword()
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Check password status');
+        return await telegramClient.hasPassword();
     }
 
     // Contact Management
     async getContacts(mobile: string) {
-        return this.executeWithConnection(mobile, 'Get contacts list', (client) =>
-            client.getContacts()
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get contacts list');
+        return await telegramClient.getContacts();
     }
 
     // Extended Chat Functions
@@ -1007,15 +793,15 @@ export class TelegramService implements OnModuleDestroy {
             folderId?: number;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Get chats', (client) =>
-            client.getChats(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get chats', options);
+        return await telegramClient.getChats(options);
     }
 
     async getFileUrl(mobile: string, url: string, filename: string): Promise<string> {
-        return this.executeWithConnection(mobile, 'Get file URL', (client) =>
-            client.getFileUrl(url, filename)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get file URL', { url, filename });
+        return await telegramClient.getFileUrl(url, filename);
     }
 
     async getMessageStats(
@@ -1026,9 +812,9 @@ export class TelegramService implements OnModuleDestroy {
             fromDate?: Date;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Get message statistics', (client) =>
-            client.getMessageStats(options)
-        );
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get message statistics', options);
+        return await telegramClient.getMessageStats(options);
     }
 
     async sendViewOnceMedia(
@@ -1043,85 +829,86 @@ export class TelegramService implements OnModuleDestroy {
             filename?: string;
         }
     ) {
-        return this.executeWithConnection(mobile, 'Send view once media', async (client) => {
-            const { sourceType, chatId, caption, filename } = options;
-            try {
-                if (sourceType === 'path') {
-                    if (!options.path) throw new BadRequestException('Path is required when sourceType is url');
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Send view once media', { sourceType: options.sourceType, chatId: options.chatId });
 
-                    try {
-                        const localPath = options.path;
-                        if (!fs.existsSync(localPath)) {
-                            throw new BadRequestException(`File not found at path: ${localPath}`);
-                        }
-                        let isVideo = false;
-                        const ext = path.extname(localPath).toLowerCase().substring(1);
-                        if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
-                            isVideo = true;
-                        }
+        const { sourceType, chatId, caption, filename } = options;
+        try {
+            if (sourceType === 'path') {
+                if (!options.path) throw new BadRequestException('Path is required when sourceType is url');
 
-                        const fileBuffer = fs.readFileSync(localPath);
-
-                        this.logger.logOperation(mobile, 'Sending view once media from local file', {
-                            path: localPath,
-                            isVideo,
-                            size: fileBuffer.length,
-                            filename: filename || path.basename(localPath)
-                        });
-
-                        return client.sendViewOnceMedia(
-                            chatId,
-                            fileBuffer,
-                            caption,
-                            isVideo,
-                            filename || path.basename(localPath)
-                        );
-                    } catch (error) {
-                        if (error instanceof BadRequestException) {
-                            throw error;
-                        }
-                        this.logger.logError(mobile, 'Failed to read local file', error);
-                        throw new BadRequestException(`Failed to read local file: ${error.message}`);
+                try {
+                    const localPath = options.path;
+                    if (!fs.existsSync(localPath)) {
+                        throw new BadRequestException(`File not found at path: ${localPath}`);
                     }
-                }
-                else if (sourceType === 'base64') {
-                    if (!options.base64Data) throw new BadRequestException('Base64 data is required when sourceType is base64');
-                    const base64String = options.base64Data;
                     let isVideo = false;
-                    if (filename) {
-                        const ext = filename.toLowerCase().split('.').pop();
-                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
-                            isVideo = true;
-                        }
+                    const ext = path.extname(localPath).toLowerCase().substring(1);
+                    if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                        isVideo = true;
                     }
-                    this.logger.logOperation(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
-                    const mediaData = Buffer.from(base64String, 'base64');
-                    return client.sendViewOnceMedia(chatId, mediaData, caption, isVideo, filename);
-                }
-                else if (sourceType === 'binary') {
-                    if (!options.binaryData) throw new BadRequestException('Binary data is required when sourceType is binary');
 
-                    this.logger.logOperation(mobile, 'Sending view once media from binary', {
-                        size: options.binaryData.length,
-                        filename: filename || 'unknown'
+                    const fileBuffer = fs.readFileSync(localPath);
+
+                    this.logger.logOperation(mobile, 'Sending view once media from local file', {
+                        path: localPath,
+                        isVideo,
+                        size: fileBuffer.length,
+                        filename: filename || path.basename(localPath)
                     });
-                    let isVideo = false;
-                    if (filename) {
-                        const ext = filename.toLowerCase().split('.').pop();
-                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
-                            isVideo = true;
-                        }
+
+                    return await telegramClient.sendViewOnceMedia(
+                        chatId,
+                        fileBuffer,
+                        caption,
+                        isVideo,
+                        filename || path.basename(localPath)
+                    );
+                } catch (error) {
+                    if (error instanceof BadRequestException) {
+                        throw error;
                     }
-                    return client.sendViewOnceMedia(chatId, options.binaryData, caption, isVideo, filename);
+                    this.logger.logError(mobile, 'Failed to read local file', error);
+                    throw new BadRequestException(`Failed to read local file: ${error.message}`);
                 }
-                else {
-                    throw new BadRequestException('Invalid source type. Must be one of: url, base64, binary');
-                }
-            } catch (error) {
-                this.logger.logError(mobile, 'Failed to send view once media', error);
-                throw error;
             }
-        });
+            else if (sourceType === 'base64') {
+                if (!options.base64Data) throw new BadRequestException('Base64 data is required when sourceType is base64');
+                const base64String = options.base64Data;
+                let isVideo = false;
+                if (filename) {
+                    const ext = filename.toLowerCase().split('.').pop();
+                    if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                        isVideo = true;
+                    }
+                }
+                this.logger.logOperation(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
+                const mediaData = Buffer.from(base64String, 'base64');
+                return await telegramClient.sendViewOnceMedia(chatId, mediaData, caption, isVideo, filename);
+            }
+            else if (sourceType === 'binary') {
+                if (!options.binaryData) throw new BadRequestException('Binary data is required when sourceType is binary');
+
+                this.logger.logOperation(mobile, 'Sending view once media from binary', {
+                    size: options.binaryData.length,
+                    filename: filename || 'unknown'
+                });
+                let isVideo = false;
+                if (filename) {
+                    const ext = filename.toLowerCase().split('.').pop();
+                    if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                        isVideo = true;
+                    }
+                }
+                return await telegramClient.sendViewOnceMedia(chatId, options.binaryData, caption, isVideo, filename);
+            }
+            else {
+                throw new BadRequestException('Invalid source type. Must be one of: url, base64, binary');
+            }
+        } catch (error) {
+            this.logger.logError(mobile, 'Failed to send view once media', error);
+            throw error;
+        }
     }
 
     async getTopPrivateChats(mobile: string): Promise<{
@@ -1155,8 +942,8 @@ export class TelegramService implements OnModuleDestroy {
             textMessages: number;
         };
     }[]> {
-        return this.executeWithConnection(mobile, 'Get top private chats', async (client) => {
-            return client.getTopPrivateChats();
-        });
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Get top private chats');
+        return await telegramClient.getTopPrivateChats();
     }
 }

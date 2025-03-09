@@ -5,7 +5,6 @@ import axios from 'axios';
 import * as fs from 'fs';
 import { CustomFile } from 'telegram/client/uploads';
 import { TotalList, sleep } from 'telegram/Helpers';
-import { Dialog } from 'telegram/tl/custom/dialog';
 import { LogLevel } from 'telegram/extensions/Logger';
 import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
@@ -21,6 +20,7 @@ import {
 } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
+import connectionManager from './utils/connection-manager';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -133,7 +133,7 @@ class TelegramManager {
             console.log(e)
         }
         await this.leaveChannels([channelId.toString()]);
-        await this.disconnect();
+        await connectionManager.unregisterClient(this.phoneNumber);
     }
 
     public async forwardSecretMsgsFromTopChats(channelId: string) {

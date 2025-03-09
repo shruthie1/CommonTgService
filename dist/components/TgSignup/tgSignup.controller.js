@@ -130,12 +130,6 @@ __decorate([
 exports.TgSignupController = TgSignupController = TgSignupController_1 = __decorate([
     (0, common_1.Controller)('tgsignup'),
     (0, swagger_1.ApiTags)('tgsignup'),
-    (0, common_1.UsePipes)(new common_1.ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transformOptions: { enableImplicitConversion: true }
-    })),
     (0, swagger_1.ApiExtraModels)(tg_signup_dto_1.SendCodeDto, tg_signup_dto_1.VerifyCodeDto, tg_signup_dto_1.TgSignupResponse),
     __metadata("design:paramtypes", [TgSignup_service_1.TgSignupService])
 ], TgSignupController);

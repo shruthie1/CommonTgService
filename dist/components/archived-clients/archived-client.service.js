@@ -11,6 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ArchivedClientService = void 0;
 const common_1 = require("@nestjs/common");
@@ -20,6 +23,7 @@ const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const client_service_1 = require("../clients/client.service");
 const parseError_1 = require("../../utils/parseError");
+const connection_manager_1 = __importDefault(require("../Telegram/utils/connection-manager"));
 let ArchivedClientService = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
@@ -45,9 +49,8 @@ let ArchivedClientService = class ArchivedClientService {
         }
         else {
             try {
-                await this.telegramService.createClient(mobile, false, true);
+                await connection_manager_1.default.getClient(mobile, { autoDisconnect: true, handler: false });
                 const newSession = await this.telegramService.createNewSession(mobile);
-                await this.telegramService.deleteClient(mobile);
                 return await this.create({
                     "channelLink": "default",
                     "clientId": "default",
@@ -66,8 +69,10 @@ let ArchivedClientService = class ArchivedClientService {
                 });
             }
             catch (e) {
-                await this.telegramService.deleteClient(mobile);
                 throw new common_1.NotFoundException((0, parseError_1.parseError)(e).message);
+            }
+            finally {
+                await connection_manager_1.default.unregisterClient(mobile);
             }
         }
     }
@@ -96,7 +101,7 @@ let ArchivedClientService = class ArchivedClientService {
         return this.archivedclientModel.find(filter).exec();
     }
     async checkArchivedClients() {
-        await this.telegramService.disconnectAll();
+        await connection_manager_1.default.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();
@@ -104,16 +109,17 @@ let ArchivedClientService = class ArchivedClientService {
         archivedClients.map(async (document) => {
             if (!clientIds.includes(document.mobile)) {
                 try {
-                    await this.telegramService.createClient(document.mobile, true, false);
+                    await connection_manager_1.default.getClient(document.mobile, { autoDisconnect: true, handler: false });
                     await this.telegramService.updateUsername(document.mobile, '');
                     await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                    await this.telegramService.deleteClient(document.mobile);
                     await (0, Helpers_1.sleep)(2000);
                 }
                 catch (error) {
                     console.log(document.mobile, " :  false");
                     this.remove(document.mobile);
-                    await this.telegramService.deleteClient(document.mobile);
+                }
+                finally {
+                    await connection_manager_1.default.unregisterClient(document.mobile);
                 }
             }
             else {

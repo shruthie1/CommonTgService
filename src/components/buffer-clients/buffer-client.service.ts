@@ -15,6 +15,7 @@ import { PromoteClientService } from '../promote-clients/promote-client.service'
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import connectionManager from '../Telegram/utils/connection-manager';
 
 @Injectable()
 export class BufferClientService {
@@ -141,30 +142,30 @@ export class BufferClientService {
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
         if (!this.telegramService.getActiveClientSetup()) {
             this.logger.log('Starting join channel process');
-            await this.telegramService.disconnectAll();
-            
+            await connectionManager.disconnectAll();
+
             // Clear both queues before starting new process
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
-            
+
             await sleep(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
             const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
-            
+
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
-            
+
             if (clients.length > 0) {
                 for (const document of clients) {
                     try {
-                        const client = await this.telegramService.createClient(document.mobile, false, false);
+                        const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: false });
                         this.logger.log(`Started joining process for mobile: ${document.mobile}`);
-                        
+
                         const channels = await client.channelInfo(true);
                         this.logger.debug(`Client ${document.mobile} has ${channels.ids.length} existing channels`);
-                        
+
                         await this.update(document.mobile, { channels: channels.ids.length });
                         this.logger.debug(`Client ${document.mobile} has ${channels.canSendFalseChats.length} channels that can't send messages`);
-                        
+
                         let result = [];
                         if (channels.canSendFalseCount < 10) {
                             if (channels.ids.length < 220) {
@@ -175,13 +176,13 @@ export class BufferClientService {
                             this.logger.debug(`Adding ${result.length} new channels to join queue for ${document.mobile}`);
                             this.joinChannelMap.set(document.mobile, result);
                             this.joinChannelQueue();
-                            await this.telegramService.deleteClient(document.mobile);
+                            await connectionManager.unregisterClient(document.mobile);
                         } else {
                             this.logger.warn(`Client ${document.mobile} has too many restricted channels, moving to leave queue: ${channels.canSendFalseChats.length}`);
                             this.joinChannelMap.delete(document.mobile);
                             this.leaveChannelMap.set(document.mobile, channels.canSendFalseChats);
                             this.leaveChannelQueue();
-                            await this.telegramService.deleteClient(document.mobile);
+                            await connectionManager.unregisterClient(document.mobile);
 
                         }
                         // console.log("DbChannelsLen: ", result.length);
@@ -194,7 +195,7 @@ export class BufferClientService {
                             error.message === "USER_DEACTIVATED_BAN") {
                             this.logger.error(`Session invalid for ${document.mobile}, removing client`, error.stack);
                             await this.remove(document.mobile);
-                            await this.telegramService.deleteClient(document.mobile);
+                            await connectionManager.unregisterClient(document.mobile);
                         }
                         parseError(error)
                     }
@@ -249,7 +250,7 @@ export class BufferClientService {
                     this.joinChannelMap.set(mobile, channels);
 
                     try {
-                        await this.telegramService.createClient(mobile, false, false);
+                        await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${channel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, channel);
                     } catch (error) {
@@ -271,7 +272,7 @@ export class BufferClientService {
                             await this.remove(mobile);
                         }
                     } finally {
-                        await this.telegramService.deleteClient(mobile);
+                        await connectionManager.unregisterClient(mobile);
                     }
                 }
 
@@ -281,7 +282,7 @@ export class BufferClientService {
                 this.clearJoinChannelInterval();
             }
         }, this.JOIN_CHANNEL_INTERVAL);
-        
+
         this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
     }
 
@@ -291,7 +292,7 @@ export class BufferClientService {
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             this.isJoinChannelProcessing = false;
-            
+
             // Only schedule next run if there are items in the map
             if (this.joinChannelMap.size > 0) {
                 setTimeout(() => {
@@ -355,7 +356,7 @@ export class BufferClientService {
 
                     const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
                     this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
-                    
+
                     // Only update map if there are remaining channels
                     if (channels.length > 0) {
                         this.leaveChannelMap.set(mobile, channels);
@@ -364,7 +365,7 @@ export class BufferClientService {
                     }
 
                     try {
-                        const client = await this.telegramService.createClient(mobile, false, false);
+                        const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
                         await client.leaveChannels(channelsToProcess);
                         this.logger.debug(`${mobile} left channels successfully`);
@@ -381,7 +382,7 @@ export class BufferClientService {
                             this.removeFromLeaveMap(mobile);
                         }
                     } finally {
-                        await this.telegramService.deleteClient(mobile);
+                        await connectionManager.unregisterClient(mobile);
                     }
                 }
 
@@ -391,7 +392,7 @@ export class BufferClientService {
                 this.clearLeaveChannelInterval();
             }
         }, this.LEAVE_CHANNEL_INTERVAL);
-        
+
         this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
     }
 
@@ -422,7 +423,7 @@ export class BufferClientService {
         const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
         if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
-                const telegramClient = await this.telegramService.createClient(mobile, false)
+                const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false })
                 await telegramClient.set2fa();
                 await sleep(15000)
                 await telegramClient.updateUsername('');
@@ -445,7 +446,7 @@ export class BufferClientService {
                 const errorDetails = parseError(error)
                 throw new HttpException(errorDetails.message, errorDetails.status)
             }
-            await this.telegramService.deleteClient(mobile)
+            await connectionManager.unregisterClient(mobile)
             return "Client set as buffer successfully";
         } else {
             throw new BadRequestException("Number is a Active Client")
@@ -454,7 +455,7 @@ export class BufferClientService {
 
     async checkBufferClients() {
         if (!this.telegramService.getActiveClientSetup()) {
-            await this.telegramService.disconnectAll()
+            await connectionManager.disconnectAll()
             await sleep(2000);
             const bufferclients = await this.findAll();
             let goodIds: string[] = [];
@@ -472,7 +473,7 @@ export class BufferClientService {
             for (const document of bufferclients) {
                 if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
                     try {
-                        const cli = await this.telegramService.createClient(document.mobile, true, false);
+                        const cli = await connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
                         const me = await cli.getMe();
                         if (me.username) {
                             await this.telegramService.updateUsername(document.mobile, '');
@@ -495,13 +496,13 @@ export class BufferClientService {
                             console.log(document.mobile, " :  ALL Good");
                             goodIds.push(document.mobile)
                         }
-                        await this.telegramService.deleteClient(document.mobile)
+                        await connectionManager.unregisterClient(document.mobile)
                         await sleep(2000);
                     } catch (error) {
                         parseError(error);
                         badIds.push(document.mobile);
                         this.remove(document.mobile)
-                        await this.telegramService.deleteClient(document.mobile)
+                        await connectionManager.unregisterClient(document.mobile)
                     }
                 } else {
                     console.log("Number is a Active Client");
@@ -525,7 +526,7 @@ export class BufferClientService {
             const document = documents.shift();
             try {
                 try {
-                    const client = await this.telegramService.createClient(document.mobile, false);
+                    const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
                     const hasPassword = await client.hasPassword();
                     console.log("hasPassword: ", hasPassword);
                     if (!hasPassword) {
@@ -554,22 +555,22 @@ export class BufferClientService {
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true })
                         console.log("=============Created BufferClient=============")
-                        await this.telegramService.deleteClient(document.mobile)
+                        await connectionManager.unregisterClient(document.mobile)
                         badIds.pop();
                     } else {
                         console.log("Failed to Update as BufferClient has Password");
                         await this.usersService.update(document.tgId, { twoFA: true })
-                        await this.telegramService.deleteClient(document.mobile)
+                        await connectionManager.unregisterClient(document.mobile)
                     }
                 } catch (error) {
                     parseError(error)
-                    await this.telegramService.deleteClient(document.mobile)
+                    await connectionManager.unregisterClient(document.mobile)
                 }
             } catch (error) {
                 parseError(error)
                 console.error("An error occurred:", error);
             }
-            await this.telegramService.deleteClient(document.mobile)
+            await connectionManager.unregisterClient(document.mobile)
         }
         setTimeout(() => {
             this.joinchannelForBufferClients()

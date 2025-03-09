@@ -56,6 +56,7 @@ const axios_1 = __importDefault(require("axios"));
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
+const connection_manager_1 = __importDefault(require("../Telegram/utils/connection-manager"));
 let settingupClient = Date.now() - 250000;
 let ClientService = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
@@ -177,16 +178,15 @@ let ClientService = class ClientService {
             const existingClientMobile = existingClient.mobile;
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log(setupClientQueryDto);
-            await this.telegramService.disconnectAll();
+            await connection_manager_1.default.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             try {
                 if (newBufferClient) {
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
-                    await this.telegramService.createClient(newBufferClient.mobile);
+                    await connection_manager_1.default.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
-                    await this.telegramService.deleteClient(newBufferClient.mobile);
                     await this.updateClientSession(newSession);
                 }
                 else {
@@ -196,11 +196,13 @@ let ClientService = class ClientService {
             }
             catch (error) {
                 (0, parseError_1.parseError)(error);
-                await this.telegramService.deleteClient(newBufferClient.mobile);
                 console.log("Removing buffer as error");
                 const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
                 await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
                 this.telegramService.setActiveClientSetup(undefined);
+            }
+            finally {
+                await connection_manager_1.default.unregisterClient(newBufferClient.mobile);
             }
         }
         else {
@@ -211,10 +213,10 @@ let ClientService = class ClientService {
         try {
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await this.telegramService.disconnectAll();
+            await connection_manager_1.default.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
             const client = await this.findOne(clientId);
-            await this.telegramService.createClient(newMobile, false, true);
+            await connection_manager_1.default.getClient(newMobile, { handler: true, autoDisconnect: false });
             const firstName = (client.name).split(' ')[0];
             const middleName = (client.name).split(' ')[1];
             const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
@@ -222,7 +224,7 @@ let ClientService = class ClientService {
             const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
             const updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
-            await this.telegramService.deleteClient(newMobile);
+            await connection_manager_1.default.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             const existingClient = await this.findOne(clientId);
             this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
@@ -235,14 +237,14 @@ let ClientService = class ClientService {
                 if (existingClientUser) {
                     try {
                         if ((0, utils_1.toBoolean)(formalities)) {
-                            await this.telegramService.createClient(existingMobile, false, true);
+                            await connection_manager_1.default.getClient(existingMobile, { handler: true, autoDisconnect: false });
                             console.log("Started Formalities");
                             await this.telegramService.updateNameandBio(existingMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
                             await this.telegramService.deleteProfilePhotos(existingMobile);
                             await this.telegramService.updateUsername(existingMobile, '');
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             console.log("Formalities finished");
-                            await this.telegramService.deleteClient(existingMobile);
+                            await connection_manager_1.default.unregisterClient(existingMobile);
                             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Formalities finished`);
                         }
                         else {
@@ -286,7 +288,7 @@ let ClientService = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
-            await this.telegramService.disconnectAll();
+            await connection_manager_1.default.disconnectAll();
         }
         catch (e) {
             (0, parseError_1.parseError)(e);
@@ -305,7 +307,7 @@ let ClientService = class ClientService {
         try {
             this.lastUpdateMap.set(clientId, now);
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-            const telegramClient = await this.telegramService.createClient(client.mobile, true, false);
+            const telegramClient = await connection_manager_1.default.getClient(client.mobile, { handler: false });
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
             if (!me.username || me.username !== client.username || !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
@@ -335,11 +337,13 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
-            await this.telegramService.deleteClient(client.mobile);
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
             (0, parseError_1.parseError)(error);
+        }
+        finally {
+            connection_manager_1.default.unregisterClient(client.mobile);
         }
     }
     async updateClients() {

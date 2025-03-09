@@ -9,7 +9,6 @@ import { ChatStatistics } from 'src/interfaces/telegram';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    private handleTelegramOperation;
     connect(mobile: string): Promise<{
         message: string;
     }>;
@@ -25,7 +24,7 @@ export declare class TelegramController {
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
     getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
-    forwardMessage(mobile: string, forwardDto: ForwardBatchDto): Promise<void>;
+    forwardMessage(mobile: string, forwardDto: ForwardBatchDto): Promise<number>;
     processBatchMessages(mobile: string, batchOp: BatchProcessDto): Promise<{
         processed: number;
         errors: Error[];
@@ -60,14 +59,14 @@ export declare class TelegramController {
             total: number;
         };
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
     forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<string>;
-    leaveChannel(mobile: string, channel: string): Promise<void>;
+    leaveChannel(mobile: string, channel: string): Promise<string>;
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updatePrivacyBatch(mobile: string, settings: PrivacySettingsDto): Promise<boolean>;
     getActiveSessions(mobile: string): Promise<any[]>;
-    terminateOtherSessions(mobile: string): Promise<void>;
+    terminateOtherSessions(mobile: string): Promise<string>;
     createNewSession(mobile: string): Promise<string>;
     getSessionInfo(mobile: string): Promise<{
         sessions: {
@@ -105,26 +104,6 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
-    getClientStatistics(): Promise<{
-        totalClients: number;
-        totalOperations: number;
-        failedOperations: number;
-        averageReconnects: number;
-    }>;
-    getHealthStatus(): Promise<{
-        connections: {
-            activeConnections: number;
-            rateLimited: number;
-            totalOperations: number;
-        };
-        statistics: {
-            totalClients: number;
-            totalOperations: number;
-            failedOperations: number;
-            averageReconnects: number;
-        };
-    }>;
     getCallLogStats(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;
@@ -144,7 +123,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -175,7 +154,7 @@ export declare class TelegramController {
         deletedCount: number;
     }>;
     getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
-    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<void>;
+    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("telegram").Api.TypeMessage[]>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
@@ -185,11 +164,6 @@ export declare class TelegramController {
     }): Promise<import("telegram").Api.TypeUpdates>;
     sendViewOnceMedia(mobile: string, file: Express.Multer.File, viewOnceDto: ViewOnceMediaDto): Promise<import("telegram").Api.TypeUpdates>;
     getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<any>;
-    validateSession(mobile: string): Promise<{
-        isValid: boolean;
-        isConnected: boolean;
-        phoneNumber: string;
-    }>;
     promoteToAdmin(mobile: string, adminOp: AdminOperationDto): Promise<void>;
     demoteAdmin(mobile: string, memberOp: GroupMemberOperationDto): Promise<void>;
     unblockGroupUser(mobile: string, data: {

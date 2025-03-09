@@ -8,6 +8,7 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { ClientService } from '../clients/client.service';
 import { parseError } from '../../utils/parseError';
+import connectionManager from '../Telegram/utils/connection-manager';
 @Injectable()
 export class ArchivedClientService {
     constructor(@InjectModel('ArchivedArchivedClientsModule') private archivedclientModel: Model<ClientDocument>,
@@ -15,7 +16,7 @@ export class ArchivedClientService {
         private telegramService: TelegramService,
         @Inject(forwardRef(() => ClientService))
         private clientService: ClientService,
-    ) { }
+    ) {}
 
     async create(createClientDto: CreateClientDto): Promise<Client> {
         const createdUser = new this.archivedclientModel(createClientDto);
@@ -38,9 +39,8 @@ export class ArchivedClientService {
             return user;
         } else {
             try {
-                await this.telegramService.createClient(mobile, false, true)
+                await connectionManager.getClient(mobile, { autoDisconnect: true, handler: false });
                 const newSession = await this.telegramService.createNewSession(mobile);
-                await this.telegramService.deleteClient(mobile)
                 return await this.create({
                     "channelLink": "default",
                     "clientId": "default",
@@ -58,8 +58,9 @@ export class ArchivedClientService {
                     product: "default"
                 })
             } catch (e) {
-                await this.telegramService.deleteClient(mobile)
                 throw new NotFoundException(parseError(e).message);
+            } finally {
+                await connectionManager.unregisterClient(mobile);
             }
         }
     }
@@ -92,7 +93,7 @@ export class ArchivedClientService {
     }
 
     async checkArchivedClients() {
-        await this.telegramService.disconnectAll()
+        await connectionManager.disconnectAll()
         await sleep(2000);
         const archivedClients = await this.findAll();
 
@@ -102,15 +103,15 @@ export class ArchivedClientService {
         archivedClients.map(async (document) => {
             if (!clientIds.includes(document.mobile)) {
                 try {
-                    await this.telegramService.createClient(document.mobile, true, false);
+                    await connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
                     await this.telegramService.updateUsername(document.mobile, '');
                     await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                    await this.telegramService.deleteClient(document.mobile)
                     await sleep(2000);
                 } catch (error) {
                     console.log(document.mobile, " :  false");
                     this.remove(document.mobile)
-                    await this.telegramService.deleteClient(document.mobile)
+                } finally{
+                    await connectionManager.unregisterClient(document.mobile);
                 }
             } else {
                 console.log("Number is a Active Client")

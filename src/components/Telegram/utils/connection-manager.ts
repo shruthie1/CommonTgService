@@ -1,88 +1,194 @@
-import { TelegramError, TelegramErrorCode } from '../types/telegram-error';
-import { RateLimiter } from './rate-limiter';
 import TelegramManager from '../TelegramManager';
+import { parseError } from '../../../utils/parseError';
+import { TelegramLogger } from './telegram-logger';
+import { BadRequestException } from '@nestjs/common';
+import { UsersService } from 'src/components/users/users.service';
+import { TelegramClient } from 'telegram';
+import { contains } from '../../../utils';
 
-export class ConnectionManager {
+class ConnectionManager {
     private static instance: ConnectionManager;
-    private clientRateLimiter: RateLimiter;
-    private operationRateLimiter: RateLimiter;
-    private activeConnections: Map<string, { client: TelegramManager; lastUsed: number }>;
+    private clients: Map<string, {
+        client: TelegramManager;
+        lastUsed: number;
+        autoDisconnect?: boolean;
+    }>;
+    private readonly logger: TelegramLogger;
+    private cleanupInterval: NodeJS.Timeout | null = null;
+    private usersService: UsersService;
 
     private constructor() {
-        // Rate limit: 5 new connections per minute per mobile
-        this.clientRateLimiter = new RateLimiter(60000, 5);
-        // Rate limit: 30 operations per minute per client
-        this.operationRateLimiter = new RateLimiter(60000, 30);
-        this.activeConnections = new Map();
+        this.clients = new Map();
+        this.logger = TelegramLogger.getInstance();
     }
 
-    static getInstance(): ConnectionManager {
+    public setUsersService(usersService: UsersService) {
+        this.usersService = usersService;
+    }
+
+    public static getInstance(): ConnectionManager {
         if (!ConnectionManager.instance) {
             ConnectionManager.instance = new ConnectionManager();
         }
         return ConnectionManager.instance;
     }
 
-    async acquireConnection(mobile: string, client: TelegramManager): Promise<void> {
-        await this.clientRateLimiter.waitForRateLimit(mobile);
-        this.activeConnections.set(mobile, {
-            client,
-            lastUsed: Date.now()
-        });
-    }
-
-    async releaseConnection(mobile: string): Promise<void> {
-        const connection = this.activeConnections.get(mobile);
-        if (connection) {
-            try {
-                await connection.client.disconnect();
-            } catch (error) {
-                console.error(`Error disconnecting client ${mobile}:`, error);
-            } finally {
-                this.activeConnections.delete(mobile);
-            }
-        }
-    }
-
-    async cleanupInactiveConnections(maxIdleTime: number = 180000): Promise<void> {
+    private async cleanupInactiveConnections(maxIdleTime: number = 180000): Promise<void> {
         const now = Date.now();
-        for (const [mobile, connection] of this.activeConnections.entries()) {
+        for (const [mobile, connection] of this.clients.entries()) {
+            // Skip clients that are configured to be excluded from cleanup
+            if (!connection.autoDisconnect) {
+                continue;
+            }
             if (now - connection.lastUsed > maxIdleTime) {
                 console.log(`Releasing inactive connection for ${mobile}`);
-                await this.releaseConnection(mobile);
+                await this.unregisterClient(mobile);
             }
         }
     }
 
-    async executeWithRateLimit<T>(mobile: string, operation: () => Promise<T>): Promise<T> {
-        await this.operationRateLimiter.waitForRateLimit(mobile);
-        try {
-            return await operation();
-        } catch (error) {
-            if (error.message?.includes('FLOOD_WAIT')) {
-                throw new TelegramError(
-                    'Rate limit exceeded',
-                    TelegramErrorCode.FLOOD_WAIT,
-                    { waitTime: parseInt(error.message.match(/\d+/)?.[0] || '0') }
-                );
-            }
-            throw error;
-        }
-    }
-
-    updateLastUsed(mobile: string): void {
-        const connection = this.activeConnections.get(mobile);
+    private updateLastUsed(mobile: string): void {
+        const connection = this.clients.get(mobile);
         if (connection) {
             connection.lastUsed = Date.now();
-            this.activeConnections.set(mobile, connection);
+            this.clients.set(mobile, connection);
         }
     }
 
-    getActiveConnectionCount(): number {
-        return this.activeConnections.size;
+    public async getClient(mobile: string, options: { autoDisconnect?: boolean; handler?: boolean, excludeFromCleanup?: boolean } = {}): Promise<TelegramManager | undefined> {
+        if (!mobile) {
+            this.logger.logDebug('system', 'getClient called with empty mobile number');
+            return undefined;
+        }
+
+        const { autoDisconnect = true, handler = true } = options;
+        this.logger.logOperation(mobile, 'Getting/Creating client', { autoDisconnect, handler });
+        const clientInfo = this.clients.get(mobile);
+        if (clientInfo?.client) {
+            this.updateLastUsed(mobile);
+            if (clientInfo.client.connected()) {
+                this.logger.logOperation(mobile, 'Reusing existing connected client');
+                return clientInfo.client;
+            } else {
+                try {
+                    this.logger.logOperation(mobile, 'Reconnecting existing client');
+                    await clientInfo.client.connect();
+                    return clientInfo.client;
+                } catch (error) {
+                    this.logger.logError(mobile, 'Failed to reconnect client', error);
+                }
+            }
+        }
+
+        if (!this.usersService) {
+            throw new Error('UsersService not initialized');
+        }
+
+        const user = (await this.usersService.search({ mobile }))[0];
+        if (!user) {
+            throw new BadRequestException('user not found');
+        }
+
+        const telegramManager = new TelegramManager(user.session, user.mobile);
+        let client: TelegramClient;
+
+        try {
+            client = await telegramManager.createClient(handler);
+            await client.getMe();
+
+            if (client) {
+                await this.registerClient(
+                    mobile,
+                    telegramManager,
+                    { autoDisconnect: autoDisconnect }
+                );
+                this.logger.logOperation(mobile, 'Client created successfully');
+                return telegramManager;
+            } else {
+                throw new BadRequestException('Client Expired');
+            }
+        } catch (error) {
+            this.logger.logError(mobile, 'Client creation failed', error);
+            console.log("Parsing Error");
+            await this.unregisterClient(mobile);
+
+            const errorDetails = parseError(error, mobile);
+            if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
+                console.log("Deleting User: ", user.mobile);
+                await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
+            }
+            throw new BadRequestException(errorDetails.message);
+        }
     }
 
-    startCleanupInterval(interval: number = 60000): NodeJS.Timer {
-        return setInterval(() => this.cleanupInactiveConnections(), interval);
+    public hasClient(number: string): boolean {
+        return this.clients.has(number);
+    }
+
+    public async disconnectAll(): Promise<void> {
+        this.logger.logOperation('system', 'Disconnecting all clients');
+        const clientMobiles = Array.from(this.clients.keys());
+        await Promise.all(
+            clientMobiles.map(mobile => {
+                this.logger.logOperation(mobile, 'Disconnecting client');
+                return this.unregisterClient(mobile);
+            })
+        );
+        this.clients.clear();
+        this.logger.logOperation('system', 'All clients disconnected');
+    }
+
+    public async registerClient(
+        mobile: string,
+        telegramManager: TelegramManager,
+        options: { autoDisconnect: boolean } = { autoDisconnect: true }
+    ): Promise<void> {
+        this.clients.set(mobile, {
+            client: telegramManager,
+            lastUsed: Date.now(),
+            autoDisconnect: options.autoDisconnect
+        });
+        this.logger.logOperation(mobile, `Client registered successfully${options.autoDisconnect ? ' (excluded from auto-cleanup)' : ''}`);
+    }
+
+    public async unregisterClient(
+        mobile: string,
+    ): Promise<void> {
+        try {
+            const clientInfo = this.clients.get(mobile);
+            if (clientInfo) {
+                await clientInfo.client?.disconnect();
+                this.logger.logOperation(mobile, 'Client unregistered successfully');
+            } else {
+                console.error(`Client ${mobile} not found`);
+            }
+        } catch (error) {
+            console.error('Error in unregisterClient:', error);
+        } finally {
+            this.clients.delete(mobile);
+        }
+    }
+
+    public getActiveConnectionCount(): number {
+        return this.clients.size;
+    }
+
+    public startCleanupInterval(intervalMs: number = 300000): NodeJS.Timeout {
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupInactiveConnections().catch(err => {
+                console.error('Error in cleanup interval:', err);
+            });
+        }, intervalMs);
+        return this.cleanupInterval;
+    }
+
+    public stopCleanupInterval(): void {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
     }
 }
+
+const connectionManager = ConnectionManager.getInstance();
+export default connectionManager;

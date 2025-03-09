@@ -2,7 +2,6 @@
 import { Api, TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
-import { Dialog } from 'telegram/tl/custom/dialog';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
@@ -62,7 +61,7 @@ declare class TelegramManager {
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<TotalList<Dialog>>;
+    getDialogs(params: IterDialogsParams): Promise<TotalList<import("telegram/tl/custom/dialog").Dialog>>;
     getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;
@@ -211,7 +210,7 @@ declare class TelegramManager {
         exceptCurrent?: boolean;
     }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "week" | "month" | "day";
+        period: "day" | "week" | "month";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -342,7 +341,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

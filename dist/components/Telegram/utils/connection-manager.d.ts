@@ -1,17 +1,31 @@
 /// <reference types="node" />
 import TelegramManager from '../TelegramManager';
-export declare class ConnectionManager {
+import { UsersService } from 'src/components/users/users.service';
+declare class ConnectionManager {
     private static instance;
-    private clientRateLimiter;
-    private operationRateLimiter;
-    private activeConnections;
+    private clients;
+    private readonly logger;
+    private cleanupInterval;
+    private usersService;
     private constructor();
+    setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
-    acquireConnection(mobile: string, client: TelegramManager): Promise<void>;
-    releaseConnection(mobile: string): Promise<void>;
-    cleanupInactiveConnections(maxIdleTime?: number): Promise<void>;
-    executeWithRateLimit<T>(mobile: string, operation: () => Promise<T>): Promise<T>;
-    updateLastUsed(mobile: string): void;
+    private cleanupInactiveConnections;
+    private updateLastUsed;
+    getClient(mobile: string, options?: {
+        autoDisconnect?: boolean;
+        handler?: boolean;
+        excludeFromCleanup?: boolean;
+    }): Promise<TelegramManager | undefined>;
+    hasClient(number: string): boolean;
+    disconnectAll(): Promise<void>;
+    registerClient(mobile: string, telegramManager: TelegramManager, options?: {
+        autoDisconnect: boolean;
+    }): Promise<void>;
+    unregisterClient(mobile: string): Promise<void>;
     getActiveConnectionCount(): number;
-    startCleanupInterval(interval?: number): NodeJS.Timer;
+    startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
+    stopCleanupInterval(): void;
 }
+declare const connectionManager: ConnectionManager;
+export default connectionManager;

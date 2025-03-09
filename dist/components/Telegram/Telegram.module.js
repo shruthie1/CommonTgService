@@ -14,7 +14,6 @@ const users_module_1 = require("../users/users.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
 const active_channels_module_1 = require("../active-channels/active-channels.module");
 const channels_module_1 = require("../channels/channels.module");
-const connection_manager_1 = require("./utils/connection-manager");
 const telegram_logger_1 = require("./utils/telegram-logger");
 const telegram_validation_config_1 = require("./config/telegram-validation.config");
 let TelegramModule = class TelegramModule {
@@ -32,10 +31,6 @@ exports.TelegramModule = TelegramModule = __decorate([
         providers: [
             Telegram_service_1.TelegramService,
             telegram_validation_config_1.TelegramValidationConfig,
-            {
-                provide: 'CONNECTION_MANAGER',
-                useValue: connection_manager_1.ConnectionManager.getInstance()
-            },
             {
                 provide: 'TELEGRAM_LOGGER',
                 useValue: telegram_logger_1.TelegramLogger.getInstance()
