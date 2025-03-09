@@ -30,7 +30,7 @@ class ConnectionManager {
                 continue;
             }
             if (now - connection.lastUsed > maxIdleTime) {
-                console.log(`Releasing inactive connection for ${mobile}`);
+                this.logger.logOperation(mobile, 'Releasing inactive connection');
                 await this.unregisterClient(mobile);
             }
         }
@@ -90,11 +90,11 @@ class ConnectionManager {
         }
         catch (error) {
             this.logger.logError(mobile, 'Client creation failed', error);
-            console.log("Parsing Error");
+            this.logger.logDebug(mobile, 'Parsing error details...');
             await this.unregisterClient(mobile);
             const errorDetails = (0, parseError_1.parseError)(error, mobile);
             if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
-                console.log("Deleting User: ", user.mobile);
+                this.logger.logOperation(mobile, 'Marking user as expired');
                 await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
             }
             throw new common_1.BadRequestException(errorDetails.message);
@@ -119,7 +119,7 @@ class ConnectionManager {
             lastUsed: Date.now(),
             autoDisconnect: options.autoDisconnect
         });
-        this.logger.logOperation(mobile, `Client registered successfully${options.autoDisconnect ? ' (excluded from auto-cleanup)' : ''}`);
+        this.logger.logOperation(mobile, `Client registered successfully${!options.autoDisconnect ? ' (excluded from auto-cleanup)' : ''}`);
     }
     async unregisterClient(mobile) {
         try {
@@ -129,11 +129,11 @@ class ConnectionManager {
                 this.logger.logOperation(mobile, 'Client unregistered successfully');
             }
             else {
-                console.error(`Client ${mobile} not found`);
+                this.logger.logDebug(mobile, 'Client not found for unregistration');
             }
         }
         catch (error) {
-            console.error('Error in unregisterClient:', error);
+            this.logger.logError(mobile, 'Error in unregisterClient', error);
         }
         finally {
             this.clients.delete(mobile);
@@ -145,7 +145,7 @@ class ConnectionManager {
     startCleanupInterval(intervalMs = 300000) {
         this.cleanupInterval = setInterval(() => {
             this.cleanupInactiveConnections().catch(err => {
-                console.error('Error in cleanup interval:', err);
+                this.logger.logError('system', 'Error in cleanup interval', err);
             });
         }, intervalMs);
         return this.cleanupInterval;
