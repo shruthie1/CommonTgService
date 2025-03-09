@@ -59,7 +59,7 @@ export declare class TelegramController {
             total: number;
         };
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
     forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
     setup2FA(mobile: string): Promise<string>;
@@ -123,7 +123,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "photo" | "video";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;
