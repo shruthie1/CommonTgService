@@ -150,7 +150,7 @@ let TelegramController = class TelegramController {
     }
     async forwardMedia(mobile, channel, fromChatId) {
         return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
+            await this.telegramService.createClient(mobile, false, false);
             return this.telegramService.forwardMedia(mobile, channel, fromChatId);
         });
     }
