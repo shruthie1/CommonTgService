@@ -1,4 +1,4 @@
-import { Controller, Post, Body, BadRequestException, HttpException, UseGuards, Logger, HttpStatus, ValidationPipe, UsePipes } from '@nestjs/common';
+import { Controller, Post, Body, Logger, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiExtraModels } from '@nestjs/swagger';
 import { TgSignupService } from './TgSignup.service';
 import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
@@ -10,7 +10,7 @@ import { parseError } from '../../utils/parseError';
 export class TgSignupController {
     private readonly logger = new Logger(TgSignupController.name);
 
-    constructor(private readonly tgSignupService: TgSignupService) { }
+    constructor(private readonly tgSignupService: TgSignupService) {}
 
     @Post('send-code')
     @ApiOperation({
@@ -88,7 +88,7 @@ export class TgSignupController {
     async verifyCode(@Body() verifyCodeDto: VerifyCodeDto): Promise<TgSignupResponse> {
         try {
             this.logger.debug(`[VERIFY_CODE] Request received for phone: ${verifyCodeDto.phone}`);
-            
+
             const result = await this.tgSignupService.verifyCode(
                 verifyCodeDto.phone,
                 verifyCodeDto.code,

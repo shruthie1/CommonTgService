@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, UsePipes, ValidationPipe, Delete, Put, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
@@ -36,11 +36,6 @@ import connectionManager from './utils/connection-manager';
 
 @Controller('telegram')
 @ApiTags('Telegram')
-@UsePipes(new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true
-}))
 export class TelegramController {
     constructor(private readonly telegramService: TelegramService) {}
 
