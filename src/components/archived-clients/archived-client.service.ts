@@ -8,7 +8,7 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { ClientService } from '../clients/client.service';
 import { parseError } from '../../utils/parseError';
-import connectionManager from '../Telegram/utils/connection-manager';
+import { connectionManager } from '../Telegram/utils/connection-manager';
 @Injectable()
 export class ArchivedClientService {
     constructor(@InjectModel('ArchivedArchivedClientsModule') private archivedclientModel: Model<ClientDocument>,

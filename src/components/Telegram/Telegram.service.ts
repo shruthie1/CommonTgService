@@ -9,7 +9,7 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { parseError } from '../../utils/parseError';
 import { ChannelInfo } from './types/telegram-responses';
-import connectionManager from './utils/connection-manager';
+import { connectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';

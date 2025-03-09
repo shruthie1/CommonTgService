@@ -32,7 +32,7 @@ import { ChatStatistics } from '../../interfaces/telegram';
 import { ConnectionStatusDto } from './dto/common-responses.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
-import connectionManager from './utils/connection-manager';
+import { connectionManager } from './utils/connection-manager';
 
 @Controller('telegram')
 @ApiTags('Telegram')

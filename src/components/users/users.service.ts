@@ -9,7 +9,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import connectionManager from '../Telegram/utils/connection-manager';
+import { connectionManager } from '../Telegram/utils/connection-manager';
 
 @Injectable()
 export class UsersService {

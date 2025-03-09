@@ -199,5 +199,4 @@ class ConnectionManager {
     }
 }
 
-const connectionManager = ConnectionManager.getInstance();
-export default connectionManager;
+export const connectionManager = ConnectionManager.getInstance();

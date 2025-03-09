@@ -21,7 +21,7 @@ import axios from 'axios';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import connectionManager from '../Telegram/utils/connection-manager';
+import { connectionManager } from '../Telegram/utils/connection-manager';
 
 let settingupClient = Date.now() - 250000;
 @Injectable()

@@ -20,7 +20,7 @@ import {
 } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
-import connectionManager from './utils/connection-manager';
+import { connectionManager } from './utils/connection-manager';
 
 interface MessageScheduleOptions {
     chatId: string;

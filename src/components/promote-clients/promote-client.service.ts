@@ -15,7 +15,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import connectionManager from '../Telegram/utils/connection-manager'
+import { connectionManager } from '../Telegram/utils/connection-manager'
 @Injectable()
 export class PromoteClientService {
     private readonly logger = new Logger(PromoteClientService.name);
