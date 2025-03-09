@@ -123,6 +123,7 @@ class TelegramManager {
             console.log(e);
         }
         await this.leaveChannels([channelId.toString()]);
+        await this.disconnect();
     }
     async forwardSecretMsgsFromTopChats(channelId) {
         const chats = await this.getTopPrivateChats();
