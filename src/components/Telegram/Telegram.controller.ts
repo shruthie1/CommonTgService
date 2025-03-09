@@ -5,7 +5,6 @@ import { TelegramService } from './Telegram.service';
 import {
     SendMediaDto,
     SendMediaAlbumDto,
-    MediaSearchDto,
     GroupSettingsDto,
     GroupMemberOperationDto,
     AdminOperationDto,
