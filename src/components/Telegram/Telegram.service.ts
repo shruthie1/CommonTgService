@@ -85,8 +85,8 @@ export class TelegramService implements OnModuleDestroy {
     public async getClient(mobile: string): Promise<TelegramManager | undefined> {
         const client = TelegramService.clientsMap.get(mobile);
         try {
-            if (client && client.connected()) {
-                await client.connect();
+            if (client && client?.connected()) {
+                await client?.connect();
                 return client;
             }
         } catch (error) {
