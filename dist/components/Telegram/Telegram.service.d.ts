@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { BufferClientService } from './../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import TelegramManager from "./TelegramManager";
@@ -74,8 +75,7 @@ export declare class TelegramService implements OnModuleDestroy {
         id: any;
         accessHash: any;
     }>;
-    forwardSecrets(mobile: string, fromChatId: string): Promise<void>;
-    joinChannelAndForward(mobile: string, fromChatId: string, channel: string): Promise<void>;
+    forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<void>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
     getCallLog(mobile: string): Promise<{
@@ -97,7 +97,19 @@ export declare class TelegramService implements OnModuleDestroy {
     updatePrivacy(mobile: string): Promise<string>;
     downloadProfilePic(mobile: string, index: number): Promise<string>;
     updateUsername(mobile: string, username: string): Promise<string>;
-    getMediaMetadata(mobile: string, chatId?: string, offset?: number, limit?: number): Promise<any>;
+    getMediaMetadata(mobile: string, params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        limit?: number;
+        maxId?: number;
+        minId?: number;
+        all?: boolean;
+    }): Promise<{
+        messages: any[];
+        total: number;
+    }>;
     downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<void>;
@@ -212,24 +224,38 @@ export declare class TelegramService implements OnModuleDestroy {
         chatId: string;
         query?: string;
         types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-        offset?: number;
+        minId?: number;
+        maxId?: number;
         limit?: number;
     }): Promise<{
-        messages: {
-            id: number;
-            message: string;
-            date: number;
-            sender: {
-                id: string;
-                is_self: boolean;
-                username: string;
-            };
-            media: {
-                type: "document" | "video" | "photo";
-                thumbnailUrl: string | Buffer;
-            };
-        }[];
-        total: number;
+        video?: {
+            messages: number[];
+            total: number;
+        };
+        photo?: {
+            messages: number[];
+            total: number;
+        };
+        document?: {
+            messages: number[];
+            total: number;
+        };
+        voice?: {
+            messages: number[];
+            total: number;
+        };
+        text?: {
+            messages: number[];
+            total: number;
+        };
+        all?: {
+            messages: number[];
+            total: number;
+        };
+        roundVideo?: {
+            messages: number[];
+            total: number;
+        };
     }>;
     getFilteredMedia(mobile: string, params: {
         chatId: string;
@@ -419,6 +445,15 @@ export declare class TelegramService implements OnModuleDestroy {
             other: number;
         };
     }>;
+    sendViewOnceMedia(mobile: string, options: {
+        chatId: string;
+        sourceType: 'path' | 'base64' | 'binary';
+        path?: string;
+        base64Data?: string;
+        binaryData?: Buffer;
+        caption?: string;
+        filename?: string;
+    }): Promise<Api.TypeUpdates>;
     getTopPrivateChats(mobile: string): Promise<{
         chatId: string;
         username?: string;

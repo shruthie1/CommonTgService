@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, UsePipes, ValidationPipe, Delete, Put } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, UsePipes, ValidationPipe, Delete, Put, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
@@ -21,7 +21,9 @@ import {
     ContactBlockListDto,
     AddContactsDto,
     MediaType,
-    createGroupDto
+    createGroupDto,
+    ViewOnceMediaDto,
+    MediaSourceType
 } from './dto';
 import { MessageType } from './dto/message-search.dto';
 import { MediaMetadataDto } from './dto/metadata-operations.dto';
@@ -29,6 +31,8 @@ import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from 'src/interfaces/telegram';
 import { ConnectionStatusDto } from './dto/common-responses.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import * as multer from 'multer';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -219,44 +223,27 @@ export class TelegramController {
         );
     }
 
-    @Post('messages/bulk-forward/:mobile')
-    @ApiOperation({ summary: 'Forward multiple messages' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiBody({ type: ForwardBatchDto })
-    async forwardBulkMessages(
-        @Param('mobile') mobile: string,
-        @Body() bulkOp: ForwardBatchDto
-    ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.forwardBulkMessages(
-                mobile,
-                bulkOp.fromChatId,
-                bulkOp.toChatId,
-                bulkOp.messageIds
-            );
-        });
-    }
-
     @Get('messages/search/:mobile')
     @ApiOperation({ summary: 'Search messages in a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'query', required: true })
+    @ApiQuery({ name: 'query', required: false })
     @ApiQuery({ name: 'types', required: false, enum: MessageType, isArray: true })
-    @ApiQuery({ name: 'offset', required: false, type: Number })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
+    @ApiQuery({ name: 'minId', required: false, type: Number })
+    @ApiQuery({ name: 'maxId', required: false, type: Number })
     async searchMessages(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
         @Query('query') query: string,
         @Query('types') types?: MessageType[],
-        @Query('offset') offset?: number,
-        @Query('limit') limit: number = 20
+        @Query('limit') limit?: number,
+        @Query('minId') minId?: number,
+        @Query('maxId') maxId?: number,
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.searchMessages(mobile, { chatId, query, types, offset, limit });
+            return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
         });
     }
 
@@ -275,28 +262,23 @@ export class TelegramController {
         });
     }
 
-    @Post('channels/join/:mobile')
-    @ApiOperation({ summary: 'Join channel' })
+    @Post('forwardMediatoMe/:mobile')
+    @ApiOperation({ summary: 'Forward media messages to me' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiParam({ name: 'channel', description: 'Channel username or ID', required: true })
-    @ApiQuery({ name: 'forward', description: 'Whether to forward messages after joining', required: false, type: Boolean })
+    @ApiQuery({ name: 'channel', description: 'Channel username or ID', required: false })
     @ApiQuery({ name: 'fromChatId', description: 'Source chat ID to forward messages from', required: false })
-    async joinChannel(
+    async forwardMedia(
         @Param('mobile') mobile: string,
-        @Param('channel') channel: string,
-        @Query('forward') forward?: boolean,
+        @Query('channel') channel?: string,
         @Query('fromChatId') fromChatId?: string
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            if (forward && fromChatId) {
-                return this.telegramService.joinChannelAndForward(
-                    mobile,
-                    fromChatId,
-                    channel
-                );
-            }
-            return this.telegramService.joinChannel(mobile, channel);
+            return this.telegramService.forwardMedia(
+                mobile,
+                channel,
+                fromChatId
+            );
         });
     }
 
@@ -458,7 +440,7 @@ export class TelegramController {
         });
     }
 
-    // Contact Management 
+    // Contact Management
     @Post('contacts/add-bulk/:mobile')
     @ApiOperation({ summary: 'Add multiple contacts in bulk' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -486,27 +468,6 @@ export class TelegramController {
         return this.handleTelegramOperation(async () => {
             const client = await this.telegramService.createClient(mobile);
             return client.getContacts();
-        });
-    }
-
-    // Media Operations
-    @Get('media/info/:mobile')
-    @ApiOperation({ summary: 'Get media messages info' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'types', required: false, enum: MediaType, isArray: true })
-    @ApiQuery({ name: 'offset', required: false, type: Number })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
-    async getMediaInfo(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('types') types?: MediaType[],
-        @Query('offset') offset?: number,
-        @Query('limit') limit?: number
-    ) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
         });
     }
 
@@ -571,15 +532,36 @@ export class TelegramController {
     @Get('media/metadata/:mobile')
     @ApiOperation({ summary: 'Get media metadata from a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ type: MediaSearchDto })
-    @ApiResponse({ status: 200, type: [MediaMetadataDto] })
+    @ApiQuery({ name: 'chatId', required: true })
+    @ApiQuery({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true })
+    @ApiQuery({ name: 'startDate', required: false })
+    @ApiQuery({ name: 'endDate', required: false })
+    @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
+    @ApiQuery({ name: 'minId', required: false, type: Number })
+    @ApiQuery({ name: 'maxId', required: false, type: Number })
     async getMediaMetadata(
         @Param('mobile') mobile: string,
-        @Query() searchDto: MediaSearchDto
+        @Query('chatId') chatId: string,
+        @Query('types') types?: ('photo' | 'video' | 'document' | 'voice')[],
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('limit') limit?: number,
+        @Query('minId') minId?: number,
+        @Query('maxId') maxId?: number,
+        @Query('all') all?: boolean
     ) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, searchDto.chatId, searchDto.offset, searchDto.limit);
+            return this.telegramService.getMediaMetadata(mobile, {
+                chatId,
+                types,
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined,
+                limit,
+                minId,
+                maxId,
+                all
+            });
         });
     }
 
@@ -881,6 +863,61 @@ export class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.sendVoiceMessage(mobile, voice);
+        });
+    }
+
+    @Post('media/view-once/:mobile')
+    @ApiOperation({ summary: 'Send a view once (disappearing) media message' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiConsumes('multipart/form-data', 'application/json')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                chatId: { type: 'string', description: 'Chat ID to send the media to' },
+                sourceType: { type: 'string', enum: ['path', 'base64', 'binary'], description: 'Source type of media' },
+                path: { type: 'string', description: 'path of the media file (when sourceType is Path)' },
+                base64Data: { type: 'string', description: 'Base64 data (when sourceType is base64)' },
+                binaryData: { type: 'string', format: 'binary', description: 'Binary file (when sourceType is binary)' },
+                caption: { type: 'string', description: 'Optional caption for the media' },
+                filename: { type: 'string', description: 'Optional filename for the media' }
+            },
+            required: ['chatId', 'sourceType']
+        }
+    })
+    @UseInterceptors(FileInterceptor('binaryData', {
+        storage: multer.memoryStorage()
+    }))
+    @ApiResponse({ status: 200, description: 'View once media sent successfully' })
+    @ApiResponse({ status: 400, description: 'Failed to send view once media' })
+    async sendViewOnceMedia(
+        @Param('mobile') mobile: string,
+        @UploadedFile() file: Express.Multer.File,
+        @Body() viewOnceDto: ViewOnceMediaDto
+    ) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+
+            // Handle file upload case
+            if (viewOnceDto.sourceType === MediaSourceType.BINARY && file) {
+                return this.telegramService.sendViewOnceMedia(mobile, {
+                    chatId: viewOnceDto.chatId,
+                    sourceType: viewOnceDto.sourceType,
+                    binaryData: file.buffer,
+                    caption: viewOnceDto.caption,
+                    filename: viewOnceDto.filename || file.originalname
+                });
+            }
+
+            // Handle JSON payload case (URL or base64)
+            return this.telegramService.sendViewOnceMedia(mobile, {
+                chatId: viewOnceDto.chatId,
+                sourceType: viewOnceDto.sourceType,
+                path: viewOnceDto.path,
+                base64Data: viewOnceDto.base64Data,
+                caption: viewOnceDto.caption,
+                filename: viewOnceDto.filename
+            });
         });
     }
 

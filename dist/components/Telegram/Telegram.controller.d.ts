@@ -1,6 +1,7 @@
+/// <reference types="multer" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
-import { SendMediaDto, MediaSearchDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, MediaType, createGroupDto } from './dto';
+import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto } from './dto';
 import { MessageType } from './dto/message-search.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
@@ -29,26 +30,38 @@ export declare class TelegramController {
         processed: number;
         errors: Error[];
     }>;
-    forwardBulkMessages(mobile: string, bulkOp: ForwardBatchDto): Promise<void>;
-    searchMessages(mobile: string, chatId: string, query: string, types?: MessageType[], offset?: number, limit?: number): Promise<{
-        messages: {
-            id: number;
-            message: string;
-            date: number;
-            sender: {
-                id: string;
-                is_self: boolean;
-                username: string;
-            };
-            media: {
-                type: "document" | "video" | "photo";
-                thumbnailUrl: string | Buffer;
-            };
-        }[];
-        total: number;
+    searchMessages(mobile: string, chatId: string, query: string, types?: MessageType[], limit?: number, minId?: number, maxId?: number): Promise<{
+        video?: {
+            messages: number[];
+            total: number;
+        };
+        photo?: {
+            messages: number[];
+            total: number;
+        };
+        document?: {
+            messages: number[];
+            total: number;
+        };
+        voice?: {
+            messages: number[];
+            total: number;
+        };
+        text?: {
+            messages: number[];
+            total: number;
+        };
+        all?: {
+            messages: number[];
+            total: number;
+        };
+        roundVideo?: {
+            messages: number[];
+            total: number;
+        };
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
-    joinChannel(mobile: string, channel: string, forward?: boolean, fromChatId?: string): Promise<void | import("telegram").Api.TypeUpdates>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
+    forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<void>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
@@ -92,7 +105,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;
@@ -121,11 +134,13 @@ export declare class TelegramController {
     }>;
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
-    getMediaInfo(mobile: string, chatId: string, types?: MediaType[], offset?: number, limit?: number): Promise<any>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
     downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<any>;
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("telegram").Api.TypeUpdates>;
-    getMediaMetadata(mobile: string, searchDto: MediaSearchDto): Promise<any>;
+    getMediaMetadata(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number, all?: boolean): Promise<{
+        messages: any[];
+        total: number;
+    }>;
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
@@ -168,6 +183,7 @@ export declare class TelegramController {
         duration?: number;
         caption?: string;
     }): Promise<import("telegram").Api.TypeUpdates>;
+    sendViewOnceMedia(mobile: string, file: Express.Multer.File, viewOnceDto: ViewOnceMediaDto): Promise<import("telegram").Api.TypeUpdates>;
     getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<any>;
     validateSession(mobile: string): Promise<{
         isValid: boolean;

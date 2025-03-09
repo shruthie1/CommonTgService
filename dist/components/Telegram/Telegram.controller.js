@@ -1,9 +1,32 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
 };
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
@@ -21,6 +44,8 @@ const message_search_dto_1 = require("./dto/message-search.dto");
 const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const common_responses_dto_1 = require("./dto/common-responses.dto");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer = __importStar(require("multer"));
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -111,16 +136,10 @@ let TelegramController = class TelegramController {
             }
         }, batchOp.delayMs);
     }
-    async forwardBulkMessages(mobile, bulkOp) {
+    async searchMessages(mobile, chatId, query, types, limit, minId, maxId) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.forwardBulkMessages(mobile, bulkOp.fromChatId, bulkOp.toChatId, bulkOp.messageIds);
-        });
-    }
-    async searchMessages(mobile, chatId, query, types, offset, limit = 20) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.searchMessages(mobile, { chatId, query, types, offset, limit });
+            return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
         });
     }
     async getChannelInfo(mobile, includeIds) {
@@ -129,13 +148,10 @@ let TelegramController = class TelegramController {
             return this.telegramService.getChannelInfo(mobile, includeIds);
         });
     }
-    async joinChannel(mobile, channel, forward, fromChatId) {
+    async forwardMedia(mobile, channel, fromChatId) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            if (forward && fromChatId) {
-                return this.telegramService.joinChannelAndForward(mobile, fromChatId, channel);
-            }
-            return this.telegramService.joinChannel(mobile, channel);
+            return this.telegramService.forwardMedia(mobile, channel, fromChatId);
         });
     }
     async leaveChannel(mobile, channel) {
@@ -230,12 +246,6 @@ let TelegramController = class TelegramController {
             return client.getContacts();
         });
     }
-    async getMediaInfo(mobile, chatId, types, offset, limit) {
-        return this.handleTelegramOperation(async () => {
-            await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, chatId, offset, limit);
-        });
-    }
     async sendMedia(mobile, sendMediaDto) {
         return this.handleTelegramOperation(async () => {
             const client = await this.telegramService.createClient(mobile);
@@ -257,10 +267,19 @@ let TelegramController = class TelegramController {
             return this.telegramService.sendMediaAlbum(mobile, albumDto);
         });
     }
-    async getMediaMetadata(mobile, searchDto) {
+    async getMediaMetadata(mobile, chatId, types, startDate, endDate, limit, minId, maxId, all) {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
-            return this.telegramService.getMediaMetadata(mobile, searchDto.chatId, searchDto.offset, searchDto.limit);
+            return this.telegramService.getMediaMetadata(mobile, {
+                chatId,
+                types,
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined,
+                limit,
+                minId,
+                maxId,
+                all
+            });
         });
     }
     async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, minId, maxId) {
@@ -380,6 +399,28 @@ let TelegramController = class TelegramController {
         return this.handleTelegramOperation(async () => {
             await this.telegramService.createClient(mobile);
             return this.telegramService.sendVoiceMessage(mobile, voice);
+        });
+    }
+    async sendViewOnceMedia(mobile, file, viewOnceDto) {
+        return this.handleTelegramOperation(async () => {
+            await this.telegramService.createClient(mobile);
+            if (viewOnceDto.sourceType === dto_1.MediaSourceType.BINARY && file) {
+                return this.telegramService.sendViewOnceMedia(mobile, {
+                    chatId: viewOnceDto.chatId,
+                    sourceType: viewOnceDto.sourceType,
+                    binaryData: file.buffer,
+                    caption: viewOnceDto.caption,
+                    filename: viewOnceDto.filename || file.originalname
+                });
+            }
+            return this.telegramService.sendViewOnceMedia(mobile, {
+                chatId: viewOnceDto.chatId,
+                sourceType: viewOnceDto.sourceType,
+                path: viewOnceDto.path,
+                base64Data: viewOnceDto.base64Data,
+                caption: viewOnceDto.caption,
+                filename: viewOnceDto.filename
+            });
         });
     }
     async getChatHistory(mobile, chatId, offset, limit) {
@@ -646,33 +687,24 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "processBatchMessages", null);
 __decorate([
-    (0, common_1.Post)('messages/bulk-forward/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Forward multiple messages' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.ForwardBatchDto }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.ForwardBatchDto]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "forwardBulkMessages", null);
-__decorate([
     (0, common_1.Get)('messages/search/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Search messages in a chat' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'query', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'query', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'types', required: false, enum: message_search_dto_1.MessageType, isArray: true }),
-    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('query')),
     __param(3, (0, common_1.Query)('types')),
-    __param(4, (0, common_1.Query)('offset')),
-    __param(5, (0, common_1.Query)('limit')),
+    __param(4, (0, common_1.Query)('limit')),
+    __param(5, (0, common_1.Query)('minId')),
+    __param(6, (0, common_1.Query)('maxId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, Array, Number, Number]),
+    __metadata("design:paramtypes", [String, String, String, Array, Number, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "searchMessages", null);
 __decorate([
@@ -687,20 +719,18 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChannelInfo", null);
 __decorate([
-    (0, common_1.Post)('channels/join/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Join channel' }),
+    (0, common_1.Post)('forwardMediatoMe/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Forward media messages to me' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiParam)({ name: 'channel', description: 'Channel username or ID', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'forward', description: 'Whether to forward messages after joining', required: false, type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'channel', description: 'Channel username or ID', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'fromChatId', description: 'Source chat ID to forward messages from', required: false }),
     __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Param)('channel')),
-    __param(2, (0, common_1.Query)('forward')),
-    __param(3, (0, common_1.Query)('fromChatId')),
+    __param(1, (0, common_1.Query)('channel')),
+    __param(2, (0, common_1.Query)('fromChatId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Boolean, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "joinChannel", null);
+], TelegramController.prototype, "forwardMedia", null);
 __decorate([
     (0, common_1.Post)('channels/leave/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Leave channel' }),
@@ -856,23 +886,6 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getContacts", null);
 __decorate([
-    (0, common_1.Get)('media/info/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get media messages info' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'types', required: false, enum: dto_1.MediaType, isArray: true }),
-    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)('chatId')),
-    __param(2, (0, common_1.Query)('types')),
-    __param(3, (0, common_1.Query)('offset')),
-    __param(4, (0, common_1.Query)('limit')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Array, Number, Number]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getMediaInfo", null);
-__decorate([
     (0, common_1.Post)('media/send/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send media message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
@@ -912,12 +925,24 @@ __decorate([
     (0, common_1.Get)('media/metadata/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get media metadata from a chat' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ type: dto_1.MediaSearchDto }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: [metadata_operations_dto_1.MediaMetadataDto] }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true }),
+    (0, swagger_1.ApiQuery)({ name: 'startDate', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'endDate', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
     __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)()),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('types')),
+    __param(3, (0, common_1.Query)('startDate')),
+    __param(4, (0, common_1.Query)('endDate')),
+    __param(5, (0, common_1.Query)('limit')),
+    __param(6, (0, common_1.Query)('minId')),
+    __param(7, (0, common_1.Query)('maxId')),
+    __param(8, (0, common_1.Query)('all')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.MediaSearchDto]),
+    __metadata("design:paramtypes", [String, String, Array, String, String, Number, Number, Number, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMediaMetadata", null);
 __decorate([
@@ -1128,6 +1153,38 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendVoiceMessage", null);
+__decorate([
+    (0, common_1.Post)('media/view-once/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send a view once (disappearing) media message' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data', 'application/json'),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                chatId: { type: 'string', description: 'Chat ID to send the media to' },
+                sourceType: { type: 'string', enum: ['path', 'base64', 'binary'], description: 'Source type of media' },
+                path: { type: 'string', description: 'path of the media file (when sourceType is Path)' },
+                base64Data: { type: 'string', description: 'Base64 data (when sourceType is base64)' },
+                binaryData: { type: 'string', format: 'binary', description: 'Binary file (when sourceType is binary)' },
+                caption: { type: 'string', description: 'Optional caption for the media' },
+                filename: { type: 'string', description: 'Optional filename for the media' }
+            },
+            required: ['chatId', 'sourceType']
+        }
+    }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('binaryData', {
+        storage: multer.memoryStorage()
+    })),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'View once media sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Failed to send view once media' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, dto_1.ViewOnceMediaDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "sendViewOnceMedia", null);
 __decorate([
     (0, common_1.Get)('chat/history/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get chat history with metadata' }),

@@ -49,8 +49,9 @@ declare class TelegramManager {
         id: any;
         accessHash: any;
     }>;
-    createGroupAndForward(fromChatId: string): Promise<void>;
-    joinChannelAndForward(fromChatId: string, channel: string): Promise<void>;
+    archiveChat(id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
+    forwardMedia(channel: string, fromChatId: string): Promise<void>;
+    forwardSecretMsgsFromTopChats(channelId: string): Promise<void>;
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
     disconnect(): Promise<void>;
@@ -106,6 +107,7 @@ declare class TelegramManager {
         video: number;
         totalCalls: number;
     }>;
+    getCallLogsInternal(): Promise<{}>;
     handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
@@ -114,7 +116,20 @@ declare class TelegramManager {
     getContacts(): Promise<Api.contacts.TypeContacts>;
     deleteChat(chatId: string): Promise<void>;
     blockUser(chatId: string): Promise<void>;
-    getMediaMetadata(chatId?: string, offset?: number, limit?: number): any;
+    getMediaMetadata(params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        limit?: number;
+        maxId?: number;
+        minId?: number;
+    }): Promise<{
+        messages: number[];
+        total: number;
+        hasMore: boolean;
+        lastOffsetId: number;
+    }>;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
     private downloadWithTimeout;
     private getMediaDetails;
@@ -122,6 +137,7 @@ declare class TelegramManager {
     forwardMessage(toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
+    sendViewOnceMedia(chatId: string, buffer: Buffer, caption?: string, isVideo?: boolean, filename?: string): Promise<Api.TypeUpdates>;
     getFileUrl(url: string, filename: string): Promise<string>;
     updateProfilePic(image: any): Promise<void>;
     hasPassword(): Promise<boolean>;
@@ -270,24 +286,49 @@ declare class TelegramManager {
     searchMessages(params: {
         chatId: string;
         query?: string;
-        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-        offset?: number;
+        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
+        minId?: number;
+        maxId?: number;
         limit?: number;
     }): Promise<{
-        messages: {
-            id: number;
-            message: string;
-            date: number;
-            sender: {
-                id: string;
-                is_self: boolean;
-                username: string;
-            };
-            media: {
-                type: "document" | "video" | "photo";
-                thumbnailUrl: string | Buffer;
-            };
-        }[];
+        video?: {
+            messages: number[];
+            total: number;
+        };
+        photo?: {
+            messages: number[];
+            total: number;
+        };
+        document?: {
+            messages: number[];
+            total: number;
+        };
+        voice?: {
+            messages: number[];
+            total: number;
+        };
+        text?: {
+            messages: number[];
+            total: number;
+        };
+        all?: {
+            messages: number[];
+            total: number;
+        };
+        roundVideo?: {
+            messages: number[];
+            total: number;
+        };
+    }>;
+    getAllMediaMetaData(params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        maxId?: number;
+        minId?: number;
+    }): Promise<{
+        messages: any[];
         total: number;
     }>;
     getFilteredMedia(params: {
@@ -295,7 +336,6 @@ declare class TelegramManager {
         types?: ('photo' | 'video' | 'document' | 'voice')[];
         startDate?: Date;
         endDate?: Date;
-        offset?: number;
         limit?: number;
         maxId?: number;
         minId?: number;

@@ -54,6 +54,7 @@ const telegram_error_1 = require("./types/telegram-error");
 const connection_manager_1 = require("./utils/connection-manager");
 const telegram_logger_1 = require("./utils/telegram-logger");
 const client_metadata_1 = require("./utils/client-metadata");
+const fs = __importStar(require("fs"));
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, bufferClientService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -296,13 +297,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await this.getClient(mobile);
         return await telegramClient.createGroup();
     }
-    async forwardSecrets(mobile, fromChatId) {
+    async forwardMedia(mobile, channel, fromChatId) {
         const telegramClient = await this.getClient(mobile);
-        return await telegramClient.createGroupAndForward(fromChatId);
-    }
-    async joinChannelAndForward(mobile, fromChatId, channel) {
-        const telegramClient = await this.getClient(mobile);
-        return await telegramClient.joinChannelAndForward(fromChatId, channel);
+        return await telegramClient.forwardMedia(channel, fromChatId);
     }
     async blockUser(mobile, chatId) {
         const telegramClient = await this.getClient(mobile);
@@ -412,9 +409,14 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new Error("Failed to update username");
         }
     }
-    async getMediaMetadata(mobile, chatId, offset, limit = 100) {
+    async getMediaMetadata(mobile, params) {
         return this.executeWithConnection(mobile, 'Get media metadata', async (client) => {
-            return await client.getMediaMetadata(chatId, offset, limit);
+            if (params) {
+                return await client.getAllMediaMetaData(params);
+            }
+            else {
+                return await client.getMediaMetadata(params);
+            }
         });
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
@@ -657,6 +659,81 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async getMessageStats(mobile, options) {
         return this.executeWithConnection(mobile, 'Get message statistics', (client) => client.getMessageStats(options));
+    }
+    async sendViewOnceMedia(mobile, options) {
+        return this.executeWithConnection(mobile, 'Send view once media', async (client) => {
+            const { sourceType, chatId, caption, filename } = options;
+            try {
+                if (sourceType === 'path') {
+                    if (!options.path)
+                        throw new common_1.BadRequestException('Path is required when sourceType is url');
+                    try {
+                        const localPath = options.path;
+                        if (!fs.existsSync(localPath)) {
+                            throw new common_1.BadRequestException(`File not found at path: ${localPath}`);
+                        }
+                        let isVideo = false;
+                        const ext = path.extname(localPath).toLowerCase().substring(1);
+                        if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+                        const fileBuffer = fs.readFileSync(localPath);
+                        this.logger.logOperation(mobile, 'Sending view once media from local file', {
+                            path: localPath,
+                            isVideo,
+                            size: fileBuffer.length,
+                            filename: filename || path.basename(localPath)
+                        });
+                        return client.sendViewOnceMedia(chatId, fileBuffer, caption, isVideo, filename || path.basename(localPath));
+                    }
+                    catch (error) {
+                        if (error instanceof common_1.BadRequestException) {
+                            throw error;
+                        }
+                        this.logger.logError(mobile, 'Failed to read local file', error);
+                        throw new common_1.BadRequestException(`Failed to read local file: ${error.message}`);
+                    }
+                }
+                else if (sourceType === 'base64') {
+                    if (!options.base64Data)
+                        throw new common_1.BadRequestException('Base64 data is required when sourceType is base64');
+                    const base64String = options.base64Data;
+                    let isVideo = false;
+                    if (filename) {
+                        const ext = filename.toLowerCase().split('.').pop();
+                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+                    }
+                    this.logger.logOperation(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
+                    const mediaData = Buffer.from(base64String, 'base64');
+                    return client.sendViewOnceMedia(chatId, mediaData, caption, isVideo, filename);
+                }
+                else if (sourceType === 'binary') {
+                    if (!options.binaryData)
+                        throw new common_1.BadRequestException('Binary data is required when sourceType is binary');
+                    this.logger.logOperation(mobile, 'Sending view once media from binary', {
+                        size: options.binaryData.length,
+                        filename: filename || 'unknown'
+                    });
+                    let isVideo = false;
+                    if (filename) {
+                        const ext = filename.toLowerCase().split('.').pop();
+                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+                    }
+                    return client.sendViewOnceMedia(chatId, options.binaryData, caption, isVideo, filename);
+                }
+                else {
+                    throw new common_1.BadRequestException('Invalid source type. Must be one of: url, base64, binary');
+                }
+            }
+            catch (error) {
+                this.logger.logError(mobile, 'Failed to send view once media', error);
+                throw error;
+            }
+        });
     }
     async getTopPrivateChats(mobile) {
         return this.executeWithConnection(mobile, 'Get top private chats', async (client) => {

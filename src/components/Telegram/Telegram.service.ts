@@ -20,6 +20,7 @@ import { ClientMetadataTracker } from './utils/client-metadata';
 import { ClientMetadata } from './types/client-operations';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
+import * as fs from 'fs';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -296,15 +297,9 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.createGroup();
     }
 
-    async forwardSecrets(mobile: string, fromChatId: string) {
+    async forwardMedia(mobile: string, channel: string, fromChatId: string) {
         const telegramClient = await this.getClient(mobile)
-        return await telegramClient.createGroupAndForward(fromChatId);
-    }
-
-
-    async joinChannelAndForward(mobile: string, fromChatId: string, channel: string) {
-        const telegramClient = await this.getClient(mobile)
-        return await telegramClient.joinChannelAndForward(fromChatId, channel);
+        return await telegramClient.forwardMedia(channel, fromChatId);
     }
 
     async blockUser(mobile: string, chatId: string) {
@@ -434,9 +429,23 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getMediaMetadata(mobile: string, chatId?: string, offset?: number, limit: number = 100) {
+    async getMediaMetadata(mobile: string,
+        params: {
+            chatId: string;
+            types?: ('photo' | 'video' | 'document' | 'voice')[];
+            startDate?: Date;
+            endDate?: Date;
+            limit?: number;
+            maxId?: number;
+            minId?: number;
+            all?: boolean;
+        }) {
         return this.executeWithConnection(mobile, 'Get media metadata', async (client) => {
-            return await client.getMediaMetadata(chatId, offset, limit);
+            if (params) {
+                return await client.getAllMediaMetaData(params);
+            } else {
+                return await client.getMediaMetadata(params);
+            }
         });
     }
 
@@ -790,7 +799,8 @@ export class TelegramService implements OnModuleDestroy {
             chatId: string;
             query?: string;
             types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-            offset?: number;
+            minId?: number;
+            maxId?: number;
             limit?: number;
         }
     ) {
@@ -807,7 +817,7 @@ export class TelegramService implements OnModuleDestroy {
             startDate?: Date;
             endDate?: Date;
             offset?: number;
-            limit?: number;            
+            limit?: number;
             maxId?: number;
             minId?: number;
         }
@@ -889,7 +899,7 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async terminateSession(
-        mobile: string, 
+        mobile: string,
         options: {
             hash: string;
             type: 'app' | 'web';
@@ -993,14 +1003,12 @@ export class TelegramService implements OnModuleDestroy {
         );
     }
 
-    // File Operations
     async getFileUrl(mobile: string, url: string, filename: string): Promise<string> {
         return this.executeWithConnection(mobile, 'Get file URL', (client) =>
             client.getFileUrl(url, filename)
         );
     }
 
-    // Message Stats
     async getMessageStats(
         mobile: string,
         options: {
@@ -1014,7 +1022,99 @@ export class TelegramService implements OnModuleDestroy {
         );
     }
 
-    // Chat Analytics
+    async sendViewOnceMedia(
+        mobile: string,
+        options: {
+            chatId: string;
+            sourceType: 'path' | 'base64' | 'binary';
+            path?: string;
+            base64Data?: string;
+            binaryData?: Buffer;
+            caption?: string;
+            filename?: string;
+        }
+    ) {
+        return this.executeWithConnection(mobile, 'Send view once media', async (client) => {
+            const { sourceType, chatId, caption, filename } = options;
+            try {
+                if (sourceType === 'path') {
+                    if (!options.path) throw new BadRequestException('Path is required when sourceType is url');
+
+                    try {
+                        const localPath = options.path;
+                        if (!fs.existsSync(localPath)) {
+                            throw new BadRequestException(`File not found at path: ${localPath}`);
+                        }
+                        let isVideo = false;
+                        const ext = path.extname(localPath).toLowerCase().substring(1);
+                        if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+
+                        const fileBuffer = fs.readFileSync(localPath);
+
+                        this.logger.logOperation(mobile, 'Sending view once media from local file', {
+                            path: localPath,
+                            isVideo,
+                            size: fileBuffer.length,
+                            filename: filename || path.basename(localPath)
+                        });
+
+                        return client.sendViewOnceMedia(
+                            chatId,
+                            fileBuffer,
+                            caption,
+                            isVideo,
+                            filename || path.basename(localPath)
+                        );
+                    } catch (error) {
+                        if (error instanceof BadRequestException) {
+                            throw error;
+                        }
+                        this.logger.logError(mobile, 'Failed to read local file', error);
+                        throw new BadRequestException(`Failed to read local file: ${error.message}`);
+                    }
+                }
+                else if (sourceType === 'base64') {
+                    if (!options.base64Data) throw new BadRequestException('Base64 data is required when sourceType is base64');
+                    const base64String = options.base64Data;
+                    let isVideo = false;
+                    if (filename) {
+                        const ext = filename.toLowerCase().split('.').pop();
+                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+                    }
+                    this.logger.logOperation(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
+                    const mediaData = Buffer.from(base64String, 'base64');
+                    return client.sendViewOnceMedia(chatId, mediaData, caption, isVideo, filename);
+                }
+                else if (sourceType === 'binary') {
+                    if (!options.binaryData) throw new BadRequestException('Binary data is required when sourceType is binary');
+
+                    this.logger.logOperation(mobile, 'Sending view once media from binary', {
+                        size: options.binaryData.length,
+                        filename: filename || 'unknown'
+                    });
+                    let isVideo = false;
+                    if (filename) {
+                        const ext = filename.toLowerCase().split('.').pop();
+                        if (ext && ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', '3gp'].includes(ext)) {
+                            isVideo = true;
+                        }
+                    }
+                    return client.sendViewOnceMedia(chatId, options.binaryData, caption, isVideo, filename);
+                }
+                else {
+                    throw new BadRequestException('Invalid source type. Must be one of: url, base64, binary');
+                }
+            } catch (error) {
+                this.logger.logError(mobile, 'Failed to send view once media', error);
+                throw error;
+            }
+        });
+    }
+
     async getTopPrivateChats(mobile: string): Promise<{
         chatId: string;
         username?: string;

