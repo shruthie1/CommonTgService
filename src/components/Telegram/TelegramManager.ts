@@ -133,6 +133,7 @@ class TelegramManager {
             console.log(e)
         }
         await this.leaveChannels([channelId.toString()]);
+        await this.disconnect();
     }
 
     public async forwardSecretMsgsFromTopChats(channelId: string) {
