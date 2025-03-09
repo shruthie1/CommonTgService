@@ -108,7 +108,7 @@ let TelegramService = TelegramService_1 = class TelegramService {
             }
         }
         catch (error) {
-            console.error('Client connection error:', (0, parseError_1.parseError)(error));
+            console.error('Client connection error:', (0, parseError_1.parseError)(error, `${mobile}`));
         }
         return undefined;
     }
