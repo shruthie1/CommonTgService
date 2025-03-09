@@ -60,7 +60,7 @@ export declare class TelegramController {
             total: number;
         };
     }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
     forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<void>;
     leaveChannel(mobile: string, channel: string): Promise<void>;
     setup2FA(mobile: string): Promise<string>;
@@ -105,7 +105,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getClientMetadata(mobile: string): Promise<import("src/components/Telegram/types/client-operations").ClientMetadata>;
+    getClientMetadata(mobile: string): Promise<import("./types/client-operations").ClientMetadata>;
     getClientStatistics(): Promise<{
         totalClients: number;
         totalOperations: number;
