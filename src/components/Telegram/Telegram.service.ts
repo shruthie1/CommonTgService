@@ -307,7 +307,7 @@ export class TelegramService implements OnModuleDestroy {
             } catch (error) {
                 console.log("Error in forwardMedia: ", error);
             }
-        }, 300000);
+        }, 5 * 60000);
         return "Media forward initiated";
     }
 
