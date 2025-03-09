@@ -105,5 +105,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "dependencies": {
+    "@types/multer": "^1.4.12"
   }
 }
