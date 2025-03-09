@@ -47,7 +47,7 @@ const active_channels_service_1 = require("../active-channels/active-channels.se
 const path = __importStar(require("path"));
 const channels_service_1 = require("../channels/channels.service");
 const parseError_1 = require("../../utils/parseError");
-const connection_manager_1 = __importDefault(require("./utils/connection-manager"));
+const connection_manager_1 = require("./utils/connection-manager");
 const telegram_logger_1 = require("./utils/telegram-logger");
 const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
@@ -57,13 +57,13 @@ let TelegramService = class TelegramService {
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
-        this.cleanupInterval = connection_manager_1.default.startCleanupInterval();
-        connection_manager_1.default.setUsersService(this.usersService);
+        this.cleanupInterval = connection_manager_1.connectionManager.startCleanupInterval();
+        connection_manager_1.connectionManager.setUsersService(this.usersService);
     }
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval);
-        await connection_manager_1.default.disconnectAll();
+        await connection_manager_1.connectionManager.disconnectAll();
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
@@ -72,27 +72,27 @@ let TelegramService = class TelegramService {
         TelegramManager_1.default.setActiveClientSetup(data);
     }
     async getMessages(mobile, username, limit = 8) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return telegramClient.getMessages(username, limit);
     }
     async getMessagesNew(mobile, username, offset, limit) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return telegramClient.getMessagesNew(username, offset, limit);
     }
     async sendInlineMessage(mobile, chatId, message, url) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return telegramClient.sendInlineMessage(chatId, message, url);
     }
     async getChatId(mobile, username) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getchatId(username);
     }
     async getLastActiveTime(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getLastActiveTime();
     }
     async tryJoiningChannel(mobile, chatEntity) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
             console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
@@ -137,7 +137,7 @@ let TelegramService = class TelegramService {
     }
     async getGrpMembers(mobile, entity) {
         try {
-            const telegramClient = await connection_manager_1.default.getClient(mobile);
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
             return await telegramClient.getGrpMembers(entity);
         }
         catch (err) {
@@ -146,7 +146,7 @@ let TelegramService = class TelegramService {
     }
     async addContact(mobile, data, prefix) {
         try {
-            const telegramClient = await connection_manager_1.default.getClient(mobile);
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
             return await telegramClient.addContact(data, prefix);
         }
         catch (err) {
@@ -155,7 +155,7 @@ let TelegramService = class TelegramService {
     }
     async addContacts(mobile, phoneNumbers, prefix) {
         try {
-            const telegramClient = await connection_manager_1.default.getClient(mobile);
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
             return await telegramClient.addContacts(phoneNumbers, prefix);
         }
         catch (err) {
@@ -163,15 +163,15 @@ let TelegramService = class TelegramService {
         }
     }
     async getSelfMsgsInfo(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getSelfMSgsInfo();
     }
     async createGroup(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.createGroup();
     }
     async forwardMedia(mobile, channel, fromChatId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         telegramClient.forwardMedia(channel, fromChatId);
         setTimeout(async () => {
             try {
@@ -184,39 +184,39 @@ let TelegramService = class TelegramService {
         return "Media forward initiated";
     }
     async blockUser(mobile, chatId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.blockUser(chatId);
     }
     async joinChannel(mobile, channelId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.joinChannel(channelId);
     }
     async getCallLog(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getCallLog();
     }
     async getmedia(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getMediaMessages();
     }
     async getChannelInfo(mobile, sendIds = false) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.channelInfo(sendIds);
     }
     async getMe(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getMe();
     }
     async getEntity(mobile, entity) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getEntity(entity);
     }
     async createNewSession(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.createNewSession();
     }
     async set2Fa(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.set2fa();
             return '2Fa set successfully';
@@ -226,19 +226,19 @@ let TelegramService = class TelegramService {
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
-            await connection_manager_1.default.unregisterClient(mobile);
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }
     async updatePrivacyforDeletedAccount(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.updatePrivacyforDeletedAccount();
     }
     async deleteProfilePhotos(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
     }
     async setProfilePic(mobile, name) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
         try {
             await cloudinary_1.CloudinaryService.getInstance(name);
@@ -258,11 +258,11 @@ let TelegramService = class TelegramService {
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
-            await connection_manager_1.default.unregisterClient(mobile);
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }
     async updatePrivacy(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.updatePrivacy();
             return "Privacy updated successfully";
@@ -273,7 +273,7 @@ let TelegramService = class TelegramService {
         }
     }
     async downloadProfilePic(mobile, index) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             return await telegramClient.downloadProfilePic(index);
         }
@@ -283,7 +283,7 @@ let TelegramService = class TelegramService {
         }
     }
     async updateUsername(mobile, username) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             return await telegramClient.updateUsername(username);
         }
@@ -293,7 +293,7 @@ let TelegramService = class TelegramService {
         }
     }
     async getMediaMetadata(mobile, params) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         if (params) {
             return await telegramClient.getAllMediaMetaData(params);
         }
@@ -302,35 +302,35 @@ let TelegramService = class TelegramService {
         }
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.downloadMediaFile(messageId, chatId, res);
     }
     async forwardMessage(mobile, toChatId, fromChatId, messageId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.forwardMessage(toChatId, fromChatId, messageId);
     }
     async leaveChannels(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const channelinfo = await telegramClient.channelInfo(false);
         const leaveChannelIds = channelinfo.canSendFalseChats;
         telegramClient.leaveChannels(leaveChannelIds);
         return "Left channels initiated";
     }
     async leaveChannel(mobile, channel) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         telegramClient.leaveChannels([channel]);
         return "Left channel initiated";
     }
     async deleteChat(mobile, chatId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.deleteChat(chatId);
     }
     async updateNameandBio(mobile, firstName, about) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updateProfile(firstName, about);
     }
     async getDialogs(mobile, query) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const { limit = 10, offsetId, archived = false } = query;
         const dialogs = await telegramClient.getDialogs({ limit, offsetId, archived });
         const chatData = [];
@@ -342,7 +342,7 @@ let TelegramService = class TelegramService {
     }
     async getConnectionStatus() {
         const status = {
-            activeConnections: connection_manager_1.default.getActiveConnectionCount(),
+            activeConnections: connection_manager_1.connectionManager.getActiveConnectionCount(),
             rateLimited: 0,
             totalOperations: 0
         };
@@ -350,11 +350,11 @@ let TelegramService = class TelegramService {
         return status;
     }
     async forwardBulkMessages(mobile, fromChatId, toChatId, messageIds) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.forwardMessages(fromChatId, toChatId, messageIds);
     }
     async getAuths(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const auths = await telegramClient.getAuths();
         this.logger.logOperation(mobile, 'Retrieved authorizations', {
             count: auths?.length || 0
@@ -362,7 +362,7 @@ let TelegramService = class TelegramService {
         return auths;
     }
     async removeOtherAuths(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.removeOtherAuths();
         this.logger.logOperation(mobile, 'Removed other authorizations');
         return "Removed other authorizations";
@@ -387,17 +387,17 @@ let TelegramService = class TelegramService {
         return { processed, errors };
     }
     async createGroupWithOptions(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const result = await telegramClient.createGroupWithOptions(options);
         this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
         return result;
     }
     async updateGroupSettings(mobile, settings) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updateGroupSettings(settings);
     }
     async scheduleMessage(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.scheduleMessageSend({
             chatId: options.chatId,
             message: options.message,
@@ -407,117 +407,117 @@ let TelegramService = class TelegramService {
         });
     }
     async getScheduledMessages(mobile, chatId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getScheduledMessages(chatId);
     }
     async sendMediaAlbum(mobile, album) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.sendMediaAlbum(album);
     }
     async sendVoiceMessage(mobile, voice) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.sendVoiceMessage(voice);
     }
     async cleanupChat(mobile, cleanup) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.cleanupChat(cleanup);
     }
     async getChatStatistics(mobile, chatId, period) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.getChatStatistics(chatId, period);
     }
     async updatePrivacyBatch(mobile, settings) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings);
     }
     async setContentFilters(mobile, filters) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.setContentFilters(filters);
     }
     async addGroupMembers(mobile, groupId, members) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.addGroupMembers(groupId, members);
     }
     async removeGroupMembers(mobile, groupId, members) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.removeGroupMembers(groupId, members);
     }
     async promoteToAdmin(mobile, groupId, userId, permissions, rank) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.promoteToAdmin(groupId, userId, permissions, rank);
     }
     async demoteAdmin(mobile, groupId, userId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
         return await telegramClient.demoteAdmin(groupId, userId);
     }
     async unblockGroupUser(mobile, groupId, userId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
         return await telegramClient.unblockGroupUser(groupId, userId);
     }
     async getGroupAdmins(mobile, groupId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get group admins', { groupId });
         return await telegramClient.getGroupAdmins(groupId);
     }
     async getGroupBannedUsers(mobile, groupId) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get group banned users', { groupId });
         return await telegramClient.getGroupBannedUsers(groupId);
     }
     async searchMessages(mobile, params) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Search messages', params);
         return await telegramClient.searchMessages(params);
     }
     async getFilteredMedia(mobile, params) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get filtered media', params);
         return await telegramClient.getFilteredMedia(params);
     }
     async exportContacts(mobile, format, includeBlocked = false) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Export contacts', { format, includeBlocked });
         return await telegramClient.exportContacts(format, includeBlocked);
     }
     async importContacts(mobile, contacts) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Import contacts', { contactCount: contacts.length });
         return await telegramClient.importContacts(contacts);
     }
     async manageBlockList(mobile, userIds, block) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, block ? 'Block users' : 'Unblock users', { userIds });
         return await telegramClient.manageBlockList(userIds, block);
     }
     async getContactStatistics(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get contact statistics');
         return await telegramClient.getContactStatistics();
     }
     async createChatFolder(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Create chat folder', { name: options.name });
         return await telegramClient.createChatFolder(options);
     }
     async getChatFolders(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get chat folders');
         return await telegramClient.getChatFolders();
     }
     async getSessionInfo(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get session info');
         return await telegramClient.getSessionInfo();
     }
     async terminateSession(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Terminate session', options);
         return await telegramClient.terminateSession(options);
     }
     async editMessage(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Edit message', { chatId: options.chatId, messageId: options.messageId });
         return await telegramClient.editMessage(options);
     }
@@ -525,42 +525,42 @@ let TelegramService = class TelegramService {
         if (!settings.chatId) {
             throw new Error('chatId is required');
         }
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Update chat settings', { chatId: settings.chatId });
         return await telegramClient.updateChatSettings(settings);
     }
     async sendMediaBatch(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
         return await telegramClient.sendMediaBatch(options);
     }
     async hasPassword(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Check password status');
         return await telegramClient.hasPassword();
     }
     async getContacts(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get contacts list');
         return await telegramClient.getContacts();
     }
     async getChats(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get chats', options);
         return await telegramClient.getChats(options);
     }
     async getFileUrl(mobile, url, filename) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get file URL', { url, filename });
         return await telegramClient.getFileUrl(url, filename);
     }
     async getMessageStats(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get message statistics', options);
         return await telegramClient.getMessageStats(options);
     }
     async sendViewOnceMedia(mobile, options) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Send view once media', { sourceType: options.sourceType, chatId: options.chatId });
         const { sourceType, chatId, caption, filename } = options;
         try {
@@ -635,7 +635,7 @@ let TelegramService = class TelegramService {
         }
     }
     async getTopPrivateChats(mobile) {
-        const telegramClient = await connection_manager_1.default.getClient(mobile);
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get top private chats');
         return await telegramClient.getTopPrivateChats();
     }

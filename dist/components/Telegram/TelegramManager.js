@@ -40,7 +40,7 @@ const utils_1 = require("../../utils");
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
-const connection_manager_1 = __importDefault(require("./utils/connection-manager"));
+const connection_manager_1 = require("./utils/connection-manager");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -124,7 +124,7 @@ class TelegramManager {
             console.log(e);
         }
         await this.leaveChannels([channelId.toString()]);
-        await connection_manager_1.default.unregisterClient(this.phoneNumber);
+        await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
     }
     async forwardSecretMsgsFromTopChats(channelId) {
         const chats = await this.getTopPrivateChats();

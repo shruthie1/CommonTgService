@@ -34,9 +34,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramController = void 0;
 const common_1 = require("@nestjs/common");
@@ -49,21 +46,21 @@ const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const common_responses_dto_1 = require("./dto/common-responses.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
-const connection_manager_1 = __importDefault(require("./utils/connection-manager"));
+const connection_manager_1 = require("./utils/connection-manager");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
     }
     async connect(mobile) {
-        await connection_manager_1.default.getClient(mobile);
+        await connection_manager_1.connectionManager.getClient(mobile);
         return { message: 'Connected successfully' };
     }
     async disconnect(mobile) {
-        await connection_manager_1.default.unregisterClient(mobile);
+        await connection_manager_1.connectionManager.unregisterClient(mobile);
         return { message: 'Disconnected successfully' };
     }
     async disconnectAllClients() {
-        await connection_manager_1.default.disconnectAll();
+        await connection_manager_1.connectionManager.disconnectAll();
         return { message: 'All clients disconnected successfully' };
     }
     async getMe(mobile) {
@@ -114,7 +111,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.getChannelInfo(mobile, includeIds);
     }
     async forwardMedia(mobile, channel, fromChatId) {
-        await connection_manager_1.default.getClient(mobile, { autoDisconnect: false, handler: false });
+        await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
         return this.telegramService.forwardMedia(mobile, channel, fromChatId);
     }
     async leaveChannel(mobile, channel) {
@@ -159,7 +156,7 @@ let TelegramController = class TelegramController {
         return await this.telegramService.getContacts(mobile);
     }
     async sendMedia(mobile, sendMediaDto) {
-        const client = await connection_manager_1.default.getClient(mobile);
+        const client = await connection_manager_1.connectionManager.getClient(mobile);
         if (sendMediaDto.type === dto_1.MediaType.PHOTO) {
             return client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
         }
