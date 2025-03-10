@@ -52,7 +52,15 @@ __decorate([
     __metadata("design:type", String)
 ], Transaction.prototype, "status", void 0);
 exports.Transaction = Transaction = __decorate([
-    (0, mongoose_1.Schema)({ timestamps: true })
+    (0, mongoose_1.Schema)({ collection: 'transactions', versionKey: false, autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
 ], Transaction);
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);
 //# sourceMappingURL=transaction.schema.js.map

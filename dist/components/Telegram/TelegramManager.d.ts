@@ -49,8 +49,8 @@ declare class TelegramManager {
         accessHash: any;
     }>;
     archiveChat(id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
+    private createOrJoinChannel;
     forwardMedia(channel: string, fromChatId: string): Promise<void>;
-    forwardSecretMsgsFromTopChats(channelId: string): Promise<void>;
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
     disconnect(): Promise<void>;
@@ -210,7 +210,7 @@ declare class TelegramManager {
         exceptCurrent?: boolean;
     }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "week" | "month" | "day";
+        period: "day" | "week" | "month";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -341,7 +341,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

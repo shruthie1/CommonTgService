@@ -24,6 +24,7 @@
 /// <reference types="mongoose/types/inferschematype" />
 /// <reference types="mongoose/types/inferrawdoctype" />
 import { Document } from 'mongoose';
+export type TransactionDocument = Transaction & Document;
 export declare class Transaction extends Document {
     transactionId: string;
     amount: number;

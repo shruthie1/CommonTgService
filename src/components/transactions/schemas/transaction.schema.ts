@@ -1,7 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-@Schema({ timestamps: true })
+export type TransactionDocument = Transaction & Document;
+@Schema({ collection: 'transactions', versionKey: false, autoIndex: true,
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret._id;
+    },
+  },
+})
 export class Transaction extends Document {
   @Prop({ required: false })
   transactionId: string;

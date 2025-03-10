@@ -26,10 +26,10 @@
 import { Model } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { Transaction } from './schemas/transaction.schema';
+import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 export declare class TransactionService {
     private readonly transactionModel;
-    constructor(transactionModel: Model<Transaction>);
+    constructor(transactionModel: Model<TransactionDocument>);
     create(createTransactionDto: CreateTransactionDto): Promise<Transaction>;
     findOne(id: string): Promise<Transaction>;
     findAll(search?: string, limit?: number, offset?: number): Promise<{

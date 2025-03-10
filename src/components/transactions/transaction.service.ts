@@ -3,12 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { Transaction } from './schemas/transaction.schema';
+import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 
 @Injectable()
 export class TransactionService {
   constructor(
-    @InjectModel(Transaction.name) private readonly transactionModel: Model<Transaction>,
+    @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
@@ -32,13 +32,13 @@ export class TransactionService {
   ): Promise<{ transactions: Transaction[]; total: number }> {
     const query = search
       ? {
-          $or: [
-            { transactionId: { $regex: search, $options: 'i' } },
-            { issue: { $regex: search, $options: 'i' } },
-            { profile: { $regex: search, $options: 'i' } },
-            { chatId: { $regex: search, $options: 'i' } },
-          ],
-        }
+        $or: [
+          { transactionId: { $regex: search, $options: 'i' } },
+          { issue: { $regex: search, $options: 'i' } },
+          { profile: { $regex: search, $options: 'i' } },
+          { chatId: { $regex: search, $options: 'i' } },
+        ],
+      }
       : {};
 
     const transactions = await this.transactionModel
