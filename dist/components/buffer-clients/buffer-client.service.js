@@ -375,6 +375,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 await telegramClient.updatePrivacyforDeletedAccount();
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.updateProfile("Deleted Account", "Deleted Account");
+                await (0, Helpers_1.sleep)(3000);
+                await telegramClient.deleteProfilePhotos();
+                const channels = await this.telegramService.getChannelInfo(mobile, true);
+                const bufferClient = {
+                    tgId: user.tgId,
+                    session: user.session,
+                    mobile: user.mobile,
+                    availableDate,
+                    channels: channels.ids.length,
+                };
+                await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
