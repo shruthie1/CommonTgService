@@ -196,6 +196,8 @@ export class ClientService {
 
     async updateClientSession(newSession: string) {
         try {
+            let updatedUsername = '';
+            console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
             await connectionManager.disconnectAll();
@@ -207,17 +209,23 @@ export class ClientService {
             const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
             const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
             const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + fetchNumbersFromString(clientId);
-            const updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
+            try {
+                updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
+            }
+            catch (error) {
+                console.log("Error in updating username", error);
+                const errorDetails = parseError(error, 'Error in updating username', true);
+            }
             await fetchWithTimeout(`${notifbot()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             const existingClient = await this.findOne(clientId);
-            this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
+            await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
             await fetchWithTimeout(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
                 await this.updateClient(clientId);
-            }, 10000);
+            }, 15000);
 
             try {
                 if (existingClientUser) {
