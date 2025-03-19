@@ -150,7 +150,7 @@ export class ClientService {
     }
 
     async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
-        console.log(`Received New Client Request for - ${clientId}`)
+        console.log(`Received New Client Request for - ${clientId}`, settingupClient)
         if (toBoolean(process.env.AUTO_CLIENT_SETUP) && Date.now() > (settingupClient + 240000)) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
@@ -164,7 +164,6 @@ export class ClientService {
             try {
                 if (newBufferClient) {
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile })
-
                     await connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession)
@@ -255,7 +254,7 @@ export class ClientService {
                         }
                     } catch (error) {
                         console.log("Cannot Archive Old Client");
-                        const errorDetails = parseError(error);
+                        const errorDetails = parseError(error, 'Error in Archiving Old Client', true);
                         if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
@@ -266,7 +265,8 @@ export class ClientService {
                     }
                 }
             } catch (error) {
-                parseError(error);
+                parseError(error, 'Error in Archiving Old Client outer', true);
+                console.log("Error in Archiving Old Client");
             }
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
