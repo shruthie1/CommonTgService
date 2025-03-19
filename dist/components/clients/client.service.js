@@ -171,7 +171,7 @@ let ClientService = class ClientService {
         return this.clientModel.find(filter).exec();
     }
     async setupClient(clientId, setupClientQueryDto) {
-        console.log(`Received New Client Request for - ${clientId}`);
+        console.log(`Received New Client Request for - ${clientId}`, settingupClient);
         if ((0, utils_1.toBoolean)(process.env.AUTO_CLIENT_SETUP) && Date.now() > (settingupClient + 240000)) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
@@ -270,7 +270,7 @@ let ClientService = class ClientService {
                     }
                     catch (error) {
                         console.log("Cannot Archive Old Client");
-                        const errorDetails = (0, parseError_1.parseError)(error);
+                        const errorDetails = (0, parseError_1.parseError)(error, 'Error in Archiving Old Client', true);
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
@@ -283,7 +283,8 @@ let ClientService = class ClientService {
                 }
             }
             catch (error) {
-                (0, parseError_1.parseError)(error);
+                (0, parseError_1.parseError)(error, 'Error in Archiving Old Client outer', true);
+                console.log("Error in Archiving Old Client");
             }
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
