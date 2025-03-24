@@ -16,43 +16,47 @@ let Transaction = class Transaction {
 };
 exports.Transaction = Transaction;
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: true, unique: true }),
+    (0, mongoose_1.Prop)({ type: String, required: true, unique: true, index: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "transactionId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Number, required: true }),
+    (0, mongoose_1.Prop)({ type: Number, required: true }),
     __metadata("design:type", Number)
 ], Transaction.prototype, "amount", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: true }),
+    (0, mongoose_1.Prop)({ type: String, required: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "issue", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: true }),
+    (0, mongoose_1.Prop)({ type: String, default: '' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "description", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, default: 'undefined' }),
+    (0, mongoose_1.Prop)({ type: String }),
+    __metadata("design:type", String)
+], Transaction.prototype, "refundMethod", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: String, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "profile", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: true }),
+    (0, mongoose_1.Prop)({ type: String, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "chatId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, default: 'undefined' }),
+    (0, mongoose_1.Prop)({ type: String, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "ip", void 0);
 __decorate([
     (0, mongoose_1.Prop)({
-        type: mongoose_2.Schema.Types.String,
+        type: String,
         enum: ['pending', 'completed', 'failed', 'cancelled'],
         default: 'pending'
     }),
     __metadata("design:type", String)
 ], Transaction.prototype, "status", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Boolean, default: false }),
+    (0, mongoose_1.Prop)({ type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Transaction.prototype, "isDeleted", void 0);
 exports.Transaction = Transaction = __decorate([
@@ -66,10 +70,12 @@ exports.Transaction = Transaction = __decorate([
                 return ret;
             },
         },
-        strict: true
+        strict: false
     })
 ], Transaction);
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);
 exports.TransactionSchema.index({ chatId: 1, status: 1 });
 exports.TransactionSchema.index({ createdAt: 1 });
+exports.TransactionSchema.index({ chatId: 1 });
+exports.TransactionSchema.index({ status: 1 });
 //# sourceMappingURL=transaction.schema.js.map
