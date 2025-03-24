@@ -11,30 +11,41 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var TransactionService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TransactionService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const transaction_schema_1 = require("./schemas/transaction.schema");
-let TransactionService = TransactionService_1 = class TransactionService {
+let TransactionService = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
-        this.logger = new common_1.Logger(TransactionService_1.name);
     }
     async create(createTransactionDto) {
-        this.logger.debug('Creating new transaction with data:', createTransactionDto);
+        console.log('Creating new transaction with data:', createTransactionDto);
         try {
-            const newTransaction = new this.transactionModel(createTransactionDto);
-            this.logger.debug('Transaction model created:', newTransaction.toObject());
+            const transactionData = {
+                transactionId: createTransactionDto.transactionId,
+                amount: createTransactionDto.amount,
+                issue: createTransactionDto.issue,
+                description: createTransactionDto.description || '',
+                refundMethod: createTransactionDto.refundMethod,
+                profile: createTransactionDto.profile || 'undefined',
+                chatId: createTransactionDto.chatId || 'undefined',
+                ip: createTransactionDto.ip || 'undefined',
+                status: createTransactionDto.status || 'pending',
+                isDeleted: false
+            };
+            console.log('Prepared transaction data:', transactionData);
+            const newTransaction = new this.transactionModel(transactionData);
+            console.log('Transaction model created:', newTransaction.toObject());
             const savedTransaction = await newTransaction.save();
-            this.logger.debug('Transaction saved successfully:', savedTransaction.toObject());
+            console.log('Transaction saved successfully:', savedTransaction.toObject());
             return savedTransaction;
         }
         catch (error) {
-            this.logger.error('Error saving transaction:', error);
-            this.logger.error('Transaction data that failed:', createTransactionDto);
+            console.error('Error saving transaction:', error);
+            console.error('Transaction data that failed:', createTransactionDto);
             throw error;
         }
     }
@@ -82,7 +93,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
     }
 };
 exports.TransactionService = TransactionService;
-exports.TransactionService = TransactionService = TransactionService_1 = __decorate([
+exports.TransactionService = TransactionService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(transaction_schema_1.Transaction.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])
