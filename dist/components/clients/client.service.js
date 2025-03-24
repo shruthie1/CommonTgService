@@ -228,8 +228,7 @@ let ClientService = class ClientService {
                 updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
             }
             catch (error) {
-                console.log("Error in updating username", error);
-                const errorDetails = (0, parseError_1.parseError)(error, 'Error in updating username', true);
+                (0, parseError_1.parseError)(error, 'Error in updating username', true);
             }
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
@@ -300,7 +299,7 @@ let ClientService = class ClientService {
             await connection_manager_1.connectionManager.disconnectAll();
         }
         catch (e) {
-            (0, parseError_1.parseError)(e);
+            (0, parseError_1.parseError)(e, 'Error in updating client session', true);
             this.telegramService.setActiveClientSetup(undefined);
         }
     }
