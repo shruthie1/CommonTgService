@@ -24,20 +24,18 @@ let TransactionService = class TransactionService {
     async create(createTransactionDto) {
         console.log('Creating new transaction with data:', createTransactionDto);
         try {
-            const transactionData = {
+            const newTransaction = new this.transactionModel({
                 transactionId: createTransactionDto.transactionId,
                 amount: createTransactionDto.amount,
                 issue: createTransactionDto.issue,
-                description: createTransactionDto.description || '',
+                description: createTransactionDto.description,
                 refundMethod: createTransactionDto.refundMethod,
                 profile: createTransactionDto.profile || 'undefined',
-                chatId: createTransactionDto.chatId || 'undefined',
+                chatId: createTransactionDto.chatId,
                 ip: createTransactionDto.ip || 'undefined',
                 status: createTransactionDto.status || 'pending',
                 isDeleted: false
-            };
-            console.log('Prepared transaction data:', transactionData);
-            const newTransaction = new this.transactionModel(transactionData);
+            });
             console.log('Transaction model created:', newTransaction.toObject());
             const savedTransaction = await newTransaction.save();
             console.log('Transaction saved successfully:', savedTransaction.toObject());
