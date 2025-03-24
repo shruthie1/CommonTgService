@@ -29,6 +29,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 export declare class TransactionService {
     private readonly transactionModel;
+    private readonly logger;
     constructor(transactionModel: Model<TransactionDocument>);
     create(createTransactionDto: CreateTransactionDto): Promise<Transaction>;
     findOne(id: string): Promise<Transaction>;

@@ -15,19 +15,19 @@ let Transaction = class Transaction {
 };
 exports.Transaction = Transaction;
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, index: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "transactionId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Transaction.prototype, "amount", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "issue", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "description", void 0);
 __decorate([
@@ -35,31 +35,45 @@ __decorate([
     __metadata("design:type", String)
 ], Transaction.prototype, "refundMethod", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "profile", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Transaction.prototype, "chatId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "ip", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: false, default: 'pending' }),
+    (0, mongoose_1.Prop)({
+        required: true,
+        enum: ['pending', 'completed', 'failed', 'cancelled'],
+        default: 'pending'
+    }),
     __metadata("design:type", String)
 ], Transaction.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Transaction.prototype, "isDeleted", void 0);
 exports.Transaction = Transaction = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'transactions', versionKey: false, autoIndex: true,
+    (0, mongoose_1.Schema)({
         timestamps: true,
+        collection: 'transactions',
         toJSON: {
             virtuals: true,
-            transform: (doc, ret) => {
-                delete ret._id;
+            transform: (_doc, ret) => {
+                delete ret.__v;
+                return ret;
             },
-        },
+        }
     })
 ], Transaction);
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);
+exports.TransactionSchema.index({ createdAt: 1 });
+exports.TransactionSchema.index({ transactionId: 1 }, { unique: true });
+exports.TransactionSchema.index({ chatId: 1 });
+exports.TransactionSchema.index({ status: 1 });
 //# sourceMappingURL=transaction.schema.js.map

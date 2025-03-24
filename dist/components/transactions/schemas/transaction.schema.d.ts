@@ -35,6 +35,9 @@ export declare class Transaction {
     chatId: string;
     ip: string;
     status: string;
+    isDeleted: boolean;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 export declare const TransactionSchema: import("mongoose").Schema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & {
     _id: import("mongoose").Types.ObjectId;
