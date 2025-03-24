@@ -25,7 +25,7 @@
 /// <reference types="mongoose/types/inferrawdoctype" />
 import { Document } from 'mongoose';
 export type TransactionDocument = Transaction & Document;
-export declare class Transaction extends Document {
+export declare class Transaction {
     transactionId: string;
     amount: number;
     issue: string;
@@ -36,12 +36,12 @@ export declare class Transaction extends Document {
     ip: string;
     status: string;
 }
-export declare const TransactionSchema: import("mongoose").Schema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & Required<{
-    _id: unknown;
-}> & {
+export declare const TransactionSchema: import("mongoose").Schema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
     __v: number;
-}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Transaction, Document<unknown, {}, import("mongoose").FlatRecord<Transaction>> & import("mongoose").FlatRecord<Transaction> & Required<{
-    _id: unknown;
-}> & {
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Transaction, Document<unknown, {}, import("mongoose").FlatRecord<Transaction>> & import("mongoose").FlatRecord<Transaction> & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
     __v: number;
 }>;
