@@ -12,41 +12,42 @@ export type TransactionDocument = Transaction & Document;
       delete ret.__v;
       return ret;
     },
-  }
+  },
+  strict: false  // Allow fields not explicitly defined in schema
 })
 export class Transaction {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ type: String, required: true, unique: true, index: true })
   transactionId: string;
 
-  @Prop({ required: true })
+  @Prop({ type: Number, required: true })
   amount: number;
 
-  @Prop({ required: true })
+  @Prop({ type: String, required: true })
   issue: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, default: '' })
   description: string;
 
-  @Prop({ required: false })
+  @Prop({ type: String })
   refundMethod?: string;
 
-  @Prop({ required: false, default: 'undefined' })
+  @Prop({ type: String, default: 'undefined' })
   profile: string;
 
-  @Prop({ required: true })
+  @Prop({ type: String, default: 'undefined' })
   chatId: string;
 
-  @Prop({ required: false, default: 'undefined' })
+  @Prop({ type: String, default: 'undefined' })
   ip: string;
 
   @Prop({
-    required: true,
+    type: String,
     enum: ['pending', 'completed', 'failed', 'cancelled'],
     default: 'pending'
   })
   status: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   isDeleted: boolean;
 
   createdAt?: Date;
@@ -57,6 +58,5 @@ export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 
 // Indexes
 TransactionSchema.index({ createdAt: 1 });
-TransactionSchema.index({ transactionId: 1 }, { unique: true });
 TransactionSchema.index({ chatId: 1 });
 TransactionSchema.index({ status: 1 });

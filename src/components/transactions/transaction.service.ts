@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -7,26 +7,39 @@ import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 
 @Injectable()
 export class TransactionService {
-  private readonly logger = new Logger(TransactionService.name);
-
   constructor(
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
-    this.logger.debug('Creating new transaction with data:', createTransactionDto);
+    console.log('Creating new transaction with data:', createTransactionDto);
 
     try {
-      const newTransaction = new this.transactionModel(createTransactionDto);
-      this.logger.debug('Transaction model created:', newTransaction.toObject());
+      const transactionData = {
+        transactionId: createTransactionDto.transactionId,
+        amount: createTransactionDto.amount,
+        issue: createTransactionDto.issue,
+        description: createTransactionDto.description || '',
+        refundMethod: createTransactionDto.refundMethod,
+        profile: createTransactionDto.profile || 'undefined',
+        chatId: createTransactionDto.chatId || 'undefined',
+        ip: createTransactionDto.ip || 'undefined',
+        status: createTransactionDto.status || 'pending',
+        isDeleted: false
+      };
+
+      console.log('Prepared transaction data:', transactionData);
+
+      const newTransaction = new this.transactionModel(transactionData);
+      console.log('Transaction model created:', newTransaction.toObject());
 
       const savedTransaction = await newTransaction.save();
-      this.logger.debug('Transaction saved successfully:', savedTransaction.toObject());
+      console.log('Transaction saved successfully:', savedTransaction.toObject());
 
       return savedTransaction;
     } catch (error) {
-      this.logger.error('Error saving transaction:', error);
-      this.logger.error('Transaction data that failed:', createTransactionDto);
+      console.error('Error saving transaction:', error);
+      console.error('Transaction data that failed:', createTransactionDto);
       throw error;
     }
   }
