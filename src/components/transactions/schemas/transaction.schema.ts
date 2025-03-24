@@ -4,12 +4,13 @@ import { Document, Schema as MongooseSchema } from 'mongoose';
 export type TransactionDocument = Transaction & Document;
 
 @Schema({
-  timestamps: true,
   collection: 'transactions',
+  versionKey: false,
+  autoIndex: true,
+  timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: (_doc, ret) => {
-      delete ret.__v;
+    transform: (doc, ret) => {
       return ret;
     },
   },
@@ -28,13 +29,16 @@ export class Transaction {
   @Prop({ type: MongooseSchema.Types.String, required: true })
   description: string;
 
-  @Prop({ type: MongooseSchema.Types.String, default: 'undefined' })
+  @Prop({ type: MongooseSchema.Types.String, required: false, default: 'undefined' })
+  refundMethod: string;
+
+  @Prop({ type: MongooseSchema.Types.String, required: false, default: 'undefined' })
   profile: string;
 
   @Prop({ type: MongooseSchema.Types.String, required: true })
   chatId: string;
 
-  @Prop({ type: MongooseSchema.Types.String, default: 'undefined' })
+  @Prop({ type: MongooseSchema.Types.String, required: false, default: 'undefined' })
   ip: string;
 
   @Prop({
