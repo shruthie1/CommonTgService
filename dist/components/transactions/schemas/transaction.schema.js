@@ -32,7 +32,11 @@ __decorate([
     __metadata("design:type", String)
 ], Transaction.prototype, "description", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, default: 'undefined' }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: false, default: 'undefined' }),
+    __metadata("design:type", String)
+], Transaction.prototype, "refundMethod", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: false, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "profile", void 0);
 __decorate([
@@ -40,7 +44,7 @@ __decorate([
     __metadata("design:type", String)
 ], Transaction.prototype, "chatId", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, default: 'undefined' }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.String, required: false, default: 'undefined' }),
     __metadata("design:type", String)
 ], Transaction.prototype, "ip", void 0);
 __decorate([
@@ -57,12 +61,13 @@ __decorate([
 ], Transaction.prototype, "isDeleted", void 0);
 exports.Transaction = Transaction = __decorate([
     (0, mongoose_1.Schema)({
-        timestamps: true,
         collection: 'transactions',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
         toJSON: {
             virtuals: true,
-            transform: (_doc, ret) => {
-                delete ret.__v;
+            transform: (doc, ret) => {
                 return ret;
             },
         },

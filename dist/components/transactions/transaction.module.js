@@ -12,12 +12,14 @@ const mongoose_1 = require("@nestjs/mongoose");
 const transaction_service_1 = require("./transaction.service");
 const transaction_controller_1 = require("./transaction.controller");
 const transaction_schema_1 = require("./schemas/transaction.schema");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let TransactionModule = class TransactionModule {
 };
 exports.TransactionModule = TransactionModule;
 exports.TransactionModule = TransactionModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            init_module_1.initModule,
             mongoose_1.MongooseModule.forFeature([
                 { name: transaction_schema_1.Transaction.name, schema: transaction_schema_1.TransactionSchema },
             ]),

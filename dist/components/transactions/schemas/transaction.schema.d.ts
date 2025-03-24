@@ -30,6 +30,7 @@ export declare class Transaction {
     amount: number;
     issue: string;
     description: string;
+    refundMethod: string;
     profile: string;
     chatId: string;
     ip: string;
