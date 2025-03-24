@@ -11,7 +11,7 @@ export type TransactionDocument = Transaction & Document;
     },
   },
 })
-export class Transaction extends Document {
+export class Transaction {
   @Prop({ required: false })
   transactionId: string;
 
