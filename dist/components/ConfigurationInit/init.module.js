@@ -28,7 +28,6 @@ let initModule = class initModule {
     }
     async onModuleInit() {
         console.log(`Started :: ${process.env.clientId}`);
-        (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
     }
     async onModuleDestroy() {
         console.log("Init Module Destroying");
