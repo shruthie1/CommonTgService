@@ -18,6 +18,8 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const transaction_schema_1 = require("./schemas/transaction.schema");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let TransactionService = TransactionService_1 = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
@@ -98,6 +100,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
                 this.transactionModel.countDocuments(query).exec(),
             ]);
             this.logger.debug(`Found ${total} transactions matching filters`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)(process.env.accountsChannel)}&text=${encodeURIComponent(`Found ${total} transactions matching ip: ${filters.ip}\nchatId: ${filters.chatId}\ntransactionId: ${filters.transactionId}\nprofile: ${filters.profile}`)}`);
             return { transactions, total };
         }
         catch (error) {
