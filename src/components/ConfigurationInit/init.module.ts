@@ -28,12 +28,12 @@ export class initModule implements OnModuleDestroy, OnModuleInit {
   constructor(@Inject(getConnectionToken()) private readonly connection: Connection) {}
   async onModuleInit() {
     console.log(`Started :: ${process.env.clientId}`)
-    // fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+    fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
   }
 
   async onModuleDestroy() {
     console.log("Init Module Destroying")
-    // await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
+    await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
     this.closeConnection();
   }
 
