@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { Client } from '../clients/schemas/client.schema';
 import { ArchivedClientService } from './archived-client.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
@@ -21,7 +21,10 @@ export class ArchivedClientController {
 
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
-  //@apiresponse({ status: 200, description: 'Return the searched user data.' })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID' })
+  @ApiQuery({ name: 'dbcoll', required: false, description: 'Database collection name' })
+  @ApiQuery({ name: 'channelLink', required: false, description: 'Channel link' })
+  @ApiQuery({ name: 'link', required: false, description: 'Client link' })
   async search(@Query() query: SearchClientDto): Promise<Client[]> {
     return this.archivedclientService.search(query);
   }

@@ -13,4 +13,6 @@ export declare class SearchClientDto {
     mainAccount?: string;
     product?: string;
     promoteMobile?: string[];
+    qrId?: string;
+    gpayId?: string;
 }

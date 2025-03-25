@@ -30,7 +30,6 @@ let ActiveChannelsController = class ActiveChannelsController {
         return this.activeChannelsService.createMultiple(createChannelDtos);
     }
     search(query) {
-        console.log(query);
         return this.activeChannelsService.search(query);
     }
     async findAll() {

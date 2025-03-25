@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -7,90 +7,151 @@ import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 
 @Injectable()
 export class TransactionService {
+  private readonly logger = new Logger(TransactionService.name);
+
   constructor(
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
-    console.log('Creating new transaction with data:', createTransactionDto);
-
+    this.logger.log(`Creating new transaction: ${JSON.stringify(createTransactionDto)}`);
     try {
-      // Create a new transaction instance with all fields explicitly set
-      const newTransaction = new this.transactionModel({
-        transactionId: createTransactionDto.transactionId,
-        amount: createTransactionDto.amount,
-        issue: createTransactionDto.issue,
-        description: createTransactionDto.description,
-        refundMethod: createTransactionDto.refundMethod,
-        profile: createTransactionDto.profile || 'undefined',
-        chatId: createTransactionDto.chatId,
-        ip: createTransactionDto.ip || 'undefined',
-        status: createTransactionDto.status || 'pending',
-        isDeleted: false
-      });
+      // Check if transaction with same ID already exists
+      const existingTransaction = await this.transactionModel
+        .findOne({ transactionId: createTransactionDto.transactionId })
+        .exec();
+      
+      if (existingTransaction) {
+        throw new BadRequestException('Transaction with this ID already exists');
+      }
 
-      console.log('Transaction model created:', newTransaction.toObject());
-
+      const newTransaction = new this.transactionModel(createTransactionDto);
       const savedTransaction = await newTransaction.save();
-      console.log('Transaction saved successfully:', savedTransaction.toObject());
-
+      this.logger.log(`Transaction created successfully: ${savedTransaction.transactionId}`);
       return savedTransaction;
     } catch (error) {
-      console.error('Error saving transaction:', error);
-      console.error('Transaction data that failed:', createTransactionDto);
-      throw error;
+      this.logger.error(`Error creating transaction: ${error.message}`, error.stack);
+      throw error instanceof BadRequestException ? error : new BadRequestException('Failed to create transaction');
     }
   }
 
   async findOne(id: string): Promise<Transaction> {
-    const transaction = await this.transactionModel.findById(id).exec();
-    if (!transaction) {
-      throw new NotFoundException('Transaction not found');
+    this.logger.debug(`Finding transaction by ID: ${id}`);
+    try {
+      const transaction = await this.transactionModel.findById(id).exec();
+      if (!transaction) {
+        this.logger.warn(`Transaction not found with ID: ${id}`);
+        throw new NotFoundException('Transaction not found');
+      }
+      return transaction;
+    } catch (error) {
+      this.logger.error(`Error finding transaction: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException) throw error;
+      throw new BadRequestException('Invalid transaction ID format');
     }
-    return transaction;
   }
 
   async findAll(
-    search?: string,
+    filters: {
+      transactionId?: string;
+      amount?: number;
+      issue?: string;
+      refundMethod?: string;
+      profile?: string;
+      chatId?: string;
+      status?: string;
+      ip?: string;
+    },
     limit = 10,
     offset = 0,
   ): Promise<{ transactions: Transaction[]; total: number }> {
-    const query = search
-      ? {
-        $or: [
-          { transactionId: { $regex: search, $options: 'i' } },
-          { issue: { $regex: search, $options: 'i' } },
-          { profile: { $regex: search, $options: 'i' } },
-          { chatId: { $regex: search, $options: 'i' } },
-        ],
+    this.logger.debug(`Finding transactions with filters: ${JSON.stringify(filters)}`);
+    try {
+      const orConditions = [];
+
+      if (filters.transactionId) {
+        orConditions.push({ transactionId: { $regex: filters.transactionId, $options: 'i' } });
       }
-      : {};
+      if (filters.amount) {
+        orConditions.push({ amount: filters.amount });
+      }
+      if (filters.issue) {
+        orConditions.push({ issue: { $regex: filters.issue, $options: 'i' } });
+      }
+      if (filters.refundMethod) {
+        orConditions.push({ refundMethod: { $regex: filters.refundMethod, $options: 'i' } });
+      }
+      if (filters.profile) {
+        orConditions.push({ profile: { $regex: filters.profile, $options: 'i' } });
+      }
+      if (filters.chatId) {
+        orConditions.push({ chatId: { $regex: filters.chatId, $options: 'i' } });
+      }
+      if (filters.status) {
+        orConditions.push({ status: { $regex: filters.status, $options: 'i' } });
+      }
+      if (filters.ip) {
+        orConditions.push({ ip: { $regex: filters.ip, $options: 'i' } });
+      }
 
-    const transactions = await this.transactionModel
-      .find(query)
-      .skip(offset)
-      .limit(limit)
-      .exec();
-    const total = await this.transactionModel.countDocuments(query).exec();
+      const query = orConditions.length > 0 ? { $or: orConditions } : {};
 
-    return { transactions, total };
+      const [transactions, total] = await Promise.all([
+        this.transactionModel
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip(offset)
+          .limit(limit)
+          .exec(),
+        this.transactionModel.countDocuments(query).exec(),
+      ]);
+
+      this.logger.debug(`Found ${total} transactions matching filters`);
+      return { transactions, total };
+    } catch (error) {
+      this.logger.error(`Error finding transactions: ${error.message}`, error.stack);
+      throw new BadRequestException('Failed to fetch transactions');
+    }
   }
 
   async update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<Transaction> {
-    const updatedTransaction = await this.transactionModel
-      .findByIdAndUpdate(id, updateTransactionDto, { new: true })
-      .exec();
-    if (!updatedTransaction) {
-      throw new NotFoundException('Transaction not found');
+    this.logger.debug(`Updating transaction ${id} with data: ${JSON.stringify(updateTransactionDto)}`);
+    try {
+      const updatedTransaction = await this.transactionModel
+        .findByIdAndUpdate(id, updateTransactionDto, { 
+          new: true,
+          runValidators: true 
+        })
+        .exec();
+
+      if (!updatedTransaction) {
+        this.logger.warn(`Transaction not found for update with ID: ${id}`);
+        throw new NotFoundException('Transaction not found');
+      }
+
+      this.logger.log(`Transaction ${id} updated successfully`);
+      return updatedTransaction;
+    } catch (error) {
+      this.logger.error(`Error updating transaction: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException) throw error;
+      throw new BadRequestException('Failed to update transaction');
     }
-    return updatedTransaction;
   }
 
   async delete(id: string): Promise<Transaction> {
-    const deletedTransaction = await this.transactionModel.findByIdAndDelete(id).exec();
-    if (!deletedTransaction) {
-      throw new NotFoundException('Transaction not found');
+    this.logger.debug(`Deleting transaction: ${id}`);
+    try {
+      const deletedTransaction = await this.transactionModel.findByIdAndDelete(id).exec();
+      if (!deletedTransaction) {
+        this.logger.warn(`Transaction not found for deletion with ID: ${id}`);
+        throw new NotFoundException('Transaction not found');
+      }
+      this.logger.log(`Transaction ${id} deleted successfully`);
+      return deletedTransaction;
+    } catch (error) {
+      this.logger.error(`Error deleting transaction: ${error.message}`, error.stack);
+      if (error instanceof NotFoundException) throw error;
+      throw new BadRequestException('Failed to delete transaction');
     }
-    return deletedTransaction;
   }
 }

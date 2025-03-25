@@ -116,4 +116,18 @@ __decorate([
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' }),
     __metadata("design:type", Array)
 ], SearchClientDto.prototype, "promoteMobile", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID of the client' }),
+    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "qrId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Google Pay ID of the client' }),
+    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "gpayId", void 0);
 //# sourceMappingURL=search-client.dto.js.map

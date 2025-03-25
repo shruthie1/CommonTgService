@@ -88,4 +88,16 @@ export class SearchClientDto {
     @ArrayNotEmpty({ message: 'Promote mobile numbers must not be empty if provided' })
     @Matches(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' })
     promoteMobile?: string[];
+
+    @ApiPropertyOptional({ description: 'Paytm QR ID of the client' })
+    @Transform(({ value }: TransformFnParams) => value?.trim())
+    @IsOptional()
+    @IsString()
+    qrId?: string;
+
+    @ApiPropertyOptional({ description: 'Google Pay ID of the client' })
+    @Transform(({ value }: TransformFnParams) => value?.trim())
+    @IsOptional()
+    @IsString()
+    gpayId?: string;
 }

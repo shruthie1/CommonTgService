@@ -43,7 +43,6 @@ export class ActiveChannelsController {
   @ApiQuery({ name: 'reactRestricted', required: false, type: Boolean })
   @ApiQuery({ name: 'megagroup', required: false, type: Boolean })
   search(@Query() query: any): Promise<ActiveChannel[]> {
-    console.log(query);
     return this.activeChannelsService.search(query);
   }
 

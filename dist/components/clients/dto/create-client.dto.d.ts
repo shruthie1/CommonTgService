@@ -13,5 +13,7 @@ export declare class CreateClientDto {
     readonly deployKey: string;
     readonly mainAccount: string;
     readonly product: string;
-    readonly promoteMobile?: string[];
+    readonly promoteMobile: string[];
+    readonly qrId: string;
+    readonly gpayId: string;
 }

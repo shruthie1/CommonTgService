@@ -59,6 +59,8 @@ export declare class ClientService {
         deployKey: string;
         mainAccount: string;
         product: string;
+        qrId: string;
+        gpayId: string;
     }[]>;
     refreshMap(): Promise<void>;
     findOne(clientId: string, throwErr?: boolean): Promise<Client>;

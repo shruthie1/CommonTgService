@@ -29,10 +29,19 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 export declare class TransactionService {
     private readonly transactionModel;
+    private readonly logger;
     constructor(transactionModel: Model<TransactionDocument>);
     create(createTransactionDto: CreateTransactionDto): Promise<Transaction>;
     findOne(id: string): Promise<Transaction>;
-    findAll(search?: string, limit?: number, offset?: number): Promise<{
+    findAll(filters: {
+        transactionId?: string;
+        amount?: number;
+        issue?: string;
+        refundMethod?: string;
+        profile?: string;
+        chatId?: string;
+        status?: string;
+    }, limit?: number, offset?: number): Promise<{
         transactions: Transaction[];
         total: number;
     }>;

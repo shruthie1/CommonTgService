@@ -1,3 +1,9 @@
+export declare enum TransactionStatus {
+    PENDING = "pending",
+    COMPLETED = "completed",
+    FAILED = "failed",
+    CANCELLED = "cancelled"
+}
 export declare class CreateTransactionDto {
     transactionId: string;
     amount: number;
@@ -7,5 +13,5 @@ export declare class CreateTransactionDto {
     profile: string;
     chatId: string;
     ip: string;
-    status: string;
+    status: TransactionStatus;
 }

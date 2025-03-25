@@ -71,8 +71,16 @@ export class Client {
     product: string;
 
     @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user' })
-    @Prop({ required: false, type: [String] })
+    @Prop({ required: true, type: [String] })
     promoteMobile: string[];
+
+    @ApiProperty({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' })
+    @Prop({ required: true })
+    qrId: string;
+
+    @ApiProperty({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' })
+    @Prop({ required: true })
+    gpayId: string;
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

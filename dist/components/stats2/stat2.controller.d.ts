@@ -4,9 +4,9 @@ import { UpdateStatDto } from './update-stat2.dto';
 export declare class Stat2Controller {
     private readonly statService;
     constructor(statService: Stat2Service);
-    create(createStatDto: CreateStatDto): Promise<import("./stat2.schema").Stat2>;
-    findByChatIdAndProfile(chatId: string, profile: string): Promise<import("./stat2.schema").Stat2>;
-    update(chatId: string, profile: string, updateStatDto: UpdateStatDto): Promise<import("./stat2.schema").Stat2>;
+    create(createStatDto: CreateStatDto): Promise<import("src").Stat2>;
+    findByChatIdAndProfile(chatId: string, profile: string): Promise<import("src").Stat2>;
+    update(chatId: string, profile: string, updateStatDto: UpdateStatDto): Promise<import("src").Stat2>;
     deleteOne(chatId: string, profile: string): Promise<void>;
     deleteAll(): Promise<void>;
 }

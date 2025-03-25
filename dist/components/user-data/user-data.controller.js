@@ -69,6 +69,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, type: Boolean }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_user_data_dto_1.SearchDto]),

@@ -11,87 +11,141 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var TransactionService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TransactionService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const transaction_schema_1 = require("./schemas/transaction.schema");
-let TransactionService = class TransactionService {
+let TransactionService = TransactionService_1 = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
+        this.logger = new common_1.Logger(TransactionService_1.name);
     }
     async create(createTransactionDto) {
-        console.log('Creating new transaction with data:', createTransactionDto);
+        this.logger.log(`Creating new transaction: ${JSON.stringify(createTransactionDto)}`);
         try {
-            const newTransaction = new this.transactionModel({
-                transactionId: createTransactionDto.transactionId,
-                amount: createTransactionDto.amount,
-                issue: createTransactionDto.issue,
-                description: createTransactionDto.description,
-                refundMethod: createTransactionDto.refundMethod,
-                profile: createTransactionDto.profile || 'undefined',
-                chatId: createTransactionDto.chatId,
-                ip: createTransactionDto.ip || 'undefined',
-                status: createTransactionDto.status || 'pending',
-                isDeleted: false
-            });
-            console.log('Transaction model created:', newTransaction.toObject());
+            const existingTransaction = await this.transactionModel
+                .findOne({ transactionId: createTransactionDto.transactionId })
+                .exec();
+            if (existingTransaction) {
+                throw new common_1.BadRequestException('Transaction with this ID already exists');
+            }
+            const newTransaction = new this.transactionModel(createTransactionDto);
             const savedTransaction = await newTransaction.save();
-            console.log('Transaction saved successfully:', savedTransaction.toObject());
+            this.logger.log(`Transaction created successfully: ${savedTransaction.transactionId}`);
             return savedTransaction;
         }
         catch (error) {
-            console.error('Error saving transaction:', error);
-            console.error('Transaction data that failed:', createTransactionDto);
-            throw error;
+            this.logger.error(`Error creating transaction: ${error.message}`, error.stack);
+            throw error instanceof common_1.BadRequestException ? error : new common_1.BadRequestException('Failed to create transaction');
         }
     }
     async findOne(id) {
-        const transaction = await this.transactionModel.findById(id).exec();
-        if (!transaction) {
-            throw new common_1.NotFoundException('Transaction not found');
-        }
-        return transaction;
-    }
-    async findAll(search, limit = 10, offset = 0) {
-        const query = search
-            ? {
-                $or: [
-                    { transactionId: { $regex: search, $options: 'i' } },
-                    { issue: { $regex: search, $options: 'i' } },
-                    { profile: { $regex: search, $options: 'i' } },
-                    { chatId: { $regex: search, $options: 'i' } },
-                ],
+        this.logger.debug(`Finding transaction by ID: ${id}`);
+        try {
+            const transaction = await this.transactionModel.findById(id).exec();
+            if (!transaction) {
+                this.logger.warn(`Transaction not found with ID: ${id}`);
+                throw new common_1.NotFoundException('Transaction not found');
             }
-            : {};
-        const transactions = await this.transactionModel
-            .find(query)
-            .skip(offset)
-            .limit(limit)
-            .exec();
-        const total = await this.transactionModel.countDocuments(query).exec();
-        return { transactions, total };
+            return transaction;
+        }
+        catch (error) {
+            this.logger.error(`Error finding transaction: ${error.message}`, error.stack);
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            throw new common_1.BadRequestException('Invalid transaction ID format');
+        }
+    }
+    async findAll(filters, limit = 10, offset = 0) {
+        this.logger.debug(`Finding transactions with filters: ${JSON.stringify(filters)}`);
+        try {
+            const orConditions = [];
+            if (filters.transactionId) {
+                orConditions.push({ transactionId: { $regex: filters.transactionId, $options: 'i' } });
+            }
+            if (filters.amount) {
+                orConditions.push({ amount: filters.amount });
+            }
+            if (filters.issue) {
+                orConditions.push({ issue: { $regex: filters.issue, $options: 'i' } });
+            }
+            if (filters.refundMethod) {
+                orConditions.push({ refundMethod: { $regex: filters.refundMethod, $options: 'i' } });
+            }
+            if (filters.profile) {
+                orConditions.push({ profile: { $regex: filters.profile, $options: 'i' } });
+            }
+            if (filters.chatId) {
+                orConditions.push({ chatId: { $regex: filters.chatId, $options: 'i' } });
+            }
+            if (filters.status) {
+                orConditions.push({ status: { $regex: filters.status, $options: 'i' } });
+            }
+            const query = orConditions.length > 0 ? { $or: orConditions } : {};
+            const [transactions, total] = await Promise.all([
+                this.transactionModel
+                    .find(query)
+                    .sort({ createdAt: -1 })
+                    .skip(offset)
+                    .limit(limit)
+                    .exec(),
+                this.transactionModel.countDocuments(query).exec(),
+            ]);
+            this.logger.debug(`Found ${total} transactions matching filters`);
+            return { transactions, total };
+        }
+        catch (error) {
+            this.logger.error(`Error finding transactions: ${error.message}`, error.stack);
+            throw new common_1.BadRequestException('Failed to fetch transactions');
+        }
     }
     async update(id, updateTransactionDto) {
-        const updatedTransaction = await this.transactionModel
-            .findByIdAndUpdate(id, updateTransactionDto, { new: true })
-            .exec();
-        if (!updatedTransaction) {
-            throw new common_1.NotFoundException('Transaction not found');
+        this.logger.debug(`Updating transaction ${id} with data: ${JSON.stringify(updateTransactionDto)}`);
+        try {
+            const updatedTransaction = await this.transactionModel
+                .findByIdAndUpdate(id, updateTransactionDto, {
+                new: true,
+                runValidators: true
+            })
+                .exec();
+            if (!updatedTransaction) {
+                this.logger.warn(`Transaction not found for update with ID: ${id}`);
+                throw new common_1.NotFoundException('Transaction not found');
+            }
+            this.logger.log(`Transaction ${id} updated successfully`);
+            return updatedTransaction;
         }
-        return updatedTransaction;
+        catch (error) {
+            this.logger.error(`Error updating transaction: ${error.message}`, error.stack);
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            throw new common_1.BadRequestException('Failed to update transaction');
+        }
     }
     async delete(id) {
-        const deletedTransaction = await this.transactionModel.findByIdAndDelete(id).exec();
-        if (!deletedTransaction) {
-            throw new common_1.NotFoundException('Transaction not found');
+        this.logger.debug(`Deleting transaction: ${id}`);
+        try {
+            const deletedTransaction = await this.transactionModel.findByIdAndDelete(id).exec();
+            if (!deletedTransaction) {
+                this.logger.warn(`Transaction not found for deletion with ID: ${id}`);
+                throw new common_1.NotFoundException('Transaction not found');
+            }
+            this.logger.log(`Transaction ${id} deleted successfully`);
+            return deletedTransaction;
         }
-        return deletedTransaction;
+        catch (error) {
+            this.logger.error(`Error deleting transaction: ${error.message}`, error.stack);
+            if (error instanceof common_1.NotFoundException)
+                throw error;
+            throw new common_1.BadRequestException('Failed to delete transaction');
+        }
     }
 };
 exports.TransactionService = TransactionService;
-exports.TransactionService = TransactionService = __decorate([
+exports.TransactionService = TransactionService = TransactionService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(transaction_schema_1.Transaction.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])

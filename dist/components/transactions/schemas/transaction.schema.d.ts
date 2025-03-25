@@ -24,17 +24,20 @@
 /// <reference types="mongoose/types/inferschematype" />
 /// <reference types="mongoose/types/inferrawdoctype" />
 import { Document, Schema as MongooseSchema } from 'mongoose';
+import { TransactionStatus } from '../dto/create-transaction.dto';
 export type TransactionDocument = Transaction & Document;
 export declare class Transaction {
     transactionId: string;
     amount: number;
     issue: string;
     description: string;
+    refundMethod: string;
     profile: string;
     chatId: string;
     ip: string;
-    status: string;
-    isDeleted: boolean;
+    status: TransactionStatus;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 export declare const TransactionSchema: MongooseSchema<Transaction, import("mongoose").Model<Transaction, any, any, any, Document<unknown, any, Transaction> & Transaction & {
     _id: import("mongoose").Types.ObjectId;

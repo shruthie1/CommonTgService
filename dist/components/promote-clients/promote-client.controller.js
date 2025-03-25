@@ -79,6 +79,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name' }),
+    (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
+    (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_promote_client_dto_1.SearchPromoteClientDto]),

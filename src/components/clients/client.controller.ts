@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch, HttpException, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './schemas/client.schema';
@@ -32,6 +32,10 @@ export class ClientController {
    */
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID' })
+  @ApiQuery({ name: 'dbcoll', required: false, description: 'Database collection name' })
+  @ApiQuery({ name: 'channelLink', required: false, description: 'Channel link' })
+  @ApiQuery({ name: 'link', required: false, description: 'Client link' })
   @ApiResponse({ status: 200, description: 'Matching user data returned successfully.' })
   async search(@Query() query: SearchClientDto): Promise<Client[]> {
     try {

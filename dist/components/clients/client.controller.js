@@ -123,6 +123,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
+    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
+    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Matching user data returned successfully.' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),

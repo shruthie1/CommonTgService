@@ -74,4 +74,12 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "promoteMobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user', required: false }),
+    __metadata("design:type", String)
+], CreateClientDto.prototype, "qrId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user', required: false }),
+    __metadata("design:type", String)
+], CreateClientDto.prototype, "gpayId", void 0);
 //# sourceMappingURL=create-client.dto.js.map

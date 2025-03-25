@@ -21,6 +21,8 @@ export declare class ClientController {
         deployKey: string;
         mainAccount: string;
         product: string;
+        qrId: string;
+        gpayId: string;
     }[]>;
     findAll(): Promise<Client[]>;
     findOne(clientId: string): Promise<Client>;

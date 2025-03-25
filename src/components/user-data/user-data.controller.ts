@@ -19,6 +19,10 @@ export class UserDataController {
 
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
+  @ApiQuery({ name: 'profile', required: false, description: 'User profile' })
+  @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID' })
+  @ApiQuery({ name: 'isTesting', required: false, type: Boolean })
+  @ApiQuery({ name: 'banned', required: false, type: Boolean })
   async search(@Query() query: SearchDto): Promise<UserData[]> {
     return this.userDataService.search(query);
   }

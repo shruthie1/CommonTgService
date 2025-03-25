@@ -44,5 +44,11 @@ export class CreateClientDto {
     readonly product: string;
 
     @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] })
-    readonly promoteMobile?: string[];
+    readonly promoteMobile: string[];
+
+    @ApiProperty({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user', required: false })
+    readonly qrId: string;
+
+    @ApiProperty({ example: 'myred1808@postbank', description: 'Google Pay ID of the user', required: false })
+    readonly gpayId: string;
 }

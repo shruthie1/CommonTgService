@@ -55,7 +55,10 @@ export class ArchivedClientService {
                     "session": newSession,
                     "username": "default",
                     "mobile": mobile,
-                    product: "default"
+                    product: "default",
+                    gpayId: "default",
+                    promoteMobile:[],
+                    qrId: "default",
                 })
             } catch (e) {
                 throw new NotFoundException(parseError(e).message);

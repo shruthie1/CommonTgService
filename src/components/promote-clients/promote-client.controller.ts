@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { PromoteClientService } from './promote-client.service';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
@@ -19,6 +19,10 @@ export class PromoteClientController {
 
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
+  @ApiQuery({ name: 'mobile', required: false, description: 'Mobile number' })
+  @ApiQuery({ name: 'firstName', required: false, description: 'First name' })
+  @ApiQuery({ name: 'lastName', required: false, description: 'Last name' })
+  @ApiQuery({ name: 'username', required: false, description: 'Username' })
   async search(@Query() query: SearchPromoteClientDto): Promise<PromoteClient[]> {
     return this.clientService.search(query);
   }

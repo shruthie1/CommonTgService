@@ -188,12 +188,12 @@ export class TelegramController {
     @Get('messages/search/:mobile')
     @ApiOperation({ summary: 'Search messages in a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'query', required: false })
-    @ApiQuery({ name: 'types', required: false, enum: MessageType, isArray: true })
-    @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
-    @ApiQuery({ name: 'minId', required: false, type: Number })
-    @ApiQuery({ name: 'maxId', required: false, type: Number })
+    @ApiQuery({ name: 'chatId', required: true, description: 'Chat ID to search in' })
+    @ApiQuery({ name: 'query', required: false, description: 'Text to search for' })
+    @ApiQuery({ name: 'types', required: false, enum: MessageType, isArray: true, description: 'Types of messages to include' })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of messages to fetch' })
+    @ApiQuery({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' })
+    @ApiQuery({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' })
     async searchMessages(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
@@ -448,13 +448,13 @@ export class TelegramController {
     @Get('media/filter/:mobile')
     @ApiOperation({ summary: 'Get filtered media messages from a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true })
-    @ApiQuery({ name: 'startDate', required: false })
-    @ApiQuery({ name: 'endDate', required: false })
-    @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
-    @ApiQuery({ name: 'minId', required: false, type: Number })
-    @ApiQuery({ name: 'maxId', required: false, type: Number })
+    @ApiQuery({ name: 'chatId', required: true, description: 'Chat ID to get media from' })
+    @ApiQuery({ name: 'types', required: false, enum: ['photo', 'video', 'document', 'voice'], isArray: true })
+    @ApiQuery({ name: 'startDate', required: false, description: 'Filter media after this date' })
+    @ApiQuery({ name: 'endDate', required: false, description: 'Filter media before this date' })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of media items to fetch' })
+    @ApiQuery({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' })
+    @ApiQuery({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' })
     @ApiResponse({ status: 200, type: [MediaMetadataDto] })
     async getFilteredMedia(
         @Param('mobile') mobile: string,
@@ -530,9 +530,9 @@ export class TelegramController {
     @Get('dialogs/:mobile')
     @ApiOperation({ summary: 'Get all dialogs' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'limit', description: 'Number of dialogs to fetch', required: false, type: Number })
-    @ApiQuery({ name: 'offsetId', description: 'Number of dialogs to fetch', required: false, type: Number })
-    @ApiQuery({ name: 'archived', description: 'Include archived chats', required: false, type: Boolean })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 })
+    @ApiQuery({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 })
+    @ApiQuery({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false })
     async getAllDialogs(
         @Param('mobile') mobile: string,
         @Query('limit') limit: number = 500,
