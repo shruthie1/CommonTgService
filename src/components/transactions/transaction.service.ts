@@ -22,7 +22,7 @@ export class TransactionService {
       const existingTransaction = await this.transactionModel
         .findOne({ transactionId: createTransactionDto.transactionId })
         .exec();
-      
+
       if (existingTransaction) {
         throw new BadRequestException('Transaction with this ID already exists');
       }
@@ -72,28 +72,28 @@ export class TransactionService {
       const orConditions = [];
 
       if (filters.transactionId) {
-        orConditions.push({ transactionId: { $regex: filters.transactionId, $options: 'i' } });
+        orConditions.push({ transactionId: filters.transactionId.toLowerCase() });
       }
       if (filters.amount) {
         orConditions.push({ amount: filters.amount });
       }
       if (filters.issue) {
-        orConditions.push({ issue: { $regex: filters.issue, $options: 'i' } });
+        orConditions.push({ issue: filters.issue });
       }
       if (filters.refundMethod) {
-        orConditions.push({ refundMethod: { $regex: filters.refundMethod, $options: 'i' } });
+        orConditions.push({ refundMethod: filters.refundMethod });
       }
       if (filters.profile) {
-        orConditions.push({ profile: { $regex: filters.profile, $options: 'i' } });
+        orConditions.push({ profile: filters.profile });
       }
       if (filters.chatId) {
-        orConditions.push({ chatId: { $regex: filters.chatId, $options: 'i' } });
+        orConditions.push({ chatId: filters.chatId });
       }
       if (filters.status) {
-        orConditions.push({ status: { $regex: filters.status, $options: 'i' } });
+        orConditions.push({ status: filters.status });
       }
       if (filters.ip) {
-        orConditions.push({ ip: { $regex: filters.ip, $options: 'i' } });
+        orConditions.push({ ip: filters.ip });
       }
 
       const query = orConditions.length > 0 ? { $or: orConditions } : {};
@@ -121,9 +121,9 @@ export class TransactionService {
     this.logger.debug(`Updating transaction ${id} with data: ${JSON.stringify(updateTransactionDto)}`);
     try {
       const updatedTransaction = await this.transactionModel
-        .findByIdAndUpdate(id, updateTransactionDto, { 
+        .findByIdAndUpdate(id, updateTransactionDto, {
           new: true,
-          runValidators: true 
+          runValidators: true
         })
         .exec();
 
