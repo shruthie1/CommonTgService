@@ -7,7 +7,7 @@ export declare class TransactionController {
     constructor(transactionService: TransactionService);
     create(createTransactionDto: CreateTransactionDto): Promise<Transaction>;
     findOne(id: string): Promise<Transaction>;
-    findAll(transactionId?: string, amount?: number, issue?: string, refundMethod?: string, profile?: string, chatId?: string, status?: string, limit?: number, offset?: number): Promise<{
+    findAll(transactionId?: string, amount?: number, issue?: string, refundMethod?: string, profile?: string, chatId?: string, ip?: string, status?: string, limit?: number, offset?: number): Promise<{
         transactions: Transaction[];
         total: number;
     }>;
