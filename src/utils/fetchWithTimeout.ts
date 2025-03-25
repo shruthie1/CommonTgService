@@ -72,7 +72,7 @@ export async function fetchWithTimeout(
                     return bypassResponse;
                 } catch (bypassError) {
                     const errorDetails = extractMessage(parseError(bypassError, `host: ${host}\nendpoint:${endpoint}`, false));
-                    notify(`Bypass attempt failed`, `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}`);
+                    notify(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${errorDetails.length < 250 ? `msg: ${errorDetails}` : "msg: Message too long"}` });
                     return undefined;
                 }
             }
@@ -87,7 +87,7 @@ export async function fetchWithTimeout(
         }
     }
     const errorData = extractMessage(parseError(lastError, `${process.env.clientId} host: ${host}\nendpoint:${endpoint}`, false));
-    notify(`All ${maxRetries} retries exhausted`, `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}`);
+    notify(`All ${maxRetries} retries exhausted`, { message: `${errorData.length < 250 ? `msg: ${errorData}` : "msg: Message too long"}` });
     return undefined;
 }
 

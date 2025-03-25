@@ -1,38 +1,44 @@
-const notifbottokens: string[] = [
-    // '5856546982:AAEW5QCbfb7nFAcmsTyVjHXyV86TVVLcL_g',
-    '8010207494:AAEHuVAE004SdqMpBUNzcLB_NKndXRMAcu0',
-    '7628485611:AAECLtviheixcYoEBL_EhfsCegct7lgV-Zk',
-    '7940072383:AAHwRu4_4QWqeuC4ZClS9OiSfBOVQ7TvGHw'
-];
-let currentNotifTokenIndex = 0;
+const getBotTokens = () => {
+    const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
+    if (botTokens.length === 0) {
+        throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
+    }
+    return botTokens;
+};
+
+let botTokens: string[] | null = null;
+let currentTokenIndex = 0;
+
+const initializeBotTokens = () => {
+    if (botTokens === null) {
+        botTokens = getBotTokens();
+    }
+    return botTokens;
+};
+
+export function getBotToken() {
+    return initializeBotTokens()[currentTokenIndex];
+}
 
 export function notifbot(chatId: string = process.env.accountsChannel || "-1001801844217", botToken?: string): string {
-    const token = botToken || notifbottokens[currentNotifTokenIndex];
+    const tokens = initializeBotTokens();
+    const token = botToken || tokens[currentTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
 
     if (!botToken) {
-        currentNotifTokenIndex = (currentNotifTokenIndex + 1) % notifbottokens.length;
+        currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
     }
 
     return apiUrl;
 }
 
-const ppplbottokens: string[] = [
-    '7281017483:AAGoeVPH98k8rXUpoR22XomfAL7PzMtJVVk',
-    '7499764732:AAH3flZUF7J1zwK1xac8fI50lR24WeQAbNo',
-    '6735591051:AAELwIkSHegcBIVv5pf484Pn09WNQj1Nl54',
-    // '6624618034:AAHoM3GYaw3_uRadOWYzT7c2OEp6a7A61mY',
-    '7652714487:AAEMj_9bql6pnAWlrqzHodHO_-QGbwBwnyw',
-    '6607225097:AAG6DJg9Ll5XVxy24Nr449LTZgRb5bgshUA'
-];
-let currentPpplTokenIndex = 0;
-
 export function ppplbot(chatId: string = process.env.updatesChannel || '-1001972065816', botToken?: string): string {
-    const token = botToken || ppplbottokens[currentPpplTokenIndex];
+    const tokens = initializeBotTokens();
+    const token = botToken || tokens[currentTokenIndex];
     const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
 
     if (!botToken) {
-        currentPpplTokenIndex = (currentPpplTokenIndex + 1) % ppplbottokens.length;
+        currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
     }
 
     return apiUrl;

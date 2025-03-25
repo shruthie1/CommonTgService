@@ -211,6 +211,7 @@ class TelegramManager {
             try {
                 console.log("Destroying Client: ", this.phoneNumber);
                 await this.cleanupClient();
+                console.log("Client Destroyed finally: ", this.phoneNumber);
             }
             catch (error) {
                 console.error("Error during disconnect:", error);
@@ -226,11 +227,13 @@ class TelegramManager {
             for (const handler of handlers) {
                 this.client.removeEventHandler(handler[1], handler[0]);
             }
+            console.debug("Removing all handlers");
             try {
                 if (this.client.connected) {
                     await this.client.disconnect();
                 }
                 await this.client.destroy();
+                console.debug("Client destroyed");
             }
             catch (error) {
                 (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
@@ -242,6 +245,7 @@ class TelegramManager {
             this.channelArray = [];
             this.client = null;
             await (0, Helpers_1.sleep)(2000);
+            console.log("Client Destroyed: ", this.phoneNumber);
         }
         catch (error) {
             (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);

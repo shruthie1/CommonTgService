@@ -16,6 +16,7 @@ import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } f
 import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -945,5 +946,88 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Get top private chats');
         return await telegramClient.getTopPrivateChats();
+    }
+
+    async addBotsToChannel(
+        mobile: string,
+        channelIds: string[] = [process.env.accountsChannel, process.env.updatesChannel, process.env.notifChannel, "miscmessages", process.env.httpFailuresChannel],
+    ) {
+        this.logger.logOperation(mobile, 'Add bots to channel', { channelIds });
+        const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
+        if (botTokens.length === 0) {
+            throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
+        }
+        for (const token of botTokens) {
+            try {
+                const botInfo = await this.getBotInfo(token);
+                if (botInfo) {
+                    for (const channelId of channelIds) {
+                        await this.setupBotInChannel(mobile, channelId, botInfo.id, botInfo.username, {
+                            changeInfo: true,
+                            postMessages: true,
+                            editMessages: true,
+                            deleteMessages: true,
+                            banUsers: true,
+                            inviteUsers: true,
+                            pinMessages: true,
+                            addAdmins: true,
+                            anonymous: false,
+                            manageCall: false
+                        });
+                    };
+                }
+            } catch (error) {
+                this.logger.logError(mobile, 'Failed to setup bot in channel', error);
+            }
+        }
+
+
+    }
+
+    async getBotInfo(token: string) {
+        try {
+            const response = await fetchWithTimeout(`https://api.telegram.org/bot${token}/getMe`);
+            if (response.data?.ok) {
+                return response.data.result;
+            }
+            throw new Error('Failed to get bot info');
+        } catch (error) {
+            throw new Error(`Failed to get bot info: ${error.message}`);
+        }
+    }
+
+    async setupBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }): Promise<void> {
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.logOperation(mobile, 'Setup bot in channel', { channelId, botId, botUsername });
+        try {
+            await telegramClient.joinChannel(channelId);
+        } catch (error) {
+            this.logger.logError(mobile, 'Failed to join channel', error);
+        }
+        try {
+            await telegramClient.addGroupMembers(channelId, [botUsername]);
+            this.logger.logOperation(mobile, 'Bot added to channel', { channelId, botUsername });
+            await sleep(2000);
+            this.logger.logOperation(mobile, `Bot ${botUsername} successfully added to channel ${channelId}`);
+        } catch (error) {
+            this.logger.logError(mobile, `Failed to add bot ${botUsername} to channel ${channelId}`, error);
+        }
+        try {
+            await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
+            console.log(`Bot ${botUsername} promoted as admin in channel ${channelId}`);
+        } catch (error) {
+            this.logger.logError(mobile, `Failed to setup bot ${botUsername} in channel ${channelId}`, error);
+        }
     }
 }

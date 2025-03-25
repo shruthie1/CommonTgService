@@ -245,7 +245,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -461,4 +461,18 @@ export declare class TelegramService implements OnModuleDestroy {
             textMessages: number;
         };
     }[]>;
+    addBotsToChannel(mobile: string, channelIds?: string[]): Promise<void>;
+    getBotInfo(token: string): Promise<any>;
+    setupBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }): Promise<void>;
 }

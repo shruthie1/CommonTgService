@@ -16,10 +16,14 @@ exports.ConfigurationService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let ConfigurationService = class ConfigurationService {
     constructor(configurationModel) {
         this.configurationModel = configurationModel;
-        this.setEnv();
+        this.setEnv().then(() => {
+            (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
+        });
     }
     async OnModuleInit() {
         console.log("Config Module Inited");

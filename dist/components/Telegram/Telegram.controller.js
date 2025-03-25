@@ -344,6 +344,9 @@ let TelegramController = class TelegramController {
     async getTopPrivateChats(mobile) {
         return this.telegramService.getTopPrivateChats(mobile);
     }
+    async addBotsToChannel(mobile, body) {
+        return this.telegramService.addBotsToChannel(mobile, body.channelIds);
+    }
 };
 exports.TelegramController = TelegramController;
 __decorate([
@@ -1151,6 +1154,31 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getTopPrivateChats", null);
+__decorate([
+    (0, common_1.Post)('bots/add-to-channel/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Add bots to channel with admin privileges' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                channelIds: {
+                    type: 'array',
+                    items: {
+                        type: 'string'
+                    },
+                    description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.'
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bots added to channels successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "addBotsToChannel", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

@@ -1026,4 +1026,29 @@ export class TelegramController {
     async getTopPrivateChats(@Param('mobile') mobile: string) {
         return this.telegramService.getTopPrivateChats(mobile);
     }
+
+    @Post('bots/add-to-channel/:mobile')
+    @ApiOperation({ summary: 'Add bots to channel with admin privileges' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                channelIds: {
+                    type: 'array',
+                    items: {
+                        type: 'string'
+                    },
+                    description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.'
+                }
+            }
+        }
+    })
+    @ApiResponse({ status: 200, description: 'Bots added to channels successfully' })
+    async addBotsToChannel(
+        @Param('mobile') mobile: string,
+        @Body() body: { channelIds?: string[] }
+    ) {
+        return this.telegramService.addBotsToChannel(mobile, body.channelIds);
+    }
 }
