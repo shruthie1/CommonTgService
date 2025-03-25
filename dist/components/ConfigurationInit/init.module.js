@@ -20,15 +20,19 @@ const init_service_1 = require("./init.service");
 const configuration_schema_1 = require("./configuration.schema");
 const init_controller_1 = require("./init.controller");
 const mongoose_2 = require("mongoose");
+const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 let initModule = class initModule {
     constructor(connection) {
         this.connection = connection;
     }
     async onModuleInit() {
         console.log(`Started :: ${process.env.clientId}`);
+        (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
     }
     async onModuleDestroy() {
         console.log("Init Module Destroying");
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`closed :: ${process.env.clientId}`)}`);
         this.closeConnection();
     }
     closeConnection() {
