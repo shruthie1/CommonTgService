@@ -84,6 +84,9 @@ let TransactionService = TransactionService_1 = class TransactionService {
             if (filters.status) {
                 orConditions.push({ status: { $regex: filters.status, $options: 'i' } });
             }
+            if (filters.ip) {
+                orConditions.push({ ip: { $regex: filters.ip, $options: 'i' } });
+            }
             const query = orConditions.length > 0 ? { $or: orConditions } : {};
             const [transactions, total] = await Promise.all([
                 this.transactionModel

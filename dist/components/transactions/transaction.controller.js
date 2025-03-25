@@ -29,8 +29,8 @@ let TransactionController = class TransactionController {
     async findOne(id) {
         return this.transactionService.findOne(id);
     }
-    async findAll(transactionId, amount, issue, refundMethod, profile, chatId, status, limit, offset) {
-        return this.transactionService.findAll({ transactionId, amount, issue, refundMethod, profile, chatId, status }, limit, offset);
+    async findAll(transactionId, amount, issue, refundMethod, profile, chatId, ip, status, limit, offset) {
+        return this.transactionService.findAll({ transactionId, amount, issue, refundMethod, profile, chatId, status, ip }, limit, offset);
     }
     async update(id, updateTransactionDto) {
         return this.transactionService.update(id, updateTransactionDto);
@@ -102,6 +102,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'refundMethod', required: false, description: 'Filter by refund method' }),
     (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'Filter by user profile' }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Filter by chat ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'ip', required: false, description: 'Filter by IP address' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by transaction status' }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: 'number', description: 'Number of records to return', example: 10 }),
     (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: 'number', description: 'Number of records to skip', example: 0 }),
@@ -111,11 +112,12 @@ __decorate([
     __param(3, (0, common_1.Query)('refundMethod')),
     __param(4, (0, common_1.Query)('profile')),
     __param(5, (0, common_1.Query)('chatId')),
-    __param(6, (0, common_1.Query)('status')),
-    __param(7, (0, common_1.Query)('limit')),
-    __param(8, (0, common_1.Query)('offset')),
+    __param(6, (0, common_1.Query)('ip')),
+    __param(7, (0, common_1.Query)('status')),
+    __param(8, (0, common_1.Query)('limit')),
+    __param(9, (0, common_1.Query)('offset')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, String, String, String, String, String, Number, Number]),
+    __metadata("design:paramtypes", [String, Number, String, String, String, String, String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TransactionController.prototype, "findAll", null);
 __decorate([

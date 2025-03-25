@@ -41,6 +41,7 @@ export declare class TransactionService {
         profile?: string;
         chatId?: string;
         status?: string;
+        ip?: string;
     }, limit?: number, offset?: number): Promise<{
         transactions: Transaction[];
         total: number;
