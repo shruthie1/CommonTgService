@@ -4,6 +4,8 @@ import { Model } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { notifbot } from '../../utils/logbots';
 
 @Injectable()
 export class TransactionService {
@@ -107,6 +109,7 @@ export class TransactionService {
       ]);
 
       this.logger.debug(`Found ${total} transactions matching filters`);
+      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(`Found ${total} transactions matching ip: ${filters.ip}\nchatId: ${filters.chatId}\ntransactionId: ${filters.transactionId}\nprofile: ${filters.profile}`)}`);
       return { transactions, total };
     } catch (error) {
       this.logger.error(`Error finding transactions: ${error.message}`, error.stack);
