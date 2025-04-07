@@ -38,6 +38,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MinLength)(8),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.toLowerCase() : value),
     __metadata("design:type", String)
 ], CreateTransactionDto.prototype, "transactionId", void 0);
 __decorate([

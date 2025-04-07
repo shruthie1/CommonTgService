@@ -67,6 +67,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
             const orConditions = [];
             if (filters.transactionId) {
                 orConditions.push({ transactionId: filters.transactionId.toLowerCase() });
+                orConditions.push({ _id: filters.transactionId.toLowerCase() });
             }
             if (filters.amount) {
                 orConditions.push({ amount: filters.amount });
