@@ -6,6 +6,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import e from 'express';
 
 @Injectable()
 export class TransactionService {
@@ -13,7 +14,7 @@ export class TransactionService {
 
   constructor(
     @InjectModel(Transaction.name) private readonly transactionModel: Model<TransactionDocument>,
-  ) {}
+  ) { }
 
   async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
     this.logger.log(`Creating new transaction: ${JSON.stringify(createTransactionDto)}`);
@@ -74,27 +75,32 @@ export class TransactionService {
       if (filters.transactionId) {
         orConditions.push({ transactionId: filters.transactionId.toLowerCase() });
         orConditions.push({ _id: filters.transactionId.toLowerCase() });
-      }
-      if (filters.amount) {
-        orConditions.push({ amount: filters.amount });
-      }
-      if (filters.issue) {
-        orConditions.push({ issue: filters.issue });
-      }
-      if (filters.refundMethod) {
-        orConditions.push({ refundMethod: filters.refundMethod });
-      }
-      if (filters.profile) {
-        orConditions.push({ profile: filters.profile });
-      }
-      if (filters.chatId) {
+      } else if (filters.chatId) {
         orConditions.push({ chatId: filters.chatId });
-      }
-      if (filters.status) {
-        orConditions.push({ status: filters.status });
-      }
-      if (filters.ip) {
+      } else if (filters.ip) {
         orConditions.push({ ip: filters.ip });
+      } else {
+        if (filters.profile) {
+          orConditions.push({ profile: filters.profile });
+        }
+        if (filters.amount) {
+          orConditions.push({ amount: filters.amount });
+        }
+        if (filters.issue) {
+          orConditions.push({ issue: filters.issue });
+        }
+        if (filters.refundMethod) {
+          orConditions.push({ refundMethod: filters.refundMethod });
+        }
+        if (filters.profile) {
+          orConditions.push({ profile: filters.profile });
+        }
+        if (filters.chatId) {
+          orConditions.push({ chatId: filters.chatId });
+        }
+        if (filters.status) {
+          orConditions.push({ status: filters.status });
+        }
       }
 
       const query = orConditions.length > 0 ? { $or: orConditions } : {};
