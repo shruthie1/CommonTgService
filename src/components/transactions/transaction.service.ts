@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
@@ -77,12 +77,16 @@ export class TransactionService {
       // Check each condition sequentially, only moving to the next if no results are found
       if (filters.transactionId) {
         // First check transactionId
-        const transactionIdQuery = { 
+        const transactionIdQuery: any = { 
           $or: [
-            { transactionId: filters.transactionId.toLowerCase() },
-            { _id: filters.transactionId.toLowerCase() }
+            { transactionId: filters.transactionId.toLowerCase() }
           ] 
         };
+        
+        // Only attempt to query by _id if the ID is a valid MongoDB ObjectId
+        if (isValidObjectId(filters.transactionId)) {
+          transactionIdQuery.$or.push({ _id: filters.transactionId });
+        }
         
         [transactions, total] = await Promise.all([
           this.transactionModel

@@ -70,10 +70,12 @@ let TransactionService = TransactionService_1 = class TransactionService {
             if (filters.transactionId) {
                 const transactionIdQuery = {
                     $or: [
-                        { transactionId: filters.transactionId.toLowerCase() },
-                        { _id: filters.transactionId.toLowerCase() }
+                        { transactionId: filters.transactionId.toLowerCase() }
                     ]
                 };
+                if ((0, mongoose_2.isValidObjectId)(filters.transactionId)) {
+                    transactionIdQuery.$or.push({ _id: filters.transactionId });
+                }
                 [transactions, total] = await Promise.all([
                     this.transactionModel
                         .find(transactionIdQuery)
