@@ -46,6 +46,7 @@ export declare class TransactionService {
         transactions: Transaction[];
         total: number;
     }>;
+    private sendNotification;
     update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<Transaction>;
     delete(id: string): Promise<Transaction>;
 }
