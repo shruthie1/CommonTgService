@@ -70,57 +70,118 @@ export class TransactionService {
   ): Promise<{ transactions: Transaction[]; total: number }> {
     this.logger.debug(`Finding transactions with filters: ${JSON.stringify(filters)}`);
     try {
-      const orConditions = [];
+      let query = {};
+      let transactions: Transaction[] = [];
+      let total = 0;
 
+      // Check each condition sequentially, only moving to the next if no results are found
       if (filters.transactionId) {
-        orConditions.push({ transactionId: filters.transactionId.toLowerCase() });
-        orConditions.push({ _id: filters.transactionId.toLowerCase() });
-      } else if (filters.chatId) {
-        orConditions.push({ chatId: filters.chatId });
-      } else if (filters.ip) {
-        orConditions.push({ ip: filters.ip });
-      } else {
-        if (filters.profile) {
-          orConditions.push({ profile: filters.profile });
-        }
-        if (filters.amount) {
-          orConditions.push({ amount: filters.amount });
-        }
-        if (filters.issue) {
-          orConditions.push({ issue: filters.issue });
-        }
-        if (filters.refundMethod) {
-          orConditions.push({ refundMethod: filters.refundMethod });
-        }
-        if (filters.profile) {
-          orConditions.push({ profile: filters.profile });
-        }
-        if (filters.chatId) {
-          orConditions.push({ chatId: filters.chatId });
-        }
-        if (filters.status) {
-          orConditions.push({ status: filters.status });
+        // First check transactionId
+        const transactionIdQuery = { 
+          $or: [
+            { transactionId: filters.transactionId.toLowerCase() },
+            { _id: filters.transactionId.toLowerCase() }
+          ] 
+        };
+        
+        [transactions, total] = await Promise.all([
+          this.transactionModel
+            .find(transactionIdQuery)
+            .sort({ createdAt: -1 })
+            .skip(offset)
+            .limit(limit)
+            .exec(),
+          this.transactionModel.countDocuments(transactionIdQuery).exec(),
+        ]);
+        
+        if (total > 0) {
+          this.logger.debug(`Found ${total} transactions matching transactionId: ${filters.transactionId}`);
+          await this.sendNotification(filters, total);
+          return { transactions, total };
         }
       }
+      
+      if (filters.ip) {
+        // Then check IP if no transaction ID match
+        query = { ip: filters.ip };
+        
+        [transactions, total] = await Promise.all([
+          this.transactionModel
+            .find(query)
+            .sort({ createdAt: -1 })
+            .skip(offset)
+            .limit(limit)
+            .exec(),
+          this.transactionModel.countDocuments(query).exec(),
+        ]);
+        
+        if (total > 0) {
+          this.logger.debug(`Found ${total} transactions matching ip: ${filters.ip}`);
+          await this.sendNotification(filters, total);
+          return { transactions, total };
+        }
+      }
+      
+      if (filters.chatId) {
+        // Then check chatId if no IP match
+        query = { chatId: filters.chatId };
+        
+        [transactions, total] = await Promise.all([
+          this.transactionModel
+            .find(query)
+            .sort({ createdAt: -1 })
+            .skip(offset)
+            .limit(limit)
+            .exec(),
+          this.transactionModel.countDocuments(query).exec(),
+        ]);
+        
+        if (total > 0) {
+          this.logger.debug(`Found ${total} transactions matching chatId: ${filters.chatId}`);
+          await this.sendNotification(filters, total);
+          return { transactions, total };
+        }
+      }
+      
+      // Finally, check remaining filters
+      const remainingFilters = {};
+      
+      if (filters.profile) remainingFilters['profile'] = filters.profile;
+      if (filters.amount) remainingFilters['amount'] = filters.amount;
+      if (filters.issue) remainingFilters['issue'] = filters.issue;
+      if (filters.refundMethod) remainingFilters['refundMethod'] = filters.refundMethod;
+      if (filters.status) remainingFilters['status'] = filters.status;
+      
+      // Only proceed if at least one remaining filter exists
+      if (Object.keys(remainingFilters).length > 0) {
+        query = remainingFilters;
+        
+        [transactions, total] = await Promise.all([
+          this.transactionModel
+            .find(query)
+            .sort({ createdAt: -1 })
+            .skip(offset)
+            .limit(limit)
+            .exec(),
+          this.transactionModel.countDocuments(query).exec(),
+        ]);
+      }
 
-      const query = orConditions.length > 0 ? { $or: orConditions } : {};
-
-      const [transactions, total] = await Promise.all([
-        this.transactionModel
-          .find(query)
-          .sort({ createdAt: -1 })
-          .skip(offset)
-          .limit(limit)
-          .exec(),
-        this.transactionModel.countDocuments(query).exec(),
-      ]);
-
-      this.logger.debug(`Found ${total} transactions matching filters`);
-      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(`Found ${total} transactions matching ip: ${filters.ip}\nchatId: ${filters.chatId}\ntransactionId: ${filters.transactionId}\nprofile: ${filters.profile}`)}`);
+      this.logger.debug(`Found ${total} transactions matching remaining filters`);
+      await this.sendNotification(filters, total);
       return { transactions, total };
     } catch (error) {
       this.logger.error(`Error finding transactions: ${error.message}`, error.stack);
       throw new BadRequestException('Failed to fetch transactions');
+    }
+  }
+
+  // Helper method to send notification
+  private async sendNotification(filters: any, total: number): Promise<void> {
+    try {
+      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(`Found ${total} transactions matching ip: ${filters.ip || 'N/A'}\nchatId: ${filters.chatId || 'N/A'}\ntransactionId: ${filters.transactionId || 'N/A'}\nprofile: ${filters.profile || 'N/A'}`)}`);
+    } catch (error) {
+      this.logger.error(`Failed to send notification: ${error.message}`);
     }
   }
 
