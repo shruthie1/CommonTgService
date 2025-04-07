@@ -18,6 +18,7 @@ export class CreateTransactionDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
+  @Transform(({ value }) => typeof value === 'string' ? value.toLowerCase() : value)
   transactionId: string;
 
   @ApiProperty({ 

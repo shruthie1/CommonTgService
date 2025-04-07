@@ -73,6 +73,7 @@ export class TransactionService {
 
       if (filters.transactionId) {
         orConditions.push({ transactionId: filters.transactionId.toLowerCase() });
+        orConditions.push({ _id: filters.transactionId.toLowerCase() });
       }
       if (filters.amount) {
         orConditions.push({ amount: filters.amount });
