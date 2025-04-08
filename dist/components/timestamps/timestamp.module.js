@@ -25,7 +25,7 @@ exports.TimestampModule = TimestampModule = __decorate([
                     collection: 'timestamps',
                     schema: timestamps_schema_1.TimestampSchema
                 }]),
-            client_module_1.ClientModule,
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
         ],
         providers: [timestamp_service_1.TimestampService],
         controllers: [timestamp_controller_1.TimestampController],

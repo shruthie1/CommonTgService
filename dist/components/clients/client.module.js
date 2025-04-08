@@ -18,6 +18,7 @@ const users_module_1 = require("../users/users.module");
 const archived_client_module_1 = require("../archived-clients/archived-client.module");
 const init_module_1 = require("../ConfigurationInit/init.module");
 const npoint_module_1 = require("../n-point/npoint.module");
+const timestamp_module_1 = require("../timestamps/timestamp.module");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -30,6 +31,7 @@ exports.ClientModule = ClientModule = __decorate([
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => archived_client_module_1.ArchivedClientModule),
+            (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
             npoint_module_1.NpointModule
         ],
         controllers: [client_controller_1.ClientController],

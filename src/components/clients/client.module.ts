@@ -9,15 +9,17 @@ import { UsersModule } from '../users/users.module';
 import { ArchivedClientModule } from '../archived-clients/archived-client.module';
 import { initModule } from '../ConfigurationInit/init.module';
 import { NpointModule } from '../n-point/npoint.module';
+import { TimestampModule } from '../timestamps/timestamp.module';
 
 @Module({
   imports: [
     initModule,
     MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
-    forwardRef(()=>TelegramModule),
-    forwardRef(()=>BufferClientModule),
-    forwardRef(()=>UsersModule),
-    forwardRef(()=>ArchivedClientModule),
+    forwardRef(() => TelegramModule),
+    forwardRef(() => BufferClientModule),
+    forwardRef(() => UsersModule),
+    forwardRef(() => ArchivedClientModule),
+    forwardRef(() => TimestampModule),
     NpointModule
   ],
   controllers: [ClientController],

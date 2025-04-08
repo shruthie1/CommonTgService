@@ -1,4 +1,4 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TimestampService } from './timestamp.service';
 import { TimestampController } from './timestamp.controller';
@@ -13,7 +13,7 @@ import { ClientModule } from '../clients/client.module';
       collection: 'timestamps', 
       schema: TimestampSchema 
     }]),
-    ClientModule,
+    forwardRef(() => ClientModule),
   ],
   providers: [TimestampService],
   controllers: [TimestampController],
