@@ -130,7 +130,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 await connection_manager_1.connectionManager.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
                 const clients = await this.promoteClientModel.find({
-                    channels: { "$lt": 250 },
+                    channels: { "$lt": 300 },
                     mobile: { $nin: existingkeys }
                 }).sort({ channels: 1 }).limit(4);
                 this.logger.debug(`Found ${clients.length} clients to process`);
