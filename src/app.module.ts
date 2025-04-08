@@ -21,6 +21,7 @@ import { PromoteClientModule } from './components/promote-clients/promote-client
 import { TgSignupModule } from './components/TgSignup/TgSignup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
 import { NpointModule } from './components/n-point/npoint.module';
+import { TimestampModule } from './components/timestamps/timestamp.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { NpointModule } from './components/n-point/npoint.module';
     TgSignupModule,
     TransactionModule,
     NpointModule,
+    TimestampModule,
   ],
   controllers:[AppController],
   providers:[AppService],
@@ -57,7 +59,8 @@ import { NpointModule } from './components/n-point/npoint.module';
     ChannelsModule,
     PromoteClientModule,
     TgSignupModule,
-    TransactionModule
+    TransactionModule,
+    TimestampModule
   ]
 })
 export class AppModule implements NestModule {

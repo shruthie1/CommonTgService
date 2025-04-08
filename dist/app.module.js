@@ -30,6 +30,7 @@ const promote_client_module_1 = require("./components/promote-clients/promote-cl
 const TgSignup_module_1 = require("./components/TgSignup/TgSignup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
 const npoint_module_1 = require("./components/n-point/npoint.module");
+const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -58,6 +59,7 @@ exports.AppModule = AppModule = __decorate([
             TgSignup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
             npoint_module_1.NpointModule,
+            timestamp_module_1.TimestampModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
@@ -72,7 +74,8 @@ exports.AppModule = AppModule = __decorate([
             channels_module_1.ChannelsModule,
             promote_client_module_1.PromoteClientModule,
             TgSignup_module_1.TgSignupModule,
-            transaction_module_1.TransactionModule
+            transaction_module_1.TransactionModule,
+            timestamp_module_1.TimestampModule
         ]
     })
 ], AppModule);

@@ -107,6 +107,9 @@ __exportStar(require("./components/ConfigurationInit/configuration.schema"), exp
 __exportStar(require("./components/builds/build.module"), exports);
 __exportStar(require("./components/builds/build.service"), exports);
 __exportStar(require("./components/builds/builds.schema"), exports);
+__exportStar(require("./components/timestamps/timestamp.module"), exports);
+__exportStar(require("./components/timestamps/timestamp.service"), exports);
+__exportStar(require("./components/timestamps/timestamps.schema"), exports);
 __exportStar(require("./components/n-point/npoint.module"), exports);
 __exportStar(require("./components/n-point/npoint.service"), exports);
 __exportStar(require("./utils"), exports);
