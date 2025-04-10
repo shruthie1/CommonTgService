@@ -13,7 +13,7 @@ export class LoggerMiddleware implements NestMiddleware {
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
 
-        const excludedEndpoints = ['/sendtochannel', '/favicon.', '/tgsignup'];
+        const excludedEndpoints = ['/sendtochannel', '/favicon.', '/tgsignup', '/timestamps'];
         const isExcluded = (url: string) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
