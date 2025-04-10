@@ -47,9 +47,6 @@ let TimestampService = class TimestampService {
             if (difference > threshold) {
                 differences[key] = difference;
             }
-            else {
-                console.log(`Difference for ${key} is within the threshold: ${difference}ms`);
-            }
         });
         return differences;
     }
