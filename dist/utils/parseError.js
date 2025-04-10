@@ -1,115 +1,243 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseError = exports.extractMessage = void 0;
-const fetchWithTimeout_1 = require("./fetchWithTimeout");
+exports.ErrorUtils = exports.createError = exports.isAxiosError = exports.parseError = exports.extractMessage = void 0;
 const logbots_1 = require("./logbots");
-const extractMessage = (data) => {
-    if (Array.isArray(data)) {
-        return `${data.map((item) => (0, exports.extractMessage)(item)).join('\n')}`;
+const axios_1 = __importDefault(require("axios"));
+const DEFAULT_ERROR_CONFIG = {
+    maxMessageLength: 200,
+    notificationTimeout: 10000,
+    ignorePatterns: [
+        /INPUT_USER_DEACTIVATED/i,
+        /too many req/i,
+        /could not find/i,
+        /ECONNREFUSED/i
+    ],
+    defaultStatus: 500,
+    defaultMessage: 'An unknown error occurred',
+    defaultError: 'UnknownError'
+};
+function safeStringify(data, depth = 0, maxDepth = 3) {
+    if (depth > maxDepth) {
+        return '[Max Depth Reached]';
     }
-    if (typeof data === 'string' ||
-        typeof data === 'number' ||
-        typeof data === 'boolean') {
+    try {
+        if (data === null || data === undefined) {
+            return String(data);
+        }
+        if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+            return String(data);
+        }
+        if (data instanceof Error) {
+            return data.message || data.toString();
+        }
+        if (Array.isArray(data)) {
+            if (data.length === 0)
+                return '[]';
+            return `[${data.map(item => safeStringify(item, depth + 1, maxDepth)).join(', ')}]`;
+        }
+        if (typeof data === 'object') {
+            const entries = Object.entries(data)
+                .filter(([_, v]) => v !== undefined && v !== null)
+                .map(([k, v]) => `${k}: ${safeStringify(v, depth + 1, maxDepth)}`);
+            if (entries.length === 0)
+                return '{}';
+            return `{${entries.join(', ')}}`;
+        }
         return String(data);
     }
-    if (typeof data === 'object' && data !== null) {
-        const messages = [];
-        for (const key in data) {
-            const value = data[key];
-            const newPrefix = key;
-            if (Array.isArray(value)) {
-                messages.push(`${newPrefix}=${value.map((item) => (0, exports.extractMessage)(item)).join('\n')}`);
-            }
-            else if (typeof value === 'string' ||
-                typeof value === 'number' ||
-                typeof value === 'boolean') {
-                messages.push(`${newPrefix}=${value}`);
-            }
-            else if (typeof value === 'object' && value !== null) {
-                messages.push(String((0, exports.extractMessage)(value)));
-            }
-        }
-        return messages.length > 0 ? messages.join('\n') : '';
+    catch (error) {
+        return `[Error Stringifying: ${error instanceof Error ? error.message : String(error)}]`;
     }
-    return '';
-};
+}
+function extractMessage(data, path = '', depth = 0, maxDepth = 5) {
+    try {
+        if (depth > maxDepth) {
+            return `${path}=[Max Depth Reached]`;
+        }
+        if (data === null || data === undefined) {
+            return '';
+        }
+        if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+            return path ? `${path}=${data}` : String(data);
+        }
+        if (data instanceof Error) {
+            const errorInfo = [
+                data.message ? `message=${data.message}` : '',
+                data.name ? `name=${data.name}` : '',
+                data.stack ? `stack=${data.stack.split('\n')[0]}` : ''
+            ].filter(Boolean).join('\n');
+            return path ? `${path}=(${errorInfo})` : errorInfo;
+        }
+        if (Array.isArray(data)) {
+            if (data.length === 0) {
+                return '';
+            }
+            return data
+                .map((item, index) => extractMessage(item, path ? `${path}[${index}]` : `[${index}]`, depth + 1, maxDepth))
+                .filter(Boolean)
+                .join('\n');
+        }
+        if (typeof data === 'object') {
+            const messages = [];
+            for (const key of Object.keys(data)) {
+                const value = data[key];
+                const newPath = path ? `${path}.${key}` : key;
+                const extracted = extractMessage(value, newPath, depth + 1, maxDepth);
+                if (extracted) {
+                    messages.push(extracted);
+                }
+            }
+            return messages.join('\n');
+        }
+        return '';
+    }
+    catch (error) {
+        console.error("Error in extractMessage:", error);
+        return `Error extracting message: ${error instanceof Error ? error.message : String(error)}`;
+    }
+}
 exports.extractMessage = extractMessage;
-function parseError(err, prefix, sendErr = true) {
-    const clientId = process.env.clientId || 'UnknownClient';
-    const notifChannel = process.env.notifChannel || 'UnknownChannel';
-    const prefixStr = `${clientId} - ${prefix || ''}`;
-    let status = 500;
-    let message = 'An unknown error occurred';
-    let error = 'UnknownError';
-    if (!err) {
-        message = 'No error object provided';
-        error = 'NoErrorObject';
+async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout) {
+    try {
+        if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+            console.error("Invalid notification URL:", url);
+            return undefined;
+        }
+        return await axios_1.default.get(url, {
+            timeout,
+            validateStatus: status => status < 500
+        });
     }
-    else if (err.response) {
+    catch (error) {
+        console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+        return undefined;
+    }
+}
+function shouldIgnoreError(message, status, patterns) {
+    if (status === 429)
+        return true;
+    return patterns.some(pattern => pattern.test(message));
+}
+function extractStatusCode(err, defaultStatus) {
+    if (!err)
+        return defaultStatus;
+    if (err.response) {
         const response = err.response;
-        status =
-            response.data?.statusCode ||
-                response.data?.status ||
-                response.data?.ResponseCode ||
-                response.status ||
-                err.status ||
-                500;
-        message =
-            response.data?.message ||
-                response.data?.errors ||
-                response.data?.ErrorMessage ||
-                response.data?.errorMessage ||
-                response.data?.UserMessage ||
-                response.data ||
-                response.message ||
-                response.statusText ||
-                err.message ||
-                'An error occurred';
-        error =
-            response.data?.error || response.error || err.name || err.code || 'Error';
+        return response.data?.statusCode ||
+            response.data?.status ||
+            response.data?.ResponseCode ||
+            response.status ||
+            err.status ||
+            defaultStatus;
     }
-    else if (err.request) {
-        status = err.status || 408;
-        message =
-            err.data?.message ||
-                err.data?.errors ||
-                err.data?.ErrorMessage ||
-                err.data?.errorMessage ||
-                err.data?.UserMessage ||
-                err.data ||
-                err.message ||
-                err.statusText ||
-                'The request was triggered but no response was received';
-        error = err.name || err.code || 'NoResponseError';
+    return err.statusCode || err.status || defaultStatus;
+}
+function extractErrorMessage(err, defaultMessage) {
+    if (!err)
+        return defaultMessage;
+    if (err.response?.data) {
+        const responseData = err.response.data;
+        return responseData.message ||
+            responseData.errors ||
+            responseData.ErrorMessage ||
+            responseData.errorMessage ||
+            responseData.UserMessage ||
+            (typeof responseData === 'string' ? responseData : null) ||
+            err.response.statusText ||
+            err.message ||
+            defaultMessage;
     }
-    else if (err.message) {
-        status = err.status || 500;
-        message = err.message;
-        error = err.name || err.code || 'Error';
+    if (err.request) {
+        return err.data?.message ||
+            err.data?.errors ||
+            err.data?.ErrorMessage ||
+            err.data?.errorMessage ||
+            err.data?.UserMessage ||
+            (typeof err.data === 'string' ? err.data : null) ||
+            err.message ||
+            err.statusText ||
+            'The request was triggered but no response was received';
     }
-    const fullMessage = `${prefixStr} :: ${(0, exports.extractMessage)(message)}`;
-    const response = { status, message: err.errorMessage ? err.errorMessage : String(fullMessage), error };
-    console.log("ParsedErr: ", {
-        fullMessage,
-        ...response
-    });
-    if (sendErr) {
+    return err.message || err.errorMessage || defaultMessage;
+}
+function extractErrorType(err, defaultError) {
+    if (!err)
+        return defaultError;
+    if (err.response?.data?.error) {
+        return err.response.data.error;
+    }
+    return err.error || err.name || err.code || defaultError;
+}
+function parseError(err, prefix, sendErr = true, config = {}) {
+    const fullConfig = { ...DEFAULT_ERROR_CONFIG, ...config };
+    try {
+        const clientId = process.env.clientId || 'UptimeChecker2';
+        const prefixStr = `${clientId}${prefix ? ` - ${prefix}` : ''}`;
+        const status = extractStatusCode(err, fullConfig.defaultStatus);
+        const rawMessage = extractErrorMessage(err, fullConfig.defaultMessage);
+        const error = extractErrorType(err, fullConfig.defaultError);
+        let extractedMessage;
         try {
-            const shouldSend = !fullMessage.includes("INPUT_USER_DEACTIVATED") &&
-                status.toString() !== "429" &&
-                !fullMessage.toLowerCase().includes("too many req") &&
-                !fullMessage.toLowerCase().includes('could not find') &&
-                !fullMessage.includes('ECONNREFUSED');
-            if (shouldSend) {
-                const notifUrl = `${(0, logbots_1.notifbot)()}&text=${prefixStr} :: ${err.errorMessage ? err.errorMessage : (0, exports.extractMessage)(message)}`;
-                (0, fetchWithTimeout_1.fetchWithTimeout)(notifUrl);
+            extractedMessage = typeof rawMessage === 'string' ? rawMessage : extractMessage(rawMessage);
+        }
+        catch (e) {
+            extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
+        }
+        const fullMessage = `${prefixStr} :: ${extractedMessage}`;
+        console.log("parsedErr: ", fullMessage);
+        const response = {
+            status,
+            message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
+            error,
+            raw: err
+        };
+        if (sendErr) {
+            try {
+                const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
+                if (!ignoreError) {
+                    const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
+                    const notifUrl = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
+                    sendNotification(notifUrl, fullConfig.notificationTimeout)
+                        .catch(e => console.error("Failed to send error notification:", e));
+                }
+            }
+            catch (notificationError) {
+                console.error('Failed to prepare error notification:', notificationError);
             }
         }
-        catch (fetchError) {
-            console.error('Failed to send error notification:', fetchError);
-        }
+        return response;
     }
-    return response;
+    catch (fatalError) {
+        console.error("Fatal error in parseError:", fatalError);
+        return {
+            status: fullConfig.defaultStatus,
+            message: "Error in error handling",
+            error: "FatalError",
+            raw: err
+        };
+    }
 }
 exports.parseError = parseError;
+function isAxiosError(error) {
+    return axios_1.default.isAxiosError(error);
+}
+exports.isAxiosError = isAxiosError;
+function createError(message, status = 500, errorType = 'ApplicationError') {
+    return {
+        status,
+        message,
+        error: errorType
+    };
+}
+exports.createError = createError;
+exports.ErrorUtils = {
+    parseError,
+    extractMessage,
+    sendNotification,
+    createError,
+    isAxiosError
+};
 //# sourceMappingURL=parseError.js.map
