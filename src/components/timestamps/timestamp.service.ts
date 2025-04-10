@@ -47,8 +47,6 @@ export class TimestampService {
             // Only include differences that are greater than the threshold
             if (difference > threshold) {
                 differences[key] = difference;
-            } else {
-                console.log(`Difference for ${key} is within the threshold: ${difference}ms`);
             }
         });
 
