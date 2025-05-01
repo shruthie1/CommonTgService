@@ -40,7 +40,7 @@ let UsersService = class UsersService {
             setTimeout(async () => {
                 await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
                 this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null);
-            }, 50 * 60000);
+            }, 3000);
             const newUser = new this.userModel(user);
             return newUser.save();
         }
