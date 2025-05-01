@@ -115,7 +115,6 @@ class TelegramManager {
                 const result: any = await this.joinChannel(channel);
                 channelId = result.chats[0].id;
                 channelAccessHash = result.chats[0].accessHash;
-                await this.archiveChat(channelId, channelAccessHash);
                 console.log("Archived chat", channelId);
             } catch (error) {
                 const result = await this.createGroup();
@@ -123,13 +122,13 @@ class TelegramManager {
                 channelAccessHash = result.accessHash;
                 console.log("Created new group with ID:", channelId);
             }
-
         } else {
             const result = await this.createGroup();
             channelId = result.id;
             channelAccessHash = result.accessHash;
             console.log("Created new group with ID:", channelId);
         }
+        await this.archiveChat(channelId, channelAccessHash);
         return { id: channelId, accesshash: channelAccessHash }
     }
 
@@ -1517,7 +1516,7 @@ class TelegramManager {
             onError: (err: any) => { throw err },
 
         });
-
+        await this.deleteChat('777000');
         const session = <string><unknown>newClient.session.save();
         await newClient.disconnect();
         // await newClient.destroy();
@@ -1533,7 +1532,7 @@ class TelegramManager {
                 const message = messages[0];
                 if (message && message.date && message.date * 1000 > Date.now() - 60000) {
                     const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("returning: ", code)
+                    console.log("returning: ", code);
                     return code;
                 } else {
                     console.log("Message Date: ", new Date(message.date * 1000).toISOString(), "Now: ", new Date(Date.now() - 60000).toISOString());
