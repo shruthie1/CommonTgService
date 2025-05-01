@@ -164,7 +164,9 @@ class TelegramManager {
         } catch (e) {
             console.log(e)
         }
-        await this.leaveChannels([channelId?.toString()]);
+        if (channelId) {
+            await this.leaveChannels([channelId.toString()]);
+        }
         await connectionManager.unregisterClient(this.phoneNumber);
     }
 
