@@ -166,8 +166,8 @@ class TelegramManager {
         }
         if (channelId) {
             await this.leaveChannels([channelId.toString()]);
+            await connectionManager.unregisterClient(this.phoneNumber);
         }
-        await connectionManager.unregisterClient(this.phoneNumber);
     }
 
     public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
