@@ -198,36 +198,7 @@ export declare class TelegramService implements OnModuleDestroy {
             untilDate: number;
         };
     }[]>;
-    searchMessages(mobile: string, params: SearchMessagesDto): Promise<{
-        video?: {
-            messages: number[];
-            total: number;
-        };
-        photo?: {
-            messages: number[];
-            total: number;
-        };
-        document?: {
-            messages: number[];
-            total: number;
-        };
-        voice?: {
-            messages: number[];
-            total: number;
-        };
-        text?: {
-            messages: number[];
-            total: number;
-        };
-        all?: {
-            messages: number[];
-            total: number;
-        };
-        roundVideo?: {
-            messages: number[];
-            total: number;
-        };
-    }>;
+    searchMessages(mobile: string, params: SearchMessagesDto): Promise<import("./dto/message-search.dto").SearchMessagesResponseDto>;
     getFilteredMedia(mobile: string, params: {
         chatId: string;
         types?: ('photo' | 'video' | 'document' | 'voice')[];

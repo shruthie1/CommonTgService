@@ -1983,7 +1983,7 @@ class TelegramManager {
             all: { messages: [], total: 0 },
             roundVideo: { messages: [], total: 0 }
         };
-        const { chatId, query = '', types = ['all'], maxId, minId, limit } = params;
+        const { chatId, query = '', types, maxId, minId, limit } = params;
         console.log("Types: ", types);
         for (const type of types) {
             const filter = this.getSearchFilter(type);
@@ -2009,7 +2009,7 @@ class TelegramManager {
             }
             let messages = result.messages;
             console.log(type, result.messages.length);
-            if (types.includes('text') && types.length === 1) {
+            if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
             }

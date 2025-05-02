@@ -8,6 +8,7 @@ import { EntityLike } from 'telegram/define';
 import { ContentFilter } from '../../interfaces/telegram';
 import { GroupOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
+import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 interface MessageScheduleOptions {
     chatId: string;
     message: string;
@@ -282,43 +283,7 @@ declare class TelegramManager {
             untilDate: number;
         };
     }>>;
-    searchMessages(params: {
-        chatId?: string;
-        query?: string;
-        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
-        minId?: number;
-        maxId?: number;
-        limit?: number;
-    }): Promise<{
-        video?: {
-            messages: number[];
-            total: number;
-        };
-        photo?: {
-            messages: number[];
-            total: number;
-        };
-        document?: {
-            messages: number[];
-            total: number;
-        };
-        voice?: {
-            messages: number[];
-            total: number;
-        };
-        text?: {
-            messages: number[];
-            total: number;
-        };
-        all?: {
-            messages: number[];
-            total: number;
-        };
-        roundVideo?: {
-            messages: number[];
-            total: number;
-        };
-    }>;
+    searchMessages(params: SearchMessagesDto): Promise<SearchMessagesResponseDto>;
     getAllMediaMetaData(params: {
         chatId: string;
         types?: ('photo' | 'video' | 'document' | 'voice')[];

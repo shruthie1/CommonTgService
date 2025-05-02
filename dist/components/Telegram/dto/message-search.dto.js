@@ -29,6 +29,9 @@ var SearchScope;
     SearchScope["GLOBAL"] = "global";
 })(SearchScope || (exports.SearchScope = SearchScope = {}));
 class SearchMessagesDto {
+    constructor() {
+        this.types = [MessageMediaType.ALL];
+    }
 }
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
