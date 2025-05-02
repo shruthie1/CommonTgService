@@ -63,7 +63,7 @@ export class SearchMessagesDto {
   @IsArray()
   @IsEnum(MessageMediaType, { each: true })
   @IsOptional()
-  types?: MessageMediaType[];
+  types?: MessageMediaType[] = [MessageMediaType.ALL];
 
   @ApiPropertyOptional({
     description: 'Minimum message ID for filtering',

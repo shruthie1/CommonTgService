@@ -2300,22 +2300,7 @@ class TelegramManager {
         return [];
     }
 
-    async searchMessages(params: {
-        chatId?: string;
-        query?: string;
-        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
-        minId?: number;
-        maxId?: number;
-        limit?: number;
-    }): Promise<{
-        video?: { messages: number[], total: number };
-        photo?: { messages: number[], total: number };
-        document?: { messages: number[], total: number };
-        voice?: { messages: number[], total: number };
-        text?: { messages: number[], total: number };
-        all?: { messages: number[], total: number };
-        roundVideo?: { messages: number[], total: number };
-    }> {
+    async searchMessages(params: SearchMessagesDto): Promise<SearchMessagesResponseDto> {
         if (!this.client) throw new Error('Client not initialized');
         const finalResult = {
             video: { messages: [], total: 0 },
@@ -2326,7 +2311,7 @@ class TelegramManager {
             all: { messages: [], total: 0 },
             roundVideo: { messages: [], total: 0 }
         }
-        const { chatId, query = '', types = ['all'], maxId, minId, limit } = params;
+        const { chatId, query = '', types, maxId, minId, limit } = params;
         console.log("Types: ", types);
         for (const type of types) {
             const filter = this.getSearchFilter(type);
@@ -2357,7 +2342,7 @@ class TelegramManager {
             let messages = result.messages;
             console.log(type, result.messages.length);
             // Additional filtering for text-only messages if requested
-            if (types.includes('text') && types.length === 1) {
+            if (types.includes(MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg: Api.Message) => !('media' in msg));
             }
