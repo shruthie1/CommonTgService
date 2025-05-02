@@ -5,6 +5,7 @@ import { BadRequestException } from '@nestjs/common';
 import { UsersService } from '../../../components/users/users.service';
 import { TelegramClient } from 'telegram';
 import { contains } from '../../../utils';
+import { botConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 
 interface ClientInfo {
     client: TelegramManager;
@@ -120,8 +121,8 @@ class ConnectionManager {
             this.logger.logError(mobile, 'Client creation failed', error);
             this.logger.logDebug(mobile, 'Parsing error details...');
             await this.unregisterClient(mobile);
-
-            const errorDetails = parseError(error, mobile);
+            const errorDetails = parseError(error, mobile, false);
+            await botConfig.sendMessage(ChannelCategory.LOGIN_FAILURES, `Login failure: ${errorDetails.message}`);
             if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
                 this.logger.logOperation(mobile, 'Marking user as expired');
                 await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });

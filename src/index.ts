@@ -130,6 +130,7 @@ export * from './utils/parseError';
 export * from './utils/logbots';
 export * from './IMap/IMap';
 export * from './interfaces/telegram';
+export * from './utils/TelegramBots.config';
 
 // Shared
 export * from './components/shared/dto/execute-request.dto';
