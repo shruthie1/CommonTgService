@@ -2747,7 +2747,7 @@ class TelegramManager {
             console.log(`[BOT CREATION] Bot creation completed successfully: @${options.username}`);
             return {
                 botToken,
-                username: options.username
+                username: botUsername
             };
         }
         catch (error) {
