@@ -96,7 +96,7 @@ class ConnectionManager {
             this.logger.logDebug(mobile, 'Parsing error details...');
             await this.unregisterClient(mobile);
             const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `Login failure: ${errorDetails.message}`);
+            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${process.env.clientId}::\n${mobile}:${errorDetails.message}`);
             if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
                 this.logger.logOperation(mobile, 'Marking user as expired');
                 await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
