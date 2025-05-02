@@ -31,28 +31,48 @@ class BotConfig {
     }
 
     private async initialize(): Promise<void> {
+        console.debug('Initializing Telegram channel configuration...');
+
         const envKeys = Object.keys(process.env).filter(key =>
             key.startsWith('TELEGRAM_CHANNEL_CONFIG_')
         );
+        console.debug(`Found ${envKeys.length} environment key(s) starting with TELEGRAM_CHANNEL_CONFIG_`);
 
         for (const key of envKeys) {
             const value = process.env[key];
-            if (!value) continue;
+            console.debug(`Processing env key: ${key} with value: ${value}`);
+
+            if (!value) {
+                console.warn(`Skipping key ${key}: no value found`);
+                continue;
+            }
 
             const [channelId, description = '', botTokensStr] = value.split('::');
+            console.debug(`Parsed config - Channel ID: ${channelId}, Description: ${description}, Tokens: ${botTokensStr}`);
+
             const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
-            if (!channelId || !botTokens || botTokens.length === 0) continue;
+            if (!channelId || !botTokens || botTokens.length === 0) {
+                console.warn(`Invalid or missing channelId/botTokens for key ${key}`);
+                continue;
+            }
 
             const category = this.getCategoryFromDescription(description);
-            if (!category) continue;
+            if (!category) {
+                console.warn(`No category derived from description: "${description}"`);
+                continue;
+            }
 
             const botUsernames: string[] = [];
+            console.debug(`Fetching usernames for category: ${category}`);
 
             for (const token of botTokens) {
+                console.debug(`Fetching username for token: ${token.substring(0, 8)}...`);
                 const username = await this.fetchUsername(token);
                 if (!username) {
+                    console.error(`Missing or invalid bot username for token ${token.substring(0, 8)} in category ${category}`);
                     throw new Error(`Missing or invalid bot username for token ${token.substring(0, 8)} in category ${category}`);
                 }
+                console.debug(`Retrieved username: ${username}`);
                 botUsernames.push(username);
             }
 
@@ -62,7 +82,11 @@ class BotConfig {
                 lastUsedIndex: -1,
                 channelId,
             });
+
+            console.info(`Configured category "${category}" with ${botTokens.length} bot(s) and channelId: ${channelId}`);
         }
+
+        console.info('Initialization complete.');
     }
 
     private getCategoryFromDescription(desc: string): ChannelCategory | null {
