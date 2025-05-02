@@ -122,7 +122,7 @@ class ConnectionManager {
             this.logger.logDebug(mobile, 'Parsing error details...');
             await this.unregisterClient(mobile);
             const errorDetails = parseError(error, mobile, false);
-            await BotConfig.getInstance().sendMessage(ChannelCategory.ACCOUNT_LOGIN_FAILURES, `Login failure: ${errorDetails.message}`);
+            await BotConfig.getInstance().sendMessage(ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${process.env.clientId}::\n${mobile}:${errorDetails.message}`);
             if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
                 this.logger.logOperation(mobile, 'Marking user as expired');
                 await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
