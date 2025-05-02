@@ -11,7 +11,6 @@ var ChannelCategory;
     ChannelCategory["USER_WARNINGS"] = "USER_WARNINGS";
     ChannelCategory["VC_WARNINGS"] = "VC_WARNINGS";
     ChannelCategory["USER_REQUESTS"] = "USER_REQUESTS";
-    ChannelCategory["LOGIN_FAILURES"] = "LOGIN_FAILURES";
     ChannelCategory["VC_NOTIFICATIONS"] = "VC_NOTIFICATIONS";
     ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
     ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
