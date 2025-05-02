@@ -1,4 +1,3 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 
 export enum ChannelCategory {

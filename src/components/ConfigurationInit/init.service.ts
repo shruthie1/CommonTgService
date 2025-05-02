@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import { BotConfig } from 'src/utils/TelegramBots.config';
+import { BotConfig } from '../../utils/TelegramBots.config';
 
 @Injectable()
 export class ConfigurationService {
