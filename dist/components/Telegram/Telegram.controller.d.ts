@@ -1,11 +1,11 @@
 /// <reference types="multer" />
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
-import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto } from './dto';
-import { MessageType } from './dto/message-search.dto';
+import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto, CreateBotDto } from './dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
+import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -29,37 +29,8 @@ export declare class TelegramController {
         processed: number;
         errors: Error[];
     }>;
-    searchMessages(mobile: string, chatId: string, query: string, types?: MessageType[], limit?: number, minId?: number, maxId?: number): Promise<{
-        video?: {
-            messages: number[];
-            total: number;
-        };
-        photo?: {
-            messages: number[];
-            total: number;
-        };
-        document?: {
-            messages: number[];
-            total: number;
-        };
-        voice?: {
-            messages: number[];
-            total: number;
-        };
-        text?: {
-            messages: number[];
-            total: number;
-        };
-        all?: {
-            messages: number[];
-            total: number;
-        };
-        roundVideo?: {
-            messages: number[];
-            total: number;
-        };
-    }>;
-    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
+    searchMessages(mobile: string, queryParams: SearchMessagesDto): Promise<SearchMessagesResponseDto>;
+    getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("src/components/Telegram/types/telegram-responses").ChannelInfo>;
     forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
     setup2FA(mobile: string): Promise<string>;
@@ -123,7 +94,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -145,7 +116,7 @@ export declare class TelegramController {
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
     getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<any[]>;
     getLastActiveTime(mobile: string): Promise<string>;
-    createGroupWithOptions(mobile: string, options: createGroupDto): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
+    createGroupWithOptions(mobile: string, options: createGroupDto): Promise<import("telegram").Api.TypeUpdates>;
     updateGroupSettings(mobile: string, settings: GroupSettingsDto): Promise<boolean>;
     addGroupMembers(memberOp: GroupMemberOperationDto, mobile: string): Promise<void>;
     removeGroupMembers(memberOp: GroupMemberOperationDto, mobile: string): Promise<void>;
@@ -346,4 +317,8 @@ export declare class TelegramController {
     addBotsToChannel(mobile: string, body: {
         channelIds?: string[];
     }): Promise<void>;
+    createBot(mobile: string, createBotDto: CreateBotDto): Promise<{
+        botToken: string;
+        username: string;
+    }>;
 }

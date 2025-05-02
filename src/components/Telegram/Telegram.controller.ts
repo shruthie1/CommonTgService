@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes } from '@nestjs/swagger';
-import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes, ApiBadRequestResponse, ApiNotFoundResponse, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { query, Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
     SendMediaDto,
@@ -22,9 +22,9 @@ import {
     MediaType,
     createGroupDto,
     ViewOnceMediaDto,
-    MediaSourceType
+    MediaSourceType,
+    CreateBotDto
 } from './dto';
-import { MessageType } from './dto/message-search.dto';
 import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
@@ -33,11 +33,13 @@ import { ConnectionStatusDto } from './dto/common-responses.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { connectionManager } from './utils/connection-manager';
+import { types } from 'util';
+import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
-    constructor(private readonly telegramService: TelegramService) {}
+    constructor(private readonly telegramService: TelegramService) { }
 
     @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
@@ -186,24 +188,22 @@ export class TelegramController {
     }
 
     @Get('messages/search/:mobile')
-    @ApiOperation({ summary: 'Search messages in a chat' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID to search in' })
-    @ApiQuery({ name: 'query', required: false, description: 'Text to search for' })
-    @ApiQuery({ name: 'types', required: false, enum: MessageType, isArray: true, description: 'Types of messages to include' })
-    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of messages to fetch' })
-    @ApiQuery({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' })
-    @ApiQuery({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' })
+    @ApiOperation({
+        summary: 'Search messages in Telegram',
+        description: 'Search for messages in a specific chat or globally across all chats'
+    })
+    @ApiOkResponse({
+        description: 'Messages successfully found',
+        type: SearchMessagesResponseDto
+    })
+    @ApiBadRequestResponse({ description: 'Invalid request parameters' })
+    @ApiNotFoundResponse({ description: 'Mobile number not registered' })
+    @ApiUnauthorizedResponse({ description: 'Unauthorized access' })
     async searchMessages(
         @Param('mobile') mobile: string,
-        @Query('query') query: string,
-        @Query('chatId') chatId?: string,
-        @Query('types') types?: MessageType[],
-        @Query('limit') limit?: number,
-        @Query('minId') minId?: number,
-        @Query('maxId') maxId?: number,
-    ) {
-        return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
+        @Query() queryParams: SearchMessagesDto
+    ): Promise<SearchMessagesResponseDto> {
+        return this.telegramService.searchMessages(mobile, queryParams);
     }
 
     // Channel Operations
@@ -1050,5 +1050,30 @@ export class TelegramController {
         @Body() body: { channelIds?: string[] }
     ) {
         return this.telegramService.addBotsToChannel(mobile, body.channelIds);
+    }
+
+    //Create bot endpoints
+    @Post('bot/create/:mobile')
+    @ApiOperation({ summary: 'Create a new bot using BotFather' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiBody({ type: CreateBotDto })
+    @ApiResponse({ 
+        status: 201, 
+        description: 'Bot created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                botToken: { type: 'string', description: 'The token to access HTTP Bot API' },
+                username: { type: 'string', description: 'The username of the created bot' }
+            }
+        }
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request - Invalid bot details' })
+    @ApiResponse({ status: 401, description: 'Unauthorized - Client not connected' })
+    async createBot(
+        @Param('mobile') mobile: string,
+        @Body() createBotDto: CreateBotDto
+    ) {
+        return this.telegramService.createBot(mobile, createBotDto);
     }
 }

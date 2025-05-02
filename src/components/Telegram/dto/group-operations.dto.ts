@@ -184,7 +184,7 @@ export class createGroupDto {
   @ApiPropertyOptional({ description: 'Group description', required: false })
   @IsOptional()
   @IsString()
-  description?: string;
+  about?: string;
 
   @ApiPropertyOptional({ description: 'Address or location of the group', required: false })
   @IsOptional()

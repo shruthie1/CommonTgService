@@ -17,6 +17,8 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { SearchMessagesDto } from './dto/message-search.dto';
+import { CreateBotDto } from './dto/create-bot.dto';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -599,14 +601,7 @@ export class TelegramService implements OnModuleDestroy {
 
     async searchMessages(
         mobile: string,
-        params: {
-            chatId?: string;
-            query?: string;
-            types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-            minId?: number;
-            maxId?: number;
-            limit?: number;
-        }
+        params: SearchMessagesDto
     ) {
         const telegramClient = await connectionManager.getClient(mobile);
         this.logger.logOperation(mobile, 'Search messages', params);
@@ -1036,5 +1031,10 @@ export class TelegramService implements OnModuleDestroy {
         } catch (error) {
             this.logger.logError(mobile, `Failed to setup bot ${botUsername} in channel ${channelId}`, error);
         }
+    }
+
+    async createBot(mobile: string, createBotDto: CreateBotDto) {
+        const client = await connectionManager.getClient(mobile);
+        return client.createBot(createBotDto);
     }
 }

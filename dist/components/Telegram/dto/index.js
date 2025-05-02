@@ -24,6 +24,7 @@ __exportStar(require("./group-operations.dto"), exports);
 __exportStar(require("./contact-management.dto"), exports);
 __exportStar(require("./profile-settings.dto"), exports);
 __exportStar(require("./view-once-media.dto"), exports);
+__exportStar(require("./create-bot.dto"), exports);
 var batch_operations_dto_1 = require("./batch-operations.dto");
 Object.defineProperty(exports, "BatchOperationType", { enumerable: true, get: function () { return batch_operations_dto_1.BatchOperationType; } });
 var media_operations_dto_1 = require("./media-operations.dto");

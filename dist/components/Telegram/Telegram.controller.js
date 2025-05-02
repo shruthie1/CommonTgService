@@ -40,13 +40,13 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const Telegram_service_1 = require("./Telegram.service");
 const dto_1 = require("./dto");
-const message_search_dto_1 = require("./dto/message-search.dto");
 const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const common_responses_dto_1 = require("./dto/common-responses.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
 const connection_manager_1 = require("./utils/connection-manager");
+const message_search_dto_1 = require("./dto/message-search.dto");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -104,8 +104,8 @@ let TelegramController = class TelegramController {
             }
         }, batchOp.delayMs);
     }
-    async searchMessages(mobile, chatId, query, types, limit, minId, maxId) {
-        return this.telegramService.searchMessages(mobile, { chatId, query, types, minId, maxId, limit });
+    async searchMessages(mobile, queryParams) {
+        return this.telegramService.searchMessages(mobile, queryParams);
     }
     async getChannelInfo(mobile, includeIds) {
         return this.telegramService.getChannelInfo(mobile, includeIds);
@@ -347,6 +347,9 @@ let TelegramController = class TelegramController {
     async addBotsToChannel(mobile, body) {
         return this.telegramService.addBotsToChannel(mobile, body.channelIds);
     }
+    async createBot(mobile, createBotDto) {
+        return this.telegramService.createBot(mobile, createBotDto);
+    }
 };
 exports.TelegramController = TelegramController;
 __decorate([
@@ -468,23 +471,21 @@ __decorate([
 ], TelegramController.prototype, "processBatchMessages", null);
 __decorate([
     (0, common_1.Get)('messages/search/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search messages in a chat' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true, description: 'Chat ID to search in' }),
-    (0, swagger_1.ApiQuery)({ name: 'query', required: false, description: 'Text to search for' }),
-    (0, swagger_1.ApiQuery)({ name: 'types', required: false, enum: message_search_dto_1.MessageType, isArray: true, description: 'Types of messages to include' }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of messages to fetch' }),
-    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Search messages in Telegram',
+        description: 'Search for messages in a specific chat or globally across all chats'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Messages successfully found',
+        type: message_search_dto_1.SearchMessagesResponseDto
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid request parameters' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Mobile number not registered' }),
+    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Unauthorized access' }),
     __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)('chatId')),
-    __param(2, (0, common_1.Query)('query')),
-    __param(3, (0, common_1.Query)('types')),
-    __param(4, (0, common_1.Query)('limit')),
-    __param(5, (0, common_1.Query)('minId')),
-    __param(6, (0, common_1.Query)('maxId')),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, Array, Number, Number, Number]),
+    __metadata("design:paramtypes", [String, message_search_dto_1.SearchMessagesDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "searchMessages", null);
 __decorate([
@@ -1179,6 +1180,30 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "addBotsToChannel", null);
+__decorate([
+    (0, common_1.Post)('bot/create/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new bot using BotFather' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ type: dto_1.CreateBotDto }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'Bot created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                botToken: { type: 'string', description: 'The token to access HTTP Bot API' },
+                username: { type: 'string', description: 'The username of the created bot' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - Invalid bot details' }),
+    (0, swagger_1.ApiResponse)({ status: 401, description: 'Unauthorized - Client not connected' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, dto_1.CreateBotDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "createBot", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

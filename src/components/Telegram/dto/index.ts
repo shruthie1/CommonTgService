@@ -10,6 +10,7 @@ export * from './group-operations.dto';
 export * from './contact-management.dto';
 export * from './profile-settings.dto';
 export * from './view-once-media.dto';
+export * from './create-bot.dto';
 
 // Type Re-exports
 export { BatchOperationType } from './batch-operations.dto';

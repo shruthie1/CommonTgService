@@ -210,7 +210,7 @@ declare class TelegramManager {
         exceptCurrent?: boolean;
     }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "week" | "month" | "day";
+        period: "day" | "week" | "month";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -283,7 +283,7 @@ declare class TelegramManager {
         };
     }>>;
     searchMessages(params: {
-        chatId: string;
+        chatId?: string;
         query?: string;
         types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
         minId?: number;
@@ -341,7 +341,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -521,5 +521,16 @@ declare class TelegramManager {
             textMessages: number;
         };
     }>>;
+    createGroupOrChannel(options: GroupOptions): Promise<Api.TypeUpdates>;
+    createBot(options: {
+        name: string;
+        username: string;
+        description?: string;
+        aboutText?: string;
+        profilePhotoUrl?: string;
+    }): Promise<{
+        botToken: string;
+        username: string;
+    }>;
 }
 export default TelegramManager;

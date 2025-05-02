@@ -60,10 +60,11 @@ export declare class ChatCleanupDto extends BaseGroupOperationDto {
 }
 export declare class createGroupDto {
     title: string;
-    description?: string;
+    about?: string;
     address?: string;
     slowMode?: number;
     megagroup?: boolean;
+    broadcast?: boolean;
     forImport?: boolean;
     memberRestrictions?: {
         sendMessages?: boolean;

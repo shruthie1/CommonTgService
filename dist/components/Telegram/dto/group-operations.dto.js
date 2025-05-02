@@ -233,6 +233,7 @@ class createGroupDto {
     constructor() {
         this.slowMode = 0;
         this.megagroup = true;
+        this.broadcast = true;
         this.forImport = false;
     }
 }
@@ -248,7 +249,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], createGroupDto.prototype, "description", void 0);
+], createGroupDto.prototype, "about", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Address or location of the group', required: false }),
     (0, class_validator_1.IsOptional)(),
@@ -267,6 +268,12 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], createGroupDto.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is a broadcast', default: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], createGroupDto.prototype, "broadcast", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the group is for import', default: false }),
     (0, class_validator_1.IsOptional)(),

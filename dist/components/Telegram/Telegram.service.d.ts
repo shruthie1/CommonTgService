@@ -9,6 +9,8 @@ import { ChannelInfo } from './types/telegram-responses';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
+import { SearchMessagesDto } from './dto/message-search.dto';
+import { CreateBotDto } from './dto/create-bot.dto';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
@@ -114,7 +116,7 @@ export declare class TelegramService implements OnModuleDestroy {
         processed: number;
         errors: Error[];
     }>;
-    createGroupWithOptions(mobile: string, options: GroupOptions): Promise<import("telegram").Api.Chat | import("telegram").Api.Channel>;
+    createGroupWithOptions(mobile: string, options: GroupOptions): Promise<import("telegram").Api.TypeUpdates>;
     updateGroupSettings(mobile: string, settings: {
         groupId: string;
         username?: string;
@@ -196,14 +198,7 @@ export declare class TelegramService implements OnModuleDestroy {
             untilDate: number;
         };
     }[]>;
-    searchMessages(mobile: string, params: {
-        chatId: string;
-        query?: string;
-        types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
-        minId?: number;
-        maxId?: number;
-        limit?: number;
-    }): Promise<{
+    searchMessages(mobile: string, params: SearchMessagesDto): Promise<{
         video?: {
             messages: number[];
             total: number;
@@ -245,7 +240,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -475,4 +470,8 @@ export declare class TelegramService implements OnModuleDestroy {
         anonymous?: boolean;
         manageCall?: boolean;
     }): Promise<void>;
+    createBot(mobile: string, createBotDto: CreateBotDto): Promise<{
+        botToken: string;
+        username: string;
+    }>;
 }

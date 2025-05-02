@@ -389,8 +389,13 @@ let TelegramService = class TelegramService {
     }
     async createGroupWithOptions(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        const result = await telegramClient.createGroupWithOptions(options);
-        this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
+        const result = await telegramClient.createGroupOrChannel(options);
+        let groupId;
+        if ('chats' in result && Array.isArray(result.chats) && result.chats.length > 0) {
+            const chat = result.chats[result.chats.length - 1];
+            groupId = chat.id?.toString();
+        }
+        this.logger.logOperation(mobile, 'Group created', { id: groupId });
         return result;
     }
     async updateGroupSettings(mobile, settings) {
@@ -709,6 +714,10 @@ let TelegramService = class TelegramService {
         catch (error) {
             this.logger.logError(mobile, `Failed to setup bot ${botUsername} in channel ${channelId}`, error);
         }
+    }
+    async createBot(mobile, createBotDto) {
+        const client = await connection_manager_1.connectionManager.getClient(mobile);
+        return client.createBot(createBotDto);
     }
 };
 exports.TelegramService = TelegramService;
