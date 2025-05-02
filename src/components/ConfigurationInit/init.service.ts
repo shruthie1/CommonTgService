@@ -4,11 +4,13 @@ import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import { BotConfig } from 'src/utils/TelegramBots.config';
 
 @Injectable()
 export class ConfigurationService {
     constructor(@InjectModel('configurationModule') private configurationModel: Model<Configuration>) {
-        this.setEnv().then(() => {
+        this.setEnv().then(async () => {
+            await BotConfig.getInstance().ready();
             fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
         });
 
