@@ -437,8 +437,15 @@ export class TelegramService implements OnModuleDestroy {
     // Enhanced Group Management
     async createGroupWithOptions(mobile: string, options: GroupOptions) {
         const telegramClient = await connectionManager.getClient(mobile);
-        const result = await telegramClient.createGroupWithOptions(options);
-        this.logger.logOperation(mobile, 'Group created', { id: result.id?.toString() });
+        const result = await telegramClient.createGroupOrChannel(options);
+        // Attempt to extract the channel/group ID from the result
+        let groupId: string | undefined;
+        if ('chats' in result && Array.isArray(result.chats) && result.chats.length > 0) {
+            // For most cases, the created group/channel will be the last chat in the array
+            const chat = result.chats[result.chats.length - 1];
+            groupId = chat.id?.toString();
+        }
+        this.logger.logOperation(mobile, 'Group created', { id: groupId });
         return result;
     }
 
@@ -593,7 +600,7 @@ export class TelegramService implements OnModuleDestroy {
     async searchMessages(
         mobile: string,
         params: {
-            chatId: string;
+            chatId?: string;
             query?: string;
             types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document')[];
             minId?: number;

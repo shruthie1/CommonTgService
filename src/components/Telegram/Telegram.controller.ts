@@ -188,7 +188,7 @@ export class TelegramController {
     @Get('messages/search/:mobile')
     @ApiOperation({ summary: 'Search messages in a chat' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', required: true, description: 'Chat ID to search in' })
+    @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID to search in' })
     @ApiQuery({ name: 'query', required: false, description: 'Text to search for' })
     @ApiQuery({ name: 'types', required: false, enum: MessageType, isArray: true, description: 'Types of messages to include' })
     @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of messages to fetch' })
@@ -196,8 +196,8 @@ export class TelegramController {
     @ApiQuery({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' })
     async searchMessages(
         @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
         @Query('query') query: string,
+        @Query('chatId') chatId?: string,
         @Query('types') types?: MessageType[],
         @Query('limit') limit?: number,
         @Query('minId') minId?: number,

@@ -1552,15 +1552,7 @@ class TelegramManager {
 
     async createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel> {
         if (!this.client) throw new Error('Client not initialized');
-
-        const result: any = await this.client.invoke(
-            new Api.channels.CreateChannel({
-                title: options.title,
-                about: options.description,
-                megagroup: options.megagroup,
-                forImport: options.forImport,
-            })
-        );
+        const result = await this.createGroupOrChannel(options);
 
         // Find the channel in updates safely
         let channelId: bigInt.BigInteger | undefined;
@@ -2308,7 +2300,7 @@ class TelegramManager {
     }
 
     async searchMessages(params: {
-        chatId: string;
+        chatId?: string;
         query?: string;
         types?: ('all' | 'text' | 'photo' | 'video' | 'voice' | 'document' | "roundVideo")[];
         minId?: number;
@@ -2344,15 +2336,18 @@ class TelegramManager {
             };
 
             console.log(type, queryFilter);
+            const searchQuery = {
+                q: query,
+                filter: filter,
+                ...queryFilter,
+                hash: bigInt(0),
+                fromId: undefined
+            }
+            if (chatId) {
+                searchQuery['peer'] = await this.safeGetEntity(chatId);
+            }
             const result = await this.client.invoke(
-                new Api.messages.Search({
-                    peer: await this.safeGetEntity(chatId),
-                    q: query,
-                    filter: filter,
-                    ...queryFilter,
-                    hash: bigInt(0),
-                    fromId: undefined
-                })
+                new Api.messages.Search(searchQuery)
             );
 
             if (!('messages' in result)) {
@@ -3184,6 +3179,20 @@ class TelegramManager {
         });
 
         return topChats;
+    }
+
+    async createGroupOrChannel(options: GroupOptions) {
+        if (!this.client) throw new Error('Client not initialized');
+        try {
+            const result = await this.client.invoke(
+                new Api.channels.CreateChannel(options)
+            );
+            return result;
+        }
+        catch (error) {
+            console.error('Error creating group or channel:', error);
+            throw new Error(`Failed to create group or channel: ${error.message}`);
+        }
     }
 }
 export default TelegramManager;

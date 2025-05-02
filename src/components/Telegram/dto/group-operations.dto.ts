@@ -201,6 +201,11 @@ export class createGroupDto {
   @IsBoolean()
   megagroup?: boolean = true;
 
+  @ApiPropertyOptional({ description: 'Whether the group is a broadcast', default: true })
+  @IsOptional()
+  @IsBoolean()
+  broadcast?: boolean = true;
+
   @ApiPropertyOptional({ description: 'Whether the group is for import', default: false })
   @IsOptional()
   @IsBoolean()

@@ -55,7 +55,7 @@ export interface GroupOptions {
     title: string;
     members?: string[];
     photo?: string;
-    description?: string;
+    about?: string;
     address?: string;
     slowMode?: number;
     megagroup?: boolean;
