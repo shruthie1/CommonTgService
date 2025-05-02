@@ -106,10 +106,6 @@ class BotConfig {
         }
     }
 
-    /**
-     * Returns the next bot username for the given category, using round-robin load balancing.
-     * Throws an error if the username is not available.
-     */
     public getBotUsername(category: ChannelCategory): string {
         if (!this.categoryMap.has(category)) {
             throw new Error(`Category ${category} not found in bot configuration`);
