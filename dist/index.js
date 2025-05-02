@@ -118,5 +118,6 @@ __exportStar(require("./utils/parseError"), exports);
 __exportStar(require("./utils/logbots"), exports);
 __exportStar(require("./IMap/IMap"), exports);
 __exportStar(require("./interfaces/telegram"), exports);
+__exportStar(require("./utils/TelegramBots.config"), exports);
 __exportStar(require("./components/shared/dto/execute-request.dto"), exports);
 //# sourceMappingURL=index.js.map

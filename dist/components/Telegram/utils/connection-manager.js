@@ -9,6 +9,7 @@ const parseError_1 = require("../../../utils/parseError");
 const telegram_logger_1 = require("./telegram-logger");
 const common_1 = require("@nestjs/common");
 const utils_1 = require("../../../utils");
+const TelegramBots_config_1 = require("../../../utils/TelegramBots.config");
 class ConnectionManager {
     constructor() {
         this.cleanupInterval = null;
@@ -94,7 +95,8 @@ class ConnectionManager {
             this.logger.logError(mobile, 'Client creation failed', error);
             this.logger.logDebug(mobile, 'Parsing error details...');
             await this.unregisterClient(mobile);
-            const errorDetails = (0, parseError_1.parseError)(error, mobile);
+            const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
+            await TelegramBots_config_1.botConfig.sendMessage(TelegramBots_config_1.ChannelCategory.LOGIN_FAILURES, `Login failure: ${errorDetails.message}`);
             if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "revoked", "user_deactivated_ban"])) {
                 this.logger.logOperation(mobile, 'Marking user as expired');
                 await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
