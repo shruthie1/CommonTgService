@@ -11,10 +11,14 @@ export declare enum ChannelCategory {
     CLIENT_ACCOUNT = "CLIENT_ACCOUNT",
     PAYMENT_FAIL_QUERIES = "PAYMENT_FAIL_QUERIES"
 }
-declare class BotConfig {
+export declare class BotConfig {
+    private static instance;
     private categoryMap;
+    private initialized;
     private initPromise;
-    constructor();
+    private constructor();
+    static getInstance(): BotConfig;
+    ready(): Promise<void>;
     private initialize;
     private getCategoryFromDescription;
     private fetchUsername;
@@ -26,6 +30,5 @@ declare class BotConfig {
         token: string;
     };
     sendMessage(category: ChannelCategory, message: string): Promise<void>;
+    private assertInitialized;
 }
-export declare const botConfig: BotConfig;
-export {};

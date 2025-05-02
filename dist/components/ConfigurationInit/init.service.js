@@ -18,10 +18,12 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
+const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 let ConfigurationService = class ConfigurationService {
     constructor(configurationModel) {
         this.configurationModel = configurationModel;
-        this.setEnv().then(() => {
+        this.setEnv().then(async () => {
+            await TelegramBots_config_1.BotConfig.getInstance().ready();
             (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
         });
     }

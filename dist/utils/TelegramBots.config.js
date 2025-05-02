@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.botConfig = exports.ChannelCategory = void 0;
+exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(require("axios"));
 var ChannelCategory;
 (function (ChannelCategory) {
@@ -22,41 +22,40 @@ var ChannelCategory;
 class BotConfig {
     constructor() {
         this.categoryMap = new Map();
+        this.initialized = false;
         this.initPromise = this.initialize();
+    }
+    static getInstance() {
+        if (!BotConfig.instance) {
+            BotConfig.instance = new BotConfig();
+        }
+        return BotConfig.instance;
+    }
+    async ready() {
+        if (!this.initialized) {
+            await this.initPromise;
+        }
     }
     async initialize() {
         console.debug('Initializing Telegram channel configuration...');
         const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
-        console.debug(`Found ${envKeys.length} environment key(s) starting with TELEGRAM_CHANNEL_CONFIG_`);
         for (const key of envKeys) {
             const value = process.env[key];
-            console.debug(`Processing env key: ${key} with value: ${value}`);
-            if (!value) {
-                console.warn(`Skipping key ${key}: no value found`);
+            if (!value)
                 continue;
-            }
             const [channelId, description = '', botTokensStr] = value.split('::');
-            console.debug(`Parsed config - Channel ID: ${channelId}, Description: ${description}, Tokens: ${botTokensStr}`);
             const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
-            if (!channelId || !botTokens || botTokens.length === 0) {
-                console.warn(`Invalid or missing channelId/botTokens for key ${key}`);
+            if (!channelId || !botTokens || botTokens.length === 0)
                 continue;
-            }
             const category = this.getCategoryFromDescription(description);
-            if (!category) {
-                console.warn(`No category derived from description: "${description}"`);
+            if (!category)
                 continue;
-            }
             const botUsernames = [];
-            console.debug(`Fetching usernames for category: ${category}`);
             for (const token of botTokens) {
-                console.debug(`Fetching username for token: ${token.substring(0, 8)}...`);
                 const username = await this.fetchUsername(token);
                 if (!username) {
-                    console.error(`Missing or invalid bot username for token ${token.substring(0, 8)} in category ${category}`);
-                    throw new Error(`Missing or invalid bot username for token ${token.substring(0, 8)} in category ${category}`);
+                    throw new Error(`Invalid bot token for ${category}`);
                 }
-                console.debug(`Retrieved username: ${username}`);
                 botUsernames.push(username);
             }
             this.categoryMap.set(category, {
@@ -65,9 +64,9 @@ class BotConfig {
                 lastUsedIndex: -1,
                 channelId,
             });
-            console.info(`Configured category "${category}" with ${botTokens.length} bot(s) and channelId: ${channelId}`);
         }
-        console.info('Initialization complete.');
+        this.initialized = true;
+        console.info('BotConfig initialized.');
     }
     getCategoryFromDescription(desc) {
         const normalized = desc.toUpperCase();
@@ -76,57 +75,34 @@ class BotConfig {
     async fetchUsername(token) {
         try {
             const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`);
-            if (res.data?.ok && res.data?.result?.username) {
-                return res.data.result.username;
-            }
-            return '';
+            return res.data?.ok ? res.data.result.username : '';
         }
-        catch (err) {
-            console.error(`Failed to fetch bot username for token ${token.substring(0, 8)}...`);
+        catch {
             return '';
         }
     }
     getBotUsername(category) {
-        if (!this.categoryMap.has(category)) {
-            throw new Error(`Category ${category} not found in bot configuration`);
-        }
-        if (!this.initPromise) {
-            throw new Error('Bot configuration not initialized yet');
-        }
+        this.assertInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots configured for category ${category}`);
+            throw new Error(`No valid bots for ${category}`);
         }
         data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
-        const username = data.botUsernames[data.lastUsedIndex];
-        if (!username) {
-            throw new Error(`Bot username not found during load balancing for category ${category}`);
-        }
-        return username;
+        return data.botUsernames[data.lastUsedIndex];
     }
     getChannelId(category) {
-        if (!this.categoryMap.has(category)) {
-            throw new Error(`Category ${category} not found in bot configuration`);
-        }
-        if (!this.initPromise) {
-            throw new Error('Bot configuration not initialized yet');
-        }
+        this.assertInitialized();
         const data = this.categoryMap.get(category);
         if (!data) {
-            throw new Error(`No configuration found for category ${category}`);
+            throw new Error(`No config for ${category}`);
         }
         return data.channelId;
     }
     getBotAndChannel(category) {
-        if (!this.categoryMap.has(category)) {
-            throw new Error(`Category ${category} not found in bot configuration`);
-        }
-        if (!this.initPromise) {
-            throw new Error('Bot configuration not initialized yet');
-        }
+        this.assertInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots configured for category ${category}`);
+            throw new Error(`No valid bots for ${category}`);
         }
         data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
         return {
@@ -136,27 +112,24 @@ class BotConfig {
         };
     }
     async sendMessage(category, message) {
-        if (!this.categoryMap.has(category)) {
-            throw new Error(`Category ${category} not found in bot configuration`);
-        }
-        if (!this.initPromise) {
-            throw new Error('Bot configuration not initialized yet');
-        }
+        this.assertInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botTokens.length === 0) {
-            throw new Error(`No valid bots configured for category ${category}`);
+            throw new Error(`No valid bots for ${category}`);
         }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
+        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
         const token = data.botTokens[data.lastUsedIndex];
         const channelId = data.channelId;
         const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${channelId}&text=${encodeURIComponent(message)}`;
-        try {
-            await axios_1.default.post(url);
-        }
-        catch (error) {
+        axios_1.default.post(url).catch(error => {
             console.error(`Failed to send message to ${channelId}:`, error);
+        });
+    }
+    assertInitialized() {
+        if (!this.initialized) {
+            throw new Error('BotConfig not initialized. App module has not finished initializing.');
         }
     }
 }
-exports.botConfig = new BotConfig();
+exports.BotConfig = BotConfig;
 //# sourceMappingURL=TelegramBots.config.js.map
