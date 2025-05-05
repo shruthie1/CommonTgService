@@ -191,8 +191,25 @@ class TelegramManager {
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
                         const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE] });
-                        await this.forwardMessages(chatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), mediaMessages.photo.messages);
-                        await this.forwardMessages(chatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), mediaMessages.video.messages);
+                        console.log("Media Messages: ", mediaMessages);
+                        const uniqueMessageIds = Array.from(new Set([
+                            ...mediaMessages.photo.messages,
+                            ...mediaMessages.video.messages,
+                            ...mediaMessages.document.messages,
+                            ...mediaMessages.voice.messages,
+                            ...mediaMessages.all.messages,
+                            ...mediaMessages.roundVideo.messages
+                        ]));
+                        const chunkSize = 30;
+                        for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
+                            const chunk = uniqueMessageIds.slice(i, i + chunkSize);
+                            await this.client.forwardMessages(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), {
+                                messages: chunk,
+                                fromPeer: chatId,
+                            });
+                            console.log(`Forwarded ${chunk.length} messages to bot`);
+                            await (0, Helpers_1.sleep)(5000);
+                        }
                     }
                 }
             }
