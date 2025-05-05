@@ -154,7 +154,7 @@ class TelegramManager {
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE] });
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE] });
                         console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
                         await this.forwardMessages(chatId, channelId, mediaMessages.photo.messages);
                         await this.forwardMessages(chatId, channelId, mediaMessages.video.messages);
@@ -200,14 +200,12 @@ class TelegramManager {
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE] });
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
                         console.log("Media Messages: ", mediaMessages);
                         const uniqueMessageIds = Array.from(new Set([
                             ...mediaMessages.photo.messages,
                             ...mediaMessages.video.messages,
                             ...mediaMessages.document.messages,
-                            ...mediaMessages.voice.messages,
-                            ...mediaMessages.all.messages,
                             ...mediaMessages.roundVideo.messages
                         ]));
                         const chunkSize = 30;
@@ -2112,6 +2110,16 @@ class TelegramManager {
             case 'url': return new Api.InputMessagesFilterUrl();
             case 'roundVideo': return new Api.InputMessagesFilterRoundVideo();
             case 'phtotoVideo': return new Api.InputMessagesFilterPhotoVideo();
+            case 'voice': return new Api.InputMessagesFilterVoice();
+            case 'roundVoice': return new Api.InputMessagesFilterRoundVoice();
+            case 'gif': return new Api.InputMessagesFilterGif();
+            case 'sticker': return new Api.InputMessagesFilterDocument();
+            case 'animation': return new Api.InputMessagesFilterDocument();
+            case 'music': return new Api.InputMessagesFilterMusic();
+            case 'chatPhoto': return new Api.InputMessagesFilterChatPhotos();
+            case 'location': return new Api.InputMessagesFilterGeo();
+            case 'contact': return new Api.InputMessagesFilterContacts();
+            case 'chatPhoto': return new Api.InputMessagesFilterChatPhotos();
             case 'phoneCalls': return new Api.InputMessagesFilterPhoneCalls({ missed: false });
             default: return new Api.InputMessagesFilterEmpty();
         }
@@ -3158,7 +3166,7 @@ class TelegramManager {
                         return null;
                     }
 
-                    const messageStats = await this.searchMessages({ chatId, types: [MessageMediaType.PHOTO, MessageMediaType.ROUND_VIDEO, MessageMediaType.VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE], limit: 10 });
+                    const messageStats = await this.searchMessages({ chatId, types: [MessageMediaType.PHOTO, MessageMediaType.ROUND_VIDEO, MessageMediaType.VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE, MessageMediaType.CHAT_PHOTO], limit: 10 });
                     console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
 
                     const callStats = {
