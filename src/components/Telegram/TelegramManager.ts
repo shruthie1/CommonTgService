@@ -22,7 +22,7 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
 import { connectionManager } from './utils/connection-manager';
 import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
-import { BotConfig, ChannelCategory } from 'src/utils/TelegramBots.config';
+import { BotConfig, ChannelCategory } from '../../utils/TelegramBots.config';
 
 interface MessageScheduleOptions {
     chatId: string;
