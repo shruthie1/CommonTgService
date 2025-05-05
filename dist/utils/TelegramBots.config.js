@@ -18,6 +18,7 @@ var ChannelCategory;
     ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
+    ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 class BotConfig {
     constructor() {
@@ -124,6 +125,14 @@ class BotConfig {
         axios_1.default.post(url).catch(error => {
             console.error(`Failed to send message to ${channelId}:`, error);
         });
+    }
+    getAllBotUsernames(category) {
+        this.assertInitialized();
+        const data = this.categoryMap.get(category);
+        if (!data || data.botUsernames.length === 0) {
+            throw new Error(`No valid bots for ${category}`);
+        }
+        return [...data.botUsernames];
     }
     assertInitialized() {
         if (!this.initialized) {

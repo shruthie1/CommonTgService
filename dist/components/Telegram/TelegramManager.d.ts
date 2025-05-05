@@ -52,6 +52,7 @@ declare class TelegramManager {
     archiveChat(id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
     private createOrJoinChannel;
     forwardMedia(channel: string, fromChatId: string): Promise<void>;
+    forwardMediaToBot(fromChatId: string): Promise<void>;
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
     disconnect(): Promise<void>;
