@@ -63,6 +63,7 @@ export declare class TelegramService implements OnModuleDestroy {
         accessHash: any;
     }>;
     forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<string>;
+    forwardMediaToBot(mobile: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<import("telegram").Api.TypeUpdates>;
     getCallLog(mobile: string): Promise<{

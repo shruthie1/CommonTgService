@@ -184,6 +184,11 @@ let TelegramService = class TelegramService {
         }, 5 * 60000);
         return "Media forward initiated";
     }
+    async forwardMediaToBot(mobile, fromChatId) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        telegramClient.forwardMediaToBot(fromChatId);
+        return "Media forward initiated";
+    }
     async blockUser(mobile, chatId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.blockUser(chatId);

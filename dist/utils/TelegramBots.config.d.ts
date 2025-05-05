@@ -9,7 +9,8 @@ export declare enum ChannelCategory {
     ACCOUNT_LOGIN_FAILURES = "ACCOUNT_LOGIN_FAILURES",
     PROMOTION_ACCOUNT = "PROMOTION_ACCOUNT",
     CLIENT_ACCOUNT = "CLIENT_ACCOUNT",
-    PAYMENT_FAIL_QUERIES = "PAYMENT_FAIL_QUERIES"
+    PAYMENT_FAIL_QUERIES = "PAYMENT_FAIL_QUERIES",
+    SAVED_MESSAGES = "SAVED_MESSAGES"
 }
 export declare class BotConfig {
     private static instance;
@@ -30,5 +31,6 @@ export declare class BotConfig {
         token: string;
     };
     sendMessage(category: ChannelCategory, message: string): Promise<void>;
+    getAllBotUsernames(category: ChannelCategory): string[];
     private assertInitialized;
 }
