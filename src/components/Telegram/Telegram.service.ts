@@ -175,6 +175,12 @@ export class TelegramService implements OnModuleDestroy {
         return "Media forward initiated";
     }
 
+    async forwardMediaToBot(mobile: string, fromChatId: string) {
+        const telegramClient = await connectionManager.getClient(mobile)
+        telegramClient.forwardMediaToBot(fromChatId);
+        return "Media forward initiated";
+    }
+
     async blockUser(mobile: string, chatId: string) {
         const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.blockUser(chatId);

@@ -12,6 +12,7 @@ export enum ChannelCategory {
     PROMOTION_ACCOUNT = 'PROMOTION_ACCOUNT',
     CLIENT_ACCOUNT = 'CLIENT_ACCOUNT',
     PAYMENT_FAIL_QUERIES = 'PAYMENT_FAIL_QUERIES',
+    SAVED_MESSAGES = 'SAVED_MESSAGES',
 }
 
 type ChannelData = {
@@ -152,6 +153,17 @@ export class BotConfig {
         axios.post(url).catch(error => {
             console.error(`Failed to send message to ${channelId}:`, error);
         });
+    }
+
+    public getAllBotUsernames(category: ChannelCategory): string[] {
+        this.assertInitialized();
+
+        const data = this.categoryMap.get(category);
+        if (!data || data.botUsernames.length === 0) {
+            throw new Error(`No valid bots for ${category}`);
+        }
+
+        return [...data.botUsernames];
     }
 
     private assertInitialized() {

