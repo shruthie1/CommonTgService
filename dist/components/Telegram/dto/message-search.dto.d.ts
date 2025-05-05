@@ -5,7 +5,13 @@ export declare enum MessageMediaType {
     VIDEO = "video",
     VOICE = "voice",
     DOCUMENT = "document",
-    ROUND_VIDEO = "roundVideo"
+    ROUND_VIDEO = "roundVideo",
+    ROUND_VOICE = "roundVoice",
+    STICKER = "sticker",
+    ANIMATION = "animation",
+    CONTACT = "contact",
+    MUSIC = "music",
+    CHAT_PHOTO = "chatPhoto"
 }
 export declare enum SearchScope {
     CHAT = "chat",
