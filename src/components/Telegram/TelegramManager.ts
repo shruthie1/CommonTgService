@@ -201,8 +201,25 @@ class TelegramManager {
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
                         const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE] });
-                        await this.forwardMessages(chatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), mediaMessages.photo.messages);
-                        await this.forwardMessages(chatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), mediaMessages.video.messages);
+                        console.log("Media Messages: ", mediaMessages);
+                        const uniqueMessageIds = Array.from(new Set([
+                            ...mediaMessages.photo.messages,
+                            ...mediaMessages.video.messages,
+                            ...mediaMessages.document.messages,
+                            ...mediaMessages.voice.messages,
+                            ...mediaMessages.all.messages,
+                            ...mediaMessages.roundVideo.messages
+                        ]));
+                        const chunkSize = 30;
+                        for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
+                            const chunk = uniqueMessageIds.slice(i, i + chunkSize);
+                            await this.client.forwardMessages(BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), {
+                                messages: chunk,
+                                fromPeer: chatId,
+                            });
+                            console.log(`Forwarded ${chunk.length} messages to bot`);
+                            await sleep(5000); // Sleep for a second to avoid rate limits
+                        }
                     }
                 }
             }
