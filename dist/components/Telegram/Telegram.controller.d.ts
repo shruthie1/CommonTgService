@@ -6,6 +6,9 @@ import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
+import { DeleteHistoryDto } from './dto/delete-chat.dto';
+import { UpdateUsernameDto } from './dto/update-username.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -24,6 +27,7 @@ export declare class TelegramController {
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
     getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
+    sendMessage(mobile: string, dto: SendMessageDto): Promise<import("telegram").Api.Message>;
     forwardMessage(mobile: string, forwardDto: ForwardBatchDto): Promise<number>;
     processBatchMessages(mobile: string, batchOp: BatchProcessDto): Promise<{
         processed: number;
@@ -33,6 +37,7 @@ export declare class TelegramController {
     getChannelInfo(mobile: string, includeIds?: boolean): Promise<import("./types/telegram-responses").ChannelInfo>;
     forwardMedia(mobile: string, channel?: string, fromChatId?: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
+    updateUsername(mobile: string, updateUsernameDto: UpdateUsernameDto): Promise<string>;
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updatePrivacyBatch(mobile: string, settings: PrivacySettingsDto): Promise<boolean>;
@@ -112,7 +117,7 @@ export declare class TelegramController {
     }>;
     getGroupMembers(mobile: string, groupId: string): Promise<any[]>;
     blockChat(mobile: string, chatId: string): Promise<void>;
-    deleteChatHistory(mobile: string, chatId: string): Promise<void>;
+    deleteChatHistory(mobile: string, deleteHistoryDto: DeleteHistoryDto): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
     getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<any[]>;
     getLastActiveTime(mobile: string): Promise<string>;

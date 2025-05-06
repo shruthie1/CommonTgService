@@ -11,6 +11,7 @@ import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } f
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
+import { Api } from 'telegram';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
@@ -35,9 +36,9 @@ export declare class TelegramService implements OnModuleDestroy {
         existingMobile: string;
         clientId: string;
     } | undefined): void;
-    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
+    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
     getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<any>;
-    sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
+    sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
     getChatId(mobile: string, username: string): Promise<any>;
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
@@ -65,7 +66,7 @@ export declare class TelegramService implements OnModuleDestroy {
     forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<string>;
     forwardMediaToBot(mobile: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
-    joinChannel(mobile: string, channelId: string): Promise<import("telegram").Api.TypeUpdates>;
+    joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
     getCallLog(mobile: string): Promise<{
         chatCallCounts: any[];
         outgoing: number;
@@ -73,9 +74,9 @@ export declare class TelegramService implements OnModuleDestroy {
         video: number;
         totalCalls: number;
     }>;
-    getmedia(mobile: string): Promise<import("telegram").Api.messages.Messages>;
+    getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
-    getMe(mobile: string): Promise<import("telegram").Api.User>;
+    getMe(mobile: string): Promise<Api.User>;
     getEntity(mobile: string, entity: EntityLike): Promise<import("telegram/define").Entity>;
     createNewSession(mobile: string): Promise<string>;
     set2Fa(mobile: string): Promise<string>;
@@ -102,7 +103,14 @@ export declare class TelegramService implements OnModuleDestroy {
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
-    deleteChat(mobile: string, chatId: string): Promise<void>;
+    deleteChat(mobile: string, params: {
+        peer: string | Api.TypeInputPeer;
+        maxId?: number;
+        justClear?: boolean;
+        revoke?: boolean;
+        minDate?: number;
+        maxDate?: number;
+    }): Promise<void>;
     updateNameandBio(mobile: string, firstName: string, about?: string): Promise<void>;
     getDialogs(mobile: string, query: DialogsQueryDto): Promise<any[]>;
     getConnectionStatus(): Promise<{
@@ -117,7 +125,7 @@ export declare class TelegramService implements OnModuleDestroy {
         processed: number;
         errors: Error[];
     }>;
-    createGroupWithOptions(mobile: string, options: GroupOptions): Promise<import("telegram").Api.TypeUpdates>;
+    createGroupWithOptions(mobile: string, options: GroupOptions): Promise<Api.TypeUpdates>;
     updateGroupSettings(mobile: string, settings: {
         groupId: string;
         username?: string;
@@ -126,15 +134,20 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<import("telegram").Api.Message>;
-    getScheduledMessages(mobile: string, chatId: string): Promise<import("telegram").Api.TypeMessage[]>;
-    sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("telegram").Api.TypeUpdates>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message>;
+    getScheduledMessages(mobile: string, chatId: string): Promise<Api.TypeMessage[]>;
+    sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
+    sendMessage(mobile: string, params: {
+        peer: string;
+        parseMode?: string;
+        message: string;
+    }): Promise<Api.Message>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
         url: string;
         duration?: number;
         caption?: string;
-    }): Promise<import("telegram").Api.TypeUpdates>;
+    }): Promise<Api.TypeUpdates>;
     cleanupChat(mobile: string, cleanup: {
         chatId: string;
         beforeDate?: Date;
@@ -327,7 +340,7 @@ export declare class TelegramService implements OnModuleDestroy {
             type: 'photo' | 'video' | 'document';
             url: string;
         };
-    }): Promise<import("telegram").Api.TypeUpdates>;
+    }): Promise<Api.TypeUpdates>;
     updateChatSettings(mobile: string, settings: {
         chatId: string;
         username?: string;
@@ -348,9 +361,9 @@ export declare class TelegramService implements OnModuleDestroy {
         }>;
         silent?: boolean;
         scheduleDate?: number;
-    }): Promise<import("telegram").Api.TypeUpdates>;
+    }): Promise<Api.TypeUpdates>;
     hasPassword(mobile: string): Promise<boolean>;
-    getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
+    getContacts(mobile: string): Promise<Api.contacts.TypeContacts>;
     getChats(mobile: string, options: {
         limit?: number;
         offsetDate?: number;
@@ -396,7 +409,7 @@ export declare class TelegramService implements OnModuleDestroy {
         binaryData?: Buffer;
         caption?: string;
         filename?: string;
-    }): Promise<import("telegram").Api.TypeUpdates>;
+    }): Promise<Api.TypeUpdates>;
     getTopPrivateChats(mobile: string): Promise<{
         chatId: string;
         username?: string;
