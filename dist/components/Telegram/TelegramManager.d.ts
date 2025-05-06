@@ -511,5 +511,7 @@ declare class TelegramManager {
         botToken: string;
         username: string;
     }>;
+    private createVCardContent;
+    sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename?: string): Promise<void>;
 }
 export default TelegramManager;
