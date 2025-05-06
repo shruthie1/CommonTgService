@@ -211,6 +211,7 @@ export class TelegramService implements OnModuleDestroy {
                 })
                 .filter((channel): channel is NonNullable<typeof channel> => Boolean(channel));
 
+            await connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
             return "Media forward initiated successfully";
