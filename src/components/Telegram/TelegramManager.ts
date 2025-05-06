@@ -2432,7 +2432,9 @@ class TelegramManager {
             }
 
             const processedMessages = await Promise.all(messages.map(async (message: Api.Message) => {
-                return message.id
+                if (!contains(message.text.toLowerCase(), ['movie', 'series', 'tv show', 'anime', 'x264', 'aac ', '720p', '1080p', 'dvd', 'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite', 'invite link', 'invitation', 'invitation link'])) {
+                    return message.id
+                }
             }));
 
             const localResult = {
