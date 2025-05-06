@@ -47,6 +47,9 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
+const delete_chat_dto_1 = require("./dto/delete-chat.dto");
+const update_username_dto_1 = require("./dto/update-username.dto");
+const send_message_dto_1 = require("./dto/send-message.dto");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -81,6 +84,9 @@ let TelegramController = class TelegramController {
     async getMessages(mobile, chatId, limit) {
         return this.telegramService.getMessages(mobile, chatId, limit);
     }
+    async sendMessage(mobile, dto) {
+        return this.telegramService.sendMessage(mobile, dto);
+    }
     async forwardMessage(mobile, forwardDto) {
         return this.telegramService.forwardBulkMessages(mobile, forwardDto.fromChatId, forwardDto.toChatId, forwardDto.messageIds);
     }
@@ -96,7 +102,7 @@ let TelegramController = class TelegramController {
                     break;
                 case dto_1.BatchOperationType.DELETE:
                     for (const item of batch) {
-                        await this.telegramService.deleteChat(mobile, item.chatId);
+                        await this.telegramService.deleteChat(mobile, { peer: item.chatId, justClear: true });
                     }
                     break;
                 default:
@@ -116,6 +122,9 @@ let TelegramController = class TelegramController {
     }
     async leaveChannel(mobile, channel) {
         return this.telegramService.leaveChannel(mobile, channel);
+    }
+    async updateUsername(mobile, updateUsernameDto) {
+        return this.telegramService.updateUsername(mobile, updateUsernameDto.newUsername);
     }
     async setup2FA(mobile) {
         return this.telegramService.set2Fa(mobile);
@@ -197,8 +206,8 @@ let TelegramController = class TelegramController {
     async blockChat(mobile, chatId) {
         return this.telegramService.blockUser(mobile, chatId);
     }
-    async deleteChatHistory(mobile, chatId) {
-        return this.telegramService.deleteChat(mobile, chatId);
+    async deleteChatHistory(mobile, deleteHistoryDto) {
+        return this.telegramService.deleteChat(mobile, deleteHistoryDto);
     }
     async sendMessageWithInlineButton(mobile, chatId, message, url) {
         return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
@@ -448,6 +457,21 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMessages", null);
 __decorate([
+    (0, common_1.Post)('message/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send a Telegram message as a user' }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the user account to send the message from',
+        required: true,
+        example: '1234567890',
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, send_message_dto_1.SendMessageDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "sendMessage", null);
+__decorate([
     (0, common_1.Post)('messages/forward/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Forward messages' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
@@ -523,6 +547,21 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "leaveChannel", null);
+__decorate([
+    (0, common_1.Patch)('username/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update the Telegram username of a user' }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the user whose username should be updated',
+        required: true,
+        example: '1234567890',
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_username_dto_1.UpdateUsernameDto]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "updateUsername", null);
 __decorate([
     (0, common_1.Post)('2fa/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Setup two-factor authentication' }),
@@ -748,13 +787,28 @@ __decorate([
 ], TelegramController.prototype, "blockChat", null);
 __decorate([
     (0, common_1.Delete)('chat/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete a chat' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID to delete', required: true }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete or clear a chat history for a user' }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the user whose chat should be deleted',
+        required: true,
+        example: '1234567890',
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'peer',
+        description: 'Username or Peer ID of the chat to delete',
+        required: true,
+        example: 'someusername',
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId', example: 100000 }),
+    (0, swagger_1.ApiQuery)({ name: 'justClear', required: false, description: 'Only clear history for this user', example: false }),
+    (0, swagger_1.ApiQuery)({ name: 'revoke', required: false, description: 'Delete for everyone if possible', example: true }),
+    (0, swagger_1.ApiQuery)({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)', example: 1609459200 }),
+    (0, swagger_1.ApiQuery)({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)', example: 1612137600 }),
     __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)('chatId')),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, delete_chat_dto_1.DeleteHistoryDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "deleteChatHistory", null);
 __decorate([

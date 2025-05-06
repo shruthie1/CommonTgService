@@ -327,9 +327,9 @@ let TelegramService = class TelegramService {
         telegramClient.leaveChannels([channel]);
         return "Left channel initiated";
     }
-    async deleteChat(mobile, chatId) {
+    async deleteChat(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.deleteChat(chatId);
+        return await telegramClient.deleteChat(params);
     }
     async updateNameandBio(mobile, firstName, about) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -424,6 +424,10 @@ let TelegramService = class TelegramService {
     async sendMediaAlbum(mobile, album) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.sendMediaAlbum(album);
+    }
+    async sendMessage(mobile, params) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        return await telegramClient.sendMessage(params);
     }
     async sendVoiceMessage(mobile, voice) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);

@@ -115,7 +115,14 @@ declare class TelegramManager {
     downloadProfilePic(photoIndex: number): Promise<string>;
     getLastActiveTime(): Promise<string>;
     getContacts(): Promise<Api.contacts.TypeContacts>;
-    deleteChat(chatId: string): Promise<void>;
+    deleteChat(params: {
+        peer: string | Api.TypeInputPeer;
+        maxId?: number;
+        justClear?: boolean;
+        revoke?: boolean;
+        minDate?: number;
+        maxDate?: number;
+    }): Promise<void>;
     blockUser(chatId: string): Promise<void>;
     getMediaMetadata(params: {
         chatId: string;
@@ -160,6 +167,11 @@ declare class TelegramManager {
     scheduleMessageSend(opts: MessageScheduleOptions): Promise<Api.Message>;
     getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]>;
     sendMediaAlbum(album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
+    sendMessage(params: {
+        peer: string;
+        parseMode?: string;
+        message: string;
+    }): Promise<Api.Message>;
     sendVoiceMessage(voice: {
         chatId: string;
         url: string;
