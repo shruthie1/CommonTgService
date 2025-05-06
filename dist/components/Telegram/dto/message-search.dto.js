@@ -229,4 +229,14 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", MessageTypeResult)
 ], SearchMessagesResponseDto.prototype, "roundVideo", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Round voice message results',
+        type: MessageTypeResult
+    }),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => MessageTypeResult),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", MessageTypeResult)
+], SearchMessagesResponseDto.prototype, "roundVoice", void 0);
 //# sourceMappingURL=message-search.dto.js.map

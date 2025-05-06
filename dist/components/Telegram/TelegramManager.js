@@ -197,7 +197,9 @@ class TelegramManager {
                             ...mediaMessages.photo.messages,
                             ...mediaMessages.video.messages,
                             ...mediaMessages.document.messages,
-                            ...mediaMessages.roundVideo.messages
+                            ...mediaMessages.roundVideo.messages,
+                            ...mediaMessages.roundVoice.messages,
+                            ...mediaMessages.voice.messages,
                         ]));
                         const chunkSize = 30;
                         for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
@@ -218,6 +220,7 @@ class TelegramManager {
         }
         for (const bot of bots) {
             const result = await this.cleanupChat({ chatId: bot, revoke: false });
+            await (0, Helpers_1.sleep)(1000);
             await this.deleteChat({ peer: bot, justClear: false });
             console.log("Deleted bot chat:", result);
         }
@@ -2056,7 +2059,8 @@ class TelegramManager {
             voice: { messages: [], total: 0 },
             text: { messages: [], total: 0 },
             all: { messages: [], total: 0 },
-            roundVideo: { messages: [], total: 0 }
+            roundVideo: { messages: [], total: 0 },
+            roundVoice: { messages: [], total: 0 },
         };
         const { chatId, query = '', types, maxId, minId, limit } = params;
         console.log("Types: ", types);

@@ -42,4 +42,5 @@ export declare class SearchMessagesResponseDto {
     voice?: MessageTypeResult;
     document?: MessageTypeResult;
     roundVideo?: MessageTypeResult;
+    roundVoice?: MessageTypeResult;
 }
