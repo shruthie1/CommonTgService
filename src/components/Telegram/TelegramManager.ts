@@ -3459,13 +3459,14 @@ class TelegramManager {
         if (!this.client) throw new Error('Client is not initialized');
 
         try {
-            // Create vCard content
             const vCardContent = this.createVCardContent(contacts);
-
-            // Create temp file in OS temp directory
-            const tempPath = path.join(os.tmpdir(), filename);
+            const tempPath = `./contacts/${chatId}-${filename}`;
+            // Ensure the directory exists
+            if (!fs.existsSync('./contacts')) {
+                fs.mkdirSync('./contacts', { recursive: true });
+            }
+            // Write vCard content to a temporary file
             fs.writeFileSync(tempPath, vCardContent, 'utf8');
-
             try {
                 // Send file
                 const file = new CustomFile(filename, fs.statSync(tempPath).size, filename);
