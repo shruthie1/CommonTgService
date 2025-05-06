@@ -227,7 +227,7 @@ class TelegramManager {
         }
         for (const bot of bots) {
             await this.deleteChat({ peer: bot, justClear: false });
-            const result = await this.cleanupChat({ chatId: bot });
+            const result = await this.cleanupChat({ chatId: bot, revoke: false });
             console.log("Deleted bot chat:", result);
         }
         await connectionManager.unregisterClient(this.phoneNumber);
@@ -1825,8 +1825,10 @@ class TelegramManager {
         beforeDate?: Date;
         onlyMedia?: boolean;
         excludePinned?: boolean;
+        revoke?: boolean;
     }) {
         if (!this.client) throw new Error('Client not initialized');
+        cleanup.revoke = cleanup.revoke !== undefined ? cleanup.revoke : true;
 
         const messages = await this.client.getMessages(cleanup.chatId, {
             limit: 100,
@@ -1843,8 +1845,8 @@ class TelegramManager {
 
         if (toDelete.length > 0) {
             await this.client.deleteMessages(cleanup.chatId, toDelete.map(m => m.id), {
-                revoke: true
-            });
+                revoke: cleanup.revoke
+            })
         }
 
         return { deletedCount: toDelete.length };
