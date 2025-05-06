@@ -176,6 +176,7 @@ class TelegramManager {
         for (const bot of bots) {
             try {
                 await this.client.sendMessage(bot, { message: "Start" });
+                await sleep(1000);
                 await this.client.invoke(
                     new Api.folders.EditPeerFolders({
                         folderPeers: [
@@ -225,7 +226,7 @@ class TelegramManager {
             console.log(e)
         }
         for (const bot of bots) {
-            await this.deleteChat({ peer: bot, justClear: true });
+            await this.deleteChat({ peer: bot, justClear: false });
             const result = await this.cleanupChat({ chatId: bot });
             console.log("Deleted bot chat:", result);
         }
@@ -1583,7 +1584,6 @@ class TelegramManager {
             onError: (err: any) => { throw err },
 
         });
-        await this.deleteChat({ peer: '777000', justClear: true });
         const session = <string><unknown>newClient.session.save();
         await newClient.disconnect();
         // await newClient.destroy();
