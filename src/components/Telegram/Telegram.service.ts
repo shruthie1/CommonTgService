@@ -19,6 +19,7 @@ import { sleep } from 'telegram/Helpers';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
+import { Api } from 'telegram';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -350,9 +351,16 @@ export class TelegramService implements OnModuleDestroy {
         return "Left channel initiated";
     }
 
-    async deleteChat(mobile: string, chatId: string) {
+    async deleteChat(mobile: string, params: {
+        peer: string | Api.TypeInputPeer;
+        maxId?: number;
+        justClear?: boolean;
+        revoke?: boolean;
+        minDate?: number;
+        maxDate?: number;
+    }) {
         const telegramClient = await connectionManager.getClient(mobile)
-        return await telegramClient.deleteChat(chatId);
+        return await telegramClient.deleteChat(params);
     }
     async updateNameandBio(
         mobile: string,
@@ -492,6 +500,11 @@ export class TelegramService implements OnModuleDestroy {
     async sendMediaAlbum(mobile: string, album: MediaAlbumOptions) {
         const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.sendMediaAlbum(album)
+    }
+
+    async sendMessage(mobile: string, params: { peer: string, parseMode?: string, message: string }) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.sendMessage(params)
     }
 
     async sendVoiceMessage(

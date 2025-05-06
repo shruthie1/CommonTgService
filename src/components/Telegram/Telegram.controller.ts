@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes, ApiBadRequestResponse, ApiNotFoundResponse, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { query, Response } from 'express';
 import { TelegramService } from './Telegram.service';
@@ -35,6 +35,9 @@ import * as multer from 'multer';
 import { connectionManager } from './utils/connection-manager';
 import { types } from 'util';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
+import { DeleteHistoryDto } from './dto/delete-chat.dto';
+import { UpdateUsernameDto } from './dto/update-username.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -133,6 +136,22 @@ export class TelegramController {
         return this.telegramService.getMessages(mobile, chatId, limit);
     }
 
+
+    @Post('message/:mobile')
+    @ApiOperation({ summary: 'Send a Telegram message as a user' })
+    @ApiParam({
+        name: 'mobile',
+        description: 'Mobile number of the user account to send the message from',
+        required: true,
+        example: '1234567890',
+    })
+    async sendMessage(
+        @Param('mobile') mobile: string,
+        @Body() dto: SendMessageDto,
+    ) {
+        return this.telegramService.sendMessage(mobile, dto);
+    }
+
     @Post('messages/forward/:mobile')
     @ApiOperation({ summary: 'Forward messages' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
@@ -176,7 +195,7 @@ export class TelegramController {
                         break;
                     case BatchOperationType.DELETE:
                         for (const item of batch) {
-                            await this.telegramService.deleteChat(mobile, item.chatId);
+                            await this.telegramService.deleteChat(mobile, { peer: item.chatId, justClear: true });
                         }
                         break;
                     default:
@@ -245,6 +264,21 @@ export class TelegramController {
         @Query('channel') channel: string
     ) {
         return this.telegramService.leaveChannel(mobile, channel);
+    }
+
+    @Patch('username/:mobile')
+    @ApiOperation({ summary: 'Update the Telegram username of a user' })
+    @ApiParam({
+        name: 'mobile',
+        description: 'Mobile number of the user whose username should be updated',
+        required: true,
+        example: '1234567890',
+    })
+    async updateUsername(
+        @Param('mobile') mobile: string,
+        @Body() updateUsernameDto: UpdateUsernameDto,
+    ) {
+        return this.telegramService.updateUsername(mobile, updateUsernameDto.newUsername);
     }
 
     // Security & Privacy
@@ -500,14 +534,29 @@ export class TelegramController {
     }
 
     @Delete('chat/:mobile')
-    @ApiOperation({ summary: 'Delete a chat' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'chatId', description: 'Chat ID to delete', required: true })
+    @ApiOperation({ summary: 'Delete or clear a chat history for a user' })
+    @ApiParam({
+        name: 'mobile',
+        description: 'Mobile number of the user whose chat should be deleted',
+        required: true,
+        example: '1234567890',
+    })
+    @ApiQuery({
+        name: 'peer',
+        description: 'Username or Peer ID of the chat to delete',
+        required: true,
+        example: 'someusername',
+    })
+    @ApiQuery({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId', example: 100000 })
+    @ApiQuery({ name: 'justClear', required: false, description: 'Only clear history for this user', example: false })
+    @ApiQuery({ name: 'revoke', required: false, description: 'Delete for everyone if possible', example: true })
+    @ApiQuery({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)', example: 1609459200 })
+    @ApiQuery({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)', example: 1612137600 })
     async deleteChatHistory(
         @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string
+        @Query() deleteHistoryDto: DeleteHistoryDto,
     ) {
-        return this.telegramService.deleteChat(mobile, chatId);
+        return this.telegramService.deleteChat(mobile, deleteHistoryDto);
     }
 
     // Additional Message Operations
@@ -1057,8 +1106,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Create a new bot using BotFather' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: CreateBotDto })
-    @ApiResponse({ 
-        status: 201, 
+    @ApiResponse({
+        status: 201,
         description: 'Bot created successfully',
         schema: {
             type: 'object',
