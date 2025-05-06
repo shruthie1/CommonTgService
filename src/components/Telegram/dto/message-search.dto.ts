@@ -1,12 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { 
-  IsString, 
-  IsOptional, 
-  IsArray, 
-  IsNumber, 
-  IsEnum, 
-  IsDate, 
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsNumber,
+  IsEnum,
+  IsDate,
   Min,
   Max,
   IsInt,
@@ -221,4 +221,13 @@ export class SearchMessagesResponseDto {
   @Type(() => MessageTypeResult)
   @IsOptional()
   roundVideo?: MessageTypeResult;
+
+  @ApiPropertyOptional({
+    description: 'Round voice message results',
+    type: MessageTypeResult
+  })
+  @ValidateNested()
+  @Type(() => MessageTypeResult)
+  @IsOptional()
+  roundVoice?: MessageTypeResult;
 }
