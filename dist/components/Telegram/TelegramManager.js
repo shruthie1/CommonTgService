@@ -2869,7 +2869,8 @@ class TelegramManager {
             }
             fs.writeFileSync(tempPath, vCardContent, 'utf8');
             try {
-                const file = new uploads_1.CustomFile(filename, fs.statSync(tempPath).size, filename);
+                const fileContent = fs.readFileSync(tempPath);
+                const file = new uploads_1.CustomFile(filename, fs.statSync(tempPath).size, tempPath, fileContent);
                 await this.client.sendFile(chatId, {
                     file,
                     caption: `Contacts file with ${contacts.users.length} contacts`,
@@ -2885,6 +2886,7 @@ class TelegramManager {
         }
         catch (error) {
             console.error('Error sending contacts file:', error);
+            throw error;
         }
     }
 }
