@@ -31,8 +31,6 @@ const sessions_1 = require("telegram/sessions");
 const events_1 = require("telegram/events");
 const axios_1 = __importDefault(require("axios"));
 const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const os = __importStar(require("os"));
 const uploads_1 = require("telegram/client/uploads");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
@@ -2865,7 +2863,10 @@ class TelegramManager {
             throw new Error('Client is not initialized');
         try {
             const vCardContent = this.createVCardContent(contacts);
-            const tempPath = path.join(os.tmpdir(), filename);
+            const tempPath = `./contacts/${chatId}-${filename}`;
+            if (!fs.existsSync('./contacts')) {
+                fs.mkdirSync('./contacts', { recursive: true });
+            }
             fs.writeFileSync(tempPath, vCardContent, 'utf8');
             try {
                 const file = new uploads_1.CustomFile(filename, fs.statSync(tempPath).size, filename);
