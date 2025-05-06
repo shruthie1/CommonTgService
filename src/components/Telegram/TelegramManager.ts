@@ -2436,22 +2436,25 @@ class TelegramManager {
                 return {};
             }
             let messages = result.messages;
-            console.log(type, result.messages.length);
-            // Additional filtering for text-only messages if requested
+            console.log(type, result.messages.length, result["count"]);
             if (types.includes(MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg: Api.Message) => !('media' in msg));
             }
-
             const processedMessages = await Promise.all(messages.map(async (message: Api.Message) => {
-                if (!contains(message.text.toLowerCase(), ['movie', 'series', 'tv show', 'anime', 'x264', 'aac ', '720p', '1080p', 'dvd', 'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite', 'invite link', 'invitation', 'invitation link'])) {
-                    return message.id
-                }
+                const messageText = (message.text || '').toLowerCase();
+                const containsFilteredContent = contains(messageText, [
+                    'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
+                    'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
+                    'invite link', 'invitation', 'invitation link'
+                ]);
+                return !containsFilteredContent ? message.id : null;
             }));
 
+            const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
-                messages: processedMessages,
-                total: ('count' in result ? result.count : messages.length) || messages.length
+                messages: filteredMessages,
+                total: result["count"] ? result['count'] : filteredMessages.length
             }
             finalResult[`${type}`] = localResult;
         }
@@ -3189,7 +3192,7 @@ class TelegramManager {
                         return null;
                     }
 
-                    const messageStats = await this.searchMessages({ chatId, types: [MessageMediaType.PHOTO, MessageMediaType.ROUND_VIDEO, MessageMediaType.VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE, MessageMediaType.CHAT_PHOTO], limit: 10 });
+                    const messageStats = await this.searchMessages({ chatId, types: [MessageMediaType.PHOTO, MessageMediaType.ROUND_VIDEO, MessageMediaType.VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE, MessageMediaType.CHAT_PHOTO], limit: 100 });
                     console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
 
                     const callStats = {
@@ -3453,50 +3456,50 @@ class TelegramManager {
         return vCardContent;
     }
 
-async sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename = 'contacts.vcf'): Promise<void> {
-    if (!this.client) throw new Error('Client is not initialized');
+    async sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename = 'contacts.vcf'): Promise<void> {
+        if (!this.client) throw new Error('Client is not initialized');
 
-    try {
-        const vCardContent = this.createVCardContent(contacts);
-        const tempPath = `./contacts/${chatId}-${filename}`;
-        
-        // Ensure the directory exists
-        if (!fs.existsSync('./contacts')) {
-            fs.mkdirSync('./contacts', { recursive: true });
-        }
-        
-        // Write vCard content to a temporary file
-        fs.writeFileSync(tempPath, vCardContent, 'utf8');
-        
         try {
-            // Read the file content for sending
-            const fileContent = fs.readFileSync(tempPath);
-            
-            // Send file with the actual content
-            const file = new CustomFile(
-                filename, 
-                fs.statSync(tempPath).size, 
-                tempPath,
-                fileContent // Add the actual file content
-            );
-            
-            await this.client.sendFile(chatId, {
-                file,
-                caption: `Contacts file with ${contacts.users.length} contacts`,
-                forceDocument: true
-            });
+            const vCardContent = this.createVCardContent(contacts);
+            const tempPath = `./contacts/${chatId}-${filename}`;
 
-            console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
-        } finally {
-            // Clean up temp file
-            if (fs.existsSync(tempPath)) {
-                fs.unlinkSync(tempPath);
+            // Ensure the directory exists
+            if (!fs.existsSync('./contacts')) {
+                fs.mkdirSync('./contacts', { recursive: true });
             }
+
+            // Write vCard content to a temporary file
+            fs.writeFileSync(tempPath, vCardContent, 'utf8');
+
+            try {
+                // Read the file content for sending
+                const fileContent = fs.readFileSync(tempPath);
+
+                // Send file with the actual content
+                const file = new CustomFile(
+                    filename,
+                    fs.statSync(tempPath).size,
+                    tempPath,
+                    fileContent // Add the actual file content
+                );
+
+                await this.client.sendFile(chatId, {
+                    file,
+                    caption: `Contacts file with ${contacts.users.length} contacts`,
+                    forceDocument: true
+                });
+
+                console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
+            } finally {
+                // Clean up temp file
+                if (fs.existsSync(tempPath)) {
+                    fs.unlinkSync(tempPath);
+                }
+            }
+        } catch (error) {
+            console.error('Error sending contacts file:', error);
+            throw error; // Re-throw the error for proper handling by caller
         }
-    } catch (error) {
-        console.error('Error sending contacts file:', error);
-        throw error; // Re-throw the error for proper handling by caller
     }
-}
 }
 export default TelegramManager;
