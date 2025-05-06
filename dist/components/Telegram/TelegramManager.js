@@ -2097,19 +2097,24 @@ class TelegramManager {
                 return {};
             }
             let messages = result.messages;
-            console.log(type, result.messages.length);
+            console.log(type, result.messages.length, result["count"]);
             if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
             }
             const processedMessages = await Promise.all(messages.map(async (message) => {
-                if (!(0, utils_1.contains)(message.text.toLowerCase(), ['movie', 'series', 'tv show', 'anime', 'x264', 'aac ', '720p', '1080p', 'dvd', 'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite', 'invite link', 'invitation', 'invitation link'])) {
-                    return message.id;
-                }
+                const messageText = (message.text || '').toLowerCase();
+                const containsFilteredContent = (0, utils_1.contains)(messageText, [
+                    'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
+                    'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
+                    'invite link', 'invitation', 'invitation link'
+                ]);
+                return !containsFilteredContent ? message.id : null;
             }));
+            const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
-                messages: processedMessages,
-                total: ('count' in result ? result.count : messages.length) || messages.length
+                messages: filteredMessages,
+                total: result["count"] ? result['count'] : filteredMessages.length
             };
             finalResult[`${type}`] = localResult;
         }
@@ -2653,7 +2658,7 @@ class TelegramManager {
                         console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
                         return null;
                     }
-                    const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.CHAT_PHOTO], limit: 10 });
+                    const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.CHAT_PHOTO], limit: 100 });
                     console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
                     const callStats = {
                         total: 0,
