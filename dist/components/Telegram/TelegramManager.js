@@ -217,8 +217,8 @@ class TelegramManager {
             console.log(e);
         }
         for (const bot of bots) {
-            await this.deleteChat({ peer: bot, justClear: false });
             const result = await this.cleanupChat({ chatId: bot, revoke: false });
+            await this.deleteChat({ peer: bot, justClear: false });
             console.log("Deleted bot chat:", result);
         }
         await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
@@ -2089,7 +2089,9 @@ class TelegramManager {
                 messages = messages.filter((msg) => !('media' in msg));
             }
             const processedMessages = await Promise.all(messages.map(async (message) => {
-                return message.id;
+                if (!(0, utils_1.contains)(message.text.toLowerCase(), ['movie', 'series', 'tv show', 'anime', 'x264', 'aac ', '720p', '1080p', 'dvd', 'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite', 'invite link', 'invitation', 'invitation link'])) {
+                    return message.id;
+                }
             }));
             const localResult = {
                 messages: processedMessages,
