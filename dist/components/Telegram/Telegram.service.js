@@ -52,6 +52,7 @@ const telegram_logger_1 = require("./utils/telegram-logger");
 const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const utils_1 = require("../../utils");
 let TelegramService = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -185,9 +186,44 @@ let TelegramService = class TelegramService {
         return "Media forward initiated";
     }
     async forwardMediaToBot(mobile, fromChatId) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        telegramClient.forwardMediaToBot(fromChatId);
-        return "Media forward initiated";
+        try {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+            await telegramClient.forwardMediaToBot(fromChatId);
+            const dialogs = await telegramClient.getDialogs({ limit: 500 });
+            const channels = dialogs
+                .filter(chat => chat.isChannel || chat.isGroup)
+                .map(chat => {
+                const chatEntity = chat.entity;
+                const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
+                if (!chatEntity.broadcast &&
+                    !cannotSendMsgs &&
+                    chatEntity.participantsCount > 50 &&
+                    (0, utils_1.shouldMatch)(chatEntity)) {
+                    return {
+                        channelId: chatEntity.id.toString(),
+                        canSendMsgs: true,
+                        participantsCount: chatEntity.participantsCount,
+                        private: false,
+                        title: chatEntity.title,
+                        broadcast: chatEntity.broadcast,
+                        megagroup: chatEntity.megagroup,
+                        restricted: chatEntity.restricted,
+                        sendMessages: true,
+                        username: chatEntity.username,
+                        forbidden: false
+                    };
+                }
+                return null;
+            })
+                .filter((channel) => Boolean(channel));
+            await this.channelsService.createMultiple(channels);
+            await this.activeChannelsService.createMultiple(channels);
+            return "Media forward initiated successfully";
+        }
+        catch (error) {
+            console.error("Error forwarding media:", error);
+            return `Media forward failed: ${error.message}`;
+        }
     }
     async blockUser(mobile, chatId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
