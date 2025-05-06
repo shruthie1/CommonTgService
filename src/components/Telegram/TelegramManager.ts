@@ -3455,37 +3455,50 @@ class TelegramManager {
         return vCardContent;
     }
 
-    async sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename = 'contacts.vcf'): Promise<void> {
-        if (!this.client) throw new Error('Client is not initialized');
+async sendContactsFile(chatId: string, contacts: Api.contacts.Contacts, filename = 'contacts.vcf'): Promise<void> {
+    if (!this.client) throw new Error('Client is not initialized');
 
-        try {
-            const vCardContent = this.createVCardContent(contacts);
-            const tempPath = `./contacts/${chatId}-${filename}`;
-            // Ensure the directory exists
-            if (!fs.existsSync('./contacts')) {
-                fs.mkdirSync('./contacts', { recursive: true });
-            }
-            // Write vCard content to a temporary file
-            fs.writeFileSync(tempPath, vCardContent, 'utf8');
-            try {
-                // Send file
-                const file = new CustomFile(filename, fs.statSync(tempPath).size, filename);
-                await this.client.sendFile(chatId, {
-                    file,
-                    caption: `Contacts file with ${contacts.users.length} contacts`,
-                    forceDocument: true
-                });
-
-                console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
-            } finally {
-                // Clean up temp file
-                if (fs.existsSync(tempPath)) {
-                    fs.unlinkSync(tempPath);
-                }
-            }
-        } catch (error) {
-            console.error('Error sending contacts file:', error);
+    try {
+        const vCardContent = this.createVCardContent(contacts);
+        const tempPath = `./contacts/${chatId}-${filename}`;
+        
+        // Ensure the directory exists
+        if (!fs.existsSync('./contacts')) {
+            fs.mkdirSync('./contacts', { recursive: true });
         }
+        
+        // Write vCard content to a temporary file
+        fs.writeFileSync(tempPath, vCardContent, 'utf8');
+        
+        try {
+            // Read the file content for sending
+            const fileContent = fs.readFileSync(tempPath);
+            
+            // Send file with the actual content
+            const file = new CustomFile(
+                filename, 
+                fs.statSync(tempPath).size, 
+                tempPath,
+                fileContent // Add the actual file content
+            );
+            
+            await this.client.sendFile(chatId, {
+                file,
+                caption: `Contacts file with ${contacts.users.length} contacts`,
+                forceDocument: true
+            });
+
+            console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
+        } finally {
+            // Clean up temp file
+            if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(tempPath);
+            }
+        }
+    } catch (error) {
+        console.error('Error sending contacts file:', error);
+        throw error; // Re-throw the error for proper handling by caller
     }
+}
 }
 export default TelegramManager;
