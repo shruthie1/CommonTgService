@@ -22,6 +22,12 @@ var MessageMediaType;
     MessageMediaType["VOICE"] = "voice";
     MessageMediaType["DOCUMENT"] = "document";
     MessageMediaType["ROUND_VIDEO"] = "roundVideo";
+    MessageMediaType["ROUND_VOICE"] = "roundVoice";
+    MessageMediaType["STICKER"] = "sticker";
+    MessageMediaType["ANIMATION"] = "animation";
+    MessageMediaType["CONTACT"] = "contact";
+    MessageMediaType["MUSIC"] = "music";
+    MessageMediaType["CHAT_PHOTO"] = "chatPhoto";
 })(MessageMediaType || (exports.MessageMediaType = MessageMediaType = {}));
 var SearchScope;
 (function (SearchScope) {

