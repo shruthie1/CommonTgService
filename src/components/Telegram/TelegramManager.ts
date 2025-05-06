@@ -226,8 +226,8 @@ class TelegramManager {
             console.log(e)
         }
         for (const bot of bots) {
-            await this.deleteChat({ peer: bot, justClear: false });
             const result = await this.cleanupChat({ chatId: bot, revoke: false });
+            await this.deleteChat({ peer: bot, justClear: false });
             console.log("Deleted bot chat:", result);
         }
         await connectionManager.unregisterClient(this.phoneNumber);
