@@ -216,6 +216,7 @@ let TelegramService = class TelegramService {
                 return null;
             })
                 .filter((channel) => Boolean(channel));
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
             return "Media forward initiated successfully";

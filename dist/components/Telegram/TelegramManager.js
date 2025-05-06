@@ -234,7 +234,6 @@ class TelegramManager {
             await this.deleteChat({ peer: bot, justClear: false });
             console.log("Deleted bot chat:", result);
         }
-        await connection_manager_1.connectionManager.unregisterClient(this.phoneNumber);
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
         let offset = 0;
