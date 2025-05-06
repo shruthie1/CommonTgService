@@ -3,8 +3,6 @@ import { StringSession } from 'telegram/sessions';
 import { NewMessage, NewMessageEvent } from 'telegram/events';
 import axios from 'axios';
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { CustomFile } from 'telegram/client/uploads';
 import { TotalList, sleep } from 'telegram/Helpers';
 import { LogLevel } from 'telegram/extensions/Logger';

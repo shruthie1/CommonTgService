@@ -20,6 +20,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
+import { shouldMatch } from '../../utils';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -176,10 +177,47 @@ export class TelegramService implements OnModuleDestroy {
         return "Media forward initiated";
     }
 
-    async forwardMediaToBot(mobile: string, fromChatId: string) {
-        const telegramClient = await connectionManager.getClient(mobile)
-        telegramClient.forwardMediaToBot(fromChatId);
-        return "Media forward initiated";
+    async forwardMediaToBot(mobile: string, fromChatId: string): Promise<string> {
+        try {
+            const telegramClient = await connectionManager.getClient(mobile);
+            await telegramClient.forwardMediaToBot(fromChatId);
+            const dialogs = await telegramClient.getDialogs({ limit: 500 });
+            const channels = dialogs
+                .filter(chat => chat.isChannel || chat.isGroup)
+                .map(chat => {
+                    const chatEntity = chat.entity as Api.Channel;
+                    const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
+
+                    if (!chatEntity.broadcast &&
+                        !cannotSendMsgs &&
+                        chatEntity.participantsCount > 50 &&
+                        shouldMatch(chatEntity)) {
+
+                        return {
+                            channelId: chatEntity.id.toString(),
+                            canSendMsgs: true,
+                            participantsCount: chatEntity.participantsCount,
+                            private: false,
+                            title: chatEntity.title,
+                            broadcast: chatEntity.broadcast,
+                            megagroup: chatEntity.megagroup,
+                            restricted: chatEntity.restricted,
+                            sendMessages: true,
+                            username: chatEntity.username,
+                            forbidden: false
+                        };
+                    }
+                    return null;
+                })
+                .filter((channel): channel is NonNullable<typeof channel> => Boolean(channel));
+
+            await this.channelsService.createMultiple(channels);
+            await this.activeChannelsService.createMultiple(channels);
+            return "Media forward initiated successfully";
+        } catch (error) {
+            console.error("Error forwarding media:", error);
+            return `Media forward failed: ${error.message}`;
+        }
     }
 
     async blockUser(mobile: string, chatId: string) {
