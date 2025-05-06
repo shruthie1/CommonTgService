@@ -183,6 +183,7 @@ declare class TelegramManager {
         beforeDate?: Date;
         onlyMedia?: boolean;
         excludePinned?: boolean;
+        revoke?: boolean;
     }): Promise<{
         deletedCount: number;
     }>;
