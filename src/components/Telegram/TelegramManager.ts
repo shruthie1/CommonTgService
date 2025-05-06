@@ -227,6 +227,7 @@ class TelegramManager {
         }
         for (const bot of bots) {
             const result = await this.cleanupChat({ chatId: bot, revoke: false });
+            await sleep(1000);
             await this.deleteChat({ peer: bot, justClear: false });
             console.log("Deleted bot chat:", result);
         }
