@@ -2441,13 +2441,24 @@ class TelegramManager {
                 messages = messages.filter((msg: Api.Message) => !('media' in msg));
             }
             const processedMessages = await Promise.all(messages.map(async (message: Api.Message) => {
-                const messageText = (message.text || '').toLowerCase();
-                const containsFilteredContent = contains(messageText, [
+                const unwantedTexts = [
                     'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
                     'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
-                    'invite link', 'invitation', 'invitation link'
-                ]);
-                return !containsFilteredContent ? message.id : null;
+                    'invite link', 'invitation', 'invitation link', 'demo', 'earn', 'book', 'paper', 'pay',
+                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray'
+                ]
+                if (message.media && message.media instanceof Api.MessageMediaDocument) {
+                    const document = message.media.document as Api.Document;
+                    const fileName = document.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName || '';
+                    const fileNameText = fileName.toLowerCase();
+                    const isWantedFile = !contains(fileNameText, unwantedTexts);
+                    return isWantedFile ? message.id : null;
+                } else {
+                    const messageText = (message.text || '').toLowerCase();
+                    const containsFilteredContent = contains(messageText, unwantedTexts);
+                    return !containsFilteredContent ? message.id : null;
+
+                }
             }));
 
             const filteredMessages = processedMessages.filter(id => id !== null);
