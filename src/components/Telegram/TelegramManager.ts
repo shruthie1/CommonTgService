@@ -2449,7 +2449,8 @@ class TelegramManager {
                 ]
                 if (message.media && message.media instanceof Api.MessageMediaDocument) {
                     const document = message.media.document as Api.Document;
-                    const fileName = document.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename)?.fileName || '';
+                    const fileNameAttr = document.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
+                    const fileName = fileNameAttr && fileNameAttr instanceof Api.DocumentAttributeFilename ? fileNameAttr.fileName : '';
                     const fileNameText = fileName.toLowerCase();
                     const isWantedFile = !contains(fileNameText, unwantedTexts);
                     return isWantedFile ? message.id : null;
@@ -2457,7 +2458,6 @@ class TelegramManager {
                     const messageText = (message.text || '').toLowerCase();
                     const containsFilteredContent = contains(messageText, unwantedTexts);
                     return !containsFilteredContent ? message.id : null;
-
                 }
             }));
 
