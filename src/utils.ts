@@ -4,7 +4,7 @@ export function sleep(ms: number): Promise<void> {
 
 export function contains(str: string | null | undefined, arr: string[]): boolean {
   if (!str || !Array.isArray(arr)) return false;
-  return arr.some(element => element && str.includes(element));
+  return arr.some(element => element && str.includes(element.toLowerCase()));
 }
 
 export function toBoolean(value: string | number | boolean | null | undefined): boolean {
