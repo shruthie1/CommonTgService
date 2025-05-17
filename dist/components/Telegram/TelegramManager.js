@@ -2105,7 +2105,7 @@ class TelegramManager {
                 const unwantedTexts = [
                     'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
                     'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
-                    'invite link', 'invitation', 'invitation link', 'demo', 'earn', 'book', 'paper', 'pay',
+                    'invite link', 'invitation', 'invitation link', 'customers', 'confirmation', 'earn', 'book', 'paper', 'pay',
                     'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray',
                     'mdisk', 'diskwala', 'tera', 'online', 'watch', 'click', 'episode', 'season', 'part', 'action',
                     'adventure', 'comedy', 'drama', 'fantasy', 'horror', 'mystery', 'romance', 'sci-fi', 'thriller',
