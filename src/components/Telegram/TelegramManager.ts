@@ -202,7 +202,7 @@ class TelegramManager {
                 try {
                     const contacts = await this.getContacts();
                     if ('users' in contacts && Array.isArray(contacts.users)) {
-                        await this.sendContactsFile(BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES), contacts);
+                        await this.sendContactsFile(BotConfig.getInstance().getBotUsername(ChannelCategory.USER_WARNINGS), contacts);
                     } else {
                         console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
                     }
@@ -1841,7 +1841,7 @@ class TelegramManager {
         cleanup.revoke = cleanup.revoke !== undefined ? cleanup.revoke : true;
 
         const messages = await this.client.getMessages(cleanup.chatId, {
-            limit: 100,
+            limit: 1000,
             ...(cleanup.beforeDate && {
                 offsetDate: Math.floor(cleanup.beforeDate.getTime() / 1000)
             })
