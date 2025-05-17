@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
+import * as fs from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -29,7 +30,7 @@ async function bootstrap() {
     origin: "*"
   });
   const document = SwaggerModule.createDocument(app, config);
-  // fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
+  fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
   SwaggerModule.setup('api', app, document);
   mongoose.set('debug', true)
   app.useGlobalPipes(new ValidationPipe({

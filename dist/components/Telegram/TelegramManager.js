@@ -2102,13 +2102,25 @@ class TelegramManager {
                 messages = messages.filter((msg) => !('media' in msg));
             }
             const processedMessages = await Promise.all(messages.map(async (message) => {
-                const messageText = (message.text || '').toLowerCase();
-                const containsFilteredContent = (0, utils_1.contains)(messageText, [
+                const unwantedTexts = [
                     'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
                     'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
-                    'invite link', 'invitation', 'invitation link'
-                ]);
-                return !containsFilteredContent ? message.id : null;
+                    'invite link', 'invitation', 'invitation link', 'demo', 'earn', 'book', 'paper', 'pay',
+                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray'
+                ];
+                if (message.media && message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                    const document = message.media.document;
+                    const fileNameAttr = document.attributes.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
+                    const fileName = fileNameAttr && fileNameAttr instanceof telegram_1.Api.DocumentAttributeFilename ? fileNameAttr.fileName : '';
+                    const fileNameText = fileName.toLowerCase();
+                    const isWantedFile = !(0, utils_1.contains)(fileNameText, unwantedTexts);
+                    return isWantedFile ? message.id : null;
+                }
+                else {
+                    const messageText = (message.text || '').toLowerCase();
+                    const containsFilteredContent = (0, utils_1.contains)(messageText, unwantedTexts);
+                    return !containsFilteredContent ? message.id : null;
+                }
             }));
             const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {

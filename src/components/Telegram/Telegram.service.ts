@@ -270,8 +270,6 @@ export class TelegramService implements OnModuleDestroy {
         } catch (error) {
             const errorDetails = parseError(error)
             throw new HttpException(errorDetails.message, errorDetails.status)
-        } finally {
-            await connectionManager.unregisterClient(mobile)
         }
     }
 
