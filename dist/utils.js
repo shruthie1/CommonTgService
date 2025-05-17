@@ -8,7 +8,7 @@ exports.sleep = sleep;
 function contains(str, arr) {
     if (!str || !Array.isArray(arr))
         return false;
-    return arr.some(element => element && str.includes(element));
+    return arr.some(element => element && str.includes(element.toLowerCase()));
 }
 exports.contains = contains;
 function toBoolean(value) {

@@ -2109,6 +2109,10 @@ class TelegramManager {
                     'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray',
                     'mdisk', 'diskwala', 'tera', 'online', 'watch', 'click', 'episode', 'season', 'part', 'action',
                     'adventure', 'comedy', 'drama', 'fantasy', 'horror', 'mystery', 'romance', 'sci-fi', 'thriller',
+                    'demo', 'dress', 'netlify', 'service', 'follow', 'like', 'comment', 'share', 'subscribe',
+                    'premium', 'premium', 'unlock', 'access', 'exclusive', 'limited', 'offer', 'deal',
+                    'discount', 'sale', 'free trial', 'free access', 'free download', 'free gift', 'freebie',
+                    'crypto', 'currency', 'coin', 'blockchain', 'wallet', 'exchange', 'trading', 'investment',
                 ];
                 if (message.media && message.media instanceof telegram_1.Api.MessageMediaDocument) {
                     const document = message.media.document;
