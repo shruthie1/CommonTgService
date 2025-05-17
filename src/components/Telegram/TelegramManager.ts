@@ -2445,7 +2445,9 @@ class TelegramManager {
                     'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
                     'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
                     'invite link', 'invitation', 'invitation link', 'demo', 'earn', 'book', 'paper', 'pay',
-                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray'
+                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray', 
+                    'mdisk', 'diskwala', 'tera', 'online', 'watch', 'click', 'episode', 'season', 'part', 'action',
+                    'adventure', 'comedy', 'drama', 'fantasy', 'horror', 'mystery', 'romance', 'sci-fi', 'thriller',
                 ]
                 if (message.media && message.media instanceof Api.MessageMediaDocument) {
                     const document = message.media.document as Api.Document;
