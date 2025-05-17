@@ -268,9 +268,6 @@ let TelegramService = class TelegramService {
             const errorDetails = (0, parseError_1.parseError)(error);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
-        finally {
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
-        }
     }
     async updatePrivacyforDeletedAccount(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
