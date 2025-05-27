@@ -13,7 +13,7 @@ import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: 'promoteClientModule', schema: PromoteClientSchema, collection: 'promoteClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),

@@ -7,7 +7,7 @@ import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema, collection: "userData" }])],
   controllers: [UserDataController],
   providers: [UserDataService],

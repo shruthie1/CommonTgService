@@ -9,7 +9,7 @@ import { PromoteMsgModule } from '../promote-msgs/promote-msgs.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: ActiveChannel.name, schema: ActiveChannelSchema }]),
     PromoteMsgModule
   ],

@@ -9,7 +9,7 @@ import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: 'userModule', schema: UserSchema, collection: 'users' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => ClientModule)

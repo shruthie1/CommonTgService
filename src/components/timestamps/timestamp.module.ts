@@ -4,10 +4,12 @@ import { TimestampService } from './timestamp.service';
 import { TimestampController } from './timestamp.controller';
 import { TimestampSchema } from './timestamps.schema';
 import { ClientModule } from '../clients/client.module';
+import { initModule } from '../ConfigurationInit';
 
 @Global()
 @Module({
   imports: [
+    initModule.forRoot(),
     MongooseModule.forFeature([{ 
       name: 'timestampModule', 
       collection: 'timestamps', 

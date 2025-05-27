@@ -13,7 +13,7 @@ import { PromoteClientModule } from '../promote-clients/promote-client.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: 'bufferClientModule', schema: BufferClientSchema, collection: 'bufferClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),

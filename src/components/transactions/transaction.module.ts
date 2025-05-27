@@ -7,13 +7,13 @@ import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
   controllers: [TransactionController],
   providers: [TransactionService],
-  exports:[TransactionService]
+  exports: [TransactionService]
 })
 export class TransactionModule {}

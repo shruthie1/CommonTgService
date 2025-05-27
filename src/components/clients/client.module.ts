@@ -13,7 +13,7 @@ import { TimestampModule } from '../timestamps/timestamp.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => BufferClientModule),

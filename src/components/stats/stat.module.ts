@@ -7,7 +7,7 @@ import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
     imports: [
-        initModule,
+        initModule.forRoot(),
         MongooseModule.forFeature([{ name: "StatsModule", collection: "stats", schema: StatSchema }])],
     controllers: [StatController],
     providers: [StatService],

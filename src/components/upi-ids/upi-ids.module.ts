@@ -4,10 +4,12 @@ import { UpiIdService } from './upi-ids.service';
 import { UpiIdController } from './upi-ids.controller';
 import { UpiIdSchema } from './upi-ids.schema';
 import { NpointModule } from '../n-point/npoint.module';
+import { initModule } from '../ConfigurationInit';
 
 @Global()
 @Module({
   imports: [
+    initModule.forRoot(),
     UpiIdModule,
     NpointModule,
     MongooseModule.forFeature([{ name: 'UpiIdModule', collection: 'upi-ids', schema: UpiIdSchema }]),

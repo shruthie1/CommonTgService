@@ -9,7 +9,7 @@ import { ClientModule } from '../clients/client.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: ClientSchema }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => ClientModule)

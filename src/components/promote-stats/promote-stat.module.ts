@@ -7,7 +7,8 @@ import { PromoteStat, PromoteStatSchema } from './schemas/promote-stat.schema';
 import { ClientModule } from '../clients/client.module';
 
 @Module({
-  imports: [initModule,
+  imports: [
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: PromoteStat.name, collection: "promoteStats", schema: PromoteStatSchema }]),
     ClientModule
   ],

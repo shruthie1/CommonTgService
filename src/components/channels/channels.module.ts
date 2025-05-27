@@ -8,7 +8,7 @@ import { initModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     MongooseModule.forFeature([{ name: Channel.name, schema: ChannelSchema }]),
   ],
   controllers: [ChannelsController],
