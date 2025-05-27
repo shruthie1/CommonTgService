@@ -129,8 +129,4 @@ exports.Transaction = Transaction = __decorate([
     })
 ], Transaction);
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);
-exports.TransactionSchema.index({ chatId: 1, status: 1 });
-exports.TransactionSchema.index({ profile: 1, status: 1 });
-exports.TransactionSchema.index({ createdAt: -1 });
-exports.TransactionSchema.index({ amount: 1, status: 1 });
 //# sourceMappingURL=transaction.schema.js.map
