@@ -1,55 +1,113 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { BotConfig } from '../../utils/TelegramBots.config';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class ConfigurationService {
-    constructor(@InjectModel('configurationModule') private configurationModel: Model<Configuration>) {
-        this.setEnv().then(async () => {
-            await BotConfig.getInstance().ready();
-            fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
-        });
+export class ConfigurationService implements OnModuleInit {
+    private readonly logger = new Logger(ConfigurationService.name);
+    private initialized = false;
 
-    }
+    constructor(
+        @InjectModel('configurationModule') private configurationModel: Model<Configuration>,
+        private configService: ConfigService
+    ) {}
 
-    async OnModuleInit() {
-        console.log("Config Module Inited")
-    }
-
-    async findOne(): Promise<any> {
-        const user = await this.configurationModel.findOne({}).exec();
-        if (!user) {
-            throw new NotFoundException(`configurationModel not found`);
+    async onModuleInit() {
+        if (this.initialized) return;
+        
+        try {
+            await this.initializeConfiguration();
+            this.initialized = true;
+        } catch (error) {
+            this.logger.error('Failed to initialize configuration', error);
+            throw error;
         }
-        return user;
+    }
+
+    private async initializeConfiguration() {
+        this.logger.log('Initializing configuration service...');
+        
+        // First check if we already have configuration in process.env
+        if (!process.env.mongouri) {
+            await this.setEnv();
+        }
+        
+        await BotConfig.getInstance().ready();
+        await this.notifyStart();
+        this.logger.log('Configuration service initialized successfully');
+    }
+
+    private async notifyStart() {
+        try {
+            const clientId = process.env.clientId || this.configService.get('clientId');
+            await fetchWithTimeout(
+                `${notifbot()}&text=${encodeURIComponent(`Started :: ${clientId}`)}`
+            );
+        } catch (error) {
+            this.logger.warn('Failed to send start notification', error);
+        }
+    }
+
+    async findOne(): Promise<Configuration> {
+        const configuration = await this.configurationModel.findOne({}).lean().exec();
+        if (!configuration) {
+            throw new NotFoundException('Configuration not found');
+        }
+        return configuration;
     }
 
     async setEnv() {
-        console.log("Setting Envs");
-        const configuration: Configuration = await this.configurationModel.findOne({}, { _id: 0 });
-        const data = { ...configuration }
-        for (const key in data) {
-            console.log('setting', key)
-            process.env[key] = data[key];
+        this.logger.log('Setting environment variables...');
+        const configuration = await this.configurationModel.findOne({}, { _id: 0 }).lean();
+        
+        if (!configuration) {
+            this.logger.warn('No configuration found in database, using environment variables only');
+            return;
         }
-        console.log("finished setting env");
+
+        for (const [key, value] of Object.entries(configuration)) {
+            if (value !== undefined && value !== null) {
+                // Don't override existing environment variables
+                if (!process.env[key]) {
+                    process.env[key] = String(value);
+                    this.logger.debug(`Set environment variable: ${key}`);
+                }
+            }
+        }
+        
+        this.logger.log('Finished setting environment variables');
     }
 
-    async update(updateClientDto: any): Promise<any> {
-        delete updateClientDto['_id']
-        const updatedUser = await this.configurationModel.findOneAndUpdate(
-            {}, // Assuming you want to update the first document found in the collection
-            { $set: { ...updateClientDto } },
-            { new: true, upsert: true }
-        ).exec();
-        if (!updatedUser) {
-            throw new NotFoundException(`configurationModel not found`);
-        }
-        return updatedUser;
-    }
+    async update(updateDto: Partial<Configuration>): Promise<Configuration> {
+        const { _id, ...updateData } = updateDto as any;
 
+        try {
+            const updatedConfig = await this.configurationModel.findOneAndUpdate(
+                {},
+                { $set: updateData },
+                { new: true, upsert: true, lean: true }
+            ).exec();
+
+            if (!updatedConfig) {
+                throw new NotFoundException('Failed to update configuration');
+            }
+
+            // Update environment variables with new values
+            Object.entries(updateData).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    process.env[key] = String(value);
+                }
+            });
+
+            return updatedConfig;
+        } catch (error) {
+            this.logger.error('Failed to update configuration', error);
+            throw error;
+        }
+    }
 }

@@ -39,7 +39,7 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.initModule.forRoot(),
             Telegram_module_1.TelegramModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,

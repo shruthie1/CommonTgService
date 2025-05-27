@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { UsersModule } from './components/users/users.module';
 import { UserDataModule } from './components/user-data/user-data.module';
 import { ClientModule } from './components/clients/client.module';
@@ -24,7 +24,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 
 @Module({
   imports: [
-    initModule,
+    initModule.forRoot(),
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,
@@ -45,8 +45,8 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     NpointModule,
     TimestampModule,
   ],
-  controllers:[AppController],
-  exports:[
+  controllers: [AppController],
+  exports: [
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,

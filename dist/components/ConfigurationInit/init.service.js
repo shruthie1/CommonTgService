@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ConfigurationService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigurationService = void 0;
 const common_1 = require("@nestjs/common");
@@ -19,47 +20,93 @@ const mongoose_2 = require("mongoose");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
-let ConfigurationService = class ConfigurationService {
-    constructor(configurationModel) {
+const config_1 = require("@nestjs/config");
+let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
+    constructor(configurationModel, configService) {
         this.configurationModel = configurationModel;
-        this.setEnv().then(async () => {
-            await TelegramBots_config_1.BotConfig.getInstance().ready();
-            (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${process.env.clientId}`)}`);
-        });
+        this.configService = configService;
+        this.logger = new common_1.Logger(ConfigurationService_1.name);
+        this.initialized = false;
     }
-    async OnModuleInit() {
-        console.log("Config Module Inited");
+    async onModuleInit() {
+        if (this.initialized)
+            return;
+        try {
+            await this.initializeConfiguration();
+            this.initialized = true;
+        }
+        catch (error) {
+            this.logger.error('Failed to initialize configuration', error);
+            throw error;
+        }
+    }
+    async initializeConfiguration() {
+        this.logger.log('Initializing configuration service...');
+        if (!process.env.mongouri) {
+            await this.setEnv();
+        }
+        await TelegramBots_config_1.BotConfig.getInstance().ready();
+        await this.notifyStart();
+        this.logger.log('Configuration service initialized successfully');
+    }
+    async notifyStart() {
+        try {
+            const clientId = process.env.clientId || this.configService.get('clientId');
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${clientId}`)}`);
+        }
+        catch (error) {
+            this.logger.warn('Failed to send start notification', error);
+        }
     }
     async findOne() {
-        const user = await this.configurationModel.findOne({}).exec();
-        if (!user) {
-            throw new common_1.NotFoundException(`configurationModel not found`);
+        const configuration = await this.configurationModel.findOne({}).lean().exec();
+        if (!configuration) {
+            throw new common_1.NotFoundException('Configuration not found');
         }
-        return user;
+        return configuration;
     }
     async setEnv() {
-        console.log("Setting Envs");
-        const configuration = await this.configurationModel.findOne({}, { _id: 0 });
-        const data = { ...configuration };
-        for (const key in data) {
-            console.log('setting', key);
-            process.env[key] = data[key];
+        this.logger.log('Setting environment variables...');
+        const configuration = await this.configurationModel.findOne({}, { _id: 0 }).lean();
+        if (!configuration) {
+            this.logger.warn('No configuration found in database, using environment variables only');
+            return;
         }
-        console.log("finished setting env");
+        for (const [key, value] of Object.entries(configuration)) {
+            if (value !== undefined && value !== null) {
+                if (!process.env[key]) {
+                    process.env[key] = String(value);
+                    this.logger.debug(`Set environment variable: ${key}`);
+                }
+            }
+        }
+        this.logger.log('Finished setting environment variables');
     }
-    async update(updateClientDto) {
-        delete updateClientDto['_id'];
-        const updatedUser = await this.configurationModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
-        if (!updatedUser) {
-            throw new common_1.NotFoundException(`configurationModel not found`);
+    async update(updateDto) {
+        const { _id, ...updateData } = updateDto;
+        try {
+            const updatedConfig = await this.configurationModel.findOneAndUpdate({}, { $set: updateData }, { new: true, upsert: true, lean: true }).exec();
+            if (!updatedConfig) {
+                throw new common_1.NotFoundException('Failed to update configuration');
+            }
+            Object.entries(updateData).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    process.env[key] = String(value);
+                }
+            });
+            return updatedConfig;
         }
-        return updatedUser;
+        catch (error) {
+            this.logger.error('Failed to update configuration', error);
+            throw error;
+        }
     }
 };
 exports.ConfigurationService = ConfigurationService;
-exports.ConfigurationService = ConfigurationService = __decorate([
+exports.ConfigurationService = ConfigurationService = ConfigurationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('configurationModule')),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        config_1.ConfigService])
 ], ConfigurationService);
 //# sourceMappingURL=init.service.js.map

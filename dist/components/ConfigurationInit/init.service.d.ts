@@ -1,10 +1,17 @@
+import { OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
-export declare class ConfigurationService {
+import { ConfigService } from '@nestjs/config';
+export declare class ConfigurationService implements OnModuleInit {
     private configurationModel;
-    constructor(configurationModel: Model<Configuration>);
-    OnModuleInit(): Promise<void>;
-    findOne(): Promise<any>;
+    private configService;
+    private readonly logger;
+    private initialized;
+    constructor(configurationModel: Model<Configuration>, configService: ConfigService);
+    onModuleInit(): Promise<void>;
+    private initializeConfiguration;
+    private notifyStart;
+    findOne(): Promise<Configuration>;
     setEnv(): Promise<void>;
-    update(updateClientDto: any): Promise<any>;
+    update(updateDto: Partial<Configuration>): Promise<Configuration>;
 }
