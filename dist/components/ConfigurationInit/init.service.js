@@ -42,9 +42,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     }
     async initializeConfiguration() {
         this.logger.log('Initializing configuration service...');
-        if (!process.env.mongouri) {
-            await this.setEnv();
-        }
+        await this.setEnv();
         await TelegramBots_config_1.BotConfig.getInstance().ready();
         await this.notifyStart();
         this.logger.log('Configuration service initialized successfully');

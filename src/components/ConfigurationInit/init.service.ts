@@ -15,13 +15,13 @@ export class ConfigurationService implements OnModuleInit {
     constructor(
         @InjectModel('configurationModule') private configurationModel: Model<Configuration>,
         private configService: ConfigService
-    ) {}
+    ) { }
 
     async onModuleInit() {
         if (ConfigurationService.initialized) {
             return;
         }
-        
+
         try {
             await this.initializeConfiguration();
             ConfigurationService.initialized = true;
@@ -33,12 +33,7 @@ export class ConfigurationService implements OnModuleInit {
 
     private async initializeConfiguration() {
         this.logger.log('Initializing configuration service...');
-        
-        // First check if we already have configuration in process.env
-        if (!process.env.mongouri) {
-            await this.setEnv();
-        }
-        
+        await this.setEnv();
         await BotConfig.getInstance().ready();
         await this.notifyStart();
         this.logger.log('Configuration service initialized successfully');
@@ -70,7 +65,7 @@ export class ConfigurationService implements OnModuleInit {
     async setEnv() {
         this.logger.log('Setting environment variables...');
         const configuration = await this.configurationModel.findOne({}, { _id: 0 }).lean();
-        
+
         if (!configuration) {
             this.logger.warn('No configuration found in database, using environment variables only');
             return;
@@ -85,7 +80,7 @@ export class ConfigurationService implements OnModuleInit {
                 }
             }
         }
-        
+
         this.logger.log('Finished setting environment variables');
     }
 
