@@ -125,14 +125,13 @@ function shouldIgnoreError(message, status, patterns) {
     return patterns.some(pattern => pattern.test(message));
 }
 function extractStatusCode(err, defaultStatus) {
-    var _a, _b, _c;
     if (!err)
         return defaultStatus;
     if (err.response) {
         const response = err.response;
-        return ((_a = response.data) === null || _a === void 0 ? void 0 : _a.statusCode) ||
-            ((_b = response.data) === null || _b === void 0 ? void 0 : _b.status) ||
-            ((_c = response.data) === null || _c === void 0 ? void 0 : _c.ResponseCode) ||
+        return response.data?.statusCode ||
+            response.data?.status ||
+            response.data?.ResponseCode ||
             response.status ||
             err.status ||
             defaultStatus;
@@ -140,10 +139,9 @@ function extractStatusCode(err, defaultStatus) {
     return err.statusCode || err.status || defaultStatus;
 }
 function extractErrorMessage(err, defaultMessage) {
-    var _a, _b, _c, _d, _e, _f;
     if (!err)
         return defaultMessage;
-    if ((_a = err.response) === null || _a === void 0 ? void 0 : _a.data) {
+    if (err.response?.data) {
         const responseData = err.response.data;
         return responseData.message ||
             responseData.errors ||
@@ -156,11 +154,11 @@ function extractErrorMessage(err, defaultMessage) {
             defaultMessage;
     }
     if (err.request) {
-        return ((_b = err.data) === null || _b === void 0 ? void 0 : _b.message) ||
-            ((_c = err.data) === null || _c === void 0 ? void 0 : _c.errors) ||
-            ((_d = err.data) === null || _d === void 0 ? void 0 : _d.ErrorMessage) ||
-            ((_e = err.data) === null || _e === void 0 ? void 0 : _e.errorMessage) ||
-            ((_f = err.data) === null || _f === void 0 ? void 0 : _f.UserMessage) ||
+        return err.data?.message ||
+            err.data?.errors ||
+            err.data?.ErrorMessage ||
+            err.data?.errorMessage ||
+            err.data?.UserMessage ||
             (typeof err.data === 'string' ? err.data : null) ||
             err.message ||
             err.statusText ||
@@ -169,16 +167,15 @@ function extractErrorMessage(err, defaultMessage) {
     return err.message || err.errorMessage || defaultMessage;
 }
 function extractErrorType(err, defaultError) {
-    var _a, _b;
     if (!err)
         return defaultError;
-    if ((_b = (_a = err.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.error) {
+    if (err.response?.data?.error) {
         return err.response.data.error;
     }
     return err.error || err.name || err.code || defaultError;
 }
 function parseError(err, prefix, sendErr = true, config = {}) {
-    const fullConfig = Object.assign(Object.assign({}, DEFAULT_ERROR_CONFIG), config);
+    const fullConfig = { ...DEFAULT_ERROR_CONFIG, ...config };
     try {
         const clientId = process.env.clientId || 'UptimeChecker2';
         const prefixStr = `${clientId}${prefix ? ` - ${prefix}` : ''}`;

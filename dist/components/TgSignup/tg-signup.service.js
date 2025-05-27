@@ -55,12 +55,11 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         return phone;
     }
     async disconnectClient(phone) {
-        var _a;
         const session = TgSignupService_1.activeClients.get(phone);
         if (session) {
             try {
                 clearTimeout(session.timeoutId);
-                if ((_a = session.client) === null || _a === void 0 ? void 0 : _a.connected) {
+                if (session.client?.connected) {
                     await session.client.disconnect();
                 }
                 if (session.client) {
@@ -76,11 +75,10 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         }
     }
     async sendCode(phone) {
-        var _a, _b, _c, _d;
         try {
             phone = this.validatePhoneNumber(phone);
             const existingSession = TgSignupService_1.activeClients.get(phone);
-            if (existingSession && ((_a = existingSession.client) === null || _a === void 0 ? void 0 : _a.connected)) {
+            if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
             const { apiId, apiHash } = this.getRandomCredentials();
@@ -121,20 +119,19 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
-            if ((_b = error.errorMessage) === null || _b === void 0 ? void 0 : _b.includes('PHONE_NUMBER_BANNED')) {
+            if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
                 throw new common_1.BadRequestException('This phone number has been banned from Telegram');
             }
-            if ((_c = error.errorMessage) === null || _c === void 0 ? void 0 : _c.includes('PHONE_NUMBER_INVALID')) {
+            if (error.errorMessage?.includes('PHONE_NUMBER_INVALID')) {
                 throw new common_1.BadRequestException('Please enter a valid phone number');
             }
-            if ((_d = error.errorMessage) === null || _d === void 0 ? void 0 : _d.includes('FLOOD_WAIT')) {
+            if (error.errorMessage?.includes('FLOOD_WAIT')) {
                 throw new common_1.BadRequestException('Please wait a few minutes before trying again');
             }
             throw new common_1.BadRequestException('Unable to send OTP. Please try again');
         }
     }
     async verifyCode(phone, code, password) {
-        var _a, _b, _c, _d, _e, _f;
         try {
             phone = this.validatePhoneNumber(phone);
             const session = TgSignupService_1.activeClients.get(phone);
@@ -144,9 +141,9 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             }
             clearTimeout(session.timeoutId);
             session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            if (!((_a = session.client) === null || _a === void 0 ? void 0 : _a.connected)) {
+            if (!session.client?.connected) {
                 try {
-                    await ((_b = session.client) === null || _b === void 0 ? void 0 : _b.connect());
+                    await session.client?.connect();
                 }
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
@@ -204,8 +201,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                     }
                     return await this.handle2FALogin(phone, session.client, password);
                 }
-                if (((_c = error.errorMessage) === null || _c === void 0 ? void 0 : _c.includes('PHONE_CODE_INVALID')) ||
-                    ((_d = error.errorMessage) === null || _d === void 0 ? void 0 : _d.includes('PHONE_CODE_EXPIRED'))) {
+                if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
+                    error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
                     throw new common_1.BadRequestException('Invalid OTP,  Try again!');
                 }
                 this.logger.warn(`Verification attempt failed for ${phone}: ${error.message}`);
@@ -214,8 +211,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         }
         catch (error) {
             this.logger.error(`Verification error for ${phone}: ${error.message}`);
-            if (((_e = error.message) === null || _e === void 0 ? void 0 : _e.includes('No active signup session')) ||
-                ((_f = error.message) === null || _f === void 0 ? void 0 : _f.includes('Connection failed'))) {
+            if (error.message?.includes('No active signup session') ||
+                error.message?.includes('Connection failed')) {
                 await this.disconnectClient(phone);
             }
             throw error instanceof common_1.BadRequestException ? error :
@@ -277,19 +274,18 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         }
     }
     async processLoginResult(user, sessionString, password) {
-        var _a, _b, _c;
         try {
             if (!user || !sessionString) {
                 throw new Error('Invalid user data or session string');
             }
             const now = new Date();
             const userData = {
-                mobile: ((_b = (_a = user.phone) === null || _a === void 0 ? void 0 : _a.toString()) === null || _b === void 0 ? void 0 : _b.replace(/^\+/, '')) || '',
+                mobile: user.phone?.toString()?.replace(/^\+/, '') || '',
                 session: sessionString,
                 firstName: user.firstName || '',
                 lastName: user.lastName || '',
                 username: user.username || '',
-                tgId: ((_c = user.id) === null || _c === void 0 ? void 0 : _c.toString()) || '',
+                tgId: user.id?.toString() || '',
                 twoFA: !!password,
                 password: password || null,
                 lastActive: now.toISOString().split('T')[0],

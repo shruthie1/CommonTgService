@@ -66,7 +66,7 @@ class CloudinaryService {
         const extractPath = path.resolve(rootPath);
         console.log(`Starting download of zip file from ${url}`);
         const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
-        if ((response === null || response === void 0 ? void 0 : response.status) === 200) {
+        if (response?.status === 200) {
             console.log('Zip file downloaded successfully.');
             fs.writeFileSync(zipPath, response.data);
             console.log(`Zip file saved to ${zipPath}`);
@@ -159,9 +159,8 @@ class CloudinaryService {
         }
     }
     async printResources() {
-        var _a;
         try {
-            (_a = this.resources) === null || _a === void 0 ? void 0 : _a.forEach((val, key) => {
+            this.resources?.forEach((val, key) => {
                 console.log(key, ":", val);
             });
         }
@@ -196,7 +195,7 @@ async function saveFile(url, name) {
         const mypath = path.join(rootPath, `${name}.${extension}`);
         console.log(mypath);
         const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
-        if ((res === null || res === void 0 ? void 0 : res.statusText) === 'OK') {
+        if (res?.statusText === 'OK') {
             if (!fs.existsSync(mypath)) {
                 fs.writeFileSync(mypath, res.data, 'binary');
                 console.log(`${name}.${extension} Saved!!`);
