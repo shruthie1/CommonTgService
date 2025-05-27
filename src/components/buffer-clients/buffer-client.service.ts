@@ -255,7 +255,7 @@ export class BufferClientService {
                         await this.telegramService.tryJoiningChannel(mobile, channel);
                     } catch (error) {
                         const errorDetails = parseError(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`, errorDetails);
+                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`);
 
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
