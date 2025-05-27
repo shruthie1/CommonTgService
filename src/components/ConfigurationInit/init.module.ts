@@ -193,7 +193,6 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       if (this.connection && this.connection.readyState !== 0) {
         console.log('Closing MongoDB connection...');
         await this.connection.close(true);
-        console.log('MongoDB connection closed successfully');
       }
 
     } catch (error) {
