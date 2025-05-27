@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class ConfigurationService implements OnModuleInit {
     private readonly logger = new Logger(ConfigurationService.name);
-    private initialized = false;
+    private static initialized = false;
 
     constructor(
         @InjectModel('configurationModule') private configurationModel: Model<Configuration>,
@@ -18,11 +18,13 @@ export class ConfigurationService implements OnModuleInit {
     ) {}
 
     async onModuleInit() {
-        if (this.initialized) return;
+        if (ConfigurationService.initialized) {
+            return;
+        }
         
         try {
             await this.initializeConfiguration();
-            this.initialized = true;
+            ConfigurationService.initialized = true;
         } catch (error) {
             this.logger.error('Failed to initialize configuration', error);
             throw error;
@@ -45,6 +47,10 @@ export class ConfigurationService implements OnModuleInit {
     private async notifyStart() {
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
+            if (!clientId) {
+                this.logger.warn('No clientId found in environment or configuration');
+                return;
+            }
             await fetchWithTimeout(
                 `${notifbot()}&text=${encodeURIComponent(`Started :: ${clientId}`)}`
             );

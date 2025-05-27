@@ -11,12 +11,16 @@ const common_1 = require("@nestjs/common");
 const tg_signup_controller_1 = require("./tg-signup.controller");
 const users_module_1 = require("../users/users.module");
 const tg_signup_service_1 = require("./tg-signup.service");
+const ConfigurationInit_1 = require("../ConfigurationInit");
 let TgSignupModule = class TgSignupModule {
 };
 exports.TgSignupModule = TgSignupModule;
 exports.TgSignupModule = TgSignupModule = __decorate([
     (0, common_1.Module)({
-        imports: [(0, common_1.forwardRef)(() => users_module_1.UsersModule)],
+        imports: [
+            ConfigurationInit_1.InitModule,
+            (0, common_1.forwardRef)(() => users_module_1.UsersModule)
+        ],
         controllers: [tg_signup_controller_1.TgSignupController],
         providers: [tg_signup_service_1.TgSignupService],
         exports: [tg_signup_service_1.TgSignupService]

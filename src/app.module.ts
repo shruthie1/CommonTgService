@@ -6,7 +6,7 @@ import { TelegramModule } from './components/Telegram/Telegram.module';
 import { BufferClientModule } from './components/buffer-clients/buffer-client.module';
 import { ActiveChannelsModule } from './components/active-channels/active-channels.module';
 import { ArchivedClientModule } from './components/archived-clients/archived-client.module';
-import { initModule } from './components/ConfigurationInit/init.module';
+import { InitModule } from './components/ConfigurationInit/init.module';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppController } from './app.controller';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
@@ -24,7 +24,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,

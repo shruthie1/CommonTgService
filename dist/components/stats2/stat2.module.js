@@ -19,7 +19,7 @@ exports.Stat2Module = Stat2Module;
 exports.Stat2Module = Stat2Module = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: "Stats2Module", collection: "stats2", schema: stat2_schema_1.StatSchema }])
         ],
         controllers: [stat2_controller_1.Stat2Controller],

@@ -6,7 +6,7 @@ export declare class ConfigurationService implements OnModuleInit {
     private configurationModel;
     private configService;
     private readonly logger;
-    private initialized;
+    private static initialized;
     constructor(configurationModel: Model<Configuration>, configService: ConfigService);
     onModuleInit(): Promise<void>;
     private initializeConfiguration;

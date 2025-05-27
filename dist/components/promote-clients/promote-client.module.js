@@ -25,7 +25,7 @@ exports.PromoteClientModule = PromoteClientModule;
 exports.PromoteClientModule = PromoteClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: 'promoteClientModule', schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),

@@ -19,7 +19,7 @@ exports.ChannelsModule = ChannelsModule;
 exports.ChannelsModule = ChannelsModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: channel_schema_1.Channel.name, schema: channel_schema_1.ChannelSchema }]),
         ],
         controllers: [channels_controller_1.ChannelsController],

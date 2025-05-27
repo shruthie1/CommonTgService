@@ -16,12 +16,14 @@ const active_channels_module_1 = require("../active-channels/active-channels.mod
 const channels_module_1 = require("../channels/channels.module");
 const telegram_logger_1 = require("./utils/telegram-logger");
 const telegram_validation_config_1 = require("./config/telegram-validation.config");
+const ConfigurationInit_1 = require("../ConfigurationInit");
 let TelegramModule = class TelegramModule {
 };
 exports.TelegramModule = TelegramModule;
 exports.TelegramModule = TelegramModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            ConfigurationInit_1.InitModule,
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             buffer_client_module_1.BufferClientModule,
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),

@@ -19,7 +19,7 @@ exports.UserDataModule = UserDataModule;
 exports.UserDataModule = UserDataModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: user_data_schema_1.UserData.name, schema: user_data_schema_1.UserDataSchema, collection: "userData" }])
         ],
         controllers: [user_data_controller_1.UserDataController],

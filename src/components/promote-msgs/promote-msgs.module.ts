@@ -3,12 +3,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { PromoteMsgsService } from './promote-msgs.service';
 import { PromoteMsgsController } from './promote-msgs.controller';
 import { PromoteMsgSchema } from './promote-msgs.schema';
-import { initModule } from '../ConfigurationInit';
+import { InitModule } from '../ConfigurationInit';
 
 @Global()
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
     PromoteMsgModule,
     MongooseModule.forFeature([{ name: 'promotemsgModule', collection: 'promoteMsgs', schema: PromoteMsgSchema }]),
   ],

@@ -1,4 +1,4 @@
-import { initModule } from './../ConfigurationInit/init.module';
+import { InitModule } from './../ConfigurationInit/init.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PromoteStatService } from './promote-stat.service';
@@ -8,7 +8,7 @@ import { ClientModule } from '../clients/client.module';
 
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
     MongooseModule.forFeature([{ name: PromoteStat.name, collection: "promoteStats", schema: PromoteStatSchema }]),
     ClientModule
   ],

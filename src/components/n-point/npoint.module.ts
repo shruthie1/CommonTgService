@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { NpointService } from './npoint.service';
 import { NpointController } from './npoint.controller';
-import { initModule } from '../ConfigurationInit';
+import { InitModule } from '../ConfigurationInit';
 
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
   ],
   controllers: [NpointController],
   providers: [NpointService],

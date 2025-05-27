@@ -7,11 +7,11 @@ import { ActiveChannelsModule } from '../active-channels/active-channels.module'
 import { ChannelsModule } from '../channels/channels.module';
 import { TelegramLogger } from './utils/telegram-logger';
 import { TelegramValidationConfig } from './config/telegram-validation.config';
-import { initModule } from '../ConfigurationInit';
+import { InitModule } from '../ConfigurationInit';
 
 @Module({
     imports: [
-        initModule.forRoot(),
+        InitModule,
         forwardRef(() => UsersModule),
         BufferClientModule,
         forwardRef(() => ActiveChannelsModule),

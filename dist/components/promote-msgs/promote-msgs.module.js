@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const promote_msgs_service_1 = require("./promote-msgs.service");
 const promote_msgs_controller_1 = require("./promote-msgs.controller");
 const promote_msgs_schema_1 = require("./promote-msgs.schema");
+const ConfigurationInit_1 = require("../ConfigurationInit");
 let PromoteMsgModule = class PromoteMsgModule {
 };
 exports.PromoteMsgModule = PromoteMsgModule;
@@ -19,6 +20,7 @@ exports.PromoteMsgModule = PromoteMsgModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
         imports: [
+            ConfigurationInit_1.InitModule,
             PromoteMsgModule,
             mongoose_1.MongooseModule.forFeature([{ name: 'promotemsgModule', collection: 'promoteMsgs', schema: promote_msgs_schema_1.PromoteMsgSchema }]),
         ],

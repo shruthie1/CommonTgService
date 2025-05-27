@@ -35,7 +35,7 @@
     "start:webpack": "node dist/index.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "webpack-dev": "webpack --watch --mode development",
-    "webpack": "webpack --mode",
+    "webpack": "webpack --mode development",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

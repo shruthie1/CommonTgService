@@ -10,11 +10,15 @@ exports.NpointModule = void 0;
 const common_1 = require("@nestjs/common");
 const npoint_service_1 = require("./npoint.service");
 const npoint_controller_1 = require("./npoint.controller");
+const ConfigurationInit_1 = require("../ConfigurationInit");
 let NpointModule = class NpointModule {
 };
 exports.NpointModule = NpointModule;
 exports.NpointModule = NpointModule = __decorate([
     (0, common_1.Module)({
+        imports: [
+            ConfigurationInit_1.InitModule,
+        ],
         controllers: [npoint_controller_1.NpointController],
         providers: [npoint_service_1.NpointService],
         exports: [npoint_service_1.NpointService]

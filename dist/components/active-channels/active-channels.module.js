@@ -20,7 +20,7 @@ exports.ActiveChannelsModule = ActiveChannelsModule;
 exports.ActiveChannelsModule = ActiveChannelsModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            init_module_1.initModule,
+            init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: active_channel_schema_1.ActiveChannel.name, schema: active_channel_schema_1.ActiveChannelSchema }]),
             promote_msgs_module_1.PromoteMsgModule
         ],

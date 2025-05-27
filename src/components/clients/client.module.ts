@@ -7,13 +7,13 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
 import { ArchivedClientModule } from '../archived-clients/archived-client.module';
-import { initModule } from '../ConfigurationInit/init.module';
+import { InitModule } from '../ConfigurationInit/init.module';
 import { NpointModule } from '../n-point/npoint.module';
 import { TimestampModule } from '../timestamps/timestamp.module';
 
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
     MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => BufferClientModule),

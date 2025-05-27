@@ -13,6 +13,7 @@ const timestamp_service_1 = require("./timestamp.service");
 const timestamp_controller_1 = require("./timestamp.controller");
 const timestamps_schema_1 = require("./timestamps.schema");
 const client_module_1 = require("../clients/client.module");
+const ConfigurationInit_1 = require("../ConfigurationInit");
 let TimestampModule = class TimestampModule {
 };
 exports.TimestampModule = TimestampModule;
@@ -20,6 +21,7 @@ exports.TimestampModule = TimestampModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
         imports: [
+            ConfigurationInit_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{
                     name: 'timestampModule',
                     collection: 'timestamps',

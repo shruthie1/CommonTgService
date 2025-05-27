@@ -4,11 +4,11 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ChannelsService } from './channels.service';
 import { ChannelsController } from './channels.controller';
 import { Channel, ChannelSchema } from './schemas/channel.schema';
-import { initModule } from '../ConfigurationInit/init.module';
+import { InitModule } from '../ConfigurationInit/init.module';
 
 @Module({
   imports: [
-    initModule.forRoot(),
+    InitModule,
     MongooseModule.forFeature([{ name: Channel.name, schema: ChannelSchema }]),
   ],
   controllers: [ChannelsController],

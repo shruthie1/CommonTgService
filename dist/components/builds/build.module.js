@@ -13,6 +13,7 @@ const build_service_1 = require("./build.service");
 const build_controller_1 = require("./build.controller");
 const builds_schema_1 = require("./builds.schema");
 const npoint_module_1 = require("../n-point/npoint.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 let BuildModule = class BuildModule {
 };
 exports.BuildModule = BuildModule;
@@ -20,6 +21,7 @@ exports.BuildModule = BuildModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
         imports: [
+            init_module_1.InitModule,
             BuildModule,
             mongoose_1.MongooseModule.forFeature([{ name: 'buildModule', collection: 'builds', schema: builds_schema_1.BuildSchema }]),
             npoint_module_1.NpointModule,

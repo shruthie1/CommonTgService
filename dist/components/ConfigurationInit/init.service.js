@@ -26,14 +26,14 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
         this.configurationModel = configurationModel;
         this.configService = configService;
         this.logger = new common_1.Logger(ConfigurationService_1.name);
-        this.initialized = false;
     }
     async onModuleInit() {
-        if (this.initialized)
+        if (ConfigurationService_1.initialized) {
             return;
+        }
         try {
             await this.initializeConfiguration();
-            this.initialized = true;
+            ConfigurationService_1.initialized = true;
         }
         catch (error) {
             this.logger.error('Failed to initialize configuration', error);
@@ -52,6 +52,10 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     async notifyStart() {
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
+            if (!clientId) {
+                this.logger.warn('No clientId found in environment or configuration');
+                return;
+            }
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Started :: ${clientId}`)}`);
         }
         catch (error) {
@@ -103,6 +107,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     }
 };
 exports.ConfigurationService = ConfigurationService;
+ConfigurationService.initialized = false;
 exports.ConfigurationService = ConfigurationService = ConfigurationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('configurationModule')),
