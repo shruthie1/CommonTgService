@@ -26,7 +26,7 @@ const stat_module_1 = require("./components/stats/stat.module");
 const stat2_module_1 = require("./components/stats2/stat2.module");
 const promote_stat_module_1 = require("./components/promote-stats/promote-stat.module");
 const promote_client_module_1 = require("./components/promote-clients/promote-client.module");
-const TgSignup_module_1 = require("./components/TgSignup/TgSignup.module");
+const tg_signup_module_1 = require("./components/TgSignup/tg-signup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
 const npoint_module_1 = require("./components/n-point/npoint.module");
 const timestamp_module_1 = require("./components/timestamps/timestamp.module");
@@ -55,7 +55,7 @@ exports.AppModule = AppModule = __decorate([
             promote_stat_module_1.PromoteStatModule,
             stat_module_1.StatModule,
             stat2_module_1.Stat2Module,
-            TgSignup_module_1.TgSignupModule,
+            tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
@@ -71,7 +71,7 @@ exports.AppModule = AppModule = __decorate([
             archived_client_module_1.ArchivedClientModule,
             channels_module_1.ChannelsModule,
             promote_client_module_1.PromoteClientModule,
-            TgSignup_module_1.TgSignupModule,
+            tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
             timestamp_module_1.TimestampModule
         ]

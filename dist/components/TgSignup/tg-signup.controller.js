@@ -16,7 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TgSignupController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
-const TgSignup_service_1 = require("./TgSignup.service");
+const tg_signup_service_1 = require("./tg-signup.service");
 const tg_signup_dto_1 = require("./dto/tg-signup.dto");
 let TgSignupController = TgSignupController_1 = class TgSignupController {
     constructor(tgSignupService) {
@@ -131,6 +131,6 @@ exports.TgSignupController = TgSignupController = TgSignupController_1 = __decor
     (0, common_1.Controller)('tgsignup'),
     (0, swagger_1.ApiTags)('tgsignup'),
     (0, swagger_1.ApiExtraModels)(tg_signup_dto_1.SendCodeDto, tg_signup_dto_1.VerifyCodeDto, tg_signup_dto_1.TgSignupResponse),
-    __metadata("design:paramtypes", [TgSignup_service_1.TgSignupService])
+    __metadata("design:paramtypes", [tg_signup_service_1.TgSignupService])
 ], TgSignupController);
-//# sourceMappingURL=tgSignup.controller.js.map
+//# sourceMappingURL=tg-signup.controller.js.map

@@ -8,18 +8,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TgSignupModule = void 0;
 const common_1 = require("@nestjs/common");
-const tgSignup_controller_1 = require("./tgSignup.controller");
+const tg_signup_controller_1 = require("./tg-signup.controller");
 const users_module_1 = require("../users/users.module");
-const TgSignup_service_1 = require("./TgSignup.service");
+const tg_signup_service_1 = require("./tg-signup.service");
 let TgSignupModule = class TgSignupModule {
 };
 exports.TgSignupModule = TgSignupModule;
 exports.TgSignupModule = TgSignupModule = __decorate([
     (0, common_1.Module)({
         imports: [(0, common_1.forwardRef)(() => users_module_1.UsersModule)],
-        controllers: [tgSignup_controller_1.TgSignupController],
-        providers: [TgSignup_service_1.TgSignupService],
-        exports: [TgSignup_service_1.TgSignupService]
+        controllers: [tg_signup_controller_1.TgSignupController],
+        providers: [tg_signup_service_1.TgSignupService],
+        exports: [tg_signup_service_1.TgSignupService]
     })
 ], TgSignupModule);
-//# sourceMappingURL=TgSignup.module.js.map
+//# sourceMappingURL=tg-signup.module.js.map

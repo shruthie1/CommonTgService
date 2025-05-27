@@ -20,7 +20,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramManager = void 0;
 __exportStar(require("../../components/Telegram/Telegram.module"), exports);
 __exportStar(require("../../components/Telegram/Telegram.service"), exports);
-__exportStar(require("../../components/TgSignup/TgSignup.module"), exports);
+__exportStar(require("../../components/TgSignup/tg-signup.module"), exports);
 var TelegramManager_1 = require("../../components/Telegram/TelegramManager");
 Object.defineProperty(exports, "TelegramManager", { enumerable: true, get: function () { return __importDefault(TelegramManager_1).default; } });
 //# sourceMappingURL=index.js.map

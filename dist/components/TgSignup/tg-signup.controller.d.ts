@@ -1,4 +1,4 @@
-import { TgSignupService } from './TgSignup.service';
+import { TgSignupService } from './tg-signup.service';
 import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
 export declare class TgSignupController {
     private readonly tgSignupService;

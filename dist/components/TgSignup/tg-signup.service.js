@@ -352,4 +352,4 @@ exports.TgSignupService = TgSignupService = TgSignupService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], TgSignupService);
-//# sourceMappingURL=TgSignup.service.js.map
+//# sourceMappingURL=tg-signup.service.js.map
