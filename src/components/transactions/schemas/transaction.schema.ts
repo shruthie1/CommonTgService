@@ -106,9 +106,3 @@ export class Transaction {
 }
 
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
-
-// Compound indexes for common query patterns
-TransactionSchema.index({ chatId: 1, status: 1 });
-TransactionSchema.index({ profile: 1, status: 1 });
-TransactionSchema.index({ createdAt: -1 });
-TransactionSchema.index({ amount: 1, status: 1 });
