@@ -1,6 +1,6 @@
 {
   "name": "common-tg-service",
-  "version": "1.0.88",
+  "version": "1.0.89",
   "description": "Common Telegram service for NestJS applications",
   "author": "",
   "private": false,
@@ -22,7 +22,7 @@
   ],
   "publishConfig": {
     "access": "public"
-  },  
+  },
   "scripts": {
     "prebuild": "rm -rf dist",
     "build": "nest build && tsc -p tsconfig.json",
