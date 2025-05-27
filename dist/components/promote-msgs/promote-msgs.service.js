@@ -24,8 +24,7 @@ let PromoteMsgsService = class PromoteMsgsService {
         console.log("Config Module Inited");
     }
     async findOne() {
-        var _a;
-        const user = (_a = (await this.promotemsgModel.findOne({}, { _id: 0 }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
+        const user = (await this.promotemsgModel.findOne({}, { _id: 0 }).exec())?.toJSON();
         if (!user) {
             throw new common_1.NotFoundException(`promotemsgModel not found`);
         }
@@ -33,7 +32,7 @@ let PromoteMsgsService = class PromoteMsgsService {
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
-        const updatedUser = await this.promotemsgModel.findOneAndUpdate({}, { $set: Object.assign({}, updateClientDto) }, { new: true, upsert: true }).exec();
+        const updatedUser = await this.promotemsgModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`promotemsgModel not found`);
         }

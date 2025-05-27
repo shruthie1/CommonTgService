@@ -29,7 +29,7 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             : JSON.stringify(errorDetails.message);
         const formattedMessage = errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
             errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
-                (0, parseError_1.extractMessage)(errorDetails === null || errorDetails === void 0 ? void 0 : errorDetails.message);
+                (0, parseError_1.extractMessage)(errorDetails?.message);
         console.error(`${prefix}\n${formattedMessage}`);
         if (errorDetails.status === 429)
             return;
@@ -63,12 +63,11 @@ const RETRYABLE_NETWORK_ERRORS = [
 ];
 const RETRYABLE_STATUS_CODES = [408, 500, 502, 503, 504];
 function shouldRetry(error, parsedError) {
-    var _a;
     if (axios_1.default.isAxiosError(error)) {
         if (error.code && RETRYABLE_NETWORK_ERRORS.includes(error.code)) {
             return true;
         }
-        if ((_a = error.message) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes('timeout')) {
+        if (error.message?.toLowerCase().includes('timeout')) {
             return true;
         }
     }
@@ -80,7 +79,6 @@ function calculateBackoff(attempt, config = DEFAULT_RETRY_CONFIG) {
     return Math.floor(base + jitter);
 }
 async function makeBypassRequest(url, options) {
-    var _a, _b, _c, _d, _e;
     const bypassUrl = options.bypassUrl || process.env.bypassURL || '';
     if (!bypassUrl) {
         throw new Error('Bypass URL is not provided');
@@ -105,14 +103,17 @@ async function makeBypassRequest(url, options) {
         followRedirects: options.maxRedirects !== 0,
         maxRedirects: options.maxRedirects
     }, {
-        headers: Object.assign({ 'Content-Type': 'application/json' }, options.headers)
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        }
     });
     if (response && (options.responseType === 'arraybuffer' ||
-        ((_a = response.headers['content-type']) === null || _a === void 0 ? void 0 : _a.includes('application/octet-stream')) ||
-        ((_b = response.headers['content-type']) === null || _b === void 0 ? void 0 : _b.includes('image/')) ||
-        ((_c = response.headers['content-type']) === null || _c === void 0 ? void 0 : _c.includes('audio/')) ||
-        ((_d = response.headers['content-type']) === null || _d === void 0 ? void 0 : _d.includes('video/')) ||
-        ((_e = response.headers['content-type']) === null || _e === void 0 ? void 0 : _e.includes('application/pdf')))) {
+        response.headers['content-type']?.includes('application/octet-stream') ||
+        response.headers['content-type']?.includes('image/') ||
+        response.headers['content-type']?.includes('audio/') ||
+        response.headers['content-type']?.includes('video/') ||
+        response.headers['content-type']?.includes('application/pdf'))) {
         response.data = Buffer.from(response.data);
     }
     return response;
@@ -133,13 +134,19 @@ function parseUrl(url) {
     }
 }
 async function fetchWithTimeout(url, options = {}, maxRetries) {
-    var _a, _b;
     if (!url) {
         console.error('URL is empty');
         return undefined;
     }
-    const retryConfig = Object.assign(Object.assign(Object.assign({}, DEFAULT_RETRY_CONFIG), options.retryConfig), { maxRetries: maxRetries !== undefined ? maxRetries : (((_a = options.retryConfig) === null || _a === void 0 ? void 0 : _a.maxRetries) || DEFAULT_RETRY_CONFIG.maxRetries) });
-    const notificationConfig = Object.assign(Object.assign({}, DEFAULT_NOTIFICATION_CONFIG), options.notificationConfig);
+    const retryConfig = {
+        ...DEFAULT_RETRY_CONFIG,
+        ...options.retryConfig,
+        maxRetries: maxRetries !== undefined ? maxRetries : (options.retryConfig?.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries)
+    };
+    const notificationConfig = {
+        ...DEFAULT_NOTIFICATION_CONFIG,
+        ...options.notificationConfig
+    };
     options.timeout = options.timeout || 30000;
     options.method = options.method || "GET";
     const urlInfo = parseUrl(url);
@@ -162,7 +169,13 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
             }
         }, currentTimeout);
         try {
-            const response = await (0, axios_1.default)(Object.assign(Object.assign({}, options), { url, signal: controller.signal, maxRedirects: (_b = options.maxRedirects) !== null && _b !== void 0 ? _b : 5, timeout: currentTimeout }));
+            const response = await (0, axios_1.default)({
+                ...options,
+                url,
+                signal: controller.signal,
+                maxRedirects: options.maxRedirects ?? 5,
+                timeout: currentTimeout,
+            });
             clearTimeout(timeoutId);
             return response;
         }

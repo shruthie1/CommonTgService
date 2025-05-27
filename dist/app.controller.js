@@ -163,7 +163,7 @@ let AppController = AppController_1 = class AppController {
     }
     sanitizeHeaders(headers) {
         const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key'];
-        const sanitized = Object.assign({}, headers);
+        const sanitized = { ...headers };
         sensitiveHeaders.forEach(header => {
             Object.keys(sanitized).forEach(key => {
                 if (key.toLowerCase() === header.toLowerCase()) {

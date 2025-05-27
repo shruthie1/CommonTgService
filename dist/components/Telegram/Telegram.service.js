@@ -203,9 +203,8 @@ let TelegramService = class TelegramService {
             const channels = dialogs
                 .filter(chat => chat.isChannel || chat.isGroup)
                 .map(chat => {
-                var _a;
                 const chatEntity = chat.entity;
-                const cannotSendMsgs = (_a = chatEntity.defaultBannedRights) === null || _a === void 0 ? void 0 : _a.sendMessages;
+                const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
                 if (!chatEntity.broadcast &&
                     !cannotSendMsgs &&
                     chatEntity.participantsCount > 50 &&
@@ -408,7 +407,7 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const auths = await telegramClient.getAuths();
         this.logger.logOperation(mobile, 'Retrieved authorizations', {
-            count: (auths === null || auths === void 0 ? void 0 : auths.length) || 0
+            count: auths?.length || 0
         });
         return auths;
     }
@@ -438,13 +437,12 @@ let TelegramService = class TelegramService {
         return { processed, errors };
     }
     async createGroupWithOptions(mobile, options) {
-        var _a;
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const result = await telegramClient.createGroupOrChannel(options);
         let groupId;
         if ('chats' in result && Array.isArray(result.chats) && result.chats.length > 0) {
             const chat = result.chats[result.chats.length - 1];
-            groupId = (_a = chat.id) === null || _a === void 0 ? void 0 : _a.toString();
+            groupId = chat.id?.toString();
         }
         this.logger.logOperation(mobile, 'Group created', { id: groupId });
         return result;
@@ -733,10 +731,9 @@ let TelegramService = class TelegramService {
         }
     }
     async getBotInfo(token) {
-        var _a;
         try {
             const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.telegram.org/bot${token}/getMe`);
-            if ((_a = response.data) === null || _a === void 0 ? void 0 : _a.ok) {
+            if (response.data?.ok) {
                 return response.data.result;
             }
             throw new Error('Failed to get bot info');
