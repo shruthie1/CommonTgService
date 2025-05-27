@@ -1042,7 +1042,6 @@ let InitModule = InitModule_1 = class InitModule {
             if (this.connection && this.connection.readyState !== 0) {
                 console.log('Closing MongoDB connection...');
                 await this.connection.close(true);
-                console.log('MongoDB connection closed successfully');
             }
         }
         catch (error) {
