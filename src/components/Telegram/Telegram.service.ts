@@ -1029,8 +1029,8 @@ export class TelegramService implements OnModuleDestroy {
                             inviteUsers: true,
                             pinMessages: true,
                             addAdmins: true,
-                            anonymous: false,
-                            manageCall: false
+                            anonymous: true,
+                            manageCall: true
                         });
                     };
                 }
@@ -1074,7 +1074,7 @@ export class TelegramService implements OnModuleDestroy {
             this.logger.logError(mobile, 'Failed to join channel', error);
         }
         try {
-            await telegramClient.addGroupMembers(channelId, [botUsername]);
+            await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
             this.logger.logOperation(mobile, 'Bot added to channel', { channelId, botUsername });
             await sleep(2000);
             this.logger.logOperation(mobile, `Bot ${botUsername} successfully added to channel ${channelId}`);

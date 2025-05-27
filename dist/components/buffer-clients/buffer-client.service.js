@@ -222,7 +222,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`, errorDetails);
+                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`);
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromBufferMap(mobile);
