@@ -59,7 +59,7 @@
     "https": "^1.0.0",
     "imap": "^0.8.19",
     "mongoose": "^8.15.1",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "rxjs": "^7.8.2",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
