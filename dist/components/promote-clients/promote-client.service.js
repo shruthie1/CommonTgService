@@ -52,7 +52,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return this.promoteClientModel.find().exec();
     }
     async findOne(mobile, throwErr = true) {
-        const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const user = (_a = (await this.promoteClientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (!user && throwErr) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
@@ -66,7 +67,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return updatedUser;
     }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
-        const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const existingUser = (_a = (await this.promoteClientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (existingUser) {
             console.log("Updating");
             return this.update(existingUser.mobile, createOrUpdateUserDto);
@@ -384,8 +386,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             throw new common_1.ConflictException('PromoteClient already exist');
         }
         const clients = await this.clientService.findAll();
-        const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
+        const clientMobiles = clients.map(client => client === null || client === void 0 ? void 0 : client.mobile);
+        const clientPromoteMobiles = clients.flatMap(client => client === null || client === void 0 ? void 0 : client.promoteMobile);
         if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
             try {

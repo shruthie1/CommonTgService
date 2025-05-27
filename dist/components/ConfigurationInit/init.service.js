@@ -40,7 +40,7 @@ let ConfigurationService = class ConfigurationService {
     async setEnv() {
         console.log("Setting Envs");
         const configuration = await this.configurationModel.findOne({}, { _id: 0 });
-        const data = { ...configuration };
+        const data = Object.assign({}, configuration);
         for (const key in data) {
             console.log('setting', key);
             process.env[key] = data[key];
@@ -49,7 +49,7 @@ let ConfigurationService = class ConfigurationService {
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
-        const updatedUser = await this.configurationModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
+        const updatedUser = await this.configurationModel.findOneAndUpdate({}, { $set: Object.assign({}, updateClientDto) }, { new: true, upsert: true }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`configurationModel not found`);
         }

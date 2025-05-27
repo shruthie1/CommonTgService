@@ -4,10 +4,9 @@
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
-    "esModuleInterop": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
-    "target": "ES2021",
+    "target": "es2017",
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
@@ -15,11 +14,11 @@
     "skipLibCheck": true,
     "strictNullChecks": false,
     "noImplicitAny": false,
-    "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
+    "strictBindCallApply": false,
+    "forceConsistentCasingInFileNames": false,
+    "noFallthroughCasesInSwitch": false,
     "moduleResolution": "node",
-    "resolveJsonModule": true
+    "esModuleInterop": true
   },
   "include": [
     "src/**/*"
@@ -27,7 +26,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "test",
-    "**/*spec.ts"
+    "test"
   ]
 }

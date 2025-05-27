@@ -34,7 +34,7 @@ let BuildService = class BuildService {
     }
     async update(updateClientDto) {
         delete updateClientDto['_id'];
-        const updatedUser = await this.buildModel.findOneAndUpdate({}, { $set: { ...updateClientDto } }, { new: true, upsert: true }).exec();
+        const updatedUser = await this.buildModel.findOneAndUpdate({}, { $set: Object.assign({}, updateClientDto) }, { new: true, upsert: true }).exec();
         try {
             await this.npointSerive.updateDocument("3375d15db1eece560188", updatedUser);
             console.log("Updated document successfully in npoint");

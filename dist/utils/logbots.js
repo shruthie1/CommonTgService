@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ppplbot = exports.notifbot = exports.getBotToken = void 0;
+exports.getBotToken = getBotToken;
+exports.notifbot = notifbot;
+exports.ppplbot = ppplbot;
 const getBotTokens = () => {
     const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
     if (botTokens.length === 0) {
@@ -19,7 +21,6 @@ const initializeBotTokens = () => {
 function getBotToken() {
     return initializeBotTokens()[currentTokenIndex];
 }
-exports.getBotToken = getBotToken;
 function notifbot(chatId = process.env.accountsChannel || "-1001801844217", botToken) {
     const tokens = initializeBotTokens();
     const token = botToken || tokens[currentTokenIndex];
@@ -29,7 +30,6 @@ function notifbot(chatId = process.env.accountsChannel || "-1001801844217", botT
     }
     return apiUrl;
 }
-exports.notifbot = notifbot;
 function ppplbot(chatId = process.env.updatesChannel || '-1001972065816', botToken) {
     const tokens = initializeBotTokens();
     const token = botToken || tokens[currentTokenIndex];
@@ -39,5 +39,4 @@ function ppplbot(chatId = process.env.updatesChannel || '-1001972065816', botTok
     }
     return apiUrl;
 }
-exports.ppplbot = ppplbot;
 //# sourceMappingURL=logbots.js.map

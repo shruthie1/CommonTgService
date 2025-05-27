@@ -9,7 +9,6 @@ import { ArchivedClientModule } from './components/archived-clients/archived-cli
 import { initModule } from './components/ConfigurationInit/init.module';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { BuildModule } from './components/builds/build.module';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
@@ -47,7 +46,6 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     TimestampModule,
   ],
   controllers:[AppController],
-  providers:[AppService],
   exports:[
     TelegramModule,
     ActiveChannelsModule,

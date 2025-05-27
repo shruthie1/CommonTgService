@@ -10,7 +10,7 @@ export declare class CloudinaryService {
     overwriteFile(): Promise<void>;
     findAndSaveResources(folderName: string, type: string): Promise<void>;
     createFolder(folderName: any): Promise<any>;
-    uploadFilesToFolder(folderName: any): Promise<cloudinary.UploadApiResponse[]>;
+    uploadFilesToFolder(folderName: any): Promise<(cloudinary.UploadApiResponse | cloudinary.UploadStream)[]>;
     printResources(): Promise<void>;
     get(publicId: any): any;
     getBuffer(publicId: any): any;

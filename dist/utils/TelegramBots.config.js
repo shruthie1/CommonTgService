@@ -45,7 +45,7 @@ class BotConfig {
             if (!value)
                 continue;
             const [channelId, description = '', botTokensStr] = value.split('::');
-            const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
+            const botTokens = botTokensStr === null || botTokensStr === void 0 ? void 0 : botTokensStr.split(',').map(t => t.trim()).filter(Boolean);
             if (!channelId || !botTokens || botTokens.length === 0)
                 continue;
             const category = this.getCategoryFromDescription(description);
@@ -70,15 +70,17 @@ class BotConfig {
         console.info('BotConfig initialized.');
     }
     getCategoryFromDescription(desc) {
+        var _a;
         const normalized = desc.toUpperCase();
-        return Object.values(ChannelCategory).find(cat => normalized.includes(cat)) ?? null;
+        return (_a = Object.values(ChannelCategory).find(cat => normalized.includes(cat))) !== null && _a !== void 0 ? _a : null;
     }
     async fetchUsername(token) {
+        var _a;
         try {
             const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`);
-            return res.data?.ok ? res.data.result.username : '';
+            return ((_a = res.data) === null || _a === void 0 ? void 0 : _a.ok) ? res.data.result.username : '';
         }
-        catch {
+        catch (_b) {
             return '';
         }
     }

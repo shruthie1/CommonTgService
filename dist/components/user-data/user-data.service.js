@@ -31,14 +31,15 @@ let UserDataService = class UserDataService {
         return await this.userDataModel.find().exec();
     }
     async findOne(profile, chatId) {
-        const user = (await this.userDataModel.findOne({ profile, chatId }).exec())?.toJSON();
+        var _a;
+        const user = (_a = (await this.userDataModel.findOne({ profile, chatId }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (!user) {
             console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
         }
         const currentCount = this.callCounts.get(chatId) || 0;
         this.callCounts.set(chatId, currentCount + 1);
         if (user) {
-            return { ...user, count: this.callCounts.get(chatId) };
+            return Object.assign(Object.assign({}, user), { count: this.callCounts.get(chatId) });
         }
         else {
             return undefined;

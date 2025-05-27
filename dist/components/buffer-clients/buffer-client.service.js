@@ -54,7 +54,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         return this.bufferClientModel.find().exec();
     }
     async findOne(mobile, throwErr = true) {
-        const user = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const user = (_a = (await this.bufferClientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (!user && throwErr) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
@@ -68,7 +69,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         return updatedUser;
     }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
-        const existingUser = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const existingUser = (_a = (await this.bufferClientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (existingUser) {
             console.log("Updating");
             return this.update(existingUser.mobile, createOrUpdateUserDto);
@@ -363,8 +365,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             throw new common_1.ConflictException('BufferClient already exist');
         }
         const clients = await this.clientService.findAll();
-        const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
+        const clientMobiles = clients.map(client => client === null || client === void 0 ? void 0 : client.mobile);
+        const clientPromoteMobiles = clients.flatMap(client => client === null || client === void 0 ? void 0 : client.promoteMobile);
         if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });

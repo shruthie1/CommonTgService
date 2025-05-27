@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import TelegramManager from '../TelegramManager';
 import { UsersService } from '../../../components/users/users.service';
 interface GetClientOptions {

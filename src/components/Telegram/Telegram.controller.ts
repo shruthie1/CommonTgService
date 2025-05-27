@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes, ApiBadRequestResponse, ApiNotFoundResponse, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
-import { query, Response } from 'express';
+import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
     SendMediaDto,

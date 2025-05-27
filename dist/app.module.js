@@ -18,7 +18,6 @@ const archived_client_module_1 = require("./components/archived-clients/archived
 const init_module_1 = require("./components/ConfigurationInit/init.module");
 const channels_module_1 = require("./components/channels/channels.module");
 const app_controller_1 = require("./app.controller");
-const app_service_1 = require("./app.service");
 const logger_middleware_1 = require("./middlewares/logger.middleware");
 const build_module_1 = require("./components/builds/build.module");
 const upi_ids_module_1 = require("./components/upi-ids/upi-ids.module");
@@ -62,7 +61,6 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
         ],
         controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
         exports: [
             Telegram_module_1.TelegramModule,
             active_channels_module_1.ActiveChannelsModule,

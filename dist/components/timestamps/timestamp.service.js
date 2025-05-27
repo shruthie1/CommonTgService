@@ -78,7 +78,7 @@ let TimestampService = class TimestampService {
     }
     async update(updateTimestampDto) {
         delete updateTimestampDto['_id'];
-        const updatedTimestamp = await this.timestampModel.findOneAndUpdate({}, { $set: { ...updateTimestampDto } }, { new: true, upsert: true, lean: true }).exec();
+        const updatedTimestamp = await this.timestampModel.findOneAndUpdate({}, { $set: Object.assign({}, updateTimestampDto) }, { new: true, upsert: true, lean: true }).exec();
         if (!updatedTimestamp) {
             throw new common_1.NotFoundException(`Timestamp not found`);
         }

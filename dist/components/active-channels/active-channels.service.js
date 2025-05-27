@@ -46,7 +46,8 @@ let ActiveChannelsService = class ActiveChannelsService {
         return this.activeChannelModel.find().exec();
     }
     async findOne(channelId) {
-        const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
+        var _a;
+        const channel = (_a = (await this.activeChannelModel.findOne({ channelId }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         return channel;
     }
     async update(channelId, updateActiveChannelDto) {
@@ -74,7 +75,8 @@ let ActiveChannelsService = class ActiveChannelsService {
         return channel;
     }
     async getRandomReaction(channelId) {
-        const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
+        var _a;
+        const channel = (_a = (await this.activeChannelModel.findOne({ channelId }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (!channel) {
             return undefined;
         }

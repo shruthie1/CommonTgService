@@ -1,11 +1,13 @@
-import { AppService } from './app.service';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
 import { Response } from 'express';
 export declare class AppController {
-    private readonly appService;
-    private logger;
-    constructor(appService: AppService);
+    private readonly logger;
+    private readonly DEFAULT_TIMEOUT;
+    private readonly MAX_CONTENT_SIZE;
+    constructor();
     getHello(): string;
-    executeRequest(requestDetails: ExecuteRequestDto, res: Response): Promise<Response<any, Record<string, any>>>;
+    executeRequest(req: ExecuteRequestDto, res: Response): Promise<any>;
     private sanitizeHeaders;
+    private isBinaryResponse;
+    private handleRequestError;
 }

@@ -2762,7 +2762,10 @@ class TelegramManager {
 
         const folder = new Api.DialogFilter({
             id: Math.floor(Math.random() * 1000),
-            title: options.name,
+            title: new Api.TextWithEntities({
+                text: options.name,
+                entities: []
+            }),
             includePeers: await Promise.all(options.includedChats.map(id => this.client.getInputEntity(id))),
             excludePeers: await Promise.all((options.excludedChats || []).map(id => this.client.getInputEntity(id))),
             pinnedPeers: [],
@@ -2801,7 +2804,8 @@ class TelegramManager {
         if (!this.client) throw new Error('Client not initialized');
 
         const filters = await this.client.invoke(new Api.messages.GetDialogFilters());
-        return filters.map((filter: any) => ({
+        // DialogFilters object has a 'filters' property which is an array
+        return (filters.filters || []).map((filter: any) => ({
             id: filter.id ?? 0,
             title: filter.title ?? '',
             includedChatsCount: Array.isArray(filter.includePeers) ? filter.includePeers.length : 0,

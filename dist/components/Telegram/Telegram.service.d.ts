@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { UsersService } from '../users/users.service';
 import { OnModuleDestroy } from '@nestjs/common';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
@@ -225,7 +224,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

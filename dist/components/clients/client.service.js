@@ -21,18 +21,39 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
+};
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
 };
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -82,7 +103,7 @@ let ClientService = class ClientService {
                 await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData);
                 const maskedCls = {};
                 for (const client in clientData) {
-                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
+                    const _a = clientData[client], { session, mobile, password, promoteMobile } = _a, maskedClient = __rest(_a, ["session", "mobile", "password", "promoteMobile"]);
                     maskedCls[client] = maskedClient;
                 }
                 await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls);
@@ -116,7 +137,7 @@ let ClientService = class ClientService {
             })
             : allClients;
         const results = filteredClients.map(client => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            const { session, mobile, password, promoteMobile } = client, maskedClient = __rest(client, ["session", "mobile", "password", "promoteMobile"]);
             return maskedClient;
         });
         return results;
@@ -184,7 +205,7 @@ let ClientService = class ClientService {
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             try {
                 if (newBufferClient) {
-                    this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
+                    this.telegramService.setActiveClientSetup(Object.assign(Object.assign({}, setupClientQueryDto), { clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile }));
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession);
@@ -304,6 +325,7 @@ let ClientService = class ClientService {
         }
     }
     async updateClient(clientId) {
+        var _a, _b;
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
@@ -314,11 +336,11 @@ let ClientService = class ClientService {
         const client = await this.findOne(clientId);
         try {
             this.lastUpdateMap.set(clientId, now);
-            await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+            await cloudinary_1.CloudinaryService.getInstance((_a = client === null || client === void 0 ? void 0 : client.dbcoll) === null || _a === void 0 ? void 0 : _a.toLowerCase());
             const telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, { handler: false });
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
-            if (!me.username || me.username !== client.username || !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
+            if (!me.username || me.username !== client.username || !((_b = me.username) === null || _b === void 0 ? void 0 : _b.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase()))) {
                 const client = await this.findOne(clientId);
                 const firstName = (client.name).split(' ')[0];
                 const middleName = (client.name).split(' ')[1];

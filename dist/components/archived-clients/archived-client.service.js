@@ -36,11 +36,13 @@ let ArchivedClientService = class ArchivedClientService {
         return results;
     }
     async findOne(mobile) {
-        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const user = (_a = (await this.archivedclientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         return user;
     }
     async fetchOne(mobile) {
-        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
+        var _a;
+        const user = (_a = (await this.archivedclientModel.findOne({ mobile }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         if (user) {
             return user;
         }
@@ -81,7 +83,7 @@ let ArchivedClientService = class ArchivedClientService {
         if (updateClientDto._doc) {
             delete updateClientDto._doc['_id'];
         }
-        console.log({ ...updateClientDto });
+        console.log(Object.assign({}, updateClientDto));
         const updatedUser = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
         return updatedUser;
     }

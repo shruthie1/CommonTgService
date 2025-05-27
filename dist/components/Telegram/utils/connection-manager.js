@@ -52,7 +52,7 @@ class ConnectionManager {
         const { autoDisconnect = true, handler = true, } = options;
         this.logger.logOperation(mobile, 'Getting/Creating client', { autoDisconnect, handler });
         const clientInfo = this.clients.get(mobile);
-        if (clientInfo?.client) {
+        if (clientInfo === null || clientInfo === void 0 ? void 0 : clientInfo.client) {
             this.updateLastUsed(mobile);
             if (clientInfo.client.connected()) {
                 this.logger.logOperation(mobile, 'Reusing existing connected client');
@@ -126,10 +126,11 @@ class ConnectionManager {
         this.logger.logOperation(mobile, `Client registered successfully${!options.autoDisconnect ? ' (excluded from auto-cleanup)' : ''}`);
     }
     async unregisterClient(mobile) {
+        var _a;
         try {
             const clientInfo = this.clients.get(mobile);
             if (clientInfo) {
-                await clientInfo.client?.disconnect();
+                await ((_a = clientInfo.client) === null || _a === void 0 ? void 0 : _a.disconnect());
                 this.logger.logOperation(mobile, 'Client unregistered successfully');
             }
             else {

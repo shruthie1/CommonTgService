@@ -41,7 +41,8 @@ let ChannelsService = class ChannelsService {
         return this.ChannelModel.find().exec();
     }
     async findOne(channelId) {
-        const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
+        var _a;
+        const channel = (_a = (await this.ChannelModel.findOne({ channelId }).exec())) === null || _a === void 0 ? void 0 : _a.toJSON();
         return channel;
     }
     async update(channelId, updateChannelDto) {
@@ -56,6 +57,7 @@ let ChannelsService = class ChannelsService {
         return this.ChannelModel.find(filter).exec();
     }
     async getChannels(limit = 50, skip = 0, keywords = [], notIds = []) {
+        var _a;
         const pattern = new RegExp(keywords.join('|'), 'i');
         const notPattern = new RegExp('online|board|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser', "i");
         let query = {
@@ -70,7 +72,7 @@ let ChannelsService = class ChannelsService {
                 {
                     username: {
                         $not: {
-                            $regex: "^(" + notIds.map(id => "(?i)" + id?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))?.join("|") + ")$"
+                            $regex: "^(" + ((_a = notIds.map(id => "(?i)" + (id === null || id === void 0 ? void 0 : id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))) === null || _a === void 0 ? void 0 : _a.join("|")) + ")$"
                         }
                     }
                 },

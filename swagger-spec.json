@@ -17,6 +17,7 @@
     },
     "/execute-request": {
       "post": {
+        "description": "Makes an HTTP request to the specified URL with provided configuration and returns the response",
         "operationId": "AppController_executeRequest",
         "parameters": [],
         "requestBody": {
@@ -31,7 +32,16 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Request executed successfully"
+          },
+          "400": {
+            "description": "Invalid request parameters"
+          },
+          "429": {
+            "description": "Too many requests"
+          },
+          "500": {
+            "description": "Internal server error or request execution failed"
           }
         },
         "summary": "Execute an HTTP request with given details",
@@ -2851,19 +2861,6 @@
         "responses": {
           "201": {
             "description": "Bot created successfully",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "botToken": {
-                  "type": "string",
-                  "description": "The token to access HTTP Bot API"
-                },
-                "username": {
-                  "type": "string",
-                  "description": "The username of the created bot"
-                }
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
@@ -6568,23 +6565,6 @@
           },
           "400": {
             "description": "Invalid phone number or failed to send code",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "statusCode": {
-                  "type": "number",
-                  "example": 400
-                },
-                "message": {
-                  "type": "string",
-                  "example": "Invalid phone number format"
-                },
-                "error": {
-                  "type": "string",
-                  "example": "Bad Request"
-                }
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {

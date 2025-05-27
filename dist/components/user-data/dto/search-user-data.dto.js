@@ -69,7 +69,7 @@ __decorate([
 ], SearchDto.prototype, "secondShow", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Profile name' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
+    (0, class_transformer_1.Transform)(({ value }) => value === null || value === void 0 ? void 0 : value.trim().toLowerCase()),
     __metadata("design:type", String)
 ], SearchDto.prototype, "profile", void 0);
 __decorate([

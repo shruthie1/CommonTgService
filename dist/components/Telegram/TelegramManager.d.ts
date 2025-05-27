@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { Api, TelegramClient } from 'telegram';
 import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
@@ -225,7 +224,7 @@ declare class TelegramManager {
         exceptCurrent?: boolean;
     }): Promise<boolean>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<{
-        period: "week" | "month" | "day";
+        period: "day" | "week" | "month";
         totalMessages: number;
         uniqueSenders: number;
         messageTypes: {
@@ -320,7 +319,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
