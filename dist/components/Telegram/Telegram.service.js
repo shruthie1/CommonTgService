@@ -772,6 +772,37 @@ let TelegramService = class TelegramService {
         const client = await connection_manager_1.connectionManager.getClient(mobile);
         return client.createBot(createBotDto);
     }
+    async connect(mobile, options) {
+        await connection_manager_1.connectionManager.getClient(mobile, options);
+    }
+    async disconnect(mobile) {
+        await connection_manager_1.connectionManager.unregisterClient(mobile);
+    }
+    async disconnectAll() {
+        await connection_manager_1.connectionManager.disconnectAll();
+    }
+    getConnectionStats() {
+        return connection_manager_1.connectionManager.getConnectionStats();
+    }
+    getClientState(mobile) {
+        const state = connection_manager_1.connectionManager.getClientState(mobile);
+        const clientInfo = {
+            state: state,
+            autoDisconnect: false,
+            lastUsed: Date.now(),
+            connectionAttempts: 0
+        };
+        return clientInfo;
+    }
+    getActiveConnectionCount() {
+        return connection_manager_1.connectionManager.getActiveConnectionCount();
+    }
+    startCleanupInterval(intervalMs = 300000) {
+        connection_manager_1.connectionManager.startCleanupInterval(intervalMs);
+    }
+    stopCleanupInterval() {
+        connection_manager_1.connectionManager.stopCleanupInterval();
+    }
 };
 exports.TelegramService = TelegramService;
 exports.TelegramService = TelegramService = __decorate([

@@ -29,11 +29,10 @@ import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
-import { ConnectionStatusDto } from './dto/common-responses.dto';
+import { ConnectionStatusDto, ConnectionStatsDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { connectionManager } from './utils/connection-manager';
-import { types } from 'util';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
@@ -47,10 +46,23 @@ export class TelegramController {
     @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true })
+    @ApiQuery({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true })
+    @ApiQuery({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 })
     @ApiResponse({ status: 200, description: 'Successfully connected' })
     @ApiResponse({ status: 400, description: 'Connection failed' })
-    async connect(@Param('mobile') mobile: string) {
-        await connectionManager.getClient(mobile);
+    async connect(
+        @Param('mobile') mobile: string,
+        @Query('autoDisconnect') autoDisconnect?: boolean,
+        @Query('handler') handler?: boolean,
+        @Query('timeout') timeout?: number
+    ): Promise<{ message: string }> {
+        const options: GetClientOptionsDto = {
+            autoDisconnect,
+            handler,
+            timeout
+        };
+        await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
 
@@ -58,17 +70,57 @@ export class TelegramController {
     @ApiOperation({ summary: 'Disconnect from Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ status: 200, description: 'Successfully disconnected' })
-    async disconnect(@Param('mobile') mobile: string) {
-        await connectionManager.unregisterClient(mobile);
+    async disconnect(@Param('mobile') mobile: string): Promise<{ message: string }> {
+        await this.telegramService.disconnect(mobile);
         return { message: 'Disconnected successfully' };
     }
 
-    @Post('disconnect-all')
+    @Get('disconnect-all')
     @ApiOperation({ summary: 'Disconnect all clients' })
     @ApiResponse({ status: 200, description: 'All clients disconnected successfully' })
-    async disconnectAllClients() {
-        await connectionManager.disconnectAll();
+    async disconnectAll(): Promise<{ message: string }> {
+        await this.telegramService.disconnectAll();
         return { message: 'All clients disconnected successfully' };
+    }
+
+    @Get('connection/stats')
+    @ApiOperation({ summary: 'Get connection statistics' })
+    @ApiResponse({ status: 200, type: ConnectionStatsDto })
+    getConnectionStats(): ConnectionStatsDto {
+        return this.telegramService.getConnectionStats();
+    }
+
+    @Get('connection/state/:mobile')
+    @ApiOperation({ summary: 'Get connection state for a client' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ status: 200, type: ConnectionStatusDto })
+    @ApiResponse({ status: 404, description: 'Client not found' })
+    getClientState(@Param('mobile') mobile: string): ConnectionStatusDto | undefined {
+        return this.telegramService.getClientState(mobile);
+    }
+
+    @Get('connection/count')
+    @ApiOperation({ summary: 'Get active connection count' })
+    @ApiResponse({ status: 200, description: 'Number of active connections' })
+    getActiveConnectionCount(): number {
+        return this.telegramService.getActiveConnectionCount();
+    }
+
+    @Post('connection/cleanup/start')
+    @ApiOperation({ summary: 'Start cleanup interval for inactive connections' })
+    @ApiQuery({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number })
+    @ApiResponse({ status: 200, description: 'Cleanup interval started' })
+    startCleanupInterval(@Query('intervalMs') intervalMs?: number): { message: string } {
+        this.telegramService.startCleanupInterval(intervalMs);
+        return { message: 'Cleanup interval started' };
+    }
+
+    @Post('connection/cleanup/stop')
+    @ApiOperation({ summary: 'Stop cleanup interval' })
+    @ApiResponse({ status: 200, description: 'Cleanup interval stopped' })
+    stopCleanupInterval(): { message: string } {
+        this.telegramService.stopCleanupInterval();
+        return { message: 'Cleanup interval stopped' };
     }
 
     // Profile Management

@@ -4,6 +4,7 @@ import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperation
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
+import { ConnectionStatusDto, ConnectionStatsDto } from './dto/connection-management.dto';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
@@ -11,15 +12,24 @@ import { SendMessageDto } from './dto/send-message.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connect(mobile: string): Promise<{
+    connect(mobile: string, autoDisconnect?: boolean, handler?: boolean, timeout?: number): Promise<{
         message: string;
     }>;
     disconnect(mobile: string): Promise<{
         message: string;
     }>;
-    disconnectAllClients(): Promise<{
+    disconnectAll(): Promise<{
         message: string;
     }>;
+    getConnectionStats(): ConnectionStatsDto;
+    getClientState(mobile: string): ConnectionStatusDto | undefined;
+    getActiveConnectionCount(): number;
+    startCleanupInterval(intervalMs?: number): {
+        message: string;
+    };
+    stopCleanupInterval(): {
+        message: string;
+    };
     getMe(mobile: string): Promise<import("telegram").Api.User>;
     getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
@@ -98,7 +108,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

@@ -100,6 +100,36 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "autoDisconnect",
+            "required": false,
+            "in": "query",
+            "description": "Whether to auto disconnect the client after period of inactivity",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "handler",
+            "required": false,
+            "in": "query",
+            "description": "Whether to use event handler",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "timeout",
+            "required": false,
+            "in": "query",
+            "description": "Connection timeout in milliseconds",
+            "schema": {
+              "default": 30000,
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -142,8 +172,8 @@
       }
     },
     "/telegram/disconnect-all": {
-      "post": {
-        "operationId": "TelegramController_disconnectAllClients",
+      "get": {
+        "operationId": "TelegramController_disconnectAll",
         "parameters": [],
         "responses": {
           "200": {
@@ -151,6 +181,118 @@
           }
         },
         "summary": "Disconnect all clients",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/connection/stats": {
+      "get": {
+        "operationId": "TelegramController_getConnectionStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get connection statistics",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/connection/state/{mobile}": {
+      "get": {
+        "operationId": "TelegramController_getClientState",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionStatusDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found"
+          }
+        },
+        "summary": "Get connection state for a client",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/connection/count": {
+      "get": {
+        "operationId": "TelegramController_getActiveConnectionCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Number of active connections"
+          }
+        },
+        "summary": "Get active connection count",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/connection/cleanup/start": {
+      "post": {
+        "operationId": "TelegramController_startCleanupInterval",
+        "parameters": [
+          {
+            "name": "intervalMs",
+            "required": false,
+            "in": "query",
+            "description": "Cleanup interval in milliseconds",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cleanup interval started"
+          }
+        },
+        "summary": "Start cleanup interval for inactive connections",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/connection/cleanup/stop": {
+      "post": {
+        "operationId": "TelegramController_stopCleanupInterval",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Cleanup interval stopped"
+          }
+        },
+        "summary": "Stop cleanup interval",
         "tags": [
           "Telegram"
         ]
@@ -6999,6 +7141,76 @@
         "type": "object",
         "properties": {}
       },
+      "ConnectionStatsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Total number of connections"
+          },
+          "connected": {
+            "type": "number",
+            "description": "Number of connected clients"
+          },
+          "connecting": {
+            "type": "number",
+            "description": "Number of connecting clients"
+          },
+          "disconnecting": {
+            "type": "number",
+            "description": "Number of disconnecting clients"
+          },
+          "error": {
+            "type": "number",
+            "description": "Number of clients in error state"
+          }
+        },
+        "required": [
+          "total",
+          "connected",
+          "connecting",
+          "disconnecting",
+          "error"
+        ]
+      },
+      "ConnectionStatusDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "Connection state of the client",
+            "enum": [
+              "connecting",
+              "connected",
+              "disconnecting",
+              "disconnected",
+              "error"
+            ]
+          },
+          "autoDisconnect": {
+            "type": "boolean",
+            "description": "Whether auto disconnect is enabled"
+          },
+          "lastUsed": {
+            "type": "number",
+            "description": "When the connection was last used"
+          },
+          "connectionAttempts": {
+            "type": "number",
+            "description": "Number of connection attempts"
+          },
+          "lastError": {
+            "type": "string",
+            "description": "Last error message if any"
+          }
+        },
+        "required": [
+          "state",
+          "autoDisconnect",
+          "lastUsed",
+          "connectionAttempts"
+        ]
+      },
       "UpdateProfileDto": {
         "type": "object",
         "properties": {
@@ -7301,28 +7513,6 @@
             ]
           }
         }
-      },
-      "ConnectionStatusDto": {
-        "type": "object",
-        "properties": {
-          "activeConnections": {
-            "type": "number",
-            "description": "Number of active connections"
-          },
-          "rateLimited": {
-            "type": "number",
-            "description": "Number of rate-limited connections"
-          },
-          "totalOperations": {
-            "type": "number",
-            "description": "Total number of operations"
-          }
-        },
-        "required": [
-          "activeConnections",
-          "rateLimited",
-          "totalOperations"
-        ]
       },
       "AddContactsDto": {
         "type": "object",

@@ -1,28 +1,9 @@
 import TelegramManager from '../TelegramManager';
 import { UsersService } from '../../../components/users/users.service';
-interface ClientInfo {
-    client: TelegramManager;
-    lastUsed: number;
-    autoDisconnect: boolean;
-    connectionAttempts: number;
-    isConnecting: boolean;
-}
 interface GetClientOptions {
     autoDisconnect?: boolean;
     handler?: boolean;
-    maxRetries?: number;
-}
-interface ConnectionStats {
-    activeConnections: number;
-    totalConnections: number;
-    failedConnections: number;
-    cleanupCount: number;
-}
-declare class ConnectionManagerError extends Error {
-    readonly mobile: string;
-    readonly operation: string;
-    readonly originalError?: Error;
-    constructor(message: string, mobile: string, operation: string, originalError?: Error);
+    timeout?: number;
 }
 declare class ConnectionManager {
     private static instance;
@@ -30,38 +11,33 @@ declare class ConnectionManager {
     private readonly logger;
     private cleanupInterval;
     private usersService;
-    private readonly maxRetries;
-    private readonly connectionTimeout;
-    private stats;
+    private readonly MAX_RETRY_ATTEMPTS;
+    private readonly CONNECTION_TIMEOUT;
+    private readonly MAX_CONCURRENT_CONNECTIONS;
+    private readonly COOLDOWN_PERIOD;
     private constructor();
+    private handleShutdown;
     setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
     private cleanupInactiveConnections;
     private updateLastUsed;
-    private validateMobile;
-    private getUserByMobile;
+    private validateConnection;
     getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager>;
-    private tryGetExistingClient;
-    private waitForConnection;
-    private createNewClientWithRetries;
-    private createNewClient;
-    private handleFinalError;
-    private markUserAsExpired;
-    hasClient(mobile: string): boolean;
-    disconnectAll(): Promise<number>;
+    hasClient(number: string): boolean;
+    disconnectAll(): Promise<void>;
     private registerClient;
-    unregisterClient(mobile: string): Promise<boolean>;
+    unregisterClient(mobile: string): Promise<void>;
     getActiveConnectionCount(): number;
-    getConnectionStats(): ConnectionStats;
-    getClientInfo(mobile: string): Omit<ClientInfo, 'client'> | null;
     startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
     stopCleanupInterval(): void;
-    healthCheck(): Promise<{
-        status: 'healthy' | 'degraded' | 'unhealthy';
-        activeConnections: number;
-        stats: ConnectionStats;
-        issues: string[];
-    }>;
+    getClientState(mobile: string): string | undefined;
+    getConnectionStats(): {
+        total: number;
+        connected: number;
+        connecting: number;
+        disconnecting: number;
+        error: number;
+    };
 }
 export declare const connectionManager: ConnectionManager;
-export { ConnectionManager, ConnectionManagerError };
+export {};

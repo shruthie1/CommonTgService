@@ -11,6 +11,7 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
+import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
@@ -224,7 +225,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -458,4 +459,12 @@ export declare class TelegramService implements OnModuleDestroy {
         botToken: string;
         username: string;
     }>;
+    connect(mobile: string, options?: GetClientOptionsDto): Promise<void>;
+    disconnect(mobile: string): Promise<void>;
+    disconnectAll(): Promise<void>;
+    getConnectionStats(): ConnectionStatsDto;
+    getClientState(mobile: string): ConnectionStatusDto | undefined;
+    getActiveConnectionCount(): number;
+    startCleanupInterval(intervalMs?: number): void;
+    stopCleanupInterval(): void;
 }

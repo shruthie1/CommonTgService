@@ -21,6 +21,7 @@ import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { shouldMatch } from '../../utils';
+import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -1092,5 +1093,46 @@ export class TelegramService implements OnModuleDestroy {
     async createBot(mobile: string, createBotDto: CreateBotDto) {
         const client = await connectionManager.getClient(mobile);
         return client.createBot(createBotDto);
+    }
+
+    // Connection Management Methods
+    async connect(mobile: string, options?: GetClientOptionsDto): Promise<void> {
+        await connectionManager.getClient(mobile, options);
+    }
+
+    async disconnect(mobile: string): Promise<void> {
+        await connectionManager.unregisterClient(mobile);
+    }
+
+    async disconnectAll(): Promise<void> {
+        await connectionManager.disconnectAll();
+    }
+
+    getConnectionStats(): ConnectionStatsDto {
+        return connectionManager.getConnectionStats();
+    }
+
+    getClientState(mobile: string): ConnectionStatusDto | undefined {
+        const state = connectionManager.getClientState(mobile);
+        const clientInfo = {
+            state: state,
+            autoDisconnect: false,
+            lastUsed: Date.now(),
+            connectionAttempts: 0
+        };
+        
+        return clientInfo as ConnectionStatusDto;
+    }
+
+    getActiveConnectionCount(): number {
+        return connectionManager.getActiveConnectionCount();
+    }
+
+    startCleanupInterval(intervalMs: number = 300000): void {
+        connectionManager.startCleanupInterval(intervalMs);
+    }
+
+    stopCleanupInterval(): void {
+        connectionManager.stopCleanupInterval();
     }
 }

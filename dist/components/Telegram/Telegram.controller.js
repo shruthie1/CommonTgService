@@ -52,7 +52,7 @@ const Telegram_service_1 = require("./Telegram.service");
 const dto_1 = require("./dto");
 const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
-const common_responses_dto_1 = require("./dto/common-responses.dto");
+const connection_management_dto_1 = require("./dto/connection-management.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
 const connection_manager_1 = require("./utils/connection-manager");
@@ -64,17 +64,39 @@ let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
     }
-    async connect(mobile) {
-        await connection_manager_1.connectionManager.getClient(mobile);
+    async connect(mobile, autoDisconnect, handler, timeout) {
+        const options = {
+            autoDisconnect,
+            handler,
+            timeout
+        };
+        await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
     async disconnect(mobile) {
-        await connection_manager_1.connectionManager.unregisterClient(mobile);
+        await this.telegramService.disconnect(mobile);
         return { message: 'Disconnected successfully' };
     }
-    async disconnectAllClients() {
-        await connection_manager_1.connectionManager.disconnectAll();
+    async disconnectAll() {
+        await this.telegramService.disconnectAll();
         return { message: 'All clients disconnected successfully' };
+    }
+    getConnectionStats() {
+        return this.telegramService.getConnectionStats();
+    }
+    getClientState(mobile) {
+        return this.telegramService.getClientState(mobile);
+    }
+    getActiveConnectionCount() {
+        return this.telegramService.getActiveConnectionCount();
+    }
+    startCleanupInterval(intervalMs) {
+        this.telegramService.startCleanupInterval(intervalMs);
+        return { message: 'Cleanup interval started' };
+    }
+    stopCleanupInterval() {
+        this.telegramService.stopCleanupInterval();
+        return { message: 'Cleanup interval stopped' };
     }
     async getMe(mobile) {
         return this.telegramService.getMe(mobile);
@@ -375,11 +397,17 @@ __decorate([
     (0, common_1.Get)('connect/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Connect to Telegram' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true }),
+    (0, swagger_1.ApiQuery)({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true }),
+    (0, swagger_1.ApiQuery)({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully connected' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Connection failed' }),
     __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('autoDisconnect')),
+    __param(2, (0, common_1.Query)('handler')),
+    __param(3, (0, common_1.Query)('timeout')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Boolean, Boolean, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "connect", null);
 __decorate([
@@ -393,13 +421,58 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "disconnect", null);
 __decorate([
-    (0, common_1.Post)('disconnect-all'),
+    (0, common_1.Get)('disconnect-all'),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect all clients' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All clients disconnected successfully' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "disconnectAllClients", null);
+], TelegramController.prototype, "disconnectAll", null);
+__decorate([
+    (0, common_1.Get)('connection/stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get connection statistics' }),
+    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatsDto }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", connection_management_dto_1.ConnectionStatsDto)
+], TelegramController.prototype, "getConnectionStats", null);
+__decorate([
+    (0, common_1.Get)('connection/state/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get connection state for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", connection_management_dto_1.ConnectionStatusDto)
+], TelegramController.prototype, "getClientState", null);
+__decorate([
+    (0, common_1.Get)('connection/count'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get active connection count' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Number of active connections' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Number)
+], TelegramController.prototype, "getActiveConnectionCount", null);
+__decorate([
+    (0, common_1.Post)('connection/cleanup/start'),
+    (0, swagger_1.ApiOperation)({ summary: 'Start cleanup interval for inactive connections' }),
+    (0, swagger_1.ApiQuery)({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval started' }),
+    __param(0, (0, common_1.Query)('intervalMs')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Object)
+], TelegramController.prototype, "startCleanupInterval", null);
+__decorate([
+    (0, common_1.Post)('connection/cleanup/stop'),
+    (0, swagger_1.ApiOperation)({ summary: 'Stop cleanup interval' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval stopped' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Object)
+], TelegramController.prototype, "stopCleanupInterval", null);
 __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
@@ -653,7 +726,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('monitoring/status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get service health and connection status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: common_responses_dto_1.ConnectionStatusDto }),
+    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
