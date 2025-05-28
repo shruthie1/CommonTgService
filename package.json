@@ -1,6 +1,6 @@
 {
   "name": "common-tg-service",
-  "version": "1.0.96",
+  "version": "1.0.97",
   "description": "Common Telegram service for NestJS applications",
   "author": "",
   "private": false,
