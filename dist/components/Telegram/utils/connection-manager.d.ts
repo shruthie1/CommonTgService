@@ -1,9 +1,30 @@
 import TelegramManager from '../TelegramManager';
 import { UsersService } from '../../../components/users/users.service';
+interface RetryConfig {
+    maxAttempts: number;
+    baseDelay: number;
+    maxDelay: number;
+    backoffMultiplier: number;
+    jitter: boolean;
+}
+interface ClientInfo {
+    client: TelegramManager;
+    lastUsed: number;
+    autoDisconnect: boolean;
+    connectionAttempts: number;
+    lastError?: Error;
+    state: 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
+    retryConfig: RetryConfig;
+    nextRetryAt?: number;
+    consecutiveFailures: number;
+    lastSuccessfulConnection?: number;
+}
 interface GetClientOptions {
     autoDisconnect?: boolean;
     handler?: boolean;
     timeout?: number;
+    retryConfig?: Partial<RetryConfig>;
+    forceReconnect?: boolean;
 }
 declare class ConnectionManager {
     private static instance;
@@ -11,21 +32,28 @@ declare class ConnectionManager {
     private readonly logger;
     private cleanupInterval;
     private usersService;
-    private readonly MAX_RETRY_ATTEMPTS;
+    private readonly DEFAULT_RETRY_CONFIG;
     private readonly CONNECTION_TIMEOUT;
     private readonly MAX_CONCURRENT_CONNECTIONS;
     private readonly COOLDOWN_PERIOD;
+    private readonly VALIDATION_TIMEOUT;
     private constructor();
     private handleShutdown;
     setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
+    private calculateRetryDelay;
+    private shouldRetry;
+    private waitForRetry;
+    private validateConnection;
+    private attemptConnection;
+    getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager>;
+    private retryConnection;
+    private handleConnectionError;
+    private createNewClient;
     private cleanupInactiveConnections;
     private updateLastUsed;
-    private validateConnection;
-    getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager>;
     hasClient(number: string): boolean;
     disconnectAll(): Promise<void>;
-    private registerClient;
     unregisterClient(mobile: string): Promise<void>;
     getActiveConnectionCount(): number;
     startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
@@ -37,7 +65,11 @@ declare class ConnectionManager {
         connecting: number;
         disconnecting: number;
         error: number;
+        retrying: number;
     };
+    getClientInfo(mobile: string): ClientInfo | undefined;
+    forceReconnect(mobile: string): Promise<TelegramManager>;
+    setRetryConfig(mobile: string, config: Partial<RetryConfig>): boolean;
 }
 export declare const connectionManager: ConnectionManager;
 export {};
