@@ -8302,14 +8302,16 @@ class ConnectionManager {
         this.MAX_RETRY_ATTEMPTS = 3;
         this.CONNECTION_TIMEOUT = 30000;
         this.MAX_CONCURRENT_CONNECTIONS = 100;
-        this.COOLDOWN_PERIOD = 60000;
+        this.COOLDOWN_PERIOD = 600000;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
         process.on('SIGTERM', () => this.handleShutdown());
         process.on('SIGINT', () => this.handleShutdown());
+        this.startCleanupInterval();
     }
     async handleShutdown() {
         this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
+        this.stopCleanupInterval();
         await this.disconnectAll();
         process.exit(0);
     }
@@ -8319,7 +8321,6 @@ class ConnectionManager {
     static getInstance() {
         if (!ConnectionManager.instance) {
             ConnectionManager.instance = new ConnectionManager();
-            ConnectionManager.instance.startCleanupInterval(120000);
         }
         return ConnectionManager.instance;
     }
@@ -8327,7 +8328,8 @@ class ConnectionManager {
         const now = Date.now();
         const disconnectionPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            if (!connection.autoDisconnect) {
+            if (!connection.autoDisconnect && connection.lastUsed > now - this.COOLDOWN_PERIOD) {
+                this.logger.logOperation(mobile, 'Skipping cleanup for client with autoDisconnect disabled');
                 continue;
             }
             if (now - connection.lastUsed > maxIdleTime ||
@@ -8498,6 +8500,9 @@ class ConnectionManager {
             .length;
     }
     startCleanupInterval(intervalMs = 120000) {
+        if (this.cleanupInterval) {
+            return this.cleanupInterval;
+        }
         this.stopCleanupInterval();
         this.cleanupInterval = setInterval(() => {
             this.cleanupInactiveConnections().catch(err => {
@@ -8505,6 +8510,9 @@ class ConnectionManager {
             });
         }, intervalMs);
         this.logger.logOperation('ConnectionManager', `Cleanup interval started with ${intervalMs}ms interval`);
+        this.cleanupInactiveConnections().catch(err => {
+            this.logger.logError('ConnectionManager', 'Error in initial cleanup', err);
+        });
         return this.cleanupInterval;
     }
     stopCleanupInterval() {
