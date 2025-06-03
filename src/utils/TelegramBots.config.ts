@@ -67,7 +67,8 @@ export class BotConfig {
             for (const token of botTokens) {
                 const username = await this.fetchUsername(token);
                 if (!username) {
-                    throw new Error(`Invalid bot token for ${category}`);
+                    console.log(`Invalid bot token for ${category}, token: ${token}`);
+                    // throw new Error(`Invalid bot token for ${category}`);
                 }
                 botUsernames.push(username);
             }
