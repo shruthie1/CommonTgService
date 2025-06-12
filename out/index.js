@@ -3825,7 +3825,7 @@ class TelegramManager {
         if (error.message && error.message == 'TIMEOUT') {
         }
         else {
-            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+            console.error(`Error occurred: ${this.phoneNumber}:`, error);
         }
     }
     async createClient(handler = true, handlerFn) {
@@ -3833,6 +3833,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+        this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
         console.log("Connected Client : ", me.phone);
