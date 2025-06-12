@@ -347,7 +347,7 @@ class TelegramManager {
             // await disconnectAll()
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
-            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+            console.error(`Error occurred: ${this.phoneNumber}:`, error);
             // Handle other types of errors
         }
     }
@@ -357,7 +357,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(LogLevel.ERROR);
-        // this.client._errorHandler = this.errorHandler
+        this.client._errorHandler = this.errorHandler
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
         console.log("Connected Client : ", me.phone);
