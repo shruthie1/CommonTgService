@@ -1,4 +1,5 @@
 import { ChannelsService } from './../channels/channels.service';
+import { OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
@@ -8,7 +9,7 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
-export declare class BufferClientService {
+export declare class BufferClientService implements OnModuleDestroy {
     private bufferClientModel;
     private telegramService;
     private usersService;
@@ -27,6 +28,7 @@ export declare class BufferClientService {
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService);
+    onModuleDestroy(): Promise<void>;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClient>;

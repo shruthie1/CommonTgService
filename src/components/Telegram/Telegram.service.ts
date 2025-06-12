@@ -591,14 +591,6 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings)
     }
-    // Content Filtering
-    async setContentFilters(
-        mobile: string,
-        filters: ContentFilter
-    ) {
-        const telegramClient = await connectionManager.getClient(mobile);
-        return await telegramClient.setContentFilters(filters)
-    }
 
     async addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
         const telegramClient = await connectionManager.getClient(mobile);

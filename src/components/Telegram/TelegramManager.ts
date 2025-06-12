@@ -42,15 +42,11 @@ class TelegramManager {
     public client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
-    private contentFilters: Map<string, ContentFilter>;
-    private filterHandler: any;
-
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
-        this.contentFilters = new Map();
     }
 
     public static getActiveClientSetup() {
@@ -320,25 +316,9 @@ class TelegramManager {
 
     private async cleanupClient() {
         try {
-            if (!this.client) return;
-            const handlers = this.client.listEventHandlers();
-            for (const handler of handlers) {
-                this.client.removeEventHandler(handler[1], handler[0]);
-            }
-            console.debug("Removing all handlers");
-            try {
-                if (this.client.connected) {
-                    await this.client.disconnect();
-                }
-                await this.client.destroy();
-                console.debug("Client destroyed");
-            } catch (error) {
-                parseError(error, `${this.phoneNumber}: Error during client cleanup`);
-            }
-            await this.client.destroy();
-            await this.client.disconnect();
+            await this.client?.destroy();
             this.client = null;
-            this.session.delete();
+            this.session?.delete();
             this.channelArray = [];
             this.client = null;
             await sleep(2000);
@@ -2045,79 +2025,6 @@ class TelegramManager {
                 return 'bin';
             default:
                 return 'bin';
-        }
-    }
-
-    async setContentFilters(filters: ContentFilter) {
-        if (!this.client) throw new Error('Client not initialized');
-
-        this.contentFilters.set(filters.chatId, filters);
-
-        if (!this.filterHandler) {
-            this.filterHandler = this.client.addEventHandler(async (event) => {
-                if (event instanceof NewMessageEvent) {
-                    const message = event.message;
-                    const chatId = message.chatId?.toString();
-                    const filter = this.contentFilters.get(chatId);
-
-                    if (!filter) return;
-
-                    const shouldFilter = await this.evaluateMessage(message, filter);
-                    if (shouldFilter) {
-                        for (const action of filter.actions) {
-                            await this.executeFilterAction(action, message);
-                        }
-                    }
-                }
-            }, new NewMessage({}));
-        }
-    }
-
-    private async evaluateMessage(message: Api.Message, filter: ContentFilter): Promise<boolean> {
-        if (filter.keywords?.length) {
-            const messageText = message.message.toLowerCase();
-            if (filter.keywords.some(keyword => messageText.includes(keyword.toLowerCase()))) {
-                return true;
-            }
-        }
-
-        if (filter.mediaTypes?.length && message.media) {
-            const mediaType = this.getMediaType(message.media);
-            if (filter.mediaTypes.includes(mediaType)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private async executeFilterAction(action: 'delete' | 'warn' | 'mute', message: Api.Message) {
-        try {
-            switch (action) {
-                case 'delete':
-                    await this.client.deleteMessages(message.chatId, [message.id], { revoke: true });
-                    break;
-                case 'warn':
-                    await this.client.sendMessage(message.chatId, {
-                        message: `⚠️ Message filtered due to content policy.`,
-                        replyTo: message.id
-                    });
-                    break;
-                case 'mute':
-                    if (message.fromId) {
-                        await this.client.invoke(new Api.channels.EditBanned({
-                            channel: message.chatId,
-                            participant: message.fromId,
-                            bannedRights: new Api.ChatBannedRights({
-                                untilDate: Math.floor(Date.now() / 1000) + 3600,
-                                sendMessages: true
-                            })
-                        }));
-                    }
-                    break;
-            }
-        } catch (error) {
-            console.error(`Failed to execute filter action ${action}:`, error);
         }
     }
 

@@ -489,10 +489,6 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings);
     }
-    async setContentFilters(mobile, filters) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.setContentFilters(filters);
-    }
     async addGroupMembers(mobile, groupId, members) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.addGroupMembers(groupId, members);

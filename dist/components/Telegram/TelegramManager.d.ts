@@ -4,7 +4,6 @@ import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { ContentFilter } from '../../interfaces/telegram';
 import { GroupOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
@@ -25,8 +24,6 @@ declare class TelegramManager {
     client: TelegramClient | null;
     private channelArray;
     private static activeClientSetup;
-    private contentFilters;
-    private filterHandler;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
         days?: number;
@@ -244,9 +241,6 @@ declare class TelegramManager {
         }[];
     }>;
     private getMediaExtension;
-    setContentFilters(filters: ContentFilter): Promise<void>;
-    private evaluateMessage;
-    private executeFilterAction;
     private getSearchFilter;
     private getMediaType;
     private getEntityId;
@@ -319,7 +313,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

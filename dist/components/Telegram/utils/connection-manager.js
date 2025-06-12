@@ -27,15 +27,10 @@ class ConnectionManager {
         this.VALIDATION_TIMEOUT = 10000;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
-        process.on('SIGTERM', () => this.handleShutdown());
-        process.on('SIGINT', () => this.handleShutdown());
+        this.boundShutdownHandler = this.handleShutdown.bind(this);
+        process.on('SIGTERM', this.boundShutdownHandler);
+        process.on('SIGINT', this.boundShutdownHandler);
         this.startCleanupInterval();
-    }
-    async handleShutdown() {
-        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
-        this.stopCleanupInterval();
-        await this.disconnectAll();
-        process.exit(0);
     }
     setUsersService(usersService) {
         this.usersService = usersService;
@@ -45,6 +40,31 @@ class ConnectionManager {
             ConnectionManager.instance = new ConnectionManager();
         }
         return ConnectionManager.instance;
+    }
+    dispose() {
+        this.stopCleanupInterval();
+        process.off('SIGTERM', this.boundShutdownHandler);
+        process.off('SIGINT', this.boundShutdownHandler);
+        this.clients.clear();
+    }
+    async handleShutdown() {
+        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
+        this.dispose();
+        await this.disconnectAll();
+        process.exit(0);
+    }
+    createTimeoutPromise(timeoutMs, signal) {
+        return new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Operation timeout'));
+            }, timeoutMs);
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    clearTimeout(timeoutId);
+                    reject(new Error('Operation aborted'));
+                }, { once: true });
+            }
+        });
     }
     calculateRetryDelay(attempt, config) {
         let delay = Math.min(config.baseDelay * Math.pow(config.backoffMultiplier, attempt), config.maxDelay);
@@ -90,12 +110,17 @@ class ConnectionManager {
             if (!client.connected()) {
                 return false;
             }
-            const validationPromises = [
-                client.client.getMe(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Validation timeout')), this.VALIDATION_TIMEOUT))
-            ];
-            await Promise.race(validationPromises);
-            return true;
+            const controller = new AbortController();
+            try {
+                await Promise.race([
+                    client.client.getMe(),
+                    this.createTimeoutPromise(this.VALIDATION_TIMEOUT, controller.signal)
+                ]);
+                return true;
+            }
+            finally {
+                controller.abort();
+            }
         }
         catch (error) {
             this.logger.logError(mobile, 'Connection validation failed', error);
@@ -103,16 +128,27 @@ class ConnectionManager {
         }
     }
     async attemptConnection(mobile, telegramManager, timeout) {
-        const connectionPromises = [
-            telegramManager.createClient(true),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), timeout))
-        ];
-        const client = await Promise.race(connectionPromises);
-        await Promise.race([
-            client.getMe(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Client verification timeout')), 5000))
-        ]);
-        return client;
+        const controller = new AbortController();
+        try {
+            const client = await Promise.race([
+                telegramManager.createClient(true),
+                this.createTimeoutPromise(timeout, controller.signal)
+            ]);
+            const verificationController = new AbortController();
+            try {
+                await Promise.race([
+                    client.getMe(),
+                    this.createTimeoutPromise(5000, verificationController.signal)
+                ]);
+                return client;
+            }
+            finally {
+                verificationController.abort();
+            }
+        }
+        finally {
+            controller.abort();
+        }
     }
     async getClient(mobile, options = {}) {
         if (!mobile) {
@@ -264,10 +300,27 @@ class ConnectionManager {
                     (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2));
             if (shouldCleanup) {
                 this.logger.logOperation(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}`);
-                disconnectionPromises.push(this.unregisterClient(mobile));
+                try {
+                    disconnectionPromises.push(Promise.race([
+                        this.unregisterClient(mobile),
+                        new Promise((resolve) => setTimeout(resolve, 10000))
+                    ]));
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Error during cleanup', error);
+                    this.clients.delete(mobile);
+                }
             }
         }
-        await Promise.all(disconnectionPromises);
+        try {
+            await Promise.race([
+                Promise.all(disconnectionPromises),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Cleanup timeout')), 30000))
+            ]);
+        }
+        catch (error) {
+            this.logger.logError('ConnectionManager', 'Cleanup operation timed out', error);
+        }
     }
     updateLastUsed(mobile) {
         const connection = this.clients.get(mobile);
@@ -284,7 +337,7 @@ class ConnectionManager {
         this.logger.logOperation('ConnectionManager', 'Disconnecting all clients');
         const disconnectionPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            if (connection.state !== 'disconnecting' && connection.state !== 'disconnected') {
+            if (connection.state !== 'disconnected') {
                 connection.state = 'disconnecting';
                 this.clients.set(mobile, connection);
                 disconnectionPromises.push(this.unregisterClient(mobile));
@@ -295,21 +348,30 @@ class ConnectionManager {
         this.logger.logOperation('ConnectionManager', 'All clients disconnected');
     }
     async unregisterClient(mobile) {
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo)
+            return;
         try {
-            const clientInfo = this.clients.get(mobile);
-            if (clientInfo) {
-                clientInfo.state = 'disconnecting';
-                this.clients.set(mobile, clientInfo);
-                const disconnectionPromises = [
+            clientInfo.state = 'disconnecting';
+            this.clients.set(mobile, clientInfo);
+            const controller = new AbortController();
+            try {
+                await Promise.race([
                     clientInfo.client?.disconnect(),
-                    new Promise((resolve) => setTimeout(resolve, 5000))
-                ];
-                await Promise.race(disconnectionPromises);
-                this.logger.logOperation(mobile, 'Client unregistered successfully');
+                    this.createTimeoutPromise(5000, controller.signal)
+                ]);
+                this.logger.logOperation(mobile, 'Client disconnected successfully');
             }
-        }
-        catch (error) {
-            this.logger.logError(mobile, 'Error in unregisterClient', error);
+            catch (error) {
+                this.logger.logError(mobile, 'Error during client disconnect', error);
+            }
+            finally {
+                controller.abort();
+                if (clientInfo.client) {
+                    clientInfo.client.client = null;
+                    clientInfo.client = null;
+                }
+            }
         }
         finally {
             this.clients.delete(mobile);
@@ -384,5 +446,6 @@ class ConnectionManager {
         return false;
     }
 }
+ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
 //# sourceMappingURL=connection-manager.js.map
