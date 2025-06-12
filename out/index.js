@@ -3149,10 +3149,6 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings);
     }
-    async setContentFilters(mobile, filters) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.setContentFilters(filters);
-    }
     async addGroupMembers(mobile, groupId, members) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.addGroupMembers(groupId, members);
@@ -3545,7 +3541,6 @@ class TelegramManager {
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
-        this.contentFilters = new Map();
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -3803,27 +3798,9 @@ class TelegramManager {
     }
     async cleanupClient() {
         try {
-            if (!this.client)
-                return;
-            const handlers = this.client.listEventHandlers();
-            for (const handler of handlers) {
-                this.client.removeEventHandler(handler[1], handler[0]);
-            }
-            console.debug("Removing all handlers");
-            try {
-                if (this.client.connected) {
-                    await this.client.disconnect();
-                }
-                await this.client.destroy();
-                console.debug("Client destroyed");
-            }
-            catch (error) {
-                (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
-            }
-            await this.client.destroy();
-            await this.client.disconnect();
+            await this.client?.destroy();
             this.client = null;
-            this.session.delete();
+            this.session?.delete();
             this.channelArray = [];
             this.client = null;
             await (0, Helpers_1.sleep)(2000);
@@ -5272,73 +5249,6 @@ class TelegramManager {
                 return 'bin';
             default:
                 return 'bin';
-        }
-    }
-    async setContentFilters(filters) {
-        if (!this.client)
-            throw new Error('Client not initialized');
-        this.contentFilters.set(filters.chatId, filters);
-        if (!this.filterHandler) {
-            this.filterHandler = this.client.addEventHandler(async (event) => {
-                if (event instanceof events_1.NewMessageEvent) {
-                    const message = event.message;
-                    const chatId = message.chatId?.toString();
-                    const filter = this.contentFilters.get(chatId);
-                    if (!filter)
-                        return;
-                    const shouldFilter = await this.evaluateMessage(message, filter);
-                    if (shouldFilter) {
-                        for (const action of filter.actions) {
-                            await this.executeFilterAction(action, message);
-                        }
-                    }
-                }
-            }, new events_1.NewMessage({}));
-        }
-    }
-    async evaluateMessage(message, filter) {
-        if (filter.keywords?.length) {
-            const messageText = message.message.toLowerCase();
-            if (filter.keywords.some(keyword => messageText.includes(keyword.toLowerCase()))) {
-                return true;
-            }
-        }
-        if (filter.mediaTypes?.length && message.media) {
-            const mediaType = this.getMediaType(message.media);
-            if (filter.mediaTypes.includes(mediaType)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    async executeFilterAction(action, message) {
-        try {
-            switch (action) {
-                case 'delete':
-                    await this.client.deleteMessages(message.chatId, [message.id], { revoke: true });
-                    break;
-                case 'warn':
-                    await this.client.sendMessage(message.chatId, {
-                        message: `⚠️ Message filtered due to content policy.`,
-                        replyTo: message.id
-                    });
-                    break;
-                case 'mute':
-                    if (message.fromId) {
-                        await this.client.invoke(new telegram_1.Api.channels.EditBanned({
-                            channel: message.chatId,
-                            participant: message.fromId,
-                            bannedRights: new telegram_1.Api.ChatBannedRights({
-                                untilDate: Math.floor(Date.now() / 1000) + 3600,
-                                sendMessages: true
-                            })
-                        }));
-                    }
-                    break;
-            }
-        }
-        catch (error) {
-            console.error(`Failed to execute filter action ${action}:`, error);
         }
     }
     getSearchFilter(filter) {
@@ -8312,15 +8222,10 @@ class ConnectionManager {
         this.VALIDATION_TIMEOUT = 10000;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
-        process.on('SIGTERM', () => this.handleShutdown());
-        process.on('SIGINT', () => this.handleShutdown());
+        this.boundShutdownHandler = this.handleShutdown.bind(this);
+        process.on('SIGTERM', this.boundShutdownHandler);
+        process.on('SIGINT', this.boundShutdownHandler);
         this.startCleanupInterval();
-    }
-    async handleShutdown() {
-        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
-        this.stopCleanupInterval();
-        await this.disconnectAll();
-        process.exit(0);
     }
     setUsersService(usersService) {
         this.usersService = usersService;
@@ -8330,6 +8235,31 @@ class ConnectionManager {
             ConnectionManager.instance = new ConnectionManager();
         }
         return ConnectionManager.instance;
+    }
+    dispose() {
+        this.stopCleanupInterval();
+        process.off('SIGTERM', this.boundShutdownHandler);
+        process.off('SIGINT', this.boundShutdownHandler);
+        this.clients.clear();
+    }
+    async handleShutdown() {
+        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
+        this.dispose();
+        await this.disconnectAll();
+        process.exit(0);
+    }
+    createTimeoutPromise(timeoutMs, signal) {
+        return new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Operation timeout'));
+            }, timeoutMs);
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    clearTimeout(timeoutId);
+                    reject(new Error('Operation aborted'));
+                }, { once: true });
+            }
+        });
     }
     calculateRetryDelay(attempt, config) {
         let delay = Math.min(config.baseDelay * Math.pow(config.backoffMultiplier, attempt), config.maxDelay);
@@ -8375,12 +8305,17 @@ class ConnectionManager {
             if (!client.connected()) {
                 return false;
             }
-            const validationPromises = [
-                client.client.getMe(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Validation timeout')), this.VALIDATION_TIMEOUT))
-            ];
-            await Promise.race(validationPromises);
-            return true;
+            const controller = new AbortController();
+            try {
+                await Promise.race([
+                    client.client.getMe(),
+                    this.createTimeoutPromise(this.VALIDATION_TIMEOUT, controller.signal)
+                ]);
+                return true;
+            }
+            finally {
+                controller.abort();
+            }
         }
         catch (error) {
             this.logger.logError(mobile, 'Connection validation failed', error);
@@ -8388,16 +8323,27 @@ class ConnectionManager {
         }
     }
     async attemptConnection(mobile, telegramManager, timeout) {
-        const connectionPromises = [
-            telegramManager.createClient(true),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), timeout))
-        ];
-        const client = await Promise.race(connectionPromises);
-        await Promise.race([
-            client.getMe(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Client verification timeout')), 5000))
-        ]);
-        return client;
+        const controller = new AbortController();
+        try {
+            const client = await Promise.race([
+                telegramManager.createClient(true),
+                this.createTimeoutPromise(timeout, controller.signal)
+            ]);
+            const verificationController = new AbortController();
+            try {
+                await Promise.race([
+                    client.getMe(),
+                    this.createTimeoutPromise(5000, verificationController.signal)
+                ]);
+                return client;
+            }
+            finally {
+                verificationController.abort();
+            }
+        }
+        finally {
+            controller.abort();
+        }
     }
     async getClient(mobile, options = {}) {
         if (!mobile) {
@@ -8549,10 +8495,27 @@ class ConnectionManager {
                     (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2));
             if (shouldCleanup) {
                 this.logger.logOperation(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}`);
-                disconnectionPromises.push(this.unregisterClient(mobile));
+                try {
+                    disconnectionPromises.push(Promise.race([
+                        this.unregisterClient(mobile),
+                        new Promise((resolve) => setTimeout(resolve, 10000))
+                    ]));
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Error during cleanup', error);
+                    this.clients.delete(mobile);
+                }
             }
         }
-        await Promise.all(disconnectionPromises);
+        try {
+            await Promise.race([
+                Promise.all(disconnectionPromises),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Cleanup timeout')), 30000))
+            ]);
+        }
+        catch (error) {
+            this.logger.logError('ConnectionManager', 'Cleanup operation timed out', error);
+        }
     }
     updateLastUsed(mobile) {
         const connection = this.clients.get(mobile);
@@ -8569,7 +8532,7 @@ class ConnectionManager {
         this.logger.logOperation('ConnectionManager', 'Disconnecting all clients');
         const disconnectionPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            if (connection.state !== 'disconnecting' && connection.state !== 'disconnected') {
+            if (connection.state !== 'disconnected') {
                 connection.state = 'disconnecting';
                 this.clients.set(mobile, connection);
                 disconnectionPromises.push(this.unregisterClient(mobile));
@@ -8580,21 +8543,30 @@ class ConnectionManager {
         this.logger.logOperation('ConnectionManager', 'All clients disconnected');
     }
     async unregisterClient(mobile) {
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo)
+            return;
         try {
-            const clientInfo = this.clients.get(mobile);
-            if (clientInfo) {
-                clientInfo.state = 'disconnecting';
-                this.clients.set(mobile, clientInfo);
-                const disconnectionPromises = [
+            clientInfo.state = 'disconnecting';
+            this.clients.set(mobile, clientInfo);
+            const controller = new AbortController();
+            try {
+                await Promise.race([
                     clientInfo.client?.disconnect(),
-                    new Promise((resolve) => setTimeout(resolve, 5000))
-                ];
-                await Promise.race(disconnectionPromises);
-                this.logger.logOperation(mobile, 'Client unregistered successfully');
+                    this.createTimeoutPromise(5000, controller.signal)
+                ]);
+                this.logger.logOperation(mobile, 'Client disconnected successfully');
             }
-        }
-        catch (error) {
-            this.logger.logError(mobile, 'Error in unregisterClient', error);
+            catch (error) {
+                this.logger.logError(mobile, 'Error during client disconnect', error);
+            }
+            finally {
+                controller.abort();
+                if (clientInfo.client) {
+                    clientInfo.client.client = null;
+                    clientInfo.client = null;
+                }
+            }
         }
         finally {
             this.clients.delete(mobile);
@@ -8669,6 +8641,7 @@ class ConnectionManager {
         return false;
     }
 }
+ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
 
 
@@ -10808,6 +10781,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
     }
+    async onModuleDestroy() {
+        this.logger.log('Cleaning up BufferClientService resources');
+        this.clearBufferMap();
+        this.clearLeaveMap();
+        await connection_manager_1.connectionManager.disconnectAll();
+    }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel(bufferClient);
         return newUser.save();
@@ -10956,35 +10935,38 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         this.isJoinChannelProcessing = true;
         this.joinChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.joinChannelMap.keys());
                 if (keys.length === 0) {
                     this.clearJoinChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Join channel interval processing timeout');
                     this.clearJoinChannelInterval();
                 }, this.JOIN_CHANNEL_INTERVAL - 1000);
                 this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
                 for (const mobile of keys) {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
-                        this.removeFromBufferMap(mobile);
-                        continue;
-                    }
-                    const channel = channels.shift();
-                    this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
-                    this.joinChannelMap.set(mobile, channels);
+                    let currentChannel = null;
                     try {
-                        await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                        this.logger.debug(`${mobile} attempting to join channel: @${channel.username}`);
-                        await this.telegramService.tryJoiningChannel(mobile, channel);
+                        const channels = this.joinChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
+                            this.removeFromBufferMap(mobile);
+                            continue;
+                        }
+                        currentChannel = channels.shift();
+                        this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
+                        this.joinChannelMap.set(mobile, channels);
+                        const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                        this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
+                        await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`);
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
+                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromBufferMap(mobile);
@@ -10996,18 +10978,26 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             error.errorMessage === "USER_DEACTIVATED" ||
                             error.errorMessage === "USER_DEACTIVATED_BAN") {
                             this.logger.error(`Session invalid for ${mobile}, removing client`);
+                            this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                    }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        try {
+                            await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        }
+                        catch (unregisterError) {
+                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                        }
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in join channel interval', error.stack);
+                this.logger.error('Error in join channel interval', error);
                 this.clearJoinChannelInterval();
+            }
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
             }
         }, this.JOIN_CHANNEL_INTERVAL);
         this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
@@ -11049,6 +11039,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         this.isLeaveChannelProcessing = true;
         this.leaveChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
@@ -11056,31 +11047,32 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.clearLeaveChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Leave channel interval processing timeout');
                     this.clearLeaveChannelInterval();
                 }, this.LEAVE_CHANNEL_INTERVAL - 1000);
                 this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
                 for (const mobile of keys) {
-                    const channels = this.leaveChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
-                        this.removeFromLeaveMap(mobile);
-                        continue;
-                    }
-                    const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                    this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
-                    if (channels.length > 0) {
-                        this.leaveChannelMap.set(mobile, channels);
-                    }
-                    else {
-                        this.removeFromLeaveMap(mobile);
-                    }
                     try {
+                        const channels = this.leaveChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
+                            this.removeFromLeaveMap(mobile);
+                            continue;
+                        }
+                        const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                        this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
+                        if (channels.length > 0) {
+                            this.leaveChannelMap.set(mobile, channels);
+                        }
+                        else {
+                            this.removeFromLeaveMap(mobile);
+                        }
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
                         await client.leaveChannels(channelsToProcess);
                         this.logger.debug(`${mobile} left channels successfully`);
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
@@ -11092,16 +11084,23 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             await this.remove(mobile);
                             this.removeFromLeaveMap(mobile);
                         }
-                    }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        try {
+                            await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        }
+                        catch (unregisterError) {
+                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                        }
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in leave channel interval', error.stack);
+                this.logger.error('Error in leave channel interval', error);
                 this.clearLeaveChannelInterval();
+            }
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
             }
         }, this.LEAVE_CHANNEL_INTERVAL);
         this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
@@ -11174,71 +11173,96 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             const clients = await this.clientService.findAll();
             const promoteclients = await this.promoteClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile); })];
+            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => client.promoteMobile)].filter(Boolean);
             const promoteclientIds = promoteclients.map(client => client.mobile);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             for (const document of bufferclients) {
                 if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
                     try {
                         const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
-                        const me = await cli.getMe();
-                        if (me.username) {
-                            await this.telegramService.updateUsername(document.mobile, '');
-                            await (0, Helpers_1.sleep)(2000);
+                        try {
+                            const me = await cli.getMe();
+                            if (me.username) {
+                                await this.telegramService.updateUsername(document.mobile, '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            if (me.firstName !== "Deleted Account") {
+                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            await this.telegramService.deleteProfilePhotos(document.mobile);
+                            const hasPassword = await cli.hasPassword();
+                            if (!hasPassword) {
+                                this.logger.warn("Client does not have password");
+                                badIds.push(document.mobile);
+                            }
+                            else {
+                                this.logger.debug(document.mobile + " : ALL Good");
+                                goodIds.push(document.mobile);
+                            }
                         }
-                        if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        await this.telegramService.deleteProfilePhotos(document.mobile);
-                        const hasPassword = await cli.hasPassword();
-                        if (!hasPassword) {
-                            console.log("Client does not have password");
+                        catch (innerError) {
+                            this.logger.error(`Error processing client ${document.mobile}: ${innerError.message}`);
                             badIds.push(document.mobile);
+                            await this.remove(document.mobile);
                         }
-                        else {
-                            console.log(document.mobile, " :  ALL Good");
-                            goodIds.push(document.mobile);
+                        finally {
+                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                         }
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (error) {
+                        this.logger.error(`Error with client ${document.mobile}: ${error.message}`);
                         (0, parseError_1.parseError)(error);
                         badIds.push(document.mobile);
-                        this.remove(document.mobile);
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                        await this.remove(document.mobile);
+                        try {
+                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                        }
+                        catch (unregisterError) {
+                            this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
+                        }
                     }
                 }
                 else {
-                    console.log("Number is a Active Client");
+                    this.logger.warn("Number is a Active Client");
                     goodIds.push(document.mobile);
-                    this.remove(document.mobile);
+                    await this.remove(document.mobile);
                 }
             }
-            goodIds = [...goodIds, ...clientIds, ...promoteclientIds];
-            console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
-            this.addNewUserstoBufferClients(badIds, goodIds);
+            goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
+            this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
+            await this.addNewUserstoBufferClients(badIds, goodIds);
         }
         else {
-            console.log("ignored active check buffer channels as active client setup exists");
+            this.logger.warn("Ignored active check buffer channels as active client setup exists");
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, expired: false, twoFA: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 250 } }, { tgId: 1 }, badIds.length + 3);
-        console.log("New buffer documents to be added: ", documents.length);
+        const documents = await this.usersService.executeQuery({
+            mobile: { $nin: goodIds },
+            expired: false,
+            twoFA: false,
+            lastActive: { $lt: sixMonthsAgo },
+            totalChats: { $gt: 250 }
+        }, { tgId: 1 }, badIds.length + 3);
+        this.logger.debug(`New buffer documents to be added: ${documents.length}`);
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
+            if (!document || !document.mobile || !document.tgId || !document.session) {
+                this.logger.warn('Invalid document found, skipping');
+                continue;
+            }
             try {
+                const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                 try {
-                    const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                     const hasPassword = await client.hasPassword();
-                    console.log("hasPassword: ", hasPassword);
+                    this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        console.log("waiting for setting 2FA");
+                        this.logger.debug("Waiting for setting 2FA");
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
@@ -11250,7 +11274,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true);
-                        console.log("Inserting Document");
+                        this.logger.debug("Creating buffer client document");
                         const bufferClient = {
                             tgId: document.tgId,
                             session: document.session,
@@ -11260,26 +11284,31 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         };
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
-                        console.log("=============Created BufferClient=============");
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                        this.logger.debug("=============Created BufferClient=============");
                         badIds.pop();
                     }
                     else {
-                        console.log("Failed to Update as BufferClient has Password");
+                        this.logger.warn("Failed to Update as BufferClient has Password");
                         await this.usersService.update(document.tgId, { twoFA: true });
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                     }
                 }
                 catch (error) {
+                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     (0, parseError_1.parseError)(error);
-                    await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                }
+                finally {
+                    try {
+                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    }
+                    catch (unregisterError) {
+                        this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
+                    }
                 }
             }
             catch (error) {
+                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 (0, parseError_1.parseError)(error);
-                console.error("An error occurred:", error);
             }
-            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
         }
         setTimeout(() => {
             this.joinchannelForBufferClients();

@@ -313,7 +313,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "photo" | "video";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;
