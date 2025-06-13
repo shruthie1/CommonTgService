@@ -1339,14 +1339,6 @@ let TelegramController = class TelegramController {
     getActiveConnectionCount() {
         return this.telegramService.getActiveConnectionCount();
     }
-    startCleanupInterval(intervalMs) {
-        this.telegramService.startCleanupInterval(intervalMs);
-        return { message: 'Cleanup interval started' };
-    }
-    stopCleanupInterval() {
-        this.telegramService.stopCleanupInterval();
-        return { message: 'Cleanup interval stopped' };
-    }
     async getMe(mobile) {
         return this.telegramService.getMe(mobile);
     }
@@ -1704,24 +1696,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Number)
 ], TelegramController.prototype, "getActiveConnectionCount", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/start'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start cleanup interval for inactive connections' }),
-    (0, swagger_1.ApiQuery)({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval started' }),
-    __param(0, (0, common_1.Query)('intervalMs')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "startCleanupInterval", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/stop'),
-    (0, swagger_1.ApiOperation)({ summary: 'Stop cleanup interval' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval stopped' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "stopCleanupInterval", null);
 __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
@@ -3442,22 +3416,10 @@ let TelegramService = class TelegramService {
     }
     getClientState(mobile) {
         const state = connection_manager_1.connectionManager.getClientState(mobile);
-        const clientInfo = {
-            state: state,
-            autoDisconnect: false,
-            lastUsed: Date.now(),
-            connectionAttempts: 0
-        };
-        return clientInfo;
+        return state;
     }
     getActiveConnectionCount() {
         return connection_manager_1.connectionManager.getActiveConnectionCount();
-    }
-    startCleanupInterval(intervalMs = 300000) {
-        connection_manager_1.connectionManager.startCleanupInterval(intervalMs);
-    }
-    stopCleanupInterval() {
-        connection_manager_1.connectionManager.stopCleanupInterval();
     }
 };
 exports.TelegramService = TelegramService;
@@ -3783,31 +3745,20 @@ class TelegramManager {
         }
         return forwardedCount;
     }
-    async disconnect() {
+    async destroy() {
         if (this.client) {
             try {
-                console.log("Destroying Client: ", this.phoneNumber);
-                await this.cleanupClient();
-                console.log("Client Destroyed finally: ", this.phoneNumber);
+                await this.client?.destroy();
+                this.client = null;
+                this.session?.delete();
+                this.channelArray = [];
+                this.client = null;
+                await (0, Helpers_1.sleep)(2000);
+                console.log("Client Destroyed: ", this.phoneNumber);
             }
             catch (error) {
-                console.error("Error during disconnect:", error);
-                throw error;
+                (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
             }
-        }
-    }
-    async cleanupClient() {
-        try {
-            await this.client?.destroy();
-            this.client = null;
-            this.session?.delete();
-            this.channelArray = [];
-            this.client = null;
-            await (0, Helpers_1.sleep)(2000);
-            console.log("Client Destroyed: ", this.phoneNumber);
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
         }
     }
     async getchatId(username) {
@@ -3821,11 +3772,11 @@ class TelegramManager {
         return me;
     }
     async errorHandler(error) {
-        (0, parseError_1.parseError)(error);
         if (error.message && error.message == 'TIMEOUT') {
+            await this.destroy();
         }
         else {
-            console.error(`Error occurred: ${this.phoneNumber}:`, error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async createClient(handler = true, handlerFn) {
@@ -4875,7 +4826,7 @@ class TelegramManager {
             onError: (err) => { throw err; },
         });
         const session = newClient.session.save();
-        await newClient.disconnect();
+        await newClient.destroy();
         console.log("New Session: ", session);
         return session;
     }
@@ -5493,17 +5444,37 @@ class TelegramManager {
                 filter: filter,
                 ...queryFilter,
                 hash: (0, big_integer_1.default)(0),
-                fromId: undefined
             };
+            let messages = [];
+            let count = 0;
+            console.log("Search Query: ", searchQuery);
             if (chatId) {
                 searchQuery['peer'] = await this.safeGetEntity(chatId);
+                console.log("Performing search in chat: ", chatId);
+                const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
-            if (!('messages' in result)) {
-                return {};
+            else {
+                console.log("Performing global search");
+                const result = await this.client.invoke(new telegram_1.Api.messages.SearchGlobal({
+                    ...searchQuery,
+                    offsetRate: 0,
+                    offsetPeer: new telegram_1.Api.InputPeerEmpty(),
+                    offsetId: 0,
+                    usersOnly: true
+                }));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            let messages = result.messages;
-            console.log(type, result.messages.length, result["count"]);
             if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
@@ -5538,7 +5509,7 @@ class TelegramManager {
             const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
                 messages: filteredMessages,
-                total: result["count"] ? result['count'] : filteredMessages.length
+                total: count ? count : filteredMessages.length
             };
             finalResult[`${type}`] = localResult;
         }
@@ -7472,9 +7443,6 @@ var SearchScope;
     SearchScope["GLOBAL"] = "global";
 })(SearchScope || (exports.SearchScope = SearchScope = {}));
 class SearchMessagesDto {
-    constructor() {
-        this.types = [MessageMediaType.ALL];
-    }
 }
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
@@ -7495,14 +7463,16 @@ __decorate([
 ], SearchMessagesDto.prototype, "query", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Types of messages to search for',
-        enum: MessageMediaType,
+        description: 'Filter by multiple types options',
         isArray: true,
-        required: false,
+        enum: MessageMediaType,
+        example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
+        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(MessageMediaType, { each: true }),
-    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => String),
     __metadata("design:type", Array)
 ], SearchMessagesDto.prototype, "types", void 0);
 __decorate([
@@ -8210,6 +8180,7 @@ class ConnectionManager {
     constructor() {
         this.cleanupInterval = null;
         this.usersService = null;
+        this.isShuttingDown = false;
         this.DEFAULT_RETRY_CONFIG = {
             maxAttempts: 5,
             baseDelay: 1000,
@@ -8221,6 +8192,8 @@ class ConnectionManager {
         this.MAX_CONCURRENT_CONNECTIONS = 100;
         this.COOLDOWN_PERIOD = 600000;
         this.VALIDATION_TIMEOUT = 10000;
+        this.CLEANUP_TIMEOUT = 15000;
+        this.MAX_CLEANUP_ATTEMPTS = 3;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
         this.boundShutdownHandler = this.handleShutdown.bind(this);
@@ -8238,10 +8211,10 @@ class ConnectionManager {
         return ConnectionManager.instance;
     }
     dispose() {
+        this.isShuttingDown = true;
         this.stopCleanupInterval();
         process.off('SIGTERM', this.boundShutdownHandler);
         process.off('SIGINT', this.boundShutdownHandler);
-        this.clients.clear();
     }
     async handleShutdown() {
         this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
@@ -8277,7 +8250,7 @@ class ConnectionManager {
         if (clientInfo.nextRetryAt && now < clientInfo.nextRetryAt) {
             return false;
         }
-        const errorMessage = error.message.toLowerCase();
+        const errorMessage = error.toLowerCase();
         const nonRetryableErrors = [
             'user_deactivated_ban',
             'auth_key_unregistered',
@@ -8286,7 +8259,7 @@ class ConnectionManager {
             'user_deactivated'
         ];
         if (nonRetryableErrors.some(errType => errorMessage.includes(errType))) {
-            this.logger.logOperation(clientInfo.client?.phoneNumber || 'unknown', `Non-retryable error detected: ${error.message}`);
+            this.logger.logOperation(clientInfo.client?.phoneNumber || 'unknown', `Non-retryable error detected: ${error}`);
             return false;
         }
         return true;
@@ -8307,6 +8280,7 @@ class ConnectionManager {
                 return false;
             }
             const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.VALIDATION_TIMEOUT);
             try {
                 await Promise.race([
                     client.client.getMe(),
@@ -8315,6 +8289,7 @@ class ConnectionManager {
                 return true;
             }
             finally {
+                clearTimeout(timeoutId);
                 controller.abort();
             }
         }
@@ -8323,32 +8298,12 @@ class ConnectionManager {
             return false;
         }
     }
-    async attemptConnection(mobile, telegramManager, timeout) {
-        const controller = new AbortController();
-        try {
-            const client = await Promise.race([
-                telegramManager.createClient(true),
-                this.createTimeoutPromise(timeout, controller.signal)
-            ]);
-            const verificationController = new AbortController();
-            try {
-                await Promise.race([
-                    client.getMe(),
-                    this.createTimeoutPromise(5000, verificationController.signal)
-                ]);
-                return client;
-            }
-            finally {
-                verificationController.abort();
-            }
-        }
-        finally {
-            controller.abort();
-        }
-    }
     async getClient(mobile, options = {}) {
         if (!mobile) {
             throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (this.isShuttingDown) {
+            throw new common_1.InternalServerErrorException('ConnectionManager is shutting down');
         }
         if (this.clients.size >= this.MAX_CONCURRENT_CONNECTIONS) {
             throw new common_1.InternalServerErrorException('Maximum connection limit reached');
@@ -8359,25 +8314,26 @@ class ConnectionManager {
             ...retryConfig
         };
         let clientInfo = this.clients.get(mobile);
-        if (clientInfo?.client && !forceReconnect) {
-            this.updateLastUsed(mobile);
-            if (clientInfo.state === 'connected' &&
-                await this.validateConnection(mobile, clientInfo.client)) {
-                this.logger.logOperation(mobile, 'Reusing existing connected client');
-                clientInfo.consecutiveFailures = 0;
-                clientInfo.lastSuccessfulConnection = Date.now();
+        if (clientInfo?.client) {
+            const isValid = await this.validateConnection(mobile, clientInfo.client);
+            const isHealthy = clientInfo.state === 'connected' &&
+                clientInfo.consecutiveFailures === 0 &&
+                (Date.now() - clientInfo.lastSuccessfulConnection) < this.CONNECTION_TIMEOUT;
+            if (!forceReconnect && isValid && isHealthy) {
+                this.updateLastUsed(mobile);
+                this.logger.logOperation(mobile, 'Reusing validated healthy client');
                 return clientInfo.client;
             }
-            if (clientInfo.state === 'error' && this.shouldRetry(clientInfo, clientInfo.lastError)) {
-                await this.waitForRetry(clientInfo);
-                return this.retryConnection(mobile, clientInfo, timeout);
-            }
-            if (clientInfo.connectionAttempts >= clientInfo.retryConfig.maxAttempts) {
-                this.logger.logOperation(mobile, 'Max retry attempts reached, cleaning up client');
-                await this.unregisterClient(mobile);
-                clientInfo = undefined;
-            }
+            this.logger.logOperation(mobile, `Cleaning up client - Valid: ${isValid}, Healthy: ${isHealthy}, ForceReconnect: ${forceReconnect}`);
+            await this.unregisterClient(mobile);
+            clientInfo = undefined;
         }
+        if (clientInfo) {
+            this.logger.logOperation(mobile, 'Client info found but not valid, cleaning up');
+            await this.unregisterClient(mobile);
+            await (0, utils_1.sleep)(1000);
+        }
+        this.logger.logOperation(mobile, 'Creating fresh client connection');
         return this.createNewClient(mobile, mergedRetryConfig, { autoDisconnect, handler, timeout });
     }
     async retryConnection(mobile, clientInfo, timeout) {
@@ -8407,10 +8363,10 @@ class ConnectionManager {
         }
     }
     async handleConnectionError(mobile, clientInfo, error) {
-        clientInfo.lastError = error;
+        clientInfo.lastError = error.message;
         clientInfo.consecutiveFailures++;
         clientInfo.state = 'error';
-        if (this.shouldRetry(clientInfo, error)) {
+        if (this.shouldRetry(clientInfo, error.message)) {
             const delay = this.calculateRetryDelay(clientInfo.connectionAttempts, clientInfo.retryConfig);
             clientInfo.nextRetryAt = Date.now() + delay;
             this.clients.set(mobile, clientInfo);
@@ -8445,11 +8401,12 @@ class ConnectionManager {
             connectionAttempts: 1,
             state: 'connecting',
             retryConfig,
-            consecutiveFailures: 0
+            consecutiveFailures: 0,
+            cleanupAttempts: 0
         };
         this.clients.set(mobile, clientInfo);
         try {
-            const client = await this.attemptConnection(mobile, telegramManager, options.timeout);
+            const client = await telegramManager.createClient(true);
             if (client) {
                 clientInfo.state = 'connected';
                 clientInfo.consecutiveFailures = 0;
@@ -8486,36 +8443,56 @@ class ConnectionManager {
         }
     }
     async cleanupInactiveConnections(maxIdleTime = 180000) {
+        if (this.isShuttingDown)
+            return;
+        this.logger.logOperation('ConnectionManager', 'Perfroming Regular Cleanup');
         const now = Date.now();
-        const disconnectionPromises = [];
+        const cleanupResults = new Map();
+        const cleanupPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
             const shouldCleanup = (connection.autoDisconnect || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
                 (now - connection.lastUsed > maxIdleTime ||
                     connection.state === 'error' ||
                     connection.consecutiveFailures >= connection.retryConfig.maxAttempts ||
-                    (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2));
+                    (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2) ||
+                    (connection.cleanupAttempts && connection.cleanupAttempts >= this.MAX_CLEANUP_ATTEMPTS));
             if (shouldCleanup) {
-                this.logger.logOperation(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}`);
-                try {
-                    disconnectionPromises.push(Promise.race([
-                        this.unregisterClient(mobile),
-                        new Promise((resolve) => setTimeout(resolve, 10000))
-                    ]));
-                }
-                catch (error) {
-                    this.logger.logError(mobile, 'Error during cleanup', error);
-                    this.clients.delete(mobile);
-                }
+                this.logger.logOperation(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}, cleanup attempts: ${connection.cleanupAttempts || 0}`);
+                const cleanupPromise = this.unregisterClient(mobile)
+                    .then(() => {
+                    cleanupResults.set(mobile, true);
+                })
+                    .catch((error) => {
+                    this.logger.logError(mobile, 'Cleanup failed', error);
+                    cleanupResults.set(mobile, false);
+                    const clientInfo = this.clients.get(mobile);
+                    if (clientInfo) {
+                        clientInfo.cleanupAttempts = (clientInfo.cleanupAttempts || 0) + 1;
+                        this.clients.set(mobile, clientInfo);
+                    }
+                });
+                cleanupPromises.push(cleanupPromise);
             }
         }
-        try {
-            await Promise.race([
-                Promise.all(disconnectionPromises),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Cleanup timeout')), 30000))
-            ]);
-        }
-        catch (error) {
-            this.logger.logError('ConnectionManager', 'Cleanup operation timed out', error);
+        if (cleanupPromises.length > 0) {
+            try {
+                await Promise.race([
+                    Promise.allSettled(cleanupPromises),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Cleanup timeout')), 30000))
+                ]);
+            }
+            catch (error) {
+                this.logger.logError('ConnectionManager', 'Cleanup operation timed out', error);
+            }
+            const failed = Array.from(cleanupResults.entries())
+                .filter(([_, success]) => !success)
+                .map(([mobile]) => mobile);
+            if (failed.length > 0) {
+                this.logger.logOperation('ConnectionManager', `Cleanup completed. Failed cleanups: ${failed.join(', ')}`);
+            }
+            else {
+                this.logger.logOperation('ConnectionManager', `Cleanup completed successfully for ${cleanupResults.size} clients`);
+            }
         }
     }
     updateLastUsed(mobile) {
@@ -8539,44 +8516,126 @@ class ConnectionManager {
                 disconnectionPromises.push(this.unregisterClient(mobile));
             }
         }
-        await Promise.all(disconnectionPromises);
+        try {
+            await Promise.race([
+                Promise.allSettled(disconnectionPromises),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Disconnect all timeout')), 60000))
+            ]);
+        }
+        catch (error) {
+            this.logger.logError('ConnectionManager', 'Disconnect all timed out', error);
+        }
         this.clients.clear();
         this.logger.logOperation('ConnectionManager', 'All clients disconnected');
     }
-    async unregisterClient(mobile) {
+    async unregisterClient(mobile, timeoutMs = this.CLEANUP_TIMEOUT) {
         const clientInfo = this.clients.get(mobile);
         if (!clientInfo)
             return;
+        this.logger.logOperation(mobile, 'Unregistering client', {
+            state: clientInfo.state,
+            lastUsed: clientInfo.lastUsed,
+            autoDisconnect: clientInfo.autoDisconnect
+        });
         try {
             clientInfo.state = 'disconnecting';
-            this.clients.set(mobile, clientInfo);
-            const controller = new AbortController();
-            try {
-                await Promise.race([
-                    clientInfo.client?.disconnect(),
-                    this.createTimeoutPromise(5000, controller.signal)
-                ]);
-                this.logger.logOperation(mobile, 'Client disconnected successfully');
-            }
-            catch (error) {
-                this.logger.logError(mobile, 'Error during client disconnect', error);
-            }
-            finally {
-                controller.abort();
-                if (clientInfo.client) {
-                    clientInfo.client.client = null;
-                    clientInfo.client = null;
-                }
-            }
-        }
-        finally {
+            await clientInfo.client.destroy();
             this.clients.delete(mobile);
         }
+        catch (error) {
+            this.logger.logError(mobile, 'Unregister failed', error);
+        }
+        try {
+            await this.forceCleanupClient(mobile, clientInfo);
+        }
+        catch (forceError) {
+            this.logger.logError(mobile, 'Force cleanup also failed', forceError);
+        }
+    }
+    async forceCleanupClient(mobile, clientInfo) {
+        if (clientInfo.client?.client) {
+            this.logger.logOperation(mobile, 'Performing FORCE cleanup');
+            try {
+                await clientInfo.client.client.destroy();
+            }
+            catch (destroyError) {
+                this.logger.logError(mobile, 'Force destroy failed', destroyError);
+            }
+        }
+        try {
+            if (clientInfo.client) {
+                if (clientInfo.client.client) {
+                    clientInfo.client.client = null;
+                }
+                clientInfo.client = null;
+            }
+        }
+        catch (refError) {
+            this.logger.logError(mobile, 'Reference cleanup in force mode failed', refError);
+        }
+        this.clients.delete(mobile);
+        this.logger.logOperation(mobile, 'Client removed from map');
     }
     getActiveConnectionCount() {
         return Array.from(this.clients.values())
             .filter(client => client.state === 'connected')
             .length;
+    }
+    getConnectionLeakReport() {
+        const activeConnections = [];
+        const zombieConnections = [];
+        const staleConnections = [];
+        const now = Date.now();
+        for (const [mobile, clientInfo] of this.clients.entries()) {
+            if (clientInfo.client) {
+                const isClientConnected = clientInfo.client.connected();
+                const stateConnected = clientInfo.state === 'connected';
+                const isStale = now - clientInfo.lastUsed > this.COOLDOWN_PERIOD * 2;
+                if (isClientConnected && stateConnected) {
+                    activeConnections.push(mobile);
+                }
+                else if (!isClientConnected && stateConnected) {
+                    zombieConnections.push(mobile);
+                }
+                else if (isStale && clientInfo.state !== 'disconnected') {
+                    staleConnections.push(mobile);
+                }
+            }
+        }
+        return {
+            mapSize: this.clients.size,
+            activeConnections,
+            zombieConnections,
+            staleConnections
+        };
+    }
+    async performHealthCheck() {
+        if (this.isShuttingDown)
+            return;
+        const leakReport = this.getConnectionLeakReport();
+        if (leakReport.zombieConnections.length > 0) {
+            this.logger.logOperation('ConnectionManager', `Health check: Detected ${leakReport.zombieConnections.length} zombie connections`);
+            for (const mobile of leakReport.zombieConnections) {
+                try {
+                    await this.unregisterClient(mobile);
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Health check cleanup failed', error);
+                }
+            }
+        }
+        if (leakReport.staleConnections.length > 0) {
+            this.logger.logOperation('ConnectionManager', `Health check: Detected ${leakReport.staleConnections.length} stale connections`);
+            for (const mobile of leakReport.staleConnections) {
+                try {
+                    await this.unregisterClient(mobile);
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Stale connection cleanup failed', error);
+                }
+            }
+        }
+        this.logger.logOperation('ConnectionManager', `Health check completed - Active: ${leakReport.activeConnections.length}, Total: ${leakReport.mapSize}`, leakReport);
     }
     startCleanupInterval(intervalMs = 120000) {
         if (this.cleanupInterval) {
@@ -8584,9 +8643,14 @@ class ConnectionManager {
         }
         this.stopCleanupInterval();
         this.cleanupInterval = setInterval(() => {
-            this.cleanupInactiveConnections().catch(err => {
-                this.logger.logError('ConnectionManager', 'Error in cleanup interval', err);
-            });
+            if (!this.isShuttingDown) {
+                this.cleanupInactiveConnections().catch(err => {
+                    this.logger.logError('ConnectionManager', 'Error in cleanup interval', err);
+                });
+                this.performHealthCheck().catch(err => {
+                    this.logger.logError('ConnectionManager', 'Error in initial health check', err);
+                });
+            }
         }, intervalMs);
         this.logger.logOperation('ConnectionManager', `Cleanup interval started with ${intervalMs}ms interval`);
         this.cleanupInactiveConnections().catch(err => {
@@ -8602,7 +8666,16 @@ class ConnectionManager {
         }
     }
     getClientState(mobile) {
-        return this.clients.get(mobile)?.state;
+        const client = this.clients.get(mobile);
+        if (client) {
+            return {
+                autoDisconnect: client.autoDisconnect,
+                connectionAttempts: client.connectionAttempts,
+                lastUsed: client.lastUsed,
+                state: client.state,
+                lastError: client.lastError
+            };
+        }
     }
     getConnectionStats() {
         const stats = {
@@ -8610,6 +8683,7 @@ class ConnectionManager {
             connected: 0,
             connecting: 0,
             disconnecting: 0,
+            disconnected: 0,
             error: 0,
             retrying: 0
         };
@@ -8668,17 +8742,27 @@ class TelegramLogger {
         }
         return TelegramLogger.instance;
     }
+    shouldIncludeDetails(details) {
+        return details !== undefined
+            && details !== null
+            && !(typeof details === 'object' && Object.keys(details).length === 0);
+    }
+    formatMessage(mobile, message, details) {
+        return this.shouldIncludeDetails(details)
+            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            : `[${mobile}] ${message}`;
+    }
     logOperation(mobile, operation, details) {
-        this.logger.log(`[${mobile}] ${operation} - ${JSON.stringify(details || {})}`);
+        this.logger.log(this.formatMessage(mobile, operation, details));
     }
     logError(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
     }
     logWarning(mobile, message, details) {
-        this.logger.warn(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.warn(this.formatMessage(mobile, message, details));
     }
     logDebug(mobile, message, details) {
-        this.logger.debug(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.debug(this.formatMessage(mobile, message, details));
     }
 }
 exports.TelegramLogger = TelegramLogger;
@@ -9056,12 +9140,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         if (session) {
             try {
                 clearTimeout(session.timeoutId);
-                if (session.client?.connected) {
-                    await session.client.disconnect();
-                }
-                if (session.client) {
-                    await session.client.destroy();
-                }
+                await session.client.destroy();
+                this.logger.log(`Client disconnected for ${phone}`);
             }
             catch (error) {
                 this.logger.warn(`Error disconnecting client for ${phone}: ${error.message}`);
