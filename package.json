@@ -28,10 +28,10 @@
     "build": "nest build && tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "prepublishOnly": "npm run build",
-    "start": "nest start",
+    "start": "cross-env NODE_OPTIONS=--expose-gc nest start",
+    "start:prod": "cross-env NODE_OPTIONS=--expose-gc node dist/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
     "start:webpack": "node dist/index.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "webpack-dev": "webpack --watch --mode development",
@@ -51,6 +51,7 @@
     "@nestjs/mongoose": "^11.0.3",
     "@nestjs/platform-express": "^11.1.2",
     "@nestjs/swagger": "^11.2.0",
+    "@types/multer": "^1.4.12",
     "adm-zip": "^0.5.16",
     "axios": "^1.9.0",
     "class-transformer": "^0.5.1",
@@ -63,8 +64,7 @@
     "rxjs": "^7.8.2",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "telegram": "^2.26.22",
-    "@types/multer": "^1.4.12"
+    "telegram": "^2.26.22"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.7",
@@ -77,6 +77,7 @@
     "@types/supertest": "6.0.3",
     "@typescript-eslint/eslint-plugin": "8.33.0",
     "@typescript-eslint/parser": "8.33.0",
+    "cross-env": "^7.0.3",
     "eslint": "9.27.0",
     "eslint-config-prettier": "10.1.5",
     "eslint-plugin-prettier": "5.4.0",

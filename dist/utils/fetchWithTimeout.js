@@ -44,11 +44,11 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             await axios_1.default.get(notifUrl, { timeout: config.timeout });
         }
         catch (error) {
-            console.error("Failed to send notification:", error);
+            (0, parseError_1.parseError)(error, "Failed to send notification:", false);
         }
     }
     catch (error) {
-        console.error("Error in notification process:", error);
+        (0, parseError_1.parseError)(error, "Error in notification process:", false);
     }
 }
 const RETRYABLE_NETWORK_ERRORS = [

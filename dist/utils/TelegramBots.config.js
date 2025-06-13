@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(require("axios"));
+const fetchWithTimeout_1 = require("./fetchWithTimeout");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -74,13 +75,9 @@ class BotConfig {
         return Object.values(ChannelCategory).find(cat => normalized.includes(cat)) ?? null;
     }
     async fetchUsername(token) {
-        try {
-            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`);
-            return res.data?.ok ? res.data.result.username : '';
-        }
-        catch {
-            return '';
-        }
+        const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.telegram.org/bot${token}/getMe`);
+        const resData = res.data;
+        return resData?.ok ? resData.result.username : '';
     }
     getBotUsername(category) {
         this.assertInitialized();

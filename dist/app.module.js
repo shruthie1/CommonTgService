@@ -30,6 +30,7 @@ const tg_signup_module_1 = require("./components/TgSignup/tg-signup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
 const npoint_module_1 = require("./components/n-point/npoint.module");
 const timestamp_module_1 = require("./components/timestamps/timestamp.module");
+const memory_cleanup_service_1 = require("./memory-cleanup.service");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -60,6 +61,7 @@ exports.AppModule = AppModule = __decorate([
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
         ],
+        providers: [memory_cleanup_service_1.MemoryCleanerService],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,
@@ -73,7 +75,7 @@ exports.AppModule = AppModule = __decorate([
             promote_client_module_1.PromoteClientModule,
             tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
-            timestamp_module_1.TimestampModule
+            timestamp_module_1.TimestampModule,
         ]
     })
 ], AppModule);

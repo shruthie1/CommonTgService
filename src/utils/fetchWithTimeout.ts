@@ -71,10 +71,10 @@ async function notifyInternal(
             const notifUrl = `${channelUrl}&text=${encodeURIComponent(notificationText)}`;
             await axios.get(notifUrl, { timeout: config.timeout });
         } catch (error) {
-            console.error("Failed to send notification:", error);
+            parseError(error, "Failed to send notification:", false);
         }
     } catch (error) {
-        console.error("Error in notification process:", error);
+        parseError(error, "Error in notification process:", false);
     }
 }
 

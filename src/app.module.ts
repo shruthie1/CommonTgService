@@ -21,6 +21,7 @@ import { TgSignupModule } from './components/TgSignup/tg-signup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
 import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
+import { MemoryCleanerService } from './memory-cleanup.service';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     NpointModule,
     TimestampModule,
   ],
+  providers: [MemoryCleanerService],
   controllers: [AppController],
   exports: [
     TelegramModule,
@@ -58,7 +60,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     PromoteClientModule,
     TgSignupModule,
     TransactionModule,
-    TimestampModule
+    TimestampModule,
   ]
 })
 export class AppModule implements NestModule {

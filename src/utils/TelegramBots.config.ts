@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { parseError } from './parseError';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 export enum ChannelCategory {
     CLIENT_UPDATES = 'CLIENT_UPDATES',
@@ -91,12 +93,9 @@ export class BotConfig {
     }
 
     private async fetchUsername(token: string): Promise<string> {
-        try {
-            const res = await axios.get(`https://api.telegram.org/bot${token}/getMe`);
-            return res.data?.ok ? res.data.result.username : '';
-        } catch {
-            return '';
-        }
+        const res = await fetchWithTimeout(`https://api.telegram.org/bot${token}/getMe`);
+        const resData = res.data;
+        return resData?.ok ? resData.result.username : '';
     }
 
     public getBotUsername(category: ChannelCategory): string {
