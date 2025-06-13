@@ -782,22 +782,10 @@ let TelegramService = class TelegramService {
     }
     getClientState(mobile) {
         const state = connection_manager_1.connectionManager.getClientState(mobile);
-        const clientInfo = {
-            state: state,
-            autoDisconnect: false,
-            lastUsed: Date.now(),
-            connectionAttempts: 0
-        };
-        return clientInfo;
+        return state;
     }
     getActiveConnectionCount() {
         return connection_manager_1.connectionManager.getActiveConnectionCount();
-    }
-    startCleanupInterval(intervalMs = 300000) {
-        connection_manager_1.connectionManager.startCleanupInterval(intervalMs);
-    }
-    stopCleanupInterval() {
-        connection_manager_1.connectionManager.stopCleanupInterval();
     }
 };
 exports.TelegramService = TelegramService;

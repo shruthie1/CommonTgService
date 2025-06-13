@@ -59,12 +59,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         if (session) {
             try {
                 clearTimeout(session.timeoutId);
-                if (session.client?.connected) {
-                    await session.client.disconnect();
-                }
-                if (session.client) {
-                    await session.client.destroy();
-                }
+                await session.client.destroy();
+                this.logger.log(`Client disconnected for ${phone}`);
             }
             catch (error) {
                 this.logger.warn(`Error disconnecting client for ${phone}: ${error.message}`);

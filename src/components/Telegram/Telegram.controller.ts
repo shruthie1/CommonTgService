@@ -106,24 +106,6 @@ export class TelegramController {
         return this.telegramService.getActiveConnectionCount();
     }
 
-    @Post('connection/cleanup/start')
-    @ApiOperation({ summary: 'Start cleanup interval for inactive connections' })
-    @ApiQuery({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number })
-    @ApiResponse({ status: 200, description: 'Cleanup interval started' })
-    startCleanupInterval(@Query('intervalMs') intervalMs?: number): { message: string } {
-        this.telegramService.startCleanupInterval(intervalMs);
-        return { message: 'Cleanup interval started' };
-    }
-
-    @Post('connection/cleanup/stop')
-    @ApiOperation({ summary: 'Stop cleanup interval' })
-    @ApiResponse({ status: 200, description: 'Cleanup interval stopped' })
-    stopCleanupInterval(): { message: string } {
-        this.telegramService.stopCleanupInterval();
-        return { message: 'Cleanup interval stopped' };
-    }
-
-    // Profile Management
     @Get('me/:mobile')
     @ApiOperation({ summary: 'Get current user profile' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })

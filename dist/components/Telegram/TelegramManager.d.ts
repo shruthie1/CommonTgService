@@ -51,8 +51,7 @@ declare class TelegramManager {
     forwardMediaToBot(fromChatId: string): Promise<void>;
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
-    disconnect(): Promise<void>;
-    private cleanupClient;
+    destroy(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
@@ -313,7 +312,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

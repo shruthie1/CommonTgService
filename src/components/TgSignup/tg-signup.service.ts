@@ -88,12 +88,8 @@ export class TgSignupService implements OnModuleDestroy {
         if (session) {
             try {
                 clearTimeout(session.timeoutId);
-                if (session.client?.connected) {
-                    await session.client.disconnect();
-                }
-                if (session.client) {
-                    await session.client.destroy();
-                }
+                await session.client.destroy();
+                this.logger.log(`Client disconnected for ${phone}`);
             } catch (error) {
                 this.logger.warn(`Error disconnecting client for ${phone}: ${error.message}`);
             } finally {
@@ -158,7 +154,7 @@ export class TgSignupService implements OnModuleDestroy {
         } catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
-            
+
             if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
                 throw new BadRequestException('This phone number has been banned from Telegram');
             }
@@ -168,7 +164,7 @@ export class TgSignupService implements OnModuleDestroy {
             if (error.errorMessage?.includes('FLOOD_WAIT')) {
                 throw new BadRequestException('Please wait a few minutes before trying again');
             }
-            
+
             throw new BadRequestException('Unable to send OTP. Please try again');
         }
     }

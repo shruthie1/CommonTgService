@@ -90,14 +90,6 @@ let TelegramController = class TelegramController {
     getActiveConnectionCount() {
         return this.telegramService.getActiveConnectionCount();
     }
-    startCleanupInterval(intervalMs) {
-        this.telegramService.startCleanupInterval(intervalMs);
-        return { message: 'Cleanup interval started' };
-    }
-    stopCleanupInterval() {
-        this.telegramService.stopCleanupInterval();
-        return { message: 'Cleanup interval stopped' };
-    }
     async getMe(mobile) {
         return this.telegramService.getMe(mobile);
     }
@@ -455,24 +447,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Number)
 ], TelegramController.prototype, "getActiveConnectionCount", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/start'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start cleanup interval for inactive connections' }),
-    (0, swagger_1.ApiQuery)({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval started' }),
-    __param(0, (0, common_1.Query)('intervalMs')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "startCleanupInterval", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/stop'),
-    (0, swagger_1.ApiOperation)({ summary: 'Stop cleanup interval' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval stopped' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "stopCleanupInterval", null);
 __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),

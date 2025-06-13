@@ -224,7 +224,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -464,6 +464,4 @@ export declare class TelegramService implements OnModuleDestroy {
     getConnectionStats(): ConnectionStatsDto;
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
-    startCleanupInterval(intervalMs?: number): void;
-    stopCleanupInterval(): void;
 }

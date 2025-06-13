@@ -1106,25 +1106,10 @@ export class TelegramService implements OnModuleDestroy {
 
     getClientState(mobile: string): ConnectionStatusDto | undefined {
         const state = connectionManager.getClientState(mobile);
-        const clientInfo = {
-            state: state,
-            autoDisconnect: false,
-            lastUsed: Date.now(),
-            connectionAttempts: 0
-        };
-        
-        return clientInfo as ConnectionStatusDto;
+        return state;
     }
 
     getActiveConnectionCount(): number {
         return connectionManager.getActiveConnectionCount();
-    }
-
-    startCleanupInterval(intervalMs: number = 300000): void {
-        connectionManager.startCleanupInterval(intervalMs);
-    }
-
-    stopCleanupInterval(): void {
-        connectionManager.stopCleanupInterval();
     }
 }

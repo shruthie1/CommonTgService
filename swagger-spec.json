@@ -258,46 +258,6 @@
         ]
       }
     },
-    "/telegram/connection/cleanup/start": {
-      "post": {
-        "operationId": "TelegramController_startCleanupInterval",
-        "parameters": [
-          {
-            "name": "intervalMs",
-            "required": false,
-            "in": "query",
-            "description": "Cleanup interval in milliseconds",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Cleanup interval started"
-          }
-        },
-        "summary": "Start cleanup interval for inactive connections",
-        "tags": [
-          "Telegram"
-        ]
-      }
-    },
-    "/telegram/connection/cleanup/stop": {
-      "post": {
-        "operationId": "TelegramController_stopCleanupInterval",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Cleanup interval stopped"
-          }
-        },
-        "summary": "Stop cleanup interval",
-        "tags": [
-          "Telegram"
-        ]
-      }
-    },
     "/telegram/me/{mobile}": {
       "get": {
         "operationId": "TelegramController_getMe",
@@ -657,8 +617,27 @@
             "name": "types",
             "required": false,
             "in": "query",
-            "description": "Types of messages to search for",
+            "description": "Filter by multiple types options",
             "schema": {
+              "default": [
+                "all",
+                "text",
+                "photo",
+                "video",
+                "voice",
+                "document",
+                "roundVideo",
+                "roundVoice",
+                "sticker",
+                "animation",
+                "contact",
+                "music",
+                "chatPhoto"
+              ],
+              "example": [
+                "text",
+                "photo"
+              ],
               "type": "array",
               "items": {
                 "type": "string",

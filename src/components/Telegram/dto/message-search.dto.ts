@@ -61,15 +61,17 @@ export class SearchMessagesDto {
   query?: string;
 
   @ApiPropertyOptional({
-    description: 'Types of messages to search for',
-    enum: MessageMediaType,
+    description: 'Filter by multiple types options',
     isArray: true,
-    required: false,
+    enum: MessageMediaType,
+    example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
+    default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
   })
+  @IsOptional()
   @IsArray()
   @IsEnum(MessageMediaType, { each: true })
-  @IsOptional()
-  types?: MessageMediaType[] = [MessageMediaType.ALL];
+  @Type(() => String)
+  types?: MessageMediaType[];
 
   @ApiPropertyOptional({
     description: 'Minimum message ID for filtering',

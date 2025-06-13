@@ -15,8 +15,20 @@ export class TelegramLogger {
         return TelegramLogger.instance;
     }
 
+    private shouldIncludeDetails(details?: any): boolean {
+        return details !== undefined 
+            && details !== null 
+            && !(typeof details === 'object' && Object.keys(details).length === 0);
+    }
+
+    private formatMessage(mobile: string, message: string, details?: any): string {
+        return this.shouldIncludeDetails(details)
+            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            : `[${mobile}] ${message}`;
+    }
+
     logOperation(mobile: string, operation: string, details?: any): void {
-        this.logger.log(`[${mobile}] ${operation} - ${JSON.stringify(details || {})}`);
+        this.logger.log(this.formatMessage(mobile, operation, details));
     }
 
     logError(mobile: string, operation: string, error: any): void {
@@ -27,10 +39,10 @@ export class TelegramLogger {
     }
 
     logWarning(mobile: string, message: string, details?: any): void {
-        this.logger.warn(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.warn(this.formatMessage(mobile, message, details));
     }
 
     logDebug(mobile: string, message: string, details?: any): void {
-        this.logger.debug(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.debug(this.formatMessage(mobile, message, details));
     }
 }

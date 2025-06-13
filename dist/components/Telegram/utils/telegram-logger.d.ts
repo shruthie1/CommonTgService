@@ -3,6 +3,8 @@ export declare class TelegramLogger {
     private logger;
     private constructor();
     static getInstance(): TelegramLogger;
+    private shouldIncludeDetails;
+    private formatMessage;
     logOperation(mobile: string, operation: string, details?: any): void;
     logError(mobile: string, operation: string, error: any): void;
     logWarning(mobile: string, message: string, details?: any): void;

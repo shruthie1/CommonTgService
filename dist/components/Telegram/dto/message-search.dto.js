@@ -35,9 +35,6 @@ var SearchScope;
     SearchScope["GLOBAL"] = "global";
 })(SearchScope || (exports.SearchScope = SearchScope = {}));
 class SearchMessagesDto {
-    constructor() {
-        this.types = [MessageMediaType.ALL];
-    }
 }
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
@@ -58,14 +55,16 @@ __decorate([
 ], SearchMessagesDto.prototype, "query", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Types of messages to search for',
-        enum: MessageMediaType,
+        description: 'Filter by multiple types options',
         isArray: true,
-        required: false,
+        enum: MessageMediaType,
+        example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
+        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(MessageMediaType, { each: true }),
-    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => String),
     __metadata("design:type", Array)
 ], SearchMessagesDto.prototype, "types", void 0);
 __decorate([

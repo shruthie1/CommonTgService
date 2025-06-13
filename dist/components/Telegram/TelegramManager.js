@@ -301,31 +301,20 @@ class TelegramManager {
         }
         return forwardedCount;
     }
-    async disconnect() {
+    async destroy() {
         if (this.client) {
             try {
-                console.log("Destroying Client: ", this.phoneNumber);
-                await this.cleanupClient();
-                console.log("Client Destroyed finally: ", this.phoneNumber);
+                await this.client?.destroy();
+                this.client = null;
+                this.session?.delete();
+                this.channelArray = [];
+                this.client = null;
+                await (0, Helpers_1.sleep)(2000);
+                console.log("Client Destroyed: ", this.phoneNumber);
             }
             catch (error) {
-                console.error("Error during disconnect:", error);
-                throw error;
+                (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
             }
-        }
-    }
-    async cleanupClient() {
-        try {
-            await this.client?.destroy();
-            this.client = null;
-            this.session?.delete();
-            this.channelArray = [];
-            this.client = null;
-            await (0, Helpers_1.sleep)(2000);
-            console.log("Client Destroyed: ", this.phoneNumber);
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
         }
     }
     async getchatId(username) {
@@ -339,11 +328,11 @@ class TelegramManager {
         return me;
     }
     async errorHandler(error) {
-        (0, parseError_1.parseError)(error);
         if (error.message && error.message == 'TIMEOUT') {
+            await this.destroy();
         }
         else {
-            console.error(`Error occurred: ${this.phoneNumber}:`, error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async createClient(handler = true, handlerFn) {
@@ -1393,7 +1382,7 @@ class TelegramManager {
             onError: (err) => { throw err; },
         });
         const session = newClient.session.save();
-        await newClient.disconnect();
+        await newClient.destroy();
         console.log("New Session: ", session);
         return session;
     }
@@ -2011,17 +2000,37 @@ class TelegramManager {
                 filter: filter,
                 ...queryFilter,
                 hash: (0, big_integer_1.default)(0),
-                fromId: undefined
             };
+            let messages = [];
+            let count = 0;
+            console.log("Search Query: ", searchQuery);
             if (chatId) {
                 searchQuery['peer'] = await this.safeGetEntity(chatId);
+                console.log("Performing search in chat: ", chatId);
+                const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
-            if (!('messages' in result)) {
-                return {};
+            else {
+                console.log("Performing global search");
+                const result = await this.client.invoke(new telegram_1.Api.messages.SearchGlobal({
+                    ...searchQuery,
+                    offsetRate: 0,
+                    offsetPeer: new telegram_1.Api.InputPeerEmpty(),
+                    offsetId: 0,
+                    usersOnly: true
+                }));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            let messages = result.messages;
-            console.log(type, result.messages.length, result["count"]);
             if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
@@ -2056,7 +2065,7 @@ class TelegramManager {
             const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
                 messages: filteredMessages,
-                total: result["count"] ? result['count'] : filteredMessages.length
+                total: count ? count : filteredMessages.length
             };
             finalResult[`${type}`] = localResult;
         }
