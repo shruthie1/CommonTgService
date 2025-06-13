@@ -6,6 +6,7 @@
 // Core exports
 export { AppModule } from './app.module';
 export { AppController } from './app.controller';
+export { MemoryCleanerService } from './memory-cleanup.service';
 
 // Component exports
 export * from './components';
