@@ -304,14 +304,19 @@ class TelegramManager {
         if (this.client) {
             try {
                 await this.client?.destroy();
-                this.client = null;
+                this.client._eventBuilders = [];
                 this.session?.delete();
                 this.channelArray = [];
-                this.client = null;
                 await sleep(2000);
                 console.log("Client Destroyed: ", this.phoneNumber);
             } catch (error) {
                 parseError(error, `${this.phoneNumber}: Error during client cleanup`);
+            } finally {
+                this.client._destroyed = true;
+                if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
+                    await this.client._sender.disconnect();
+                }
+                this.client = null;
             }
         }
     }
