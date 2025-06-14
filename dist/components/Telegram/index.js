@@ -19,4 +19,7 @@ __exportStar(require("./Telegram.service"), exports);
 __exportStar(require("./Telegram.module"), exports);
 __exportStar(require("./dto/update-profile.dto"), exports);
 __exportStar(require("./dto/channel-operation.dto"), exports);
+__exportStar(require("./utils/connection-manager"), exports);
+__exportStar(require("./utils/telegram-logger"), exports);
+__exportStar(require("./utils/rate-limiter"), exports);
 //# sourceMappingURL=index.js.map
