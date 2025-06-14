@@ -495,6 +495,7 @@ const tg_signup_module_1 = __webpack_require__(/*! ./components/TgSignup/tg-sign
 const transaction_module_1 = __webpack_require__(/*! ./components/transactions/transaction.module */ "./src/components/transactions/transaction.module.ts");
 const npoint_module_1 = __webpack_require__(/*! ./components/n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
+const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -525,6 +526,7 @@ exports.AppModule = AppModule = __decorate([
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
         ],
+        providers: [memory_cleanup_service_1.MemoryCleanerService],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,
@@ -538,7 +540,7 @@ exports.AppModule = AppModule = __decorate([
             promote_client_module_1.PromoteClientModule,
             tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
-            timestamp_module_1.TimestampModule
+            timestamp_module_1.TimestampModule,
         ]
     })
 ], AppModule);
@@ -19331,6 +19333,76 @@ bootstrap();
 
 /***/ }),
 
+/***/ "./src/memory-cleanup.service.ts":
+/*!***************************************!*\
+  !*** ./src/memory-cleanup.service.ts ***!
+  \***************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var MemoryCleanerService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MemoryCleanerService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+let MemoryCleanerService = MemoryCleanerService_1 = class MemoryCleanerService {
+    constructor() {
+        this.logger = new common_1.Logger(MemoryCleanerService_1.name);
+        this.intervalId = null;
+        this.memoryLimitMB = 400;
+        this.cleanupIntervalMs = 5 * 60 * 1000;
+    }
+    onModuleInit() {
+        this.logger.log('MemoryCleanerService initialized.');
+        this.intervalId = setInterval(() => this.monitorAndCleanup(), this.cleanupIntervalMs);
+    }
+    onModuleDestroy() {
+        if (this.intervalId)
+            clearInterval(this.intervalId);
+    }
+    getMemoryUsageInMB() {
+        const mem = process.memoryUsage();
+        return {
+            rss: (mem.rss / 1024 / 1024).toFixed(2),
+            heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2),
+            heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(2),
+            external: (mem.external / 1024 / 1024).toFixed(2),
+        };
+    }
+    monitorAndCleanup() {
+        const mem = process.memoryUsage();
+        const heapUsedMB = mem.heapUsed / 1024 / 1024;
+        this.logger.log(`🧠 Heap Used: ${heapUsedMB.toFixed(2)} MB`);
+        if (heapUsedMB > this.memoryLimitMB) {
+            this.logger.warn(`🚨 Heap exceeded ${this.memoryLimitMB} MB. Cleaning up...`);
+            this.cleanupMemory();
+        }
+    }
+    cleanupMemory() {
+        if (typeof global.gc === 'function') {
+            global.gc();
+            this.logger.log('✅ Manual GC triggered via global.gc()');
+        }
+        else {
+            this.logger.warn('⚠️ GC not available. Start Node with --expose-gc');
+        }
+        const mem = this.getMemoryUsageInMB();
+        this.logger.log(`🧹 Memory After Cleanup: ${JSON.stringify(mem)}`);
+    }
+};
+exports.MemoryCleanerService = MemoryCleanerService;
+exports.MemoryCleanerService = MemoryCleanerService = MemoryCleanerService_1 = __decorate([
+    (0, common_1.Injectable)()
+], MemoryCleanerService);
+
+
+/***/ }),
+
 /***/ "./src/middlewares/logger.middleware.ts":
 /*!**********************************************!*\
   !*** ./src/middlewares/logger.middleware.ts ***!
@@ -19516,6 +19588,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -19585,13 +19658,9 @@ class BotConfig {
         return Object.values(ChannelCategory).find(cat => normalized.includes(cat)) ?? null;
     }
     async fetchUsername(token) {
-        try {
-            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`);
-            return res.data?.ok ? res.data.result.username : '';
-        }
-        catch {
-            return '';
-        }
+        const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.telegram.org/bot${token}/getMe`);
+        const resData = res.data;
+        return resData?.ok ? resData.result.username : '';
     }
     getBotUsername(category) {
         this.assertInitialized();
@@ -19708,11 +19777,11 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             await axios_1.default.get(notifUrl, { timeout: config.timeout });
         }
         catch (error) {
-            console.error("Failed to send notification:", error);
+            (0, parseError_1.parseError)(error, "Failed to send notification:", false);
         }
     }
     catch (error) {
-        console.error("Error in notification process:", error);
+        (0, parseError_1.parseError)(error, "Error in notification process:", false);
     }
 }
 const RETRYABLE_NETWORK_ERRORS = [
