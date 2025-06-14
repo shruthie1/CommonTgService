@@ -4,7 +4,6 @@ export { MemoryCleanerService } from './memory-cleanup.service';
 export * from './components';
 export * from './utils';
 export * from './middlewares';
-export * from './utils/common';
 export * from './interfaces/telegram';
 export * from './IMap/IMap';
 export * from './features/clients';

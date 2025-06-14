@@ -15,7 +15,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MailReader = void 0;
 const imap_1 = __importDefault(__webpack_require__(/*! imap */ "imap"));
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
 class MailReader {
     constructor() {
@@ -2698,7 +2698,7 @@ const telegram_logger_1 = __webpack_require__(/*! ./utils/telegram-logger */ "./
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TelegramService = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -3492,7 +3492,7 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const Logger_1 = __webpack_require__(/*! telegram/extensions/Logger */ "telegram/extensions/Logger");
 const IMap_1 = __webpack_require__(/*! ../../IMap/IMap */ "./src/IMap/IMap.ts");
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
@@ -8182,7 +8182,7 @@ const TelegramManager_1 = __importDefault(__webpack_require__(/*! ../TelegramMan
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
 const telegram_logger_1 = __webpack_require__(/*! ./telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 const TelegramBots_config_1 = __webpack_require__(/*! ../../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 class ConnectionManager {
     constructor() {
@@ -10120,7 +10120,7 @@ exports.ActiveChannelSchema = exports.ActiveChannel = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 let ActiveChannel = class ActiveChannel {
 };
 exports.ActiveChannel = ActiveChannel;
@@ -12873,7 +12873,7 @@ const buffer_client_service_1 = __webpack_require__(/*! ../buffer-clients/buffer
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 const archived_client_service_1 = __webpack_require__(/*! ../archived-clients/archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const path = __importStar(__webpack_require__(/*! path */ "path"));
 const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
@@ -17638,7 +17638,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
@@ -19472,109 +19472,6 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 
 /***/ }),
 
-/***/ "./src/utils.ts":
-/*!**********************!*\
-  !*** ./src/utils.ts ***!
-  \**********************/
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.defaultMessages = exports.defaultReactions = void 0;
-exports.sleep = sleep;
-exports.contains = contains;
-exports.toBoolean = toBoolean;
-exports.fetchNumbersFromString = fetchNumbersFromString;
-exports.areJsonsNotSame = areJsonsNotSame;
-exports.mapToJson = mapToJson;
-exports.shouldMatch = shouldMatch;
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-function contains(str, arr) {
-    if (!str || !Array.isArray(arr))
-        return false;
-    return arr.some(element => element && str.includes(element.toLowerCase()));
-}
-function toBoolean(value) {
-    if (value === null || value === undefined)
-        return false;
-    if (typeof value === 'string') {
-        const normalizedValue = value.toLowerCase().trim();
-        return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
-    }
-    if (typeof value === 'number') {
-        return value !== 0;
-    }
-    return value;
-}
-function fetchNumbersFromString(inputString) {
-    if (!inputString)
-        return '';
-    const regex = /\d+/g;
-    const matches = inputString.match(regex);
-    return matches ? matches.join('') : '';
-}
-exports.defaultReactions = Object.freeze([
-    '❤', '🔥', '👏', '🥰', '😁', '🤔',
-    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-    '🤣', '💔', '🏆', '😭', '😴', '👍',
-    '🌚', '⚡', '🍌', '😐', '💋', '👻',
-    '👀', '🙈', '🤝', '🤗', '🆒',
-    '🗿', '🙉', '🙊', '🤷', '👎'
-]);
-exports.defaultMessages = Object.freeze([
-    "1", "2", "3", "4", "5", "6", "7", "8",
-    "9", "10", "11", "12", "13", "14", "15",
-    "16", "17", "18", "19", "20", "21"
-]);
-function areJsonsNotSame(json1, json2) {
-    const keysToIgnore = ['id', '_id'];
-    console.log('[areJsonsNotSame] Starting comparison...');
-    function normalizeObject(obj) {
-        if (obj === null || obj === undefined)
-            return obj;
-        if (typeof obj !== 'object')
-            return obj;
-        if (Array.isArray(obj))
-            return obj.map(normalizeObject);
-        const normalized = {};
-        const sortedKeys = Object.keys(obj)
-            .filter(key => !keysToIgnore.includes(key))
-            .sort();
-        for (const key of sortedKeys) {
-            normalized[key] = normalizeObject(obj[key]);
-        }
-        return normalized;
-    }
-    const normalized1 = normalizeObject(json1);
-    const normalized2 = normalizeObject(json2);
-    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
-    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
-    return result;
-}
-function mapToJson(map) {
-    if (!(map instanceof Map)) {
-        throw new Error('Input must be a Map instance');
-    }
-    const obj = {};
-    for (const [key, value] of map.entries()) {
-        obj[String(key)] = value;
-    }
-    return obj;
-}
-function shouldMatch(obj) {
-    const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
-    const titleMatch = obj.title && regex.test(obj.title);
-    const usernameMatch = obj.username && regex.test(obj.username);
-    return !!(titleMatch || usernameMatch);
-}
-
-
-/***/ }),
-
 /***/ "./src/utils/TelegramBots.config.ts":
 /*!******************************************!*\
   !*** ./src/utils/TelegramBots.config.ts ***!
@@ -19725,6 +19622,109 @@ exports.BotConfig = BotConfig;
 
 /***/ }),
 
+/***/ "./src/utils/common.ts":
+/*!*****************************!*\
+  !*** ./src/utils/common.ts ***!
+  \*****************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.defaultMessages = exports.defaultReactions = void 0;
+exports.sleep = sleep;
+exports.contains = contains;
+exports.toBoolean = toBoolean;
+exports.fetchNumbersFromString = fetchNumbersFromString;
+exports.areJsonsNotSame = areJsonsNotSame;
+exports.mapToJson = mapToJson;
+exports.shouldMatch = shouldMatch;
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+function contains(str, arr) {
+    if (!str || !Array.isArray(arr))
+        return false;
+    return arr.some(element => element && str.includes(element.toLowerCase()));
+}
+function toBoolean(value) {
+    if (value === null || value === undefined)
+        return false;
+    if (typeof value === 'string') {
+        const normalizedValue = value.toLowerCase().trim();
+        return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
+    }
+    if (typeof value === 'number') {
+        return value !== 0;
+    }
+    return value;
+}
+function fetchNumbersFromString(inputString) {
+    if (!inputString)
+        return '';
+    const regex = /\d+/g;
+    const matches = inputString.match(regex);
+    return matches ? matches.join('') : '';
+}
+exports.defaultReactions = Object.freeze([
+    '❤', '🔥', '👏', '🥰', '😁', '🤔',
+    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+    '🤣', '💔', '🏆', '😭', '😴', '👍',
+    '🌚', '⚡', '🍌', '😐', '💋', '👻',
+    '👀', '🙈', '🤝', '🤗', '🆒',
+    '🗿', '🙉', '🙊', '🤷', '👎'
+]);
+exports.defaultMessages = Object.freeze([
+    "1", "2", "3", "4", "5", "6", "7", "8",
+    "9", "10", "11", "12", "13", "14", "15",
+    "16", "17", "18", "19", "20", "21"
+]);
+function areJsonsNotSame(json1, json2) {
+    const keysToIgnore = ['id', '_id'];
+    console.log('[areJsonsNotSame] Starting comparison...');
+    function normalizeObject(obj) {
+        if (obj === null || obj === undefined)
+            return obj;
+        if (typeof obj !== 'object')
+            return obj;
+        if (Array.isArray(obj))
+            return obj.map(normalizeObject);
+        const normalized = {};
+        const sortedKeys = Object.keys(obj)
+            .filter(key => !keysToIgnore.includes(key))
+            .sort();
+        for (const key of sortedKeys) {
+            normalized[key] = normalizeObject(obj[key]);
+        }
+        return normalized;
+    }
+    const normalized1 = normalizeObject(json1);
+    const normalized2 = normalizeObject(json2);
+    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
+    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
+    return result;
+}
+function mapToJson(map) {
+    if (!(map instanceof Map)) {
+        throw new Error('Input must be a Map instance');
+    }
+    const obj = {};
+    for (const [key, value] of map.entries()) {
+        obj[String(key)] = value;
+    }
+    return obj;
+}
+function shouldMatch(obj) {
+    const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
+    const titleMatch = obj.title && regex.test(obj.title);
+    const usernameMatch = obj.username && regex.test(obj.username);
+    return !!(titleMatch || usernameMatch);
+}
+
+
+/***/ }),
+
 /***/ "./src/utils/fetchWithTimeout.ts":
 /*!***************************************!*\
   !*** ./src/utils/fetchWithTimeout.ts ***!
@@ -19740,7 +19740,7 @@ exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
 const logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -19995,6 +19995,35 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
     }
     return undefined;
 }
+
+
+/***/ }),
+
+/***/ "./src/utils/index.ts":
+/*!****************************!*\
+  !*** ./src/utils/index.ts ***!
+  \****************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseError = exports.ppplbot = exports.fetchWithTimeout = exports.toBoolean = exports.shouldMatch = exports.mapToJson = exports.areJsonsNotSame = exports.fetchNumbersFromString = exports.defaultReactions = exports.defaultMessages = exports.sleep = exports.contains = void 0;
+var common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
+Object.defineProperty(exports, "contains", ({ enumerable: true, get: function () { return common_1.contains; } }));
+Object.defineProperty(exports, "sleep", ({ enumerable: true, get: function () { return common_1.sleep; } }));
+Object.defineProperty(exports, "defaultMessages", ({ enumerable: true, get: function () { return common_1.defaultMessages; } }));
+Object.defineProperty(exports, "defaultReactions", ({ enumerable: true, get: function () { return common_1.defaultReactions; } }));
+Object.defineProperty(exports, "fetchNumbersFromString", ({ enumerable: true, get: function () { return common_1.fetchNumbersFromString; } }));
+Object.defineProperty(exports, "areJsonsNotSame", ({ enumerable: true, get: function () { return common_1.areJsonsNotSame; } }));
+Object.defineProperty(exports, "mapToJson", ({ enumerable: true, get: function () { return common_1.mapToJson; } }));
+Object.defineProperty(exports, "shouldMatch", ({ enumerable: true, get: function () { return common_1.shouldMatch; } }));
+Object.defineProperty(exports, "toBoolean", ({ enumerable: true, get: function () { return common_1.toBoolean; } }));
+var fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
+Object.defineProperty(exports, "fetchWithTimeout", ({ enumerable: true, get: function () { return fetchWithTimeout_1.fetchWithTimeout; } }));
+var logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
+Object.defineProperty(exports, "ppplbot", ({ enumerable: true, get: function () { return logbots_1.ppplbot; } }));
+var parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
+Object.defineProperty(exports, "parseError", ({ enumerable: true, get: function () { return parseError_1.parseError; } }));
 
 
 /***/ }),
