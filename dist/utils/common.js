@@ -91,4 +91,4 @@ function shouldMatch(obj) {
     const usernameMatch = obj.username && regex.test(obj.username);
     return !!(titleMatch || usernameMatch);
 }
-//# sourceMappingURL=utils.js.map
+//# sourceMappingURL=common.js.map
