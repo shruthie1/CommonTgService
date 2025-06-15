@@ -59,7 +59,6 @@ declare class TelegramManager {
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(params: IterDialogsParams): Promise<TotalList<import("telegram/tl/custom/dialog").Dialog>>;
-    getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;
         videoCount: number;
@@ -312,7 +311,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "photo" | "video";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;

@@ -240,7 +240,7 @@ class ConnectionManager {
         };
         this.clients.set(mobile, clientInfo);
         try {
-            const client = await telegramManager.createClient(true);
+            const client = await telegramManager.createClient(options.handler);
             if (client) {
                 clientInfo.state = 'connected';
                 clientInfo.consecutiveFailures = 0;
