@@ -8447,7 +8447,7 @@ class ConnectionManager {
         const cleanupResults = new Map();
         const cleanupPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            const shouldCleanup = (connection.autoDisconnect || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
+            const shouldCleanup = ((connection.autoDisconnect && connection.lastUsed <= now - 100000) || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
                 (now - connection.lastUsed > maxIdleTime ||
                     connection.state === 'error' ||
                     connection.consecutiveFailures >= connection.retryConfig.maxAttempts ||
