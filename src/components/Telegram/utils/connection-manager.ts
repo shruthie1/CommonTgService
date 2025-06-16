@@ -418,7 +418,7 @@ class ConnectionManager {
 
         for (const [mobile, connection] of this.clients.entries()) {
             const shouldCleanup =
-                (connection.autoDisconnect || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
+                ((connection.autoDisconnect && connection.lastUsed <= now - 100000) || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
                 (
                     now - connection.lastUsed > maxIdleTime ||
                     connection.state === 'error' ||
