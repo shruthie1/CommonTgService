@@ -38,5 +38,4 @@ exports.DynamicData = DynamicData = __decorate([
     })
 ], DynamicData);
 exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);
-exports.DynamicDataSchema.index({ configKey: 1 }, { unique: true });
 //# sourceMappingURL=dynamic-data.schema.js.map

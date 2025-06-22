@@ -109,12 +109,21 @@ let DynamicDataService = class DynamicDataService {
                 throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
             }
             if (updateDto.arrayOperation) {
+                if (!updateDto.path) {
+                    throw new common_1.BadRequestException('Path is required for array operations');
+                }
                 await this.handleArrayOperation(doc, updateDto, useSession);
             }
-            else {
+            else if (updateDto.path) {
+                if (!(0, lodash_1.has)(doc.data, updateDto.path)) {
+                    throw new common_1.NotFoundException(`Path ${updateDto.path} not found in document`);
+                }
                 (0, lodash_1.set)(doc.data, updateDto.path, updateDto.value);
-                await doc.save({ session: useSession });
             }
+            else {
+                doc.data = updateDto.value;
+            }
+            await doc.save({ session: useSession });
             if (shouldEndSession) {
                 await useSession.commitTransaction();
             }

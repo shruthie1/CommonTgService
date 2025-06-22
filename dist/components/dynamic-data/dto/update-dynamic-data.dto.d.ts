@@ -10,7 +10,7 @@ export declare class ArrayOperation {
     index?: number;
 }
 export declare class UpdateDynamicDataDto {
-    readonly path: string;
+    readonly path?: string;
     readonly value: any;
     readonly arrayOperation?: ArrayOperation;
 }
