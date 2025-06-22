@@ -44,11 +44,12 @@ class UpdateDynamicDataDto {
 exports.UpdateDynamicDataDto = UpdateDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Path to the field to update using dot notation',
+        description: 'Path to the field to update using dot notation. If not provided, updates entire data object.',
         example: 'profile.age',
+        required: false,
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
         message: 'Invalid path format. Use dot notation (e.g., profile.age)',
     }),
@@ -56,8 +57,8 @@ __decorate([
 ], UpdateDynamicDataDto.prototype, "path", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'New value for the field',
-        example: 31,
+        description: 'New value for the field or entire data object if path is not provided',
+        example: { profile: { age: 31 } },
     }),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", Object)
