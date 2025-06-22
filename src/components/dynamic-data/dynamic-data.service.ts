@@ -75,14 +75,23 @@ export class DynamicDataService {
       const doc = await this.dynamicDataModel.findOne({ configKey }).session(useSession);
       if (!doc) {
         throw new NotFoundException(`Document with configKey ${configKey} not found`);
-      }
-
-      if (updateDto.arrayOperation) {
+      }      if (updateDto.arrayOperation) {
+        if (!updateDto.path) {
+          throw new BadRequestException('Path is required for array operations');
+        }
         await this.handleArrayOperation(doc, updateDto, useSession);
-      } else {
+      } else if (updateDto.path) {
+        // Path-based update
+        if (!has(doc.data, updateDto.path)) {
+          throw new NotFoundException(`Path ${updateDto.path} not found in document`);
+        }
         set(doc.data, updateDto.path, updateDto.value);
-        await doc.save({ session: useSession });
+      } else {
+        // Full data update
+        doc.data = updateDto.value;
       }
+      
+      await doc.save({ session: useSession });
 
       if (shouldEndSession) {
         await useSession.commitTransaction();

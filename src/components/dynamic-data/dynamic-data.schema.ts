@@ -24,6 +24,3 @@ export class DynamicData {
 }
 
 export const DynamicDataSchema = SchemaFactory.createForClass(DynamicData);
-
-// Create index on configKey
-DynamicDataSchema.index({ configKey: 1 }, { unique: true });
