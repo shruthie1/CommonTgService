@@ -52,10 +52,10 @@ export class DynamicDataService {
       if (!has(doc.data, path)) {
         throw new NotFoundException(`Path ${path} not found in document`);
       }
-      return { [path]: get(doc.data, path) };
+      return get(doc.data, path);
     }
 
-    return doc.toJSON();
+    return doc.toJSON().data;
   }
 
   async update(
