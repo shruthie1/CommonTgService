@@ -14111,9 +14111,9 @@ let DynamicDataService = class DynamicDataService {
             if (!(0, lodash_1.has)(doc.data, path)) {
                 throw new common_1.NotFoundException(`Path ${path} not found in document`);
             }
-            return { [path]: (0, lodash_1.get)(doc.data, path) };
+            return (0, lodash_1.get)(doc.data, path);
         }
-        return doc.toJSON();
+        return doc.toJSON().data;
     }
     async update(configKey, updateDto, session) {
         const useSession = session || await this.connection.startSession();
