@@ -495,6 +495,7 @@ const tg_signup_module_1 = __webpack_require__(/*! ./components/TgSignup/tg-sign
 const transaction_module_1 = __webpack_require__(/*! ./components/transactions/transaction.module */ "./src/components/transactions/transaction.module.ts");
 const npoint_module_1 = __webpack_require__(/*! ./components/n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
+const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
 const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
 let AppModule = class AppModule {
     configure(consumer) {
@@ -525,6 +526,7 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
+            dynamic_data_module_1.DynamicDataModule,
         ],
         providers: [memory_cleanup_service_1.MemoryCleanerService],
         controllers: [app_controller_1.AppController],
@@ -13627,6 +13629,605 @@ exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
 
 /***/ }),
 
+/***/ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts":
+/*!********************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/create-dynamic-data.dto.ts ***!
+  \********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateDynamicDataDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateDynamicDataDto {
+}
+exports.CreateDynamicDataDto = CreateDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Unique identifier for the dynamic data',
+        example: 'user123',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDynamicDataDto.prototype, "configKey", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Dynamic JSON data',
+        example: {
+            profile: {
+                name: 'John Doe',
+                age: 30,
+            },
+            preferences: {
+                theme: 'dark',
+                notifications: true,
+            },
+        },
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", Object)
+], CreateDynamicDataDto.prototype, "data", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/get-dynamic-data.dto.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GetDynamicDataDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class GetDynamicDataDto {
+}
+exports.GetDynamicDataDto = GetDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Path to retrieve specific data using dot notation',
+        example: 'profile.name',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
+        message: 'Invalid path format. Use dot notation (e.g., profile.name)',
+    }),
+    __metadata("design:type", String)
+], GetDynamicDataDto.prototype, "path", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts":
+/*!********************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/update-dynamic-data.dto.ts ***!
+  \********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateDynamicDataDto = exports.ArrayOperation = exports.ArrayOperationType = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+var ArrayOperationType;
+(function (ArrayOperationType) {
+    ArrayOperationType["PUSH"] = "PUSH";
+    ArrayOperationType["POP"] = "POP";
+    ArrayOperationType["INSERT"] = "INSERT";
+    ArrayOperationType["REMOVE"] = "REMOVE";
+    ArrayOperationType["UPDATE"] = "UPDATE";
+})(ArrayOperationType || (exports.ArrayOperationType = ArrayOperationType = {}));
+class ArrayOperation {
+}
+exports.ArrayOperation = ArrayOperation;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        enum: ArrayOperationType,
+        description: 'Type of array operation to perform',
+    }),
+    (0, class_validator_1.IsEnum)(ArrayOperationType),
+    __metadata("design:type", String)
+], ArrayOperation.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Index for array operations (required for INSERT and UPDATE)',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], ArrayOperation.prototype, "index", void 0);
+class UpdateDynamicDataDto {
+}
+exports.UpdateDynamicDataDto = UpdateDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Path to the field to update using dot notation',
+        example: 'profile.age',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
+        message: 'Invalid path format. Use dot notation (e.g., profile.age)',
+    }),
+    __metadata("design:type", String)
+], UpdateDynamicDataDto.prototype, "path", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'New value for the field',
+        example: 31,
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", Object)
+], UpdateDynamicDataDto.prototype, "value", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Array operation configuration',
+        required: false,
+        type: ArrayOperation,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", ArrayOperation)
+], UpdateDynamicDataDto.prototype, "arrayOperation", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.controller.ts":
+/*!****************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.controller.ts ***!
+  \****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const dynamic_data_service_1 = __webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts");
+const create_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/create-dynamic-data.dto */ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts");
+const update_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts");
+const get_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/get-dynamic-data.dto */ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts");
+let DynamicDataController = class DynamicDataController {
+    constructor(dynamicDataService) {
+        this.dynamicDataService = dynamicDataService;
+    }
+    async create(createDynamicDataDto) {
+        return this.dynamicDataService.create(createDynamicDataDto);
+    }
+    async findOne(configKey, { path }) {
+        return this.dynamicDataService.findOne(configKey, path);
+    }
+    async update(configKey, updateDynamicDataDto) {
+        return this.dynamicDataService.update(configKey, updateDynamicDataDto);
+    }
+    async remove(configKey, { path }) {
+        await this.dynamicDataService.remove(configKey, path);
+    }
+};
+exports.DynamicDataController = DynamicDataController;
+__decorate([
+    (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new dynamic data document' }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'The dynamic data document has been successfully created.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request' }),
+    (0, swagger_1.ApiResponse)({ status: 409, description: 'Conflict - Document already exists' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_dynamic_data_dto_1.CreateDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)(':configKey'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'path',
+        required: false,
+        description: 'Optional path to retrieve specific nested data',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Returns the requested dynamic data' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, get_dynamic_data_dto_1.GetDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Patch)(':configKey'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'The dynamic data has been successfully updated' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_dynamic_data_dto_1.UpdateDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':configKey'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'path',
+        required: false,
+        description: 'Optional path to delete specific nested data',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 204, description: 'The dynamic data has been successfully deleted' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, get_dynamic_data_dto_1.GetDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "remove", null);
+exports.DynamicDataController = DynamicDataController = __decorate([
+    (0, swagger_1.ApiTags)('dynamic-data'),
+    (0, common_1.Controller)('dynamic-data'),
+    __metadata("design:paramtypes", [dynamic_data_service_1.DynamicDataService])
+], DynamicDataController);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.module.ts":
+/*!************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.module.ts ***!
+  \************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const dynamic_data_controller_1 = __webpack_require__(/*! ./dynamic-data.controller */ "./src/components/dynamic-data/dynamic-data.controller.ts");
+const dynamic_data_service_1 = __webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts");
+const dynamic_data_schema_1 = __webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts");
+let DynamicDataModule = class DynamicDataModule {
+};
+exports.DynamicDataModule = DynamicDataModule;
+exports.DynamicDataModule = DynamicDataModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: dynamic_data_schema_1.DynamicData.name, schema: dynamic_data_schema_1.DynamicDataSchema },
+            ]),
+        ],
+        controllers: [dynamic_data_controller_1.DynamicDataController],
+        providers: [dynamic_data_service_1.DynamicDataService],
+        exports: [dynamic_data_service_1.DynamicDataService],
+    })
+], DynamicDataModule);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.schema.ts":
+/*!************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.schema.ts ***!
+  \************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataSchema = exports.DynamicData = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+let DynamicData = class DynamicData {
+};
+exports.DynamicData = DynamicData;
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, unique: true, type: String }),
+    __metadata("design:type", String)
+], DynamicData.prototype, "configKey", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Mixed, required: true }),
+    __metadata("design:type", Object)
+], DynamicData.prototype, "data", void 0);
+exports.DynamicData = DynamicData = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'dynamic_data',
+        versionKey: false,
+        timestamps: true,
+        strict: false,
+        toJSON: {
+            transform: (_, ret) => {
+                delete ret._id;
+                return ret;
+            },
+        },
+    })
+], DynamicData);
+exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);
+exports.DynamicDataSchema.index({ configKey: 1 }, { unique: true });
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.service.ts":
+/*!*************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.service.ts ***!
+  \*************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const dynamic_data_schema_1 = __webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts");
+const update_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts");
+const lodash_1 = __webpack_require__(/*! lodash */ "lodash");
+const mongoose_3 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
+let DynamicDataService = class DynamicDataService {
+    constructor(dynamicDataModel, connection) {
+        this.dynamicDataModel = dynamicDataModel;
+        this.connection = connection;
+    }
+    async create(createDto) {
+        const session = await this.connection.startSession();
+        try {
+            await session.startTransaction();
+            const exists = await this.dynamicDataModel.findOne({ configKey: createDto.configKey }).session(session);
+            if (exists) {
+                throw new common_1.ConflictException(`Document with configKey ${createDto.configKey} already exists`);
+            }
+            const created = new this.dynamicDataModel(createDto);
+            await created.save({ session });
+            await session.commitTransaction();
+            return created.toJSON();
+        }
+        catch (error) {
+            await session.abortTransaction();
+            if (error instanceof common_1.ConflictException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException('Failed to create dynamic data');
+        }
+        finally {
+            await session.endSession();
+        }
+    }
+    async findOne(configKey, path) {
+        const doc = await this.dynamicDataModel.findOne({ configKey });
+        if (!doc) {
+            throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+        }
+        if (path) {
+            if (!(0, lodash_1.has)(doc.data, path)) {
+                throw new common_1.NotFoundException(`Path ${path} not found in document`);
+            }
+            return { [path]: (0, lodash_1.get)(doc.data, path) };
+        }
+        return doc.toJSON();
+    }
+    async update(configKey, updateDto, session) {
+        const useSession = session || await this.connection.startSession();
+        let shouldEndSession = false;
+        try {
+            if (!session) {
+                shouldEndSession = true;
+                await useSession.startTransaction();
+            }
+            const doc = await this.dynamicDataModel.findOne({ configKey }).session(useSession);
+            if (!doc) {
+                throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+            }
+            if (updateDto.arrayOperation) {
+                await this.handleArrayOperation(doc, updateDto, useSession);
+            }
+            else {
+                (0, lodash_1.set)(doc.data, updateDto.path, updateDto.value);
+                await doc.save({ session: useSession });
+            }
+            if (shouldEndSession) {
+                await useSession.commitTransaction();
+            }
+            return doc.toJSON();
+        }
+        catch (error) {
+            if (shouldEndSession) {
+                await useSession.abortTransaction();
+            }
+            throw error;
+        }
+        finally {
+            if (shouldEndSession) {
+                await useSession.endSession();
+            }
+        }
+    }
+    async handleArrayOperation(doc, updateDto, session) {
+        const array = (0, lodash_1.get)(doc.data, updateDto.path);
+        if (!Array.isArray(array)) {
+            throw new common_1.BadRequestException(`Path ${updateDto.path} is not an array`);
+        }
+        const { type, index } = updateDto.arrayOperation;
+        switch (type) {
+            case update_dynamic_data_dto_1.ArrayOperationType.PUSH:
+                array.push(updateDto.value);
+                break;
+            case update_dynamic_data_dto_1.ArrayOperationType.POP:
+                array.pop();
+                break;
+            case update_dynamic_data_dto_1.ArrayOperationType.INSERT:
+                if (index === undefined || index < 0 || index > array.length) {
+                    throw new common_1.BadRequestException('Invalid array index for INSERT operation');
+                }
+                array.splice(index, 0, updateDto.value);
+                break;
+            case update_dynamic_data_dto_1.ArrayOperationType.REMOVE:
+                if (index === undefined || index < 0 || index >= array.length) {
+                    throw new common_1.BadRequestException('Invalid array index for REMOVE operation');
+                }
+                array.splice(index, 1);
+                break;
+            case update_dynamic_data_dto_1.ArrayOperationType.UPDATE:
+                if (index === undefined || index < 0 || index >= array.length) {
+                    throw new common_1.BadRequestException('Invalid array index for UPDATE operation');
+                }
+                array[index] = updateDto.value;
+                break;
+            default:
+                throw new common_1.BadRequestException('Invalid array operation type');
+        }
+        (0, lodash_1.set)(doc.data, updateDto.path, array);
+        await doc.save({ session });
+    }
+    async remove(configKey, path) {
+        const session = await this.connection.startSession();
+        try {
+            await session.startTransaction();
+            const doc = await this.dynamicDataModel.findOne({ configKey }).session(session);
+            if (!doc) {
+                throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+            }
+            if (path) {
+                if (!(0, lodash_1.has)(doc.data, path)) {
+                    throw new common_1.NotFoundException(`Path ${path} not found in document`);
+                }
+                (0, lodash_1.unset)(doc.data, path);
+                await doc.save({ session });
+            }
+            else {
+                await this.dynamicDataModel.deleteOne({ configKey }).session(session);
+            }
+            await session.commitTransaction();
+        }
+        catch (error) {
+            await session.abortTransaction();
+            throw error;
+        }
+        finally {
+            await session.endSession();
+        }
+    }
+};
+exports.DynamicDataService = DynamicDataService;
+exports.DynamicDataService = DynamicDataService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(dynamic_data_schema_1.DynamicData.name)),
+    __param(1, (0, mongoose_3.InjectConnection)()),
+    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection])
+], DynamicDataService);
+
+
+/***/ }),
+
 /***/ "./src/components/n-point/npoint.controller.ts":
 /*!*****************************************************!*\
   !*** ./src/components/n-point/npoint.controller.ts ***!
@@ -20487,6 +21088,16 @@ module.exports = require("https");
 /***/ ((module) => {
 
 module.exports = require("imap");
+
+/***/ }),
+
+/***/ "lodash":
+/*!*************************!*\
+  !*** external "lodash" ***!
+  \*************************/
+/***/ ((module) => {
+
+module.exports = require("lodash");
 
 /***/ }),
 
