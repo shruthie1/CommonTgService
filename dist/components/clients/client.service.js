@@ -89,14 +89,12 @@ let ClientService = ClientService_1 = class ClientService {
         const npointIdMasked = "f0d1e44d82893490bbde";
         const { data: npointClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdFull}`);
         const existingClients = await this.findAllObject();
-        console.log(existingClients, npointClients, "Comparing Clients");
         if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
             await this.npointSerive.updateDocument(npointIdFull, npointClients);
             console.log("Updated Full Clients from Npoint");
         }
         const { data: npointMaskedClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
-        console.log(existingMaskedClients, npointMaskedClients, "Comparing Masked Clients");
         if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
             await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
             console.log("Updated Masked Clients from Npoint");
