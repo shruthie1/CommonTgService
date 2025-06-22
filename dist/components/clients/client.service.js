@@ -44,9 +44,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 var ClientService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientService = void 0;
@@ -63,7 +60,6 @@ const utils_1 = require("../../utils");
 const path = __importStar(require("path"));
 const cloudinary_1 = require("../../cloudinary");
 const npoint_service_1 = require("../n-point/npoint.service");
-const axios_1 = __importDefault(require("axios"));
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
@@ -87,19 +83,17 @@ let ClientService = ClientService_1 = class ClientService {
     async checkNpoint() {
         const npointIdFull = "7c2682f37bb93ef486ba";
         const npointIdMasked = "f0d1e44d82893490bbde";
-        const { data: npointClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdFull}`);
-        const existingClients = await this.findAllObject();
-        console.log(existingClients, npointClients, "Comparing Clients");
-        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, npointClients);
-            console.log("Updated Full Clients from Npoint");
-        }
-        const { data: npointMaskedClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdMasked}`);
+        const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
-        console.log(existingMaskedClients, npointMaskedClients, "Comparing Masked Clients");
         if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
             await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
             console.log("Updated Masked Clients from Npoint");
+        }
+        const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            console.log("Updated Full Clients from Npoint");
         }
     }
     async create(createClientDto) {

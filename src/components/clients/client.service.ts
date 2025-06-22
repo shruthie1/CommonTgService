@@ -48,17 +48,17 @@ export class ClientService {
     async checkNpoint() {
         const npointIdFull = "7c2682f37bb93ef486ba";
         const npointIdMasked = "f0d1e44d82893490bbde";
-        const { data: npointClients } = await axios.get(`https://api.npoint.io/${npointIdFull}`);
-        const existingClients = await this.findAllObject();
-        if (areJsonsNotSame(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, npointClients);
-            console.log("Updated Full Clients from Npoint");
-        }
-        const { data: npointMaskedClients } = await axios.get(`https://api.npoint.io/${npointIdMasked}`);
+        const { data: npointMaskedClients } = await fetchWithTimeout(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
         if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
             await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
             console.log("Updated Masked Clients from Npoint");
+        }
+        const { data: npointClients } = await fetchWithTimeout(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if (areJsonsNotSame(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            console.log("Updated Full Clients from Npoint");
         }
     }
 
@@ -134,10 +134,13 @@ export class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : clients;
-        const results = filteredClients.map(client => {
+
+        const results = filteredClients.reduce((acc, client) => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return { clientId: client.clientId, ...maskedClient };
-        });
+            acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
+            return acc;
+        }, {});
+
         return results;
     }
 
