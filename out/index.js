@@ -12555,9 +12555,9 @@ let ClientController = class ClientController {
         this.clientService.updateClient(clientId);
         return "Update client initiated";
     }
-    async findAllMasked(query) {
+    async findAllMasked() {
         try {
-            return await this.clientService.findAllMasked(query);
+            return await this.clientService.findAllMasked();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -12566,6 +12566,14 @@ let ClientController = class ClientController {
     async findAll() {
         try {
             return await this.clientService.findAll();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async syncNpoint() {
+        try {
+            await this.clientService.checkNpoint();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -12657,9 +12665,8 @@ __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
-    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAllMasked", null);
 __decorate([
@@ -12670,6 +12677,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('sync-npoint'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients synchronized successfully with npoint.' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error during synchronization.' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "syncNpoint", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
@@ -12853,6 +12869,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var ClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ClientService = void 0;
 const Telegram_service_1 = __webpack_require__(/*! ./../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
@@ -12874,7 +12891,7 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 let settingupClient = Date.now() - 250000;
-let ClientService = class ClientService {
+let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
         this.clientModel = clientModel;
         this.telegramService = telegramService;
@@ -12882,6 +12899,7 @@ let ClientService = class ClientService {
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
         this.npointSerive = npointSerive;
+        this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
         this.lastUpdateMap = new Map();
         setInterval(async () => {
@@ -12889,21 +12907,19 @@ let ClientService = class ClientService {
         }, 5 * 60 * 1000);
     }
     async checkNpoint() {
-        const clients = (await axios_1.default.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
-        for (const client in clients) {
-            const existingClient = await this.findOne(client, false);
-            if ((0, utils_1.areJsonsNotSame)(existingClient, clients[client])) {
-                await this.findAll();
-                const clientData = (0, utils_1.mapToJson)(this.clientsMap);
-                await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData);
-                const maskedCls = {};
-                for (const client in clientData) {
-                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
-                    maskedCls[client] = maskedClient;
-                }
-                await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls);
-                break;
-            }
+        const npointIdFull = "7c2682f37bb93ef486ba";
+        const npointIdMasked = "f0d1e44d82893490bbde";
+        const { data: npointClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            console.log("Updated Full Clients from Npoint");
+        }
+        const { data: npointMaskedClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdMasked}`);
+        const existingMaskedClients = await this.findAllMaskedObject();
+        if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
+            await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
+            console.log("Updated Masked Clients from Npoint");
         }
     }
     async create(createClientDto) {
@@ -12911,29 +12927,75 @@ let ClientService = class ClientService {
         return createdUser.save();
     }
     async findAll() {
-        const clientMapLength = this.clientsMap.size;
-        if (clientMapLength < 20) {
-            const results = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean();
-            for (const client of results) {
-                this.clientsMap.set(client.clientId, client);
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                documents.forEach(client => {
+                    this.clientsMap.set(client.clientId, client);
+                });
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                return Array.from(this.clientsMap.values());
             }
-            console.log("Refreshed Clients");
-            return results;
+            else {
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return Array.from(this.clientsMap.values());
+            }
         }
-        else {
-            return Array.from(this.clientsMap.values());
+        catch (error) {
+            (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
         }
     }
-    async findAllMasked(query) {
+    async findAllMasked() {
+        const clients = await this.findAll();
+        const maskedClients = clients.map(client => {
+            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            return { ...maskedClient };
+        });
+        return maskedClients;
+    }
+    async findAllObject() {
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                const result = documents.reduce((acc, client) => {
+                    this.clientsMap.set(client.clientId, client);
+                    acc[client.clientId] = client;
+                    return acc;
+                }, {});
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                console.log("Refreshed Clients");
+                return result;
+            }
+            else {
+                const result = Array.from(this.clientsMap.entries()).reduce((acc, [clientId, client]) => {
+                    acc[clientId] = client;
+                    return acc;
+                }, {});
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return result;
+            }
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+    async findAllMaskedObject(query) {
         const allClients = await this.findAll();
+        const clients = Object.values(allClients);
         const filteredClients = query
-            ? allClients.filter(client => {
+            ? clients.filter(client => {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
-            : allClients;
+            : clients;
         const results = filteredClients.map(client => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return maskedClient;
+            return { clientId: client.clientId, ...maskedClient };
         });
         return results;
     }
@@ -13172,7 +13234,7 @@ let ClientService = class ClientService {
     }
     async updateClients() {
         const clients = await this.findAll();
-        for (const client of clients) {
+        for (const client of Object.values(clients)) {
             await this.updateClient(client.clientId);
         }
     }
@@ -13233,7 +13295,7 @@ let ClientService = class ClientService {
     }
 };
 exports.ClientService = ClientService;
-exports.ClientService = ClientService = __decorate([
+exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
@@ -13840,6 +13902,13 @@ let DynamicDataController = class DynamicDataController {
     async create(createDynamicDataDto) {
         return this.dynamicDataService.create(createDynamicDataDto);
     }
+    async findAll() {
+        return this.dynamicDataService.findAll();
+    }
+    async checkNpoint() {
+        await this.dynamicDataService.checkNpoint();
+        return { message: 'Npoint check completed' };
+    }
     async findOne(configKey, { path }) {
         return this.dynamicDataService.findOne(configKey, path);
     }
@@ -13865,6 +13934,26 @@ __decorate([
     __metadata("design:paramtypes", [create_dynamic_data_dto_1.CreateDynamicDataDto]),
     __metadata("design:returntype", Promise)
 ], DynamicDataController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all dynamic data documents' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Returns all dynamic data documents as a key-value object',
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('check-npoint'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Check and update npoint data if needed' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Npoint data check completed successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "checkNpoint", null);
 __decorate([
     (0, common_1.Get)(':configKey'),
     (0, swagger_1.ApiOperation)({ summary: 'Get dynamic data by configKey' }),
@@ -13942,6 +14031,7 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const dynamic_data_controller_1 = __webpack_require__(/*! ./dynamic-data.controller */ "./src/components/dynamic-data/dynamic-data.controller.ts");
 const dynamic_data_service_1 = __webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts");
 const dynamic_data_schema_1 = __webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts");
+const n_point_1 = __webpack_require__(/*! ../n-point */ "./src/components/n-point/index.ts");
 let DynamicDataModule = class DynamicDataModule {
 };
 exports.DynamicDataModule = DynamicDataModule;
@@ -13951,6 +14041,7 @@ exports.DynamicDataModule = DynamicDataModule = __decorate([
             mongoose_1.MongooseModule.forFeature([
                 { name: dynamic_data_schema_1.DynamicData.name, schema: dynamic_data_schema_1.DynamicDataSchema },
             ]),
+            n_point_1.NpointModule,
         ],
         controllers: [dynamic_data_controller_1.DynamicDataController],
         providers: [dynamic_data_service_1.DynamicDataService],
@@ -14063,6 +14154,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var DynamicDataService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DynamicDataService = void 0;
@@ -14075,10 +14169,14 @@ const lodash_1 = __webpack_require__(/*! lodash */ "lodash");
 const mongoose_3 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const common_2 = __webpack_require__(/*! ../../utils/common */ "./src/utils/common.ts");
+const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
-    constructor(dynamicDataModel, connection) {
+    constructor(dynamicDataModel, connection, npointService) {
         this.dynamicDataModel = dynamicDataModel;
         this.connection = connection;
+        this.npointService = npointService;
         this.logger = new common_1.Logger(DynamicDataService_1.name);
     }
     async create(createDto) {
@@ -14280,14 +14378,81 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
             await session.endSession();
         }
     }
+    async findAll() {
+        this.logger.debug('Retrieving all dynamic data documents');
+        try {
+            const documents = await this.dynamicDataModel.find().exec();
+            const result = documents.reduce((acc, doc) => {
+                acc[doc.configKey] = doc.toJSON().data;
+                return acc;
+            }, {});
+            this.logger.debug(`Successfully retrieved ${documents.length} dynamic data documents`);
+            return result;
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, 'Failed to retrieve all dynamic data: ', true);
+            this.logger.error(`Failed to retrieve all dynamic data: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+    async checkNpoint() {
+        this.logger.debug('Checking npoint data for updates');
+        try {
+            const response = await axios_1.default.get('https://api.npoint.io/6841a4c0c23bdc78333d');
+            const npointData = response.data;
+            this.logger.debug('Fetched npoint data successfully');
+            const existingData = await this.findAll();
+            if ((0, common_2.areJsonsNotSame)(existingData, npointData)) {
+                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
+                this.logger.debug('Npoint data updated successfully');
+            }
+            else {
+                this.logger.debug('No updates needed for npoint data');
+            }
+        }
+        catch (error) {
+            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
+            (0, utils_1.parseError)(error, 'Failed to check/update npoint data: ', true);
+            throw error;
+        }
+    }
 };
 exports.DynamicDataService = DynamicDataService;
 exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(dynamic_data_schema_1.DynamicData.name)),
     __param(1, (0, mongoose_3.InjectConnection)()),
-    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection])
+    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection, npoint_service_1.NpointService])
 ], DynamicDataService);
+
+
+/***/ }),
+
+/***/ "./src/components/n-point/index.ts":
+/*!*****************************************!*\
+  !*** ./src/components/n-point/index.ts ***!
+  \*****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./npoint.controller */ "./src/components/n-point/npoint.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./npoint.module */ "./src/components/n-point/npoint.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./npoint.service */ "./src/components/n-point/npoint.service.ts"), exports);
 
 
 /***/ }),
