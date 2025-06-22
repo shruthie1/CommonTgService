@@ -26,6 +26,13 @@ let DynamicDataController = class DynamicDataController {
     async create(createDynamicDataDto) {
         return this.dynamicDataService.create(createDynamicDataDto);
     }
+    async findAll() {
+        return this.dynamicDataService.findAll();
+    }
+    async checkNpoint() {
+        await this.dynamicDataService.checkNpoint();
+        return { message: 'Npoint check completed' };
+    }
     async findOne(configKey, { path }) {
         return this.dynamicDataService.findOne(configKey, path);
     }
@@ -51,6 +58,26 @@ __decorate([
     __metadata("design:paramtypes", [create_dynamic_data_dto_1.CreateDynamicDataDto]),
     __metadata("design:returntype", Promise)
 ], DynamicDataController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all dynamic data documents' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Returns all dynamic data documents as a key-value object',
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('check-npoint'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Check and update npoint data if needed' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Npoint data check completed successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "checkNpoint", null);
 __decorate([
     (0, common_1.Get)(':configKey'),
     (0, swagger_1.ApiOperation)({ summary: 'Get dynamic data by configKey' }),

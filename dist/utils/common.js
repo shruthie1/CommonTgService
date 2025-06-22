@@ -71,9 +71,7 @@ function areJsonsNotSame(json1, json2) {
     }
     const normalized1 = normalizeObject(json1);
     const normalized2 = normalizeObject(json2);
-    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
-    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
-    return result;
+    return JSON.stringify(normalized1) !== JSON.stringify(normalized2);
 }
 function mapToJson(map) {
     if (!(map instanceof Map)) {

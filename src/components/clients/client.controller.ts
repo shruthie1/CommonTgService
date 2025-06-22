@@ -10,11 +10,8 @@ import { SetupClientQueryDto } from './dto/setup-client.dto';
 @ApiTags('Clients')
 @Controller('clients')
 export class ClientController {
-  constructor(private readonly clientService: ClientService) { }
+  constructor(private readonly clientService: ClientService) {}
 
-  /**
-   * Create a new client
-   */
   @Post()
   @ApiOperation({ summary: 'Create user data' })
   @ApiResponse({ status: 201, description: 'The user data has been successfully created.' })
@@ -27,9 +24,6 @@ export class ClientController {
     }
   }
 
-  /**
-   * Search for clients based on query parameters
-   */
   @Get('search')
   @ApiOperation({ summary: 'Search user data' })
   @ApiQuery({ name: 'clientId', required: false, description: 'Client ID' })
@@ -54,27 +48,21 @@ export class ClientController {
     return "Update client initiated";
   }
 
-  /**
-   * Get all clients with masked sensitive fields
-   */
   @Get('maskedCls')
   @ApiOperation({ summary: 'Get all user data with masked fields' })
   @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
-  async findAllMasked(@Query() query: SearchClientDto) {
+  async findAllMasked() {
     try {
-      return await this.clientService.findAllMasked(query);
+      return await this.clientService.findAllMasked();
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  /**
-   * Get all clients
-   */
   @Get()
   @ApiOperation({ summary: 'Get all user data' })
   @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
-  async findAll(): Promise<Client[]> {
+  async findAll() {
     try {
       return await this.clientService.findAll();
     } catch (error) {
@@ -82,9 +70,18 @@ export class ClientController {
     }
   }
 
-  /**
-   * Get a specific client by ID
-   */
+  @Get('sync-npoint')
+  @ApiOperation({ summary: 'Sync clients with npoint service' })
+  @ApiResponse({ status: 200, description: 'Clients synchronized successfully with npoint.' })
+  @ApiResponse({ status: 500, description: 'Internal server error during synchronization.' })
+  async syncNpoint(): Promise<void> {
+    try {
+      await this.clientService.checkNpoint();
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   @Get(':clientId')
   @ApiOperation({ summary: 'Get user data by ID' })
   @ApiResponse({ status: 200, description: 'User data returned successfully.' })
@@ -97,9 +94,6 @@ export class ClientController {
     }
   }
 
-  /**
-   * Update a specific client by ID
-   */
   @Patch(':clientId')
   @ApiOperation({ summary: 'Update user data by ID' })
   @ApiResponse({ status: 200, description: 'The user data has been successfully updated.' })
@@ -112,9 +106,6 @@ export class ClientController {
     }
   }
 
-  /**
-   * Delete a specific client by ID
-   */
   @Delete(':clientId')
   @ApiOperation({ summary: 'Delete user data by ID' })
   @ApiResponse({ status: 200, description: 'The user data has been successfully deleted.' })

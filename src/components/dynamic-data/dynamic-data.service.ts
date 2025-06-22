@@ -8,6 +8,9 @@ import { get, set, unset, has } from 'lodash';
 import { InjectConnection } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { parseError } from '../../utils';
+import axios from 'axios';
+import { areJsonsNotSame } from '../../utils/common';
+import { NpointService } from '../n-point/npoint.service';
 
 @Injectable()
 export class DynamicDataService {
@@ -17,6 +20,7 @@ export class DynamicDataService {
         @InjectModel(DynamicData.name)
         private dynamicDataModel: Model<DynamicDataDocument>,
         @InjectConnection() private readonly connection: mongoose.Connection,
+        private readonly npointService: NpointService,
     ) {}
 
     async create(createDto: CreateDynamicDataDto): Promise<DynamicData> {
@@ -234,6 +238,44 @@ export class DynamicDataService {
             throw error;
         } finally {
             await session.endSession();
+        }
+    }
+
+    async findAll(): Promise<Record<string, any>> {
+        this.logger.debug('Retrieving all dynamic data documents');
+        try {
+            const documents = await this.dynamicDataModel.find().exec();
+            const result = documents.reduce((acc, doc) => {
+                acc[doc.configKey] = doc.toJSON().data;
+                return acc;
+            }, {} as Record<string, any>);
+
+            this.logger.debug(`Successfully retrieved ${documents.length} dynamic data documents`);
+            return result;
+        } catch (error) {
+            parseError(error, 'Failed to retrieve all dynamic data: ', true);
+            this.logger.error(`Failed to retrieve all dynamic data: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    async checkNpoint(): Promise<void> {
+        this.logger.debug('Checking npoint data for updates');
+        try {
+            const response = await axios.get('https://api.npoint.io/6841a4c0c23bdc78333d');
+            const npointData = response.data;
+            this.logger.debug('Fetched npoint data successfully');
+            const existingData = await this.findAll();
+            if (areJsonsNotSame(existingData, npointData)) {
+                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
+                this.logger.debug('Npoint data updated successfully');
+            } else {
+                this.logger.debug('No updates needed for npoint data');
+            }
+        } catch (error) {
+            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
+            parseError(error, 'Failed to check/update npoint data: ', true);
+            throw error;
         }
     }
 }

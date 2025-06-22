@@ -4587,161 +4587,31 @@
     "/clients/maskedCls": {
       "get": {
         "operationId": "ClientController_findAllMasked",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": false,
-            "in": "query",
-            "description": "Client ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "dbcoll",
-            "required": false,
-            "in": "query",
-            "description": "Database collection name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "channelLink",
-            "required": false,
-            "in": "query",
-            "description": "Channel link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "link",
-            "required": false,
-            "in": "query",
-            "description": "Link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "required": false,
-            "in": "query",
-            "description": "Name of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "number",
-            "required": false,
-            "in": "query",
-            "description": "Phone number of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "password",
-            "required": false,
-            "in": "query",
-            "description": "Password of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repl",
-            "required": false,
-            "in": "query",
-            "description": "Repl link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "promoteRepl",
-            "required": false,
-            "in": "query",
-            "description": "Promotion Repl link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clientName",
-            "required": false,
-            "in": "query",
-            "description": "Clientname of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "deployKey",
-            "required": false,
-            "in": "query",
-            "description": "Deployment key URL",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mainAccount",
-            "required": false,
-            "in": "query",
-            "description": "Main account of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "product",
-            "required": false,
-            "in": "query",
-            "description": "Product associated with the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "promoteMobile",
-            "required": false,
-            "in": "query",
-            "description": "Promote mobile numbers of the client",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "qrId",
-            "required": false,
-            "in": "query",
-            "description": "Paytm QR ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "gpayId",
-            "required": false,
-            "in": "query",
-            "description": "Google Pay ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "All user data returned successfully."
           }
         },
         "summary": "Get all user data with masked fields",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/sync-npoint": {
+      "get": {
+        "operationId": "ClientController_syncNpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Clients synchronized successfully with npoint."
+          },
+          "500": {
+            "description": "Internal server error during synchronization."
+          }
+        },
+        "summary": "Sync clients with npoint service",
         "tags": [
           "Clients"
         ]
@@ -7059,6 +6929,34 @@
           }
         },
         "summary": "Create a new dynamic data document",
+        "tags": [
+          "dynamic-data"
+        ]
+      },
+      "get": {
+        "operationId": "DynamicDataController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns all dynamic data documents as a key-value object"
+          }
+        },
+        "summary": "Get all dynamic data documents",
+        "tags": [
+          "dynamic-data"
+        ]
+      }
+    },
+    "/dynamic-data/check-npoint": {
+      "post": {
+        "operationId": "DynamicDataController_checkNpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Npoint data check completed successfully"
+          }
+        },
+        "summary": "Check and update npoint data if needed",
         "tags": [
           "dynamic-data"
         ]
@@ -9926,13 +9824,17 @@
         "properties": {
           "path": {
             "type": "string",
-            "description": "Path to the field to update using dot notation",
+            "description": "Path to the field to update using dot notation. If not provided, updates entire data object.",
             "example": "profile.age"
           },
           "value": {
             "type": "object",
-            "description": "New value for the field",
-            "example": 31
+            "description": "New value for the field or entire data object if path is not provided",
+            "example": {
+              "profile": {
+                "age": 31
+              }
+            }
           },
           "arrayOperation": {
             "description": "Array operation configuration",
@@ -9944,7 +9846,6 @@
           }
         },
         "required": [
-          "path",
           "value"
         ]
       }

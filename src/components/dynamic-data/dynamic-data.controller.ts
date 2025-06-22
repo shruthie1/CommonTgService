@@ -33,6 +33,25 @@ export class DynamicDataController {
     return this.dynamicDataService.create(createDynamicDataDto);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'Get all dynamic data documents' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns all dynamic data documents as a key-value object',
+  })
+  async findAll() {
+    return this.dynamicDataService.findAll();
+  }
+
+  @Post('check-npoint')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check and update npoint data if needed' })
+  @ApiResponse({ status: 200, description: 'Npoint data check completed successfully' })
+  async checkNpoint() {
+    await this.dynamicDataService.checkNpoint();
+    return { message: 'Npoint check completed' };
+  }
+
   @Get(':configKey')
   @ApiOperation({ summary: 'Get dynamic data by configKey' })
   @ApiParam({ name: 'configKey', description: 'Unique identifier for the document' })

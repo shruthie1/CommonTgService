@@ -43,9 +43,9 @@ let ClientController = class ClientController {
         this.clientService.updateClient(clientId);
         return "Update client initiated";
     }
-    async findAllMasked(query) {
+    async findAllMasked() {
         try {
-            return await this.clientService.findAllMasked(query);
+            return await this.clientService.findAllMasked();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -54,6 +54,14 @@ let ClientController = class ClientController {
     async findAll() {
         try {
             return await this.clientService.findAll();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async syncNpoint() {
+        try {
+            await this.clientService.checkNpoint();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -145,9 +153,8 @@ __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
-    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAllMasked", null);
 __decorate([
@@ -158,6 +165,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('sync-npoint'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients synchronized successfully with npoint.' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error during synchronization.' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "syncNpoint", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),

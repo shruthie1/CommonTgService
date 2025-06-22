@@ -9,22 +9,9 @@ export declare class ClientController {
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
     updateClient(clientId: string): Promise<string>;
-    findAllMasked(query: SearchClientDto): Promise<{
-        channelLink: string;
-        dbcoll: string;
-        link: string;
-        name: string;
-        repl: string;
-        promoteRepl: string;
-        username: string;
-        clientId: string;
-        deployKey: string;
-        mainAccount: string;
-        product: string;
-        qrId: string;
-        gpayId: string;
-    }[]>;
+    findAllMasked(): Promise<Partial<Client>[]>;
     findAll(): Promise<Client[]>;
+    syncNpoint(): Promise<void>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;

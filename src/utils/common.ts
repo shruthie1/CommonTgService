@@ -66,9 +66,9 @@ export function areJsonsNotSame(json1: unknown, json2: unknown): boolean {
   const normalized2 = normalizeObject(json2);
   const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
   console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
-  
   return result;
 }
+
 
 export function mapToJson<K extends string | number | symbol, V>(map: Map<K, V>): Record<string, V> {
   if (!(map instanceof Map)) {

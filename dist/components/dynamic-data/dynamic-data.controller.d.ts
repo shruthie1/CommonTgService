@@ -6,6 +6,10 @@ export declare class DynamicDataController {
     private readonly dynamicDataService;
     constructor(dynamicDataService: DynamicDataService);
     create(createDynamicDataDto: CreateDynamicDataDto): Promise<import("./dynamic-data.schema").DynamicData>;
+    findAll(): Promise<Record<string, any>>;
+    checkNpoint(): Promise<{
+        message: string;
+    }>;
     findOne(configKey: string, { path }: GetDynamicDataDto): Promise<any>;
     update(configKey: string, updateDynamicDataDto: UpdateDynamicDataDto): Promise<import("./dynamic-data.schema").DynamicData>;
     remove(configKey: string, { path }: GetDynamicDataDto): Promise<void>;

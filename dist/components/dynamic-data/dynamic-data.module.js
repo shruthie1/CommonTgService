@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const dynamic_data_controller_1 = require("./dynamic-data.controller");
 const dynamic_data_service_1 = require("./dynamic-data.service");
 const dynamic_data_schema_1 = require("./dynamic-data.schema");
+const n_point_1 = require("../n-point");
 let DynamicDataModule = class DynamicDataModule {
 };
 exports.DynamicDataModule = DynamicDataModule;
@@ -21,6 +22,7 @@ exports.DynamicDataModule = DynamicDataModule = __decorate([
             mongoose_1.MongooseModule.forFeature([
                 { name: dynamic_data_schema_1.DynamicData.name, schema: dynamic_data_schema_1.DynamicDataSchema },
             ]),
+            n_point_1.NpointModule,
         ],
         controllers: [dynamic_data_controller_1.DynamicDataController],
         providers: [dynamic_data_service_1.DynamicDataService],

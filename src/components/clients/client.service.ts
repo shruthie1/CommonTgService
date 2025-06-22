@@ -1,5 +1,5 @@
 import { TelegramService } from './../Telegram/Telegram.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef, Query } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef, Query } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
@@ -26,6 +26,7 @@ import { connectionManager } from '../Telegram/utils/connection-manager';
 let settingupClient = Date.now() - 250000;
 @Injectable()
 export class ClientService {
+    private readonly logger = new Logger(ClientService.name);
     private clientsMap: Map<string, Client> = new Map();
     private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
     constructor(@InjectModel(Client.name) private clientModel: Model<ClientDocument>,
@@ -45,21 +46,19 @@ export class ClientService {
     }
 
     async checkNpoint() {
-        const clients = (await axios.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
-        for (const client in clients) {
-            const existingClient = await this.findOne(client, false);
-            if (areJsonsNotSame(existingClient, clients[client])) {
-                await this.findAll();
-                const clientData = mapToJson(this.clientsMap)
-                await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData)
-                const maskedCls = {};
-                for (const client in clientData) {
-                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
-                    maskedCls[client] = maskedClient
-                }
-                await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls)
-                break;
-            }
+        const npointIdFull = "7c2682f37bb93ef486ba";
+        const npointIdMasked = "f0d1e44d82893490bbde";
+        const { data: npointClients } = await axios.get(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if (areJsonsNotSame(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            console.log("Updated Full Clients from Npoint");
+        }
+        const { data: npointMaskedClients } = await axios.get(`https://api.npoint.io/${npointIdMasked}`);
+        const existingMaskedClients = await this.findAllMaskedObject();
+        if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
+            await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
+            console.log("Updated Masked Clients from Npoint");
         }
     }
 
@@ -69,29 +68,75 @@ export class ClientService {
     }
 
     async findAll(): Promise<Client[]> {
-        const clientMapLength = this.clientsMap.size
-        if (clientMapLength < 20) {
-            const results: Client[] = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean()
-            for (const client of results) {
-                this.clientsMap.set(client.clientId, client)
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                documents.forEach(client => {
+                    this.clientsMap.set(client.clientId, client);
+                });
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                return Array.from(this.clientsMap.values());
+            } else {
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return Array.from(this.clientsMap.values());
             }
-            console.log("Refreshed Clients")
-            return results
-        } else {
-            return Array.from(this.clientsMap.values())
+        } catch (error) {
+            parseError(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
         }
     }
 
-    async findAllMasked(query?: SearchClientDto) {
-        const allClients = await this.findAll()
+    async findAllMasked(): Promise<Partial<Client>[]> {
+        const clients = await this.findAll();
+        const maskedClients = clients.map(client => {
+            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            return { ...maskedClient };
+        });
+        return maskedClients;
+    }
+
+    async findAllObject(): Promise<Record<string, Client>> {
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                const result = documents.reduce((acc, client) => {
+                    this.clientsMap.set(client.clientId, client);
+                    acc[client.clientId] = client;
+                    return acc;
+                }, {} as Record<string, Client>);
+
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                console.log("Refreshed Clients");
+                return result;
+            } else {
+                const result = Array.from(this.clientsMap.entries()).reduce((acc, [clientId, client]) => {
+                    acc[clientId] = client;
+                    return acc;
+                }, {} as Record<string, Client>);
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return result;
+            }
+        } catch (error) {
+            parseError(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    async findAllMaskedObject(query?: SearchClientDto) {
+        const allClients = await this.findAll();
+        const clients = Object.values(allClients);
         const filteredClients = query
-            ? allClients.filter(client => {
+            ? clients.filter(client => {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
-            : allClients;
+            : clients;
         const results = filteredClients.map(client => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return maskedClient;
+            return { clientId: client.clientId, ...maskedClient };
         });
         return results;
     }
@@ -337,7 +382,7 @@ export class ClientService {
 
     async updateClients() {
         const clients = await this.findAll();
-        for (const client of clients) {
+        for (const client of Object.values(clients)) {
             await this.updateClient(client.clientId)
         }
     }

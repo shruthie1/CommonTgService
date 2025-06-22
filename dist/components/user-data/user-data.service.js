@@ -121,6 +121,59 @@ let UserDataService = class UserDataService {
             (0, parseError_1.parseError)(error);
         }
     }
+    async incrementTotalCount(profile, chatId, amount = 1) {
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true }).exec();
+        if (!updatedUser) {
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+    async incrementPayAmount(profile, chatId, amount) {
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true }).exec();
+        if (!updatedUser) {
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+    async updateLastActive(profile, chatId) {
+        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true }).exec();
+    }
+    async findInactiveSince(date) {
+        return await this.userDataModel.find({
+            lastActiveTime: { $lt: date }
+        }).exec();
+    }
+    async findByPaymentRange(minAmount, maxAmount) {
+        return await this.userDataModel.find({
+            payAmount: {
+                $gte: minAmount,
+                $lte: maxAmount
+            }
+        }).exec();
+    }
+    async bulkUpdateUsers(filter, update) {
+        try {
+            const result = await this.userDataModel.updateMany(filter, update, { new: true }).exec();
+            return result;
+        }
+        catch (error) {
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
+        }
+    }
+    async findActiveUsers(threshold = 30) {
+        return await this.userDataModel.find({
+            totalCount: { $gt: threshold }
+        }).sort({ totalCount: -1 }).exec();
+    }
+    async resetUserCounts(profile, chatId) {
+        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, {
+            $set: {
+                totalCount: 0,
+                limitTime: new Date(),
+                paidReply: false
+            }
+        }, { new: true }).exec();
+    }
 };
 exports.UserDataService = UserDataService;
 exports.UserDataService = UserDataService = __decorate([

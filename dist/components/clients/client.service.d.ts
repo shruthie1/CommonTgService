@@ -16,13 +16,16 @@ export declare class ClientService {
     private usersService;
     private archivedClientService;
     private npointSerive;
+    private readonly logger;
     private clientsMap;
     private lastUpdateMap;
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, npointSerive: NpointService);
     checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
-    findAllMasked(query?: SearchClientDto): Promise<{
+    findAllMasked(): Promise<Partial<Client>[]>;
+    findAllObject(): Promise<Record<string, Client>>;
+    findAllMaskedObject(query?: SearchClientDto): Promise<{
         channelLink: string;
         dbcoll: string;
         link: string;

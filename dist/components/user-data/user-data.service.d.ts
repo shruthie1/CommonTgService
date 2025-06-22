@@ -18,4 +18,12 @@ export declare class UserDataService {
     search(filter: any): Promise<UserData[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]>;
     resetPaidUsers(): Promise<void>;
+    incrementTotalCount(profile: string, chatId: string, amount?: number): Promise<UserData>;
+    incrementPayAmount(profile: string, chatId: string, amount: number): Promise<UserData>;
+    updateLastActive(profile: string, chatId: string): Promise<UserData>;
+    findInactiveSince(date: Date): Promise<UserData[]>;
+    findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserData[]>;
+    bulkUpdateUsers(filter: any, update: any): Promise<any>;
+    findActiveUsers(threshold?: number): Promise<UserData[]>;
+    resetUserCounts(profile: string, chatId: string): Promise<UserData>;
 }
