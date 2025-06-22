@@ -6,6 +6,7 @@ import * as mongoose from 'mongoose';
 export declare class DynamicDataService {
     private dynamicDataModel;
     private readonly connection;
+    private readonly logger;
     constructor(dynamicDataModel: Model<DynamicDataDocument>, connection: mongoose.Connection);
     create(createDto: CreateDynamicDataDto): Promise<DynamicData>;
     findOne(configKey: string, path?: string): Promise<any>;
