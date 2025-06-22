@@ -30,6 +30,7 @@ const tg_signup_module_1 = require("./components/TgSignup/tg-signup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
 const npoint_module_1 = require("./components/n-point/npoint.module");
 const timestamp_module_1 = require("./components/timestamps/timestamp.module");
+const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const memory_cleanup_service_1 = require("./memory-cleanup.service");
 let AppModule = class AppModule {
     configure(consumer) {
@@ -60,6 +61,7 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
+            dynamic_data_module_1.DynamicDataModule,
         ],
         providers: [memory_cleanup_service_1.MemoryCleanerService],
         controllers: [app_controller_1.AppController],

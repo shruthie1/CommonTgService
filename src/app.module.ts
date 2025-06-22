@@ -21,6 +21,7 @@ import { TgSignupModule } from './components/TgSignup/tg-signup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
 import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
+import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { MemoryCleanerService } from './memory-cleanup.service';
 
 @Module({
@@ -45,6 +46,7 @@ import { MemoryCleanerService } from './memory-cleanup.service';
     TransactionModule,
     NpointModule,
     TimestampModule,
+    DynamicDataModule,
   ],
   providers: [MemoryCleanerService],
   controllers: [AppController],

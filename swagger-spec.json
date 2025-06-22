@@ -7032,6 +7032,150 @@
           "Transactions"
         ]
       }
+    },
+    "/dynamic-data": {
+      "post": {
+        "operationId": "DynamicDataController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDynamicDataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The dynamic data document has been successfully created."
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "409": {
+            "description": "Conflict - Document already exists"
+          }
+        },
+        "summary": "Create a new dynamic data document",
+        "tags": [
+          "dynamic-data"
+        ]
+      }
+    },
+    "/dynamic-data/{configKey}": {
+      "get": {
+        "operationId": "DynamicDataController_findOne",
+        "parameters": [
+          {
+            "name": "configKey",
+            "required": true,
+            "in": "path",
+            "description": "Unique identifier for the document",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "required": false,
+            "in": "query",
+            "description": "Optional path to retrieve specific nested data",
+            "schema": {
+              "example": "profile.name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns the requested dynamic data"
+          },
+          "404": {
+            "description": "Document or path not found"
+          }
+        },
+        "summary": "Get dynamic data by configKey",
+        "tags": [
+          "dynamic-data"
+        ]
+      },
+      "patch": {
+        "operationId": "DynamicDataController_update",
+        "parameters": [
+          {
+            "name": "configKey",
+            "required": true,
+            "in": "path",
+            "description": "Unique identifier for the document",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDynamicDataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The dynamic data has been successfully updated"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        },
+        "summary": "Update dynamic data by configKey",
+        "tags": [
+          "dynamic-data"
+        ]
+      },
+      "delete": {
+        "operationId": "DynamicDataController_remove",
+        "parameters": [
+          {
+            "name": "configKey",
+            "required": true,
+            "in": "path",
+            "description": "Unique identifier for the document",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "required": false,
+            "in": "query",
+            "description": "Optional path to delete specific nested data",
+            "schema": {
+              "example": "profile.name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The dynamic data has been successfully deleted"
+          },
+          "404": {
+            "description": "Document or path not found"
+          }
+        },
+        "summary": "Delete dynamic data by configKey",
+        "tags": [
+          "dynamic-data"
+        ]
+      }
     }
   },
   "info": {
@@ -9725,6 +9869,84 @@
             "default": "pending"
           }
         }
+      },
+      "CreateDynamicDataDto": {
+        "type": "object",
+        "properties": {
+          "configKey": {
+            "type": "string",
+            "description": "Unique identifier for the dynamic data",
+            "example": "user123"
+          },
+          "data": {
+            "type": "object",
+            "description": "Dynamic JSON data",
+            "example": {
+              "profile": {
+                "name": "John Doe",
+                "age": 30
+              },
+              "preferences": {
+                "theme": "dark",
+                "notifications": true
+              }
+            }
+          }
+        },
+        "required": [
+          "configKey",
+          "data"
+        ]
+      },
+      "ArrayOperation": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PUSH",
+              "POP",
+              "INSERT",
+              "REMOVE",
+              "UPDATE"
+            ],
+            "description": "Type of array operation to perform"
+          },
+          "index": {
+            "type": "number",
+            "description": "Index for array operations (required for INSERT and UPDATE)"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "UpdateDynamicDataDto": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to the field to update using dot notation",
+            "example": "profile.age"
+          },
+          "value": {
+            "type": "object",
+            "description": "New value for the field",
+            "example": 31
+          },
+          "arrayOperation": {
+            "description": "Array operation configuration",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArrayOperation"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ]
       }
     }
   }
