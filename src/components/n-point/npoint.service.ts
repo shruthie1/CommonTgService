@@ -13,14 +13,14 @@ export class NpointService {
     private async fetchCsrfToken(): Promise<string> {
         this.logger.debug('Fetching CSRF token...');
         try {
-            let data = JSON.stringify({
+            const data = JSON.stringify({
                 "user": {
                     "email": "dodieajt@gmail.com",
                     "password": "Ajtdmwajt1@"
                 }
             });
 
-            let config = {
+            const config = {
                 method: 'post',
                 maxBodyLength: Infinity,
                 url: this.signInUrl,
