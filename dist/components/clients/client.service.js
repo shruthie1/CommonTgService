@@ -167,10 +167,11 @@ let ClientService = ClientService_1 = class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : clients;
-        const results = filteredClients.map(client => {
+        const results = filteredClients.reduce((acc, client) => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return { clientId: client.clientId, ...maskedClient };
-        });
+            acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
+            return acc;
+        }, {});
         return results;
     }
     async refreshMap() {

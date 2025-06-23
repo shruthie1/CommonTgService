@@ -25,21 +25,7 @@ export declare class ClientService {
     findAll(): Promise<Client[]>;
     findAllMasked(): Promise<Partial<Client>[]>;
     findAllObject(): Promise<Record<string, Client>>;
-    findAllMaskedObject(query?: SearchClientDto): Promise<{
-        channelLink: string;
-        dbcoll: string;
-        link: string;
-        name: string;
-        repl: string;
-        promoteRepl: string;
-        username: string;
-        clientId: string;
-        deployKey: string;
-        mainAccount: string;
-        product: string;
-        qrId: string;
-        gpayId: string;
-    }[]>;
+    findAllMaskedObject(query?: SearchClientDto): Promise<{}>;
     refreshMap(): Promise<void>;
     findOne(clientId: string, throwErr?: boolean): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;

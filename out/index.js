@@ -12866,9 +12866,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 var ClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ClientService = void 0;
@@ -12885,7 +12882,6 @@ const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const path = __importStar(__webpack_require__(/*! path */ "path"));
 const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
@@ -12909,17 +12905,17 @@ let ClientService = ClientService_1 = class ClientService {
     async checkNpoint() {
         const npointIdFull = "7c2682f37bb93ef486ba";
         const npointIdMasked = "f0d1e44d82893490bbde";
-        const { data: npointClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdFull}`);
-        const existingClients = await this.findAllObject();
-        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, npointClients);
-            console.log("Updated Full Clients from Npoint");
-        }
-        const { data: npointMaskedClients } = await axios_1.default.get(`https://api.npoint.io/${npointIdMasked}`);
+        const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
         if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
             await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
             console.log("Updated Masked Clients from Npoint");
+        }
+        const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            console.log("Updated Full Clients from Npoint");
         }
     }
     async create(createClientDto) {
@@ -12993,10 +12989,11 @@ let ClientService = ClientService_1 = class ClientService {
                 return Object.keys(query).every(key => client[key] === query[key]);
             })
             : clients;
-        const results = filteredClients.map(client => {
+        const results = filteredClients.reduce((acc, client) => {
             const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return { clientId: client.clientId, ...maskedClient };
-        });
+            acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
+            return acc;
+        }, {});
         return results;
     }
     async refreshMap() {
@@ -20553,28 +20550,75 @@ exports.defaultMessages = Object.freeze([
     "16", "17", "18", "19", "20", "21"
 ]);
 function areJsonsNotSame(json1, json2) {
-    const keysToIgnore = ['id', '_id'];
-    console.log('[areJsonsNotSame] Starting comparison...');
-    function normalizeObject(obj) {
-        if (obj === null || obj === undefined)
-            return obj;
-        if (typeof obj !== 'object')
-            return obj;
-        if (Array.isArray(obj))
-            return obj.map(normalizeObject);
-        const normalized = {};
-        const sortedKeys = Object.keys(obj)
-            .filter(key => !keysToIgnore.includes(key))
-            .sort();
-        for (const key of sortedKeys) {
-            normalized[key] = normalizeObject(obj[key]);
+    const keysToIgnore = ['id', '_id', 'createdAt', 'updatedAt', 'timestamp', 'time', 'date', 'timeStamp', 'created_at', 'updated_at'];
+    const MAX_DEPTH = 10;
+    function compare(obj1, obj2, path = '', depth = 0) {
+        if (depth > MAX_DEPTH) {
+            console.log(`[DEPTH LIMIT] Reached max depth at path: ${path}`);
+            return obj1 !== obj2;
         }
-        return normalized;
+        if (obj1 === null || obj1 === undefined || obj2 === null || obj2 === undefined) {
+            if (obj1 !== obj2) {
+                console.log(`[MISMATCH] ${path}: ${obj1} !== ${obj2}`);
+                return true;
+            }
+            return false;
+        }
+        if (typeof obj1 !== typeof obj2) {
+            console.log(`[MISMATCH] ${path}: type ${typeof obj1} !== ${typeof obj2}`);
+            return true;
+        }
+        if (typeof obj1 !== 'object') {
+            if (obj1 !== obj2) {
+                console.log(`[MISMATCH] ${path}: ${obj1} !== ${obj2}`);
+                return true;
+            }
+            return false;
+        }
+        if (Array.isArray(obj1) && Array.isArray(obj2)) {
+            if (obj1.length !== obj2.length) {
+                console.log(`[MISMATCH] ${path}: array length ${obj1.length} !== ${obj2.length}`);
+                return true;
+            }
+            for (let i = 0; i < obj1.length; i++) {
+                const arrayPath = path ? `${path}[${i}]` : `[${i}]`;
+                if (compare(obj1[i], obj2[i], arrayPath, depth + 1)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (Array.isArray(obj1) || Array.isArray(obj2)) {
+            console.log(obj1, obj2);
+            console.log(`[MISMATCH] ${path}: one is array, other is not`);
+            return true;
+        }
+        const record1 = obj1;
+        const record2 = obj2;
+        const keys1 = Object.keys(record1).filter(key => !keysToIgnore.includes(key));
+        const keys2 = Object.keys(record2).filter(key => !keysToIgnore.includes(key));
+        if (keys1.length !== keys2.length) {
+            console.log(`[MISMATCH] ${path}: different key count ${keys1.length} !== ${keys2.length}`);
+            console.log(`[KEYS] obj1: [${keys1.join(', ')}]`);
+            console.log(`[KEYS] obj2: [${keys2.join(', ')}]`);
+            return true;
+        }
+        for (const key of keys1) {
+            if (!keys2.includes(key)) {
+                console.log(`[MISMATCH] ${path}: key "${key}" missing in obj2`);
+                return true;
+            }
+        }
+        for (const key of keys1) {
+            const keyPath = path ? `${path}.${key}` : key;
+            if (compare(record1[key], record2[key], keyPath, depth + 1)) {
+                return true;
+            }
+        }
+        return false;
     }
-    const normalized1 = normalizeObject(json1);
-    const normalized2 = normalizeObject(json2);
-    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
-    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
+    const result = compare(json1, json2);
+    console.log(`[COMPARISON END] Result: ${result ? 'DIFFERENT' : 'SAME'}`);
     return result;
 }
 function mapToJson(map) {
