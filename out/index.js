@@ -4567,7 +4567,13 @@ class TelegramManager {
                         break;
                     }
                     else {
-                        username = baseUsername + increment;
+                        if (increment >= 6) {
+                            const randomChars = Math.random().toString(36).substring(2, 6);
+                            username = baseUsername + randomChars;
+                        }
+                        else {
+                            username = baseUsername + increment;
+                        }
                         increment++;
                         await (0, Helpers_1.sleep)(2000);
                     }
@@ -4578,7 +4584,13 @@ class TelegramManager {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
+                    if (increment >= 6) {
+                        const randomChars = Math.random().toString(36).substring(2, 6);
+                        username = baseUsername + randomChars;
+                    }
+                    else {
+                        username = baseUsername + increment;
+                    }
                     increment++;
                     await (0, Helpers_1.sleep)(2000);
                 }
@@ -13199,7 +13211,7 @@ let ClientService = ClientService_1 = class ClientService {
                 const middleName = (client.name).split(' ')[1];
                 const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
                 const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
-                const baseUsername = `${firstNameCaps}${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
+                const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername });
             }

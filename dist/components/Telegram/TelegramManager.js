@@ -1119,7 +1119,13 @@ class TelegramManager {
                         break;
                     }
                     else {
-                        username = baseUsername + increment;
+                        if (increment >= 6) {
+                            const randomChars = Math.random().toString(36).substring(2, 6);
+                            username = baseUsername + randomChars;
+                        }
+                        else {
+                            username = baseUsername + increment;
+                        }
                         increment++;
                         await (0, Helpers_1.sleep)(2000);
                     }
@@ -1130,7 +1136,13 @@ class TelegramManager {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
+                    if (increment >= 6) {
+                        const randomChars = Math.random().toString(36).substring(2, 6);
+                        username = baseUsername + randomChars;
+                    }
+                    else {
+                        username = baseUsername + increment;
+                    }
                     increment++;
                     await (0, Helpers_1.sleep)(2000);
                 }
