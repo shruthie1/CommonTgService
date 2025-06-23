@@ -1247,6 +1247,7 @@ class TelegramManager {
         let newUserName = ''
         let username = (baseUsername && baseUsername !== '') ? baseUsername : '';
         let increment = 0;
+
         if (username === '') {
             try {
                 await this.client.invoke(new Api.account.UpdateUsername({ username }));
@@ -1267,7 +1268,13 @@ class TelegramManager {
                         newUserName = username
                         break;
                     } else {
-                        username = baseUsername + increment;
+                        // Use random characters for last 4 attempts (6, 7, 8, 9)
+                        if (increment >= 6) {
+                            const randomChars = Math.random().toString(36).substring(2, 6);
+                            username = baseUsername + randomChars;
+                        } else {
+                            username = baseUsername + increment;
+                        }
                         increment++;
                         await sleep(2000);
                     }
@@ -1277,7 +1284,13 @@ class TelegramManager {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
+                    // Use random characters for last 4 attempts (6, 7, 8, 9)
+                    if (increment >= 6) {
+                        const randomChars = Math.random().toString(36).substring(2, 6);
+                        username = baseUsername + randomChars;
+                    } else {
+                        username = baseUsername + increment;
+                    }
                     increment++;
                     await sleep(2000);
                 }
