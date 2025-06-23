@@ -354,7 +354,7 @@ export class ClientService {
                 const middleName = (client.name).split(' ')[1];
                 const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
                 const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
-                const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + fetchNumbersFromString(clientId);
+                const baseUsername = `${firstNameCaps}${middleNameCaps.slice(0, 3)}` + fetchNumbersFromString(clientId);
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername })
             }
