@@ -98,11 +98,20 @@ export class BufferClientService implements OnModuleDestroy {
     }
 
     async remove(mobile: string): Promise<void> {
-        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
-        const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
-        if (result.deletedCount === 0) {
-            throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
+        try {
+            const bufferClient = await this.findOne(mobile, false);
+            if (!bufferClient) {
+                throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
+            }
+            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\nsession: ${bufferClient.session}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile }).exec();
+        } catch (error) {
+            const errorDetails = parseError(error);
+            this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
+            throw new HttpException(errorDetails.message, errorDetails.status);
         }
+        this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter: any): Promise<BufferClient[]> {
         console.log(filter)

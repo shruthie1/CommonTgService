@@ -168,15 +168,26 @@ export class ClientService {
         if ((<any>updateClientDto)._doc) {
             delete (<any>updateClientDto)._doc['_id']
         }
-        await fetchWithTimeout(`${notifbot()}&text=Updating the Existing client: ${clientId}`);
-        const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
+
+        const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
+        await fetchWithTimeout(`${notifbot()}&text=Updating the Existing client: ${clientId}\nOld Mobile: ${previousUser?.mobile}\nOld Session: ${previousUser?.session}\n\nNew Mobile: ${updateClientDto.mobile}\nNew Session: ${updateClientDto.session}`);
+        console.log("Previous Client Values:", previousUser);
+
+        const updatedUser = await this.clientModel.findOneAndUpdate(
+            { clientId },
+            { $set: updateClientDto },
+            { new: true, upsert: true }
+        ).lean().exec();
+
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
+        console.log("Updated Client Values:", updatedUser);
         await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
         await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps")
+        console.log("Updated Client: ", updatedUser);
         return updatedUser;
     }
 
@@ -204,7 +215,7 @@ export class ClientService {
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile
             await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
-            console.log(setupClientQueryDto);
+            console.log("setupClientQueryDto:", setupClientQueryDto);
             await connectionManager.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } }
