@@ -12930,13 +12930,13 @@ let ClientService = ClientService_1 = class ClientService {
         const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
         if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
-            await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
+            await this.npointSerive.updateDocument(npointIdMasked, existingMaskedClients);
             console.log("Updated Masked Clients from Npoint");
         }
         const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
         const existingClients = await this.findAllObject();
         if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            await this.npointSerive.updateDocument(npointIdFull, existingClients);
             console.log("Updated Full Clients from Npoint");
         }
     }
@@ -14781,6 +14781,7 @@ let NpointService = NpointService_1 = class NpointService {
                 },
             });
             this.logger.debug(`Document with ID: ${documentId} updated successfully.`);
+            console.log(response.data.contents);
             return response.data;
         }
         catch (error) {
