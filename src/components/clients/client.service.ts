@@ -51,13 +51,13 @@ export class ClientService {
         const { data: npointMaskedClients } = await fetchWithTimeout(`https://api.npoint.io/${npointIdMasked}`);
         const existingMaskedClients = await this.findAllMaskedObject();
         if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
-            await this.npointSerive.updateDocument(npointIdMasked, npointMaskedClients);
+            await this.npointSerive.updateDocument(npointIdMasked, existingMaskedClients);
             console.log("Updated Masked Clients from Npoint");
         }
         const { data: npointClients } = await fetchWithTimeout(`https://api.npoint.io/${npointIdFull}`);
         const existingClients = await this.findAllObject();
         if (areJsonsNotSame(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, npointClients);
+            await this.npointSerive.updateDocument(npointIdFull, existingClients);
             console.log("Updated Full Clients from Npoint");
         }
     }

@@ -124,8 +124,8 @@ export class NpointService {
                     },
                 },
             );
-
             this.logger.debug(`Document with ID: ${documentId} updated successfully.`);
+            console.log(response.data.contents);
             return response.data;
         } catch (error) {
             this.logger.error(`Failed to update document with ID: ${documentId}: ${error.message}`);

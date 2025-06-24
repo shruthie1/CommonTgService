@@ -114,6 +114,7 @@ let NpointService = NpointService_1 = class NpointService {
                 },
             });
             this.logger.debug(`Document with ID: ${documentId} updated successfully.`);
+            console.log(response.data.contents);
             return response.data;
         }
         catch (error) {
