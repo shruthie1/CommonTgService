@@ -85,11 +85,21 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async remove(mobile) {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
-        const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
-        if (result.deletedCount === 0) {
-            throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
+        try {
+            const bufferClient = await this.findOne(mobile, false);
+            if (!bufferClient) {
+                throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
+            }
+            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\nsession: ${bufferClient.session}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile }).exec();
         }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error);
+            this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
+        }
+        this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
         console.log(filter);

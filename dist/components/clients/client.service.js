@@ -197,15 +197,19 @@ let ClientService = ClientService_1 = class ClientService {
         if (updateClientDto._doc) {
             delete updateClientDto._doc['_id'];
         }
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
-        const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
+        const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}\nOld Mobile: ${previousUser?.mobile}\nOld Session: ${previousUser?.session}\n\nNew Mobile: ${updateClientDto.mobile}\nNew Session: ${updateClientDto.session}`);
+        console.log("Previous Client Values:", previousUser);
+        const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).lean().exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
         this.clientsMap.set(clientId, updatedUser);
+        console.log("Updated Client Values:", updatedUser);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
+        console.log("Updated Client: ", updatedUser);
         return updatedUser;
     }
     async remove(clientId) {
@@ -230,7 +234,7 @@ let ClientService = ClientService_1 = class ClientService {
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
-            console.log(setupClientQueryDto);
+            console.log("setupClientQueryDto:", setupClientQueryDto);
             await connection_manager_1.connectionManager.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
