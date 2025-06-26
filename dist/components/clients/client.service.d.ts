@@ -9,17 +9,19 @@ import { ArchivedClientService } from '../archived-clients/archived-client.servi
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
+import { SessionService } from '../session-manager';
 export declare class ClientService {
     private clientModel;
     private telegramService;
     private bufferClientService;
     private usersService;
     private archivedClientService;
+    private sessionService;
     private npointSerive;
     private readonly logger;
     private clientsMap;
     private lastUpdateMap;
-    constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, npointSerive: NpointService);
+    constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, npointSerive: NpointService);
     checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;

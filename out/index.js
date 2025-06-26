@@ -497,6 +497,7 @@ const npoint_module_1 = __webpack_require__(/*! ./components/n-point/npoint.modu
 const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
 const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
 const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
+const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -510,6 +511,7 @@ exports.AppModule = AppModule = __decorate([
             Telegram_module_1.TelegramModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
+            session_manager_1.SessionModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
@@ -10253,16 +10255,20 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const archived_client_schema_1 = __webpack_require__(/*! ./schemas/archived-client.schema */ "./src/components/archived-clients/schemas/archived-client.schema.ts");
 const archived_client_service_1 = __webpack_require__(/*! ./archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
-const create_client_dto_1 = __webpack_require__(/*! ../clients/dto/create-client.dto */ "./src/components/clients/dto/create-client.dto.ts");
+const create_archived_client_dto_1 = __webpack_require__(/*! ./dto/create-archived-client.dto */ "./src/components/archived-clients/dto/create-archived-client.dto.ts");
 const search_client_dto_1 = __webpack_require__(/*! ../clients/dto/search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
 const update_client_dto_1 = __webpack_require__(/*! ../clients/dto/update-client.dto */ "./src/components/clients/dto/update-client.dto.ts");
+const session_update_dto_1 = __webpack_require__(/*! ./dto/session-update.dto */ "./src/components/archived-clients/dto/session-update.dto.ts");
+const cleanup_sessions_dto_1 = __webpack_require__(/*! ./dto/cleanup-sessions.dto */ "./src/components/archived-clients/dto/cleanup-sessions.dto.ts");
+const session_status_dto_1 = __webpack_require__(/*! ./dto/session-status.dto */ "./src/components/archived-clients/dto/session-status.dto.ts");
 let ArchivedClientController = class ArchivedClientController {
     constructor(archivedclientService) {
         this.archivedclientService = archivedclientService;
     }
-    async create(createClientDto) {
-        return this.archivedclientService.create(createClientDto);
+    async create(createArchivedClientDto) {
+        return this.archivedclientService.create(createArchivedClientDto);
     }
     async search(query) {
         return this.archivedclientService.search(query);
@@ -10286,30 +10292,68 @@ let ArchivedClientController = class ArchivedClientController {
         return this.archivedclientService.remove(mobile);
     }
     async executeQuery(query) {
-        try {
-            return await this.archivedclientService.executeQuery(query);
+        if (!query || Object.keys(query).length === 0) {
+            throw new common_1.BadRequestException('Query cannot be empty');
         }
-        catch (error) {
-            throw error;
-        }
+        return await this.archivedclientService.executeQuery(query);
+    }
+    async updateSession(mobile, sessionUpdateDto) {
+        return this.archivedclientService.updateSession(mobile, sessionUpdateDto.newSession);
+    }
+    async getOldSessions(mobile) {
+        return this.archivedclientService.getOldSessions(mobile);
+    }
+    async cleanupOldSessions(mobile, cleanupDto) {
+        return this.archivedclientService.cleanupOldSessions(mobile, cleanupDto?.maxSessions);
+    }
+    async checkSessionStatus(mobile) {
+        return this.archivedclientService.getSessionStatus(mobile);
+    }
+    async batchFetchSessions(mobiles) {
+        return this.archivedclientService.batchFetchSessions(mobiles);
+    }
+    async getCacheStats() {
+        return this.archivedclientService.getCacheStatistics();
     }
 };
 exports.ArchivedClientController = ArchivedClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Create new archived client',
+        description: 'Creates a new archived client record with session information. Used when a Telegram client becomes inactive but needs to be preserved for potential future reactivation.'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: create_archived_client_dto_1.CreateArchivedClientDto,
+        description: 'Archived client data including mobile number and session token'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client successfully created',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid input data provided' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Internal server error occurred' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
+    __metadata("design:paramtypes", [create_archived_client_dto_1.CreateArchivedClientDto]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Search archived clients',
+        description: 'Search for archived clients using various filter criteria. Supports partial matching for names and exact matching for other fields.'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Unique client identifier' }),
+    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name for filtering' }),
+    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Associated channel link' }),
+    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client profile link' }),
+    (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name (supports partial matching)' }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'List of archived clients matching search criteria',
+        type: [archived_client_schema_1.ArchivedClient]
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid search parameters' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
@@ -10317,29 +10361,75 @@ __decorate([
 ], ArchivedClientController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get all archived clients',
+        description: 'Retrieves a complete list of all archived clients in the system. Use with caution on large datasets.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Complete list of all archived clients',
+        type: [archived_client_schema_1.ArchivedClient]
+    }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Database error occurred' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findAll", null);
 __decorate([
-    (0, common_1.Get)('checkArchivedClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, common_1.Get)('maintenance/check-archived-clients'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Run archived clients maintenance check',
+        description: 'Performs comprehensive maintenance on all archived clients including session validation, profile updates, and cleanup of inactive sessions. This is a long-running operation that should be used during maintenance windows.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Maintenance check completed successfully',
+        schema: {
+            type: 'string',
+            example: 'Archived clients check completed. Processed: 150, Updated: 23, Deleted: 5, Errors: 2'
+        }
+    }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Maintenance operation failed' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "checkArchivedClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get archived client by mobile number',
+        description: 'Retrieves a specific archived client using their mobile number. Returns null if not found.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client found',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Get)('fetchOne/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, common_1.Get)('fetch/:mobile'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Fetch or create archived client',
+        description: 'Retrieves an archived client by mobile number. If not found, creates a new session and archived client record automatically.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client retrieved or created',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Could not create session for the mobile number' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Session creation failed' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -10347,7 +10437,24 @@ __decorate([
 ], ArchivedClientController.prototype, "fetchOne", null);
 __decorate([
     (0, common_1.Patch)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update archived client',
+        description: 'Updates an existing archived client record. Uses upsert operation - creates if not exists.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: update_client_dto_1.UpdateClientDto,
+        description: 'Fields to update (partial update supported)'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client updated successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid update data' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -10356,7 +10463,20 @@ __decorate([
 ], ArchivedClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Delete archived client',
+        description: 'Permanently removes an archived client record from the system.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client to delete',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client deleted successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -10364,13 +10484,202 @@ __decorate([
 ], ArchivedClientController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute custom MongoDB query',
+        description: 'Executes a custom MongoDB query against the archived clients collection. Use with caution as this provides direct database access.'
+    }),
+    (0, swagger_1.ApiBody)({
+        description: 'MongoDB query object',
+        schema: {
+            type: 'object',
+            example: {
+                mobile: '916265240911'
+            }
+        }
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Query executed successfully',
+        schema: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/ArchivedClient' }
+        }
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid query provided' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Query execution failed' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Put)(':mobile/session'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update session with backup',
+        description: 'Updates the main session for an archived client. If the current session is still active, it will be backed up to oldSessions array before being replaced.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: session_update_dto_1.SessionUpdateDto,
+        description: 'New session data'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session updated successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid session token provided' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, session_update_dto_1.SessionUpdateDto]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "updateSession", null);
+__decorate([
+    (0, common_1.Get)(':mobile/old-sessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get old sessions for client',
+        description: 'Retrieves all old session tokens stored for an archived client. These are previous sessions that were backed up when new sessions were set.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'List of old session tokens',
+        schema: {
+            type: 'array',
+            items: {
+                type: 'string',
+                description: 'Session token'
+            },
+            example: ['1BQANOTEuM==', '2CRANOTEuN==', '3DRANOTEuO==']
+        }
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Mobile number is required' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "getOldSessions", null);
+__decorate([
+    (0, common_1.Post)(':mobile/cleanup-sessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Clean up old sessions',
+        description: 'Removes inactive old sessions and limits the number of stored old sessions. Only keeps the most recent active sessions up to the specified limit.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: cleanup_sessions_dto_1.CleanupSessionsDto,
+        description: 'Cleanup configuration',
+        required: false
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session cleanup completed successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid maxSessions value' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, cleanup_sessions_dto_1.CleanupSessionsDto]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "cleanupOldSessions", null);
+__decorate([
+    (0, common_1.Get)(':mobile/session-status'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Check session status',
+        description: 'Checks if the current session for an archived client is active. This is useful for verifying session health before performing operations.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session status information',
+        type: session_status_dto_1.SessionStatusDto
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "checkSessionStatus", null);
+__decorate([
+    (0, common_1.Post)('batch-fetch'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Batch fetch sessions for multiple mobiles',
+        description: 'Efficiently retrieves or creates active sessions for multiple mobile numbers in a single request. Useful for bulk operations.'
+    }),
+    (0, swagger_1.ApiBody)({
+        description: 'Array of mobile numbers to process',
+        schema: {
+            type: 'object',
+            properties: {
+                mobiles: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    maxItems: 50,
+                    example: ['916265240911', '916265240912', '916265240913']
+                }
+            },
+            required: ['mobiles']
+        }
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Batch processing results',
+        schema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    mobile: { type: 'string' },
+                    client: { $ref: '#/components/schemas/ArchivedClient' },
+                    error: { type: 'string' }
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid batch request or too many mobiles' }),
+    __param(0, (0, common_1.Body)('mobiles')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Array]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "batchFetchSessions", null);
+__decorate([
+    (0, common_1.Get)('health/cache-stats'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get session validation cache statistics',
+        description: 'Returns statistics about the internal session validation cache for monitoring and debugging purposes.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Cache statistics',
+        schema: {
+            type: 'object',
+            properties: {
+                totalEntries: { type: 'number', example: 150 },
+                validEntries: { type: 'number', example: 120 },
+                expiredEntries: { type: 'number', example: 30 },
+                cacheHitRate: { type: 'string', example: '85%' },
+                lastCleanup: { type: 'string', format: 'date-time' }
+            }
+        }
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "getCacheStats", null);
 exports.ArchivedClientController = ArchivedClientController = __decorate([
     (0, swagger_1.ApiTags)('Archived Clients'),
     (0, common_1.Controller)('archived-clients'),
@@ -10397,7 +10706,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
-const client_schema_1 = __webpack_require__(/*! ../clients/schemas/client.schema */ "./src/components/clients/schemas/client.schema.ts");
+const archived_client_schema_1 = __webpack_require__(/*! ./schemas/archived-client.schema */ "./src/components/archived-clients/schemas/archived-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
 const archived_client_service_1 = __webpack_require__(/*! ./archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
 const archived_client_controller_1 = __webpack_require__(/*! ./archived-client.controller */ "./src/components/archived-clients/archived-client.controller.ts");
@@ -10410,7 +10719,7 @@ exports.ArchivedClientModule = ArchivedClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ collection: 'archivedClients', name: 'ArchivedClient', schema: archived_client_schema_1.ArchivedClientSchema }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule)
         ],
@@ -10442,6 +10751,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ArchivedClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -10452,15 +10762,39 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
-let ArchivedClientService = class ArchivedClientService {
+let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
         this.telegramService = telegramService;
         this.clientService = clientService;
+        this.logger = new common_1.Logger(ArchivedClientService_1.name);
+        this.MAX_OLD_SESSIONS = 10;
+        this.SESSION_GENERATION_TIMEOUT = 30000;
+        this.MAX_RETRY_ATTEMPTS = 3;
+        this.SESSION_VALIDATION_CACHE = new Map();
+        this.CACHE_EXPIRY = 5 * 60 * 1000;
     }
-    async create(createClientDto) {
-        const createdUser = new this.archivedclientModel(createClientDto);
-        return createdUser.save();
+    async create(createArchivedClientDto) {
+        try {
+            this.logger.log(`Creating new archived client for mobile: ${createArchivedClientDto.mobile}`);
+            const createdUser = new this.archivedclientModel({
+                ...createArchivedClientDto,
+                createdAt: new Date(),
+                sessionHistory: [{
+                        session: createArchivedClientDto.session,
+                        createdAt: new Date(),
+                        status: 'active',
+                        source: 'initial_creation'
+                    }]
+            });
+            const result = await createdUser.save();
+            this.logger.log(`Successfully created archived client for mobile: ${createArchivedClientDto.mobile}`);
+            return result;
+        }
+        catch (error) {
+            this.logger.error(`Failed to create archived client for mobile ${createArchivedClientDto.mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Failed to create archived client: ${error.message}`);
+        }
     }
     async findAll() {
         const results = await this.archivedclientModel.find().exec();
@@ -10471,40 +10805,37 @@ let ArchivedClientService = class ArchivedClientService {
         return user;
     }
     async fetchOne(mobile) {
-        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
-        if (user) {
-            return user;
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
         }
-        else {
-            try {
-                await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false });
-                const newSession = await this.telegramService.createNewSession(mobile);
-                return await this.create({
-                    "channelLink": "default",
-                    "clientId": "default",
-                    "dbcoll": "default",
-                    "deployKey": "default",
-                    "link": "default",
-                    "mainAccount": "default",
-                    promoteRepl: "default",
-                    "name": "default",
-                    "password": "Ajtdmwajt1@",
-                    "repl": "default",
-                    "session": newSession,
-                    "username": "default",
-                    "mobile": mobile,
-                    product: "default",
-                    gpayId: "default",
-                    promoteMobile: [],
-                    qrId: "default",
-                });
+        this.logger.log(`Session factory request for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (archivedClient) {
+                this.logger.log(`Found existing archived client for ${mobile}`);
+                const isCurrentSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+                if (isCurrentSessionActive) {
+                    this.logger.log(`Current session for ${mobile} is active, returning existing session`);
+                    await this.auditSessionAccess(mobile, archivedClient.session, 'session_reused');
+                    return archivedClient;
+                }
+                this.logger.log(`Current session for ${mobile} is inactive, attempting to find active session from history`);
+                const activeSession = await this.findActiveSessionFromHistory(archivedClient);
+                if (activeSession) {
+                    this.logger.log(`Found active session in history for ${mobile}, promoting it`);
+                    return await this.promoteActiveSession(mobile, activeSession, archivedClient);
+                }
+                this.logger.log(`No active sessions found for ${mobile}, generating new session`);
+                return await this.generateAndUpdateSession(mobile, archivedClient);
             }
-            catch (e) {
-                throw new common_1.NotFoundException((0, parseError_1.parseError)(e).message);
+            else {
+                this.logger.log(`New client ${mobile}, creating fresh session`);
+                return await this.createNewClientWithSession(mobile);
             }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(mobile);
-            }
+        }
+        catch (error) {
+            this.logger.error(`Session factory failed for mobile ${mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, parseError_1.parseError)(error).message}`);
         }
     }
     async update(mobile, updateClientDto) {
@@ -10532,32 +10863,114 @@ let ArchivedClientService = class ArchivedClientService {
         return this.archivedclientModel.find(filter).exec();
     }
     async checkArchivedClients() {
+        console.log('Starting archived clients check...');
         await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();
         const clientIds = clients.map(client => client.mobile);
-        archivedClients.map(async (document) => {
-            if (!clientIds.includes(document.mobile)) {
-                try {
-                    await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
-                    await this.telegramService.updateUsername(document.mobile, '');
-                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                    await (0, Helpers_1.sleep)(2000);
+        console.log(`Found ${archivedClients.length} archived clients to check`);
+        let processedCount = 0;
+        let updatedCount = 0;
+        let deletedCount = 0;
+        let errorCount = 0;
+        for (const document of archivedClients) {
+            try {
+                processedCount++;
+                console.log(`Processing ${processedCount}/${archivedClients.length}: ${document.mobile}`);
+                if (!clientIds.includes(document.mobile)) {
+                    const sessionCheckResult = await this.checkAndUpdateMainSession(document);
+                    if (sessionCheckResult.updated) {
+                        updatedCount++;
+                        console.log(`Updated session for archived client ${document.mobile}`);
+                    }
+                    await this.cleanupOldSessions(document.mobile, 3);
+                    try {
+                        const currentClient = await this.findOne(document.mobile);
+                        if (currentClient && currentClient.session) {
+                            await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
+                            await this.telegramService.updateUsername(document.mobile, '');
+                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                            console.log(`Updated Telegram profile for archived client ${document.mobile}`);
+                        }
+                    }
+                    catch (telegramError) {
+                        console.log(`Could not update Telegram profile for ${document.mobile}:`, telegramError.message);
+                        if (sessionCheckResult.allSessionsDead) {
+                            try {
+                                await this.remove(document.mobile);
+                                deletedCount++;
+                                console.log(`Removed archived client ${document.mobile} - all sessions dead`);
+                            }
+                            catch (removeError) {
+                                console.log(`Could not remove dead archived client ${document.mobile}:`, removeError.message);
+                            }
+                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    }
                 }
-                catch (error) {
-                    console.log(document.mobile, " :  false");
-                    this.remove(document.mobile);
+                else {
+                    console.log(`${document.mobile} is an active client, skipping archived client processing`);
                 }
-                finally {
-                    await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                await (0, Helpers_1.sleep)(1000);
+            }
+            catch (error) {
+                errorCount++;
+                console.log(`Error processing archived client ${document.mobile}:`, error.message);
+            }
+        }
+        const summary = {
+            total: archivedClients.length,
+            processed: processedCount,
+            updated: updatedCount,
+            deleted: deletedCount,
+            errors: errorCount
+        };
+        console.log('Archived clients check completed:', summary);
+        return `Archived clients check completed. Processed: ${processedCount}, Updated: ${updatedCount}, Deleted: ${deletedCount}, Errors: ${errorCount}`;
+    }
+    async checkAndUpdateMainSession(archivedClient) {
+        const mobile = archivedClient.mobile;
+        console.log(`Checking main session for ${mobile}...`);
+        const isMainSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+        if (isMainSessionActive) {
+            console.log(`Main session for ${mobile} is active`);
+            return { updated: false, allSessionsDead: false };
+        }
+        console.log(`Main session for ${mobile} is inactive, checking old sessions...`);
+        const oldSessions = archivedClient.oldSessions || [];
+        if (oldSessions.length === 0) {
+            console.log(`No old sessions available for ${mobile}`);
+            return { updated: false, allSessionsDead: true };
+        }
+        for (let i = oldSessions.length - 1; i >= 0; i--) {
+            const oldSession = oldSessions[i];
+            console.log(`Testing old session ${i + 1}/${oldSessions.length} for ${mobile}...`);
+            try {
+                const isOldSessionActive = await this.isSessionActive(mobile, oldSession);
+                if (isOldSessionActive) {
+                    console.log(`Found active old session for ${mobile}, promoting to main session`);
+                    const remainingOldSessions = oldSessions.filter((_, index) => index !== i);
+                    remainingOldSessions.unshift(archivedClient.session);
+                    const trimmedOldSessions = remainingOldSessions.slice(0, this.MAX_OLD_SESSIONS);
+                    await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                        $set: {
+                            session: oldSession,
+                            oldSessions: trimmedOldSessions
+                        }
+                    }, { new: true }).exec();
+                    console.log(`Successfully promoted old session to main session for ${mobile}`);
+                    return { updated: true, allSessionsDead: false };
                 }
             }
-            else {
-                console.log("Number is a Active Client");
+            catch (error) {
+                console.log(`Error checking old session for ${mobile}:`, error.message);
             }
-        });
-        return "Triggered ArchiveClients check";
+        }
+        console.log(`No active sessions found for ${mobile}`);
+        return { updated: false, allSessionsDead: true };
     }
     async executeQuery(query) {
         try {
@@ -10570,17 +10983,819 @@ let ArchivedClientService = class ArchivedClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async backupCurrentSession(archivedClient) {
+        const currentSession = archivedClient.session;
+        const oldSessions = archivedClient.oldSessions || [];
+        oldSessions.push(currentSession);
+        if (oldSessions.length > this.MAX_OLD_SESSIONS) {
+            oldSessions.splice(0, oldSessions.length - this.MAX_OLD_SESSIONS);
+        }
+        return { oldSessions };
+    }
+    async isSessionActive(mobile, session) {
+        if (!session || session.trim().length === 0) {
+            return false;
+        }
+        const cacheKey = `${mobile}:${session.substring(0, 20)}`;
+        const cached = this.SESSION_VALIDATION_CACHE.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp) < this.CACHE_EXPIRY) {
+            this.logger.debug(`Using cached session validation for ${mobile}`);
+            return cached.isValid;
+        }
+        let isActive = false;
+        try {
+            this.logger.debug(`Validating session for ${mobile}...`);
+            this.logger.debug(`Attempting connection validation for ${mobile}`);
+            const connectionTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 10000));
+            await Promise.race([
+                connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false }),
+                connectionTimeout
+            ]);
+            isActive = true;
+            this.logger.debug(`Connection validation successful for ${mobile}`);
+        }
+        catch (error) {
+            isActive = false;
+            this.logger.debug(`Session validation failed for ${mobile}: ${error.message}`);
+        }
+        finally {
+            await this.safeCleanupConnection(mobile);
+        }
+        this.SESSION_VALIDATION_CACHE.set(cacheKey, {
+            isValid: isActive,
+            timestamp: Date.now()
+        });
+        if (this.SESSION_VALIDATION_CACHE.size > 1000) {
+            this.cleanupValidationCache();
+        }
+        return isActive;
+    }
+    cleanupValidationCache() {
+        const now = Date.now();
+        for (const [key, value] of this.SESSION_VALIDATION_CACHE.entries()) {
+            if (now - value.timestamp > this.CACHE_EXPIRY) {
+                this.SESSION_VALIDATION_CACHE.delete(key);
+            }
+        }
+        this.logger.debug(`Cleaned up validation cache, remaining entries: ${this.SESSION_VALIDATION_CACHE.size}`);
+    }
+    async updateSession(mobile, newSession) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (!newSession || newSession.trim().length === 0) {
+            throw new common_1.BadRequestException('New session token is required and cannot be empty');
+        }
+        this.logger.log(`Updating session for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const isNewSessionValid = await this.isSessionActive(mobile, newSession);
+            if (!isNewSessionValid) {
+                this.logger.warn(`New session provided for ${mobile} is not valid`);
+            }
+            const updateData = {
+                session: newSession,
+                lastUpdated: new Date()
+            };
+            try {
+                const isCurrentSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+                if (isCurrentSessionActive && archivedClient.session !== newSession) {
+                    this.logger.log(`Current session for ${mobile} is active, backing up before update`);
+                    const backupData = await this.backupCurrentSession(archivedClient);
+                    updateData.oldSessions = backupData.oldSessions;
+                    await this.auditSessionAccess(mobile, archivedClient.session, 'session_backed_up_before_update');
+                }
+                else {
+                    this.logger.log(`Current session for ${mobile} is inactive, replacing without backup`);
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Could not verify current session status for ${mobile}, proceeding with update:`, error.message);
+            }
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateData }, {
+                new: true,
+                upsert: false,
+                runValidators: true
+            }).exec();
+            if (!updatedClient) {
+                throw new common_1.NotFoundException(`Failed to update archived client with mobile "${mobile}"`);
+            }
+            this.clearCacheForMobile(mobile);
+            await this.auditSessionAccess(mobile, newSession, 'session_manually_updated');
+            this.logger.log(`Successfully updated session for mobile: ${mobile}`);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Failed to update session for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session update failed: ${error.message}`);
+        }
+    }
+    clearCacheForMobile(mobile) {
+        const keysToDelete = [];
+        for (const key of this.SESSION_VALIDATION_CACHE.keys()) {
+            if (key.startsWith(`${mobile}:`)) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => this.SESSION_VALIDATION_CACHE.delete(key));
+        this.logger.debug(`Cleared ${keysToDelete.length} cache entries for mobile: ${mobile}`);
+    }
+    async getOldSessions(mobile) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        const archivedClient = await this.findOne(mobile);
+        if (!archivedClient) {
+            throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+        }
+        console.log(`Retrieved ${archivedClient.oldSessions?.length || 0} old sessions for ${mobile}`);
+        return archivedClient.oldSessions || [];
+    }
+    async cleanupOldSessions(mobile, maxSessions = 5) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (maxSessions < 0 || maxSessions > 20) {
+            throw new common_1.BadRequestException('maxSessions must be between 0 and 20');
+        }
+        this.logger.log(`Starting session cleanup for mobile: ${mobile}, maxSessions: ${maxSessions}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const oldSessions = archivedClient.oldSessions || [];
+            if (oldSessions.length === 0) {
+                this.logger.log(`No old sessions found for ${mobile}, cleanup not needed`);
+                return archivedClient;
+            }
+            this.logger.log(`Analyzing ${oldSessions.length} old sessions for ${mobile}...`);
+            const sessionAnalysis = {
+                active: [],
+                inactive: [],
+                failed: []
+            };
+            const sessionPromises = oldSessions.map(async (session, index) => {
+                try {
+                    await (0, Helpers_1.sleep)(100 * index);
+                    const isActive = await this.isSessionActive(mobile, session);
+                    const sessionId = session.substring(0, 10) + '...';
+                    if (isActive) {
+                        sessionAnalysis.active.push(session);
+                        this.logger.debug(`Session ${sessionId} is active`);
+                    }
+                    else {
+                        sessionAnalysis.inactive.push(session);
+                        this.logger.debug(`Session ${sessionId} is inactive`);
+                    }
+                }
+                catch (error) {
+                    sessionAnalysis.failed.push(session);
+                    this.logger.warn(`Session check failed for ${session.substring(0, 10)}...:`, error.message);
+                }
+            });
+            await Promise.all(sessionPromises);
+            let finalActiveSessions = sessionAnalysis.active;
+            if (sessionAnalysis.active.length > maxSessions) {
+                finalActiveSessions = sessionAnalysis.active.slice(-maxSessions);
+                const removedCount = sessionAnalysis.active.length - maxSessions;
+                this.logger.log(`Limiting active sessions from ${sessionAnalysis.active.length} to ${maxSessions}, removing ${removedCount} oldest`);
+            }
+            const totalRemovedCount = sessionAnalysis.inactive.length + sessionAnalysis.failed.length +
+                (sessionAnalysis.active.length - finalActiveSessions.length);
+            if (totalRemovedCount === 0) {
+                this.logger.log(`No cleanup needed for ${mobile}, all ${oldSessions.length} sessions are active and within limit`);
+                return archivedClient;
+            }
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $set: {
+                    oldSessions: finalActiveSessions,
+                    lastCleanup: new Date()
+                }
+            }, { new: true }).exec();
+            await this.auditSessionAccess(mobile, 'cleanup_operation', `removed_${totalRemovedCount}_sessions`);
+            const summary = {
+                total: oldSessions.length,
+                active: sessionAnalysis.active.length,
+                inactive: sessionAnalysis.inactive.length,
+                failed: sessionAnalysis.failed.length,
+                kept: finalActiveSessions.length,
+                removed: totalRemovedCount
+            };
+            this.logger.log(`Session cleanup completed for ${mobile}:`, summary);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Session cleanup failed for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session cleanup failed: ${error.message}`);
+        }
+    }
+    async getSessionStatus(mobile) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.log(`Getting comprehensive session status for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const isMainActive = await this.isSessionActive(mobile, archivedClient.session);
+            let activeOldSessions = 0;
+            if (archivedClient.oldSessions && archivedClient.oldSessions.length > 0) {
+                const healthCheckPromises = archivedClient.oldSessions.slice(0, 3).map(async (session) => {
+                    try {
+                        return await this.isSessionActive(mobile, session);
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+                const results = await Promise.all(healthCheckPromises);
+                activeOldSessions = results.filter(Boolean).length;
+            }
+            let reliability = 'low';
+            if (isMainActive && activeOldSessions >= 2) {
+                reliability = 'high';
+            }
+            else if (isMainActive || activeOldSessions >= 1) {
+                reliability = 'medium';
+            }
+            const lastUpdated = archivedClient.lastUpdated || archivedClient.createdAt || new Date();
+            const sessionAge = this.calculateSessionAge(lastUpdated);
+            const result = {
+                mobile,
+                isMainSessionActive: isMainActive,
+                totalOldSessions: archivedClient.oldSessions?.length || 0,
+                lastChecked: new Date().toISOString(),
+                healthMetrics: {
+                    activeOldSessions,
+                    lastUpdated: lastUpdated.toISOString(),
+                    sessionAge,
+                    reliability
+                }
+            };
+            this.logger.log(`Session status check completed for ${mobile}, reliability: ${reliability}`);
+            return result;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get session status for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session status check failed: ${error.message}`);
+        }
+    }
+    calculateSessionAge(lastUpdated) {
+        const now = new Date();
+        const diffMs = now.getTime() - lastUpdated.getTime();
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays > 0) {
+            return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        }
+        else if (diffHours > 0) {
+            return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        }
+        else if (diffMins > 0) {
+            return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        }
+        else {
+            return 'Just now';
+        }
+    }
+    async batchFetchSessions(mobiles) {
+        if (!mobiles || mobiles.length === 0) {
+            throw new common_1.BadRequestException('Mobile numbers array is required');
+        }
+        if (mobiles.length > 50) {
+            throw new common_1.BadRequestException('Batch size cannot exceed 50 mobiles');
+        }
+        this.logger.log(`Batch session factory request for ${mobiles.length} mobiles`);
+        const results = await Promise.allSettled(mobiles.map(async (mobile) => {
+            try {
+                const client = await this.fetchOne(mobile);
+                return { mobile, client };
+            }
+            catch (error) {
+                return { mobile, client: null, error: error.message };
+            }
+        }));
+        return results.map((result, index) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            }
+            else {
+                return {
+                    mobile: mobiles[index],
+                    client: null,
+                    error: result.reason?.message || 'Unknown error'
+                };
+            }
+        });
+    }
+    async createNewClientWithSession(mobile) {
+        let attempt = 0;
+        let lastError;
+        while (attempt < this.MAX_RETRY_ATTEMPTS) {
+            try {
+                attempt++;
+                this.logger.log(`Creating new session for ${mobile}, attempt ${attempt}/${this.MAX_RETRY_ATTEMPTS}`);
+                const newSession = await Promise.race([
+                    this.generateNewSession(mobile),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Session generation timeout')), this.SESSION_GENERATION_TIMEOUT))
+                ]);
+                const newClient = await this.create({
+                    session: newSession,
+                    mobile: mobile,
+                    oldSessions: []
+                });
+                await this.auditSessionAccess(mobile, newSession, 'new_client_created');
+                this.logger.log(`Successfully created new client with session for ${mobile}`);
+                return newClient;
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Attempt ${attempt} failed for new client ${mobile}:`, error.message);
+                if (attempt < this.MAX_RETRY_ATTEMPTS) {
+                    await (0, Helpers_1.sleep)(1000 * attempt);
+                }
+            }
+            finally {
+                await this.safeCleanupConnection(mobile);
+            }
+        }
+        throw new common_1.InternalServerErrorException(`Failed to create new client after ${this.MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+    }
+    async generateAndUpdateSession(mobile, existingClient) {
+        let attempt = 0;
+        let lastError;
+        while (attempt < this.MAX_RETRY_ATTEMPTS) {
+            try {
+                attempt++;
+                this.logger.log(`Generating new session for existing client ${mobile}, attempt ${attempt}/${this.MAX_RETRY_ATTEMPTS}`);
+                const newSession = await Promise.race([
+                    this.generateNewSession(mobile),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Session generation timeout')), this.SESSION_GENERATION_TIMEOUT))
+                ]);
+                await this.backupSessionToHistory(mobile, existingClient.session, 'session_replaced');
+                const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                    $set: {
+                        session: newSession,
+                        lastUpdated: new Date()
+                    },
+                    $push: {
+                        oldSessions: {
+                            $each: [existingClient.session],
+                            $slice: -this.MAX_OLD_SESSIONS
+                        }
+                    }
+                }, { new: true }).exec();
+                await this.auditSessionAccess(mobile, newSession, 'new_session_generated');
+                this.logger.log(`Successfully generated new session for ${mobile}`);
+                return updatedClient;
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Attempt ${attempt} failed for session generation ${mobile}:`, error.message);
+                if (attempt < this.MAX_RETRY_ATTEMPTS) {
+                    await (0, Helpers_1.sleep)(1000 * attempt);
+                }
+            }
+            finally {
+                await this.safeCleanupConnection(mobile);
+            }
+        }
+        throw new common_1.InternalServerErrorException(`Failed to generate session after ${this.MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+    }
+    async findActiveSessionFromHistory(archivedClient) {
+        const oldSessions = archivedClient.oldSessions || [];
+        if (oldSessions.length === 0) {
+            return null;
+        }
+        for (let i = oldSessions.length - 1; i >= 0; i--) {
+            const session = oldSessions[i];
+            try {
+                this.logger.log(`Checking session ${i + 1}/${oldSessions.length} for ${archivedClient.mobile}`);
+                const isActive = await this.isSessionActive(archivedClient.mobile, session);
+                if (isActive) {
+                    this.logger.log(`Found active session in history for ${archivedClient.mobile}`);
+                    return session;
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Failed to check session ${i + 1} for ${archivedClient.mobile}:`, error.message);
+            }
+        }
+        return null;
+    }
+    async promoteActiveSession(mobile, activeSession, archivedClient) {
+        try {
+            const updatedOldSessions = (archivedClient.oldSessions || []).filter(s => s !== activeSession);
+            if (archivedClient.session !== activeSession) {
+                updatedOldSessions.unshift(archivedClient.session);
+            }
+            const trimmedOldSessions = updatedOldSessions.slice(0, this.MAX_OLD_SESSIONS);
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $set: {
+                    session: activeSession,
+                    oldSessions: trimmedOldSessions,
+                    lastUpdated: new Date()
+                }
+            }, { new: true }).exec();
+            await this.auditSessionAccess(mobile, activeSession, 'session_promoted_from_history');
+            this.logger.log(`Successfully promoted session from history for ${mobile}`);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Failed to promote session for ${mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Failed to promote session: ${error.message}`);
+        }
+    }
+    async generateNewSession(mobile) {
+        try {
+            await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false });
+            const newSession = await this.telegramService.createNewSession(mobile);
+            if (!newSession || newSession.trim().length === 0) {
+                throw new Error('Generated session is empty or invalid');
+            }
+            return newSession;
+        }
+        catch (error) {
+            this.logger.error(`Session generation failed for ${mobile}:`, error);
+            throw error;
+        }
+    }
+    async auditSessionAccess(mobile, session, action) {
+        try {
+            await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $push: {
+                    sessionHistory: {
+                        $each: [{
+                                session: session.substring(0, 20) + '...',
+                                action,
+                                timestamp: new Date(),
+                                status: 'active'
+                            }],
+                        $slice: -50
+                    }
+                }
+            }, { upsert: false }).exec();
+        }
+        catch (error) {
+            this.logger.warn(`Failed to audit session access for ${mobile}:`, error.message);
+        }
+    }
+    async backupSessionToHistory(mobile, session, reason) {
+        try {
+            await this.auditSessionAccess(mobile, session, `backup_${reason}`);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to backup session to history for ${mobile}:`, error.message);
+        }
+    }
+    async safeCleanupConnection(mobile) {
+        try {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to cleanup connection for ${mobile}:`, error.message);
+        }
+    }
+    getCacheStatistics() {
+        const now = Date.now();
+        let validEntries = 0;
+        let expiredEntries = 0;
+        for (const [, value] of this.SESSION_VALIDATION_CACHE.entries()) {
+            if (now - value.timestamp < this.CACHE_EXPIRY) {
+                validEntries++;
+            }
+            else {
+                expiredEntries++;
+            }
+        }
+        const totalEntries = this.SESSION_VALIDATION_CACHE.size;
+        const cacheHitRate = totalEntries > 0 ?
+            Math.round((validEntries / totalEntries) * 100) + '%' : '0%';
+        return {
+            totalEntries,
+            validEntries,
+            expiredEntries,
+            cacheHitRate,
+            lastCleanup: new Date().toISOString()
+        };
+    }
 };
 exports.ArchivedClientService = ArchivedClientService;
-exports.ArchivedClientService = ArchivedClientService = __decorate([
+exports.ArchivedClientService = ArchivedClientService = ArchivedClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('ArchivedArchivedClientsModule')),
+    __param(0, (0, mongoose_1.InjectModel)('ArchivedClient')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         client_service_1.ClientService])
 ], ArchivedClientService);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/cleanup-sessions.dto.ts":
+/*!*********************************************************************!*\
+  !*** ./src/components/archived-clients/dto/cleanup-sessions.dto.ts ***!
+  \*********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CleanupSessionsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CleanupSessionsDto {
+}
+exports.CleanupSessionsDto = CleanupSessionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 5,
+        description: 'Maximum number of old sessions to keep',
+        minimum: 0,
+        maximum: 20,
+        default: 5,
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(20),
+    __metadata("design:type", Number)
+], CleanupSessionsDto.prototype, "maxSessions", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/create-archived-client.dto.ts":
+/*!***************************************************************************!*\
+  !*** ./src/components/archived-clients/dto/create-archived-client.dto.ts ***!
+  \***************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateArchivedClientDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class CreateArchivedClientDto {
+}
+exports.CreateArchivedClientDto = CreateArchivedClientDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '+916265240911', description: 'Phone number of the user' }),
+    __metadata("design:type", String)
+], CreateArchivedClientDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuMTA4LjUg==', description: 'Current session token' }),
+    __metadata("design:type", String)
+], CreateArchivedClientDto.prototype, "session", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['1BQANOTEuM==', '2CRANOTEuN=='], description: 'Array of old session tokens', required: false, type: [String] }),
+    __metadata("design:type", Array)
+], CreateArchivedClientDto.prototype, "oldSessions", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/session-status.dto.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/archived-clients/dto/session-status.dto.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionStatusDto = exports.SessionHealthMetricsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class SessionHealthMetricsDto {
+}
+exports.SessionHealthMetricsDto = SessionHealthMetricsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 2,
+        description: 'Number of active old sessions available as backup'
+    }),
+    __metadata("design:type", Number)
+], SessionHealthMetricsDto.prototype, "activeOldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-01-15T08:30:00.000Z',
+        description: 'Timestamp when the session was last updated'
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "lastUpdated", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2 hours ago',
+        description: 'Human-readable session age'
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "sessionAge", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'high',
+        description: 'Session reliability rating based on availability',
+        enum: ['high', 'medium', 'low']
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "reliability", void 0);
+class SessionStatusDto {
+}
+exports.SessionStatusDto = SessionStatusDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '916265240911',
+        description: 'Mobile number of the archived client'
+    }),
+    __metadata("design:type", String)
+], SessionStatusDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: true,
+        description: 'Whether the main session is currently active'
+    }),
+    __metadata("design:type", Boolean)
+], SessionStatusDto.prototype, "isMainSessionActive", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 3,
+        description: 'Total number of old sessions stored'
+    }),
+    __metadata("design:type", Number)
+], SessionStatusDto.prototype, "totalOldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-01-15T10:30:00.000Z',
+        description: 'Timestamp when the status was last checked'
+    }),
+    __metadata("design:type", String)
+], SessionStatusDto.prototype, "lastChecked", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Detailed health metrics for the session',
+        type: SessionHealthMetricsDto
+    }),
+    __metadata("design:type", SessionHealthMetricsDto)
+], SessionStatusDto.prototype, "healthMetrics", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/session-update.dto.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/archived-clients/dto/session-update.dto.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionUpdateDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class SessionUpdateDto {
+}
+exports.SessionUpdateDto = SessionUpdateDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '1BQANOTEuMTA4LjUg==',
+        description: 'New session token to set as primary session'
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SessionUpdateDto.prototype, "newSession", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/schemas/archived-client.schema.ts":
+/*!***************************************************************************!*\
+  !*** ./src/components/archived-clients/schemas/archived-client.schema.ts ***!
+  \***************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ArchivedClientSchema = exports.ArchivedClient = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let ArchivedClient = class ArchivedClient {
+};
+exports.ArchivedClient = ArchivedClient;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number of the archived user' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ArchivedClient.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==', description: 'Current session token of the archived user' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ArchivedClient.prototype, "session", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['1BQANOTEuM==', '2CRANOTEuN=='], description: 'Array of old session tokens' }),
+    (0, mongoose_1.Prop)({ type: [String], default: [] }),
+    __metadata("design:type", Array)
+], ArchivedClient.prototype, "oldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the session was updated' }),
+    (0, mongoose_1.Prop)({ type: Date }),
+    __metadata("design:type", Date)
+], ArchivedClient.prototype, "lastUpdated", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time sessions were cleaned up' }),
+    (0, mongoose_1.Prop)({ type: Date }),
+    __metadata("design:type", Date)
+], ArchivedClient.prototype, "lastCleanup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Session history for auditing purposes' }),
+    (0, mongoose_1.Prop)({
+        type: [{
+                session: String,
+                action: String,
+                timestamp: { type: Date, default: Date.now },
+                status: String,
+                source: String
+            }],
+        default: []
+    }),
+    __metadata("design:type", Array)
+], ArchivedClient.prototype, "sessionHistory", void 0);
+exports.ArchivedClient = ArchivedClient = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'archivedClients',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], ArchivedClient);
+exports.ArchivedClientSchema = mongoose_1.SchemaFactory.createForClass(ArchivedClient);
 
 
 /***/ }),
@@ -11078,7 +12293,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         if (error.errorMessage === "SESSION_REVOKED" ||
                             error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
                             error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
+                            error.errorMessage === "USER_DEACTIVATED_BAN" ||
+                            error.errorMessage === "FROZEN_METHOD_INVALID") {
                             this.logger.error(`Session invalid for ${mobile}, removing client`);
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
@@ -12812,6 +14028,7 @@ const archived_client_module_1 = __webpack_require__(/*! ../archived-clients/arc
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const npoint_module_1 = __webpack_require__(/*! ../n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ../timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -12824,6 +14041,7 @@ exports.ClientModule = ClientModule = __decorate([
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => archived_client_module_1.ArchivedClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
             (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
             npoint_module_1.NpointModule
         ],
@@ -12908,14 +14126,16 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
+    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, npointSerive) {
         this.clientModel = clientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
+        this.sessionService = sessionService;
         this.npointSerive = npointSerive;
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
@@ -13054,6 +14274,23 @@ let ClientService = ClientService_1 = class ClientService {
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
         console.log("Updated Client: ", updatedUser);
+        if (previousUser &&
+            (previousUser.mobile !== updatedUser.mobile || previousUser.session !== updatedUser.session)) {
+            setTimeout(async () => {
+                await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+            }, 60000);
+        }
+        if (previousUser &&
+            Array.isArray(updatedUser.promoteMobile) &&
+            Array.isArray(previousUser.promoteMobile)) {
+            const prevSet = new Set(previousUser.promoteMobile);
+            const newPromoteMobiles = updatedUser.promoteMobile.filter(mobile => !prevSet.has(mobile));
+            for (const mobile of newPromoteMobiles) {
+                setTimeout(async () => {
+                    await this.sessionService.createSession({ mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+                }, 60000);
+            }
+        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -13182,7 +14419,6 @@ let ClientService = ClientService_1 = class ClientService {
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
-                            await this.archivedClientService.remove(existingClientUser.mobile);
                         }
                         else {
                             console.log('Not Deleting user');
@@ -13325,11 +14561,13 @@ exports.ClientService = ClientService = ClientService_1 = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
         archived_client_service_1.ArchivedClientService,
+        session_manager_1.SessionService,
         npoint_service_1.NpointService])
 ], ClientService);
 
@@ -15390,7 +16628,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             if (error.message === "SESSION_REVOKED" ||
                                 error.message === "AUTH_KEY_UNREGISTERED" ||
                                 error.message === "USER_DEACTIVATED" ||
-                                error.message === "USER_DEACTIVATED_BAN") {
+                                error.message === "USER_DEACTIVATED_BAN" ||
+                                error.message === "FROZEN_METHOD_INVALID") {
                                 this.logger.warn(`${document.mobile}: Session invalid, removing client`);
                                 await this.remove(document.mobile);
                             }
@@ -16408,6 +17647,1665 @@ exports.PromoteStat = PromoteStat = __decorate([
     (0, mongoose_1.Schema)()
 ], PromoteStat);
 exports.PromoteStatSchema = mongoose_1.SchemaFactory.createForClass(PromoteStat);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/client-registry.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/session-manager/client-registry.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var ClientRegistry_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientRegistry = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+let ClientRegistry = ClientRegistry_1 = class ClientRegistry {
+    constructor() {
+        this.clients = new Map();
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.locks = new Map();
+        this.LOCK_TIMEOUT = 30000;
+        this.LOCK_EXPIRY = 120000;
+        this.CLIENT_TIMEOUT = 300000;
+        setInterval(() => this.cleanupInactiveClients(), 60000);
+        setInterval(() => this.cleanupExpiredLocks(), 30000);
+    }
+    static getInstance() {
+        if (!ClientRegistry_1.instance) {
+            ClientRegistry_1.instance = new ClientRegistry_1();
+        }
+        return ClientRegistry_1.instance;
+    }
+    async acquireLock(mobile) {
+        const lockId = `${mobile}_${Date.now()}_${Math.random()}`;
+        const now = new Date();
+        const existingLock = this.locks.get(mobile);
+        if (existingLock) {
+            if (now.getTime() - existingLock.acquired.getTime() > this.LOCK_EXPIRY) {
+                this.locks.delete(mobile);
+                this.logger.logOperation(mobile, 'Removed expired lock');
+            }
+            else {
+                this.logger.logOperation(mobile, 'Lock already exists, waiting...');
+                return null;
+            }
+        }
+        this.locks.set(mobile, { acquired: now, lockId });
+        this.logger.logOperation(mobile, `Lock acquired: ${lockId}`);
+        return lockId;
+    }
+    releaseLock(mobile, lockId) {
+        const lock = this.locks.get(mobile);
+        if (lock && lock.lockId === lockId) {
+            this.locks.delete(mobile);
+            this.logger.logOperation(mobile, `Lock released: ${lockId}`);
+            return true;
+        }
+        return false;
+    }
+    async waitForLock(mobile) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < this.LOCK_TIMEOUT) {
+            const lockId = await this.acquireLock(mobile);
+            if (lockId) {
+                return lockId;
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        throw new Error(`Lock acquisition timeout for ${mobile}`);
+    }
+    hasClient(mobile) {
+        return this.clients.has(mobile);
+    }
+    getClientInfo(mobile) {
+        return this.clients.get(mobile) || null;
+    }
+    async registerClient(mobile, client, sessionString, lockId) {
+        const lock = this.locks.get(mobile);
+        if (!lock || lock.lockId !== lockId) {
+            throw new Error(`Invalid lock for registering client: ${mobile}`);
+        }
+        if (this.clients.has(mobile)) {
+            this.logger.logError(mobile, 'Client already exists, cannot register new one', new Error('Duplicate client'));
+            return false;
+        }
+        const clientInfo = {
+            client,
+            mobile,
+            sessionString,
+            createdAt: new Date(),
+            lastActivity: new Date(),
+            isCreating: false,
+            lockId
+        };
+        this.clients.set(mobile, clientInfo);
+        this.logger.logOperation(mobile, 'Client registered successfully');
+        return true;
+    }
+    markClientCreating(mobile, lockId) {
+        const lock = this.locks.get(mobile);
+        if (!lock || lock.lockId !== lockId) {
+            return false;
+        }
+        const existing = this.clients.get(mobile);
+        if (existing) {
+            existing.isCreating = true;
+            existing.lastActivity = new Date();
+            return true;
+        }
+        const clientInfo = {
+            client: null,
+            mobile,
+            sessionString: '',
+            createdAt: new Date(),
+            lastActivity: new Date(),
+            isCreating: true,
+            lockId
+        };
+        this.clients.set(mobile, clientInfo);
+        return true;
+    }
+    updateActivity(mobile) {
+        const clientInfo = this.clients.get(mobile);
+        if (clientInfo) {
+            clientInfo.lastActivity = new Date();
+        }
+    }
+    async removeClient(mobile, lockId) {
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo) {
+            return false;
+        }
+        if (lockId) {
+            const lock = this.locks.get(mobile);
+            if (!lock || lock.lockId !== lockId) {
+                this.logger.logError(mobile, 'Invalid lock for removing client', new Error('Invalid lock'));
+                return false;
+            }
+        }
+        if (clientInfo.client) {
+            try {
+                let tempClient = clientInfo.client;
+                if (tempClient) {
+                    try {
+                        await tempClient.destroy();
+                        tempClient._eventBuilders = [];
+                        this.logger.logOperation(mobile, 'Temporary client cleaned up');
+                    }
+                    catch (cleanupError) {
+                        this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
+                    }
+                    finally {
+                        tempClient._destroyed = true;
+                        if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                            await tempClient._sender.disconnect();
+                        }
+                        tempClient = null;
+                    }
+                }
+                this.logger.logOperation(mobile, 'Client disconnected during removal');
+            }
+            catch (error) {
+                this.logger.logError(mobile, 'Error disconnecting client during removal', error);
+            }
+        }
+        this.clients.delete(mobile);
+        this.logger.logOperation(mobile, 'Client removed from registry');
+        return true;
+    }
+    getActiveClientCount() {
+        return this.clients.size;
+    }
+    getActivemobiles() {
+        return Array.from(this.clients.keys());
+    }
+    async cleanupInactiveClients() {
+        const now = new Date();
+        const inactiveClients = [];
+        for (const [mobile, clientInfo] of this.clients.entries()) {
+            const inactiveTime = now.getTime() - clientInfo.lastActivity.getTime();
+            if (inactiveTime > this.CLIENT_TIMEOUT) {
+                inactiveClients.push(mobile);
+            }
+        }
+        for (const mobile of inactiveClients) {
+            this.logger.logOperation(mobile, 'Removing inactive client');
+            await this.removeClient(mobile);
+        }
+        if (inactiveClients.length > 0) {
+            this.logger.logOperation('SYSTEM', `Cleaned up ${inactiveClients.length} inactive clients`);
+        }
+    }
+    cleanupExpiredLocks() {
+        const now = new Date();
+        const expiredLocks = [];
+        for (const [mobile, lock] of this.locks.entries()) {
+            const lockAge = now.getTime() - lock.acquired.getTime();
+            if (lockAge > this.LOCK_EXPIRY) {
+                expiredLocks.push(mobile);
+            }
+        }
+        for (const mobile of expiredLocks) {
+            this.locks.delete(mobile);
+            this.logger.logOperation(mobile, 'Removed expired lock');
+        }
+        if (expiredLocks.length > 0) {
+            this.logger.logOperation('SYSTEM', `Cleaned up ${expiredLocks.length} expired locks`);
+        }
+    }
+    async forceCleanup(mobile) {
+        let cleanedCount = 0;
+        if (this.locks.has(mobile)) {
+            this.locks.delete(mobile);
+            cleanedCount++;
+        }
+        if (await this.removeClient(mobile)) {
+            cleanedCount++;
+        }
+        this.logger.logOperation(mobile, `Force cleanup completed, removed ${cleanedCount} items`);
+        return cleanedCount;
+    }
+    getStats() {
+        return {
+            activeClients: this.clients.size,
+            activeLocks: this.locks.size,
+            mobiles: Array.from(this.clients.keys())
+        };
+    }
+};
+exports.ClientRegistry = ClientRegistry;
+ClientRegistry.instance = null;
+exports.ClientRegistry = ClientRegistry = ClientRegistry_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [])
+], ClientRegistry);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/session-manager/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session.controller */ "./src/components/session-manager/session.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session.module */ "./src/components/session-manager/session.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./client-registry */ "./src/components/session-manager/client-registry.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/schemas/sessions.schema.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/session-manager/schemas/sessions.schema.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionAuditSchema = exports.SessionAudit = exports.SessionCreationMethod = exports.SessionStatus = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+var SessionStatus;
+(function (SessionStatus) {
+    SessionStatus["CREATED"] = "created";
+    SessionStatus["ACTIVE"] = "active";
+    SessionStatus["EXPIRED"] = "expired";
+    SessionStatus["REVOKED"] = "revoked";
+    SessionStatus["FAILED"] = "failed";
+})(SessionStatus || (exports.SessionStatus = SessionStatus = {}));
+var SessionCreationMethod;
+(function (SessionCreationMethod) {
+    SessionCreationMethod["OLD_SESSION"] = "old_session";
+    SessionCreationMethod["USER_MOBILE"] = "user_mobile";
+    SessionCreationMethod["INPUT_SESSION"] = "input_session";
+})(SessionCreationMethod || (exports.SessionCreationMethod = SessionCreationMethod = {}));
+let SessionAudit = class SessionAudit {
+};
+exports.SessionAudit = SessionAudit;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Phone number associated with the session' }),
+    (0, mongoose_1.Prop)({ required: true, index: true }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Encrypted session string' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "sessionString", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Current status of the session', enum: SessionStatus }),
+    (0, mongoose_1.Prop)({ required: true, enum: SessionStatus, default: SessionStatus.CREATED }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'old_session', description: 'Method used to create the session', enum: SessionCreationMethod }),
+    (0, mongoose_1.Prop)({ required: true, enum: SessionCreationMethod }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "creationMethod", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Session created successfully', description: 'Creation success/failure message' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "creationMessage", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Previous session string used for creation (if applicable)' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "previousSessionString", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T10:00:00Z', description: 'When the session was created' }),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "createdAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:30:00Z', description: 'Last time the session was used' }),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "lastUsedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2024-01-01T10:00:00Z', description: 'When the session expires' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "expiresAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID associated with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username associated with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 3, description: 'Number of retry attempts during creation' }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], SessionAudit.prototype, "retryAttempts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Rate limit exceeded', description: 'Error message if creation failed' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "errorMessage", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: { userAgent: 'Telegram-Desktop/1.0', ipAddress: '192.168.1.1' },
+        description: 'Additional metadata about session creation'
+    }),
+    (0, mongoose_1.Prop)({ type: Object }),
+    __metadata("design:type", Object)
+], SessionAudit.prototype, "metadata", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this session is currently active' }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], SessionAudit.prototype, "isActive", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T16:00:00Z', description: 'When the session was revoked/expired' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "revokedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'manual_revocation', description: 'Reason for session revocation' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "revocationReason", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 5, description: 'Number of times this session has been used' }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], SessionAudit.prototype, "usageCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'session_validation_failed', description: 'Last known error with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "lastError", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:45:00Z', description: 'When the last error occurred' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "lastErrorAt", void 0);
+exports.SessionAudit = SessionAudit = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'session_audits',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+                delete ret.__v;
+            },
+        },
+    })
+], SessionAudit);
+exports.SessionAuditSchema = mongoose_1.SchemaFactory.createForClass(SessionAudit);
+exports.SessionAuditSchema.index({ mobile: 1, createdAt: -1 });
+exports.SessionAuditSchema.index({ status: 1, isActive: 1 });
+exports.SessionAuditSchema.index({ createdAt: -1 });
+exports.SessionAuditSchema.index({ lastUsedAt: -1 });
+exports.SessionAuditSchema.index({ mobile: 1, isActive: 1, status: 1 });
+exports.SessionAuditSchema.pre('findOneAndUpdate', function () {
+    const update = this.getUpdate();
+    if (update.$set && !update.$set.lastUsedAt) {
+        update.$set.lastUsedAt = new Date();
+    }
+});
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session-audit.service.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/session-manager/session-audit.service.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionAuditService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+let SessionAuditService = class SessionAuditService {
+    constructor(sessionAuditModel) {
+        this.sessionAuditModel = sessionAuditModel;
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+    }
+    async createAuditRecord(createDto) {
+        try {
+            this.logger.logOperation(createDto.mobile, 'Creating session audit record');
+            const sessionAudit = new this.sessionAuditModel({
+                ...createDto,
+                status: sessions_schema_1.SessionStatus.CREATED,
+                createdAt: new Date(),
+                lastUsedAt: new Date(),
+                usageCount: 0,
+                isActive: true
+            });
+            const savedRecord = await sessionAudit.save();
+            this.logger.logOperation(createDto.mobile, `Session audit record created with ID: ${savedRecord.id}`);
+            return savedRecord;
+        }
+        catch (error) {
+            this.logger.logError(createDto.mobile, 'Failed to create session audit record', error);
+            throw error;
+        }
+    }
+    async updateAuditRecord(mobile, sessionString, updateDto) {
+        try {
+            this.logger.logOperation(mobile, 'Updating session audit record');
+            const updateData = {
+                ...updateDto,
+                lastUsedAt: new Date()
+            };
+            const query = { mobile, isActive: true };
+            if (sessionString) {
+                query.sessionString = sessionString;
+            }
+            const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, { $set: updateData }, { new: true, sort: { createdAt: -1 } });
+            if (updatedRecord) {
+                this.logger.logOperation(mobile, `Session audit record updated: ${updatedRecord.id}`);
+            }
+            else {
+                this.logger.logOperation(mobile, 'No active session audit record found to update');
+            }
+            return updatedRecord;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to update session audit record', error);
+            throw error;
+        }
+    }
+    async markSessionUsed(mobile, sessionString) {
+        try {
+            const query = { mobile, isActive: true };
+            if (sessionString) {
+                query.sessionString = sessionString;
+            }
+            const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, {
+                $inc: { usageCount: 1 },
+                $set: { lastUsedAt: new Date() }
+            }, { new: true, sort: { createdAt: -1 } });
+            if (updatedRecord) {
+                this.logger.logOperation(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
+            }
+            return updatedRecord;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to mark session as used', error);
+            throw error;
+        }
+    }
+    async markSessionFailed(mobile, sessionString, errorMessage) {
+        try {
+            return await this.updateAuditRecord(mobile, sessionString, {
+                status: sessions_schema_1.SessionStatus.FAILED,
+                errorMessage,
+                lastError: errorMessage,
+                isActive: false
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to mark session as failed', error);
+            throw error;
+        }
+    }
+    async revokeSession(mobile, sessionString, reason = 'manual_revocation') {
+        try {
+            return await this.updateAuditRecord(mobile, sessionString, {
+                status: sessions_schema_1.SessionStatus.REVOKED,
+                revocationReason: reason,
+                revokedAt: new Date(),
+                isActive: false
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to revoke session', error);
+            throw error;
+        }
+    }
+    async getSessionsFormobile(mobile, activeOnly = false) {
+        try {
+            const query = { mobile };
+            if (activeOnly) {
+                query.isActive = true;
+            }
+            const sessions = await this.sessionAuditModel
+                .find(query)
+                .sort({ createdAt: -1 })
+                .exec();
+            this.logger.logOperation(mobile, `Retrieved ${sessions.length} session records`);
+            return sessions;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to get sessions for phone number', error);
+            throw error;
+        }
+    }
+    async getLatestActiveSession(mobile) {
+        try {
+            const session = await this.sessionAuditModel
+                .findOne({ mobile, isActive: true })
+                .sort({ createdAt: -1 })
+                .exec();
+            if (session) {
+                this.logger.logOperation(mobile, `Latest active session found: ${session.id}`);
+            }
+            return session;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to get latest active session', error);
+            throw error;
+        }
+    }
+    async querySessionAudits(queryDto) {
+        try {
+            const { mobile, status, creationMethod, isActive, limit = 20, offset = 0, startDate, endDate } = queryDto;
+            const query = {};
+            if (mobile)
+                query.mobile = mobile;
+            if (status)
+                query.status = status;
+            if (creationMethod)
+                query.creationMethod = creationMethod;
+            if (isActive !== undefined)
+                query.isActive = isActive;
+            if (startDate || endDate) {
+                query.createdAt = {};
+                if (startDate)
+                    query.createdAt.$gte = startDate;
+                if (endDate)
+                    query.createdAt.$lte = endDate;
+            }
+            const [sessions, total] = await Promise.all([
+                this.sessionAuditModel
+                    .find(query)
+                    .sort({ createdAt: -1 })
+                    .skip(offset)
+                    .limit(limit)
+                    .exec(),
+                this.sessionAuditModel.countDocuments(query)
+            ]);
+            this.logger.logOperation('system', `Session audit query returned ${sessions.length} of ${total} records`);
+            return {
+                sessions,
+                total,
+                page: Math.floor(offset / limit) + 1,
+                limit
+            };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to query session audits', error);
+            throw error;
+        }
+    }
+    async getSessionStats(mobile, days = 30) {
+        try {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const query = { createdAt: { $gte: startDate } };
+            if (mobile) {
+                query.mobile = mobile;
+            }
+            const stats = await this.sessionAuditModel.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: null,
+                        totalSessions: { $sum: 1 },
+                        activeSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.ACTIVE] }, 1, 0] }
+                        },
+                        expiredSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.EXPIRED] }, 1, 0] }
+                        },
+                        revokedSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.REVOKED] }, 1, 0] }
+                        },
+                        failedSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.FAILED] }, 1, 0] }
+                        }
+                    }
+                }
+            ]);
+            const methodBreakdown = await this.sessionAuditModel.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: '$creationMethod',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+            const baseStats = stats[0] || {
+                totalSessions: 0,
+                activeSessions: 0,
+                expiredSessions: 0,
+                revokedSessions: 0,
+                failedSessions: 0
+            };
+            const creationMethodBreakdown = {};
+            methodBreakdown.forEach(item => {
+                creationMethodBreakdown[item._id] = item.count;
+            });
+            const result = {
+                ...baseStats,
+                creationMethodBreakdown,
+                dateRange: {
+                    start: startDate,
+                    end: new Date()
+                }
+            };
+            this.logger.logOperation(mobile || 'system', `Session stats retrieved: ${result.totalSessions} total sessions`);
+            return result;
+        }
+        catch (error) {
+            this.logger.logError(mobile || 'system', 'Failed to get session stats', error);
+            throw error;
+        }
+    }
+    async cleanupOldSessions(days = 90) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+            const result = await this.sessionAuditModel.deleteMany({
+                createdAt: { $lt: cutoffDate },
+                isActive: false
+            });
+            this.logger.logOperation('system', `Cleaned up ${result.deletedCount} old session records`);
+            return { deletedCount: result.deletedCount };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to cleanup old sessions', error);
+            throw error;
+        }
+    }
+    async findValidSessionThisMonth(mobile) {
+        try {
+            const thisMonth = new Date();
+            thisMonth.setDate(1);
+            thisMonth.setHours(0, 0, 0, 0);
+            const recentSessions = await this.sessionAuditModel
+                .find({
+                mobile,
+                isActive: true,
+                status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
+                $or: [
+                    { lastUsedAt: { $gte: thisMonth } },
+                    {
+                        lastUsedAt: { $exists: false },
+                        createdAt: { $gte: thisMonth }
+                    }
+                ]
+            })
+                .sort({ lastUsedAt: -1, createdAt: -1 })
+                .exec();
+            return recentSessions;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            throw error;
+        }
+    }
+    async markExpiredSessions(inactiveDays = 7) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+            const result = await this.sessionAuditModel.updateMany({
+                lastUsedAt: { $lt: cutoffDate },
+                status: { $in: [sessions_schema_1.SessionStatus.CREATED, sessions_schema_1.SessionStatus.ACTIVE] },
+                isActive: true
+            }, {
+                $set: {
+                    status: sessions_schema_1.SessionStatus.EXPIRED,
+                    isActive: false,
+                    revokedAt: new Date(),
+                    revocationReason: 'auto_expired_due_to_inactivity'
+                }
+            });
+            this.logger.logOperation('system', `Marked ${result.modifiedCount} sessions as expired`);
+            return { modifiedCount: result.modifiedCount };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to mark expired sessions', error);
+            throw error;
+        }
+    }
+};
+exports.SessionAuditService = SessionAuditService;
+exports.SessionAuditService = SessionAuditService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(sessions_schema_1.SessionAudit.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model])
+], SessionAuditService);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.controller.ts":
+/*!**************************************************************!*\
+  !*** ./src/components/session-manager/session.controller.ts ***!
+  \**************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionController = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const session_service_1 = __webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const swagger_2 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class CreateSessionDto {
+}
+exports.CreateSessionDto = CreateSessionDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number with country code (optional if session provided)',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSessionDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Existing session string to use',
+        example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts...'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSessionDto.prototype, "session", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Force creation of new session even if active session exists',
+        default: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateSessionDto.prototype, "forceNew", void 0);
+class SearchAuditDto {
+}
+exports.SearchAuditDto = SearchAuditDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number to search for',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchAuditDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Session status to filter by',
+        enum: ['created', 'active', 'expired', 'revoked', 'failed']
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchAuditDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Number of records to return',
+        default: 10,
+        minimum: 1
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], SearchAuditDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Number of records to skip',
+        default: 0,
+        minimum: 0
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], SearchAuditDto.prototype, "offset", void 0);
+let SessionController = class SessionController {
+    constructor(sessionService) {
+        this.sessionService = sessionService;
+    }
+    async createSession(body) {
+        try {
+            if (!body.mobile && !body.session) {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Either mobile number or session string is required'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            if (!body.forceNew && body.mobile) {
+                const validSessionResult = await this.sessionService.findValidSessionThisMonth(body.mobile);
+                if (validSessionResult.success && validSessionResult.session) {
+                    await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    return {
+                        success: true,
+                        message: 'Valid session found from this month',
+                        session: validSessionResult.session.sessionString,
+                        isNew: false
+                    };
+                }
+                else {
+                    console.log('No valid session found from this month');
+                }
+            }
+            const options = {
+                mobile: body.mobile,
+                oldSession: body.session
+            };
+            const result = await this.sessionService.createSession(options);
+            if (result.success) {
+                return {
+                    success: true,
+                    message: 'Session created successfully',
+                    session: result.session,
+                    isNew: true
+                };
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.error,
+                    retryable: result.retryable
+                }, result.retryable ? common_1.HttpStatus.TOO_MANY_REQUESTS : common_1.HttpStatus.BAD_REQUEST);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.HttpException({
+                success: false,
+                message: error.message || 'Failed to create/retrieve session'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async searchAudit(mobile, status, limit, offset) {
+        try {
+            const options = {
+                limit: limit ? Number(limit) : 10,
+                offset: offset ? Number(offset) : 0
+            };
+            let result;
+            if (mobile) {
+                result = await this.sessionService.getSessionAuditHistory(mobile, {
+                    ...options,
+                    status: status
+                });
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Mobile number is required for search'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            if (result.success) {
+                return {
+                    success: true,
+                    data: result.data,
+                    total: result.total,
+                    message: `Retrieved ${result.data?.length || 0} audit records`
+                };
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.error || 'Failed to retrieve audit records'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.HttpException({
+                success: false,
+                message: error.message || 'Failed to search audit records'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+};
+exports.SessionController = SessionController;
+__decorate([
+    (0, common_1.Post)('create'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Master session creation endpoint',
+        description: 'Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.'
+    }),
+    (0, swagger_1.ApiBody)({ type: CreateSessionDto }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Session created or retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Session created successfully' },
+                session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
+                isNew: { type: 'boolean', example: true }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Bad request - validation failed or session creation failed'
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [CreateSessionDto]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "createSession", null);
+__decorate([
+    (0, common_1.Get)('audit/search'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Search existing audit sessions',
+        description: 'Search and retrieve session audit records based on various criteria'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, type: String, description: 'Phone number to search for' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, enum: ['created', 'active', 'expired', 'revoked', 'failed'], description: 'Filter by session status' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of records to return (default: 10)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Number of records to skip (default: 0)' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Audit records retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            mobile: { type: 'string', example: '916265240911' },
+                            sessionString: { type: 'string', example: '1BQANOTEuM==...' },
+                            status: { type: 'string', example: 'active' },
+                            creationMethod: { type: 'string', example: 'old_session' },
+                            createdAt: { type: 'string', example: '2023-12-01T10:00:00Z' },
+                            lastUsedAt: { type: 'string', example: '2023-12-01T15:30:00Z' },
+                            usageCount: { type: 'number', example: 5 }
+                        }
+                    }
+                },
+                total: { type: 'number', example: 25 },
+                message: { type: 'string', example: 'Audit records retrieved successfully' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Query)('mobile')),
+    __param(1, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('offset')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "searchAudit", null);
+exports.SessionController = SessionController = __decorate([
+    (0, swagger_1.ApiTags)('Telegram Session Management'),
+    (0, common_1.Controller)('telegram/session'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    __metadata("design:paramtypes", [session_service_1.SessionService])
+], SessionController);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.module.ts":
+/*!**********************************************************!*\
+  !*** ./src/components/session-manager/session.module.ts ***!
+  \**********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const session_controller_1 = __webpack_require__(/*! ./session.controller */ "./src/components/session-manager/session.controller.ts");
+const session_service_1 = __webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts");
+const session_audit_service_1 = __webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+let SessionModule = class SessionModule {
+};
+exports.SessionModule = SessionModule;
+exports.SessionModule = SessionModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: sessions_schema_1.SessionAudit.name, schema: sessions_schema_1.SessionAuditSchema }
+            ])
+        ],
+        controllers: [session_controller_1.SessionController],
+        providers: [session_service_1.SessionService, session_audit_service_1.SessionAuditService],
+        exports: [session_service_1.SessionService, session_audit_service_1.SessionAuditService]
+    })
+], SessionModule);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.service.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/session-manager/session.service.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionService = exports.SessionManager = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+const sessions_1 = __webpack_require__(/*! telegram/sessions */ "telegram/sessions");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const client_registry_1 = __webpack_require__(/*! ./client-registry */ "./src/components/session-manager/client-registry.ts");
+const session_audit_service_1 = __webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+class SessionManager {
+    constructor() {
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.clientRegistry = client_registry_1.ClientRegistry.getInstance();
+        this.DEFAULT_PASSWORD = "Ajtdmwajt1@";
+        this.DEFAULT_MAX_RETRIES = 3;
+        this.DEFAULT_RETRY_DELAY = 5000;
+        this.OTP_WAIT_TIME = 120000;
+        this.OTP_CHECK_INTERVAL = 3000;
+    }
+    static getInstance() {
+        if (!SessionManager.instance) {
+            SessionManager.instance = new SessionManager();
+        }
+        return SessionManager.instance;
+    }
+    async createSession(options) {
+        const { mobile, oldSession, password = this.DEFAULT_PASSWORD } = options;
+        this.logger.logOperation(mobile, 'Starting session creation process with priority order');
+        const existingCheck = this.checkExistingSession(mobile);
+        if (!existingCheck.canProceed) {
+            return existingCheck.result;
+        }
+        const strategies = this.getCreationStrategies(options);
+        this.logger.logOperation(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
+        for (const strategy of strategies) {
+            try {
+                this.logger.logOperation(mobile, `Attempting strategy: ${strategy.strategyName}`);
+                const result = await strategy();
+                if (result.success) {
+                    this.logger.logOperation(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
+                    return result;
+                }
+                this.logger.logOperation(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
+            }
+            catch (error) {
+                this.logger.logError(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
+            }
+        }
+        return { success: false, error: 'All SessionManager strategies failed', retryable: false };
+    }
+    checkExistingSession(mobile) {
+        if (this.clientRegistry.hasClient(mobile)) {
+            const clientInfo = this.clientRegistry.getClientInfo(mobile);
+            if (clientInfo?.isCreating) {
+                return {
+                    canProceed: false,
+                    result: { success: false, error: 'Session creation already in progress', retryable: true }
+                };
+            }
+            return {
+                canProceed: false,
+                result: { success: false, error: 'Active session exists. Use cleanup first.', retryable: false }
+            };
+        }
+        return { canProceed: true };
+    }
+    getCreationStrategies(options) {
+        const strategies = [];
+        if (options.oldSession) {
+            const strategyFunction = () => this.createFromOldSession(options);
+            strategyFunction.strategyName = 'oldSession';
+            strategies.push(strategyFunction);
+        }
+        if (options.mobile) {
+            const strategyFunction = () => this.createFromExistingManager(options.mobile);
+            strategyFunction.strategyName = 'existingManager';
+            strategies.push(strategyFunction);
+        }
+        return strategies;
+    }
+    async createFromOldSession(options) {
+        const { oldSession, mobile, password, maxRetries = this.DEFAULT_MAX_RETRIES, retryDelay = this.DEFAULT_RETRY_DELAY } = options;
+        const validation = await this.validateSession(oldSession, mobile);
+        if (!validation.isValid) {
+            return { success: false, error: `Session validation failed: ${validation.error}`, retryable: false };
+        }
+        const lockId = await this.clientRegistry.waitForLock(mobile);
+        try {
+            this.clientRegistry.markClientCreating(mobile, lockId);
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const newSession = await this.performSessionCreation(oldSession, mobile, password, attempt);
+                    return { success: true, session: newSession };
+                }
+                catch (error) {
+                    const errorMessage = error.message || error.toString();
+                    const isRetryable = this.isRetryableError(errorMessage);
+                    if (!isRetryable || attempt === maxRetries) {
+                        return { success: false, error: errorMessage, retryable: isRetryable };
+                    }
+                    if (attempt < maxRetries) {
+                        await (0, utils_1.sleep)(retryDelay);
+                    }
+                }
+            }
+            return { success: false, error: 'Max retries exceeded', retryable: false };
+        }
+        finally {
+            if (lockId) {
+                await this.clientRegistry.removeClient(mobile, lockId);
+                this.clientRegistry.releaseLock(mobile, lockId);
+            }
+        }
+    }
+    async createFromExistingManager(mobile) {
+        try {
+            const client = await connection_manager_1.connectionManager.getClient(mobile);
+            const newSession = await client.createNewSession();
+            return { success: true, session: newSession };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Existing manager method failed',
+                retryable: this.isRetryableError(error.message)
+            };
+        }
+    }
+    async validateSession(sessionString, mobile) {
+        let tempClient = null;
+        try {
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            await tempClient.connect();
+            const userInfo = await tempClient.getMe();
+            if (!userInfo || userInfo.phone !== mobile) {
+                return { isValid: false, error: 'Phone number mismatch or invalid user info' };
+            }
+            return { isValid: true, userInfo };
+        }
+        catch (error) {
+            return { isValid: false, error: error.message || error.toString() || error.errorMessage };
+        }
+        finally {
+            await this.cleanupClient(tempClient, mobile);
+        }
+    }
+    async performSessionCreation(oldSessionString, mobile, password, attempt) {
+        let oldClient = null;
+        let newClient = null;
+        try {
+            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            await oldClient.connect();
+            await oldClient.getMe();
+            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            await newClient.start({
+                phoneNumber: mobile,
+                password: async () => password,
+                phoneCode: async () => this.waitForOtp(oldClient, mobile, attempt),
+                onError: (err) => {
+                    throw new Error(`Session start error: ${err.message || err}`);
+                }
+            });
+            return newClient.session.save();
+        }
+        finally {
+            await Promise.all([
+                this.cleanupClient(newClient, mobile),
+                this.cleanupClient(oldClient, mobile)
+            ]);
+        }
+    }
+    async waitForOtp(oldClient, mobile, attempt) {
+        const startTime = Date.now();
+        this.logger.logOperation(mobile, `Waiting for OTP (attempt ${attempt})`);
+        while (Date.now() - startTime < this.OTP_WAIT_TIME) {
+            try {
+                const messages = await oldClient.getMessages('777000', { limit: 1 });
+                const message = messages[0];
+                if (message && message.date && (message.date * 1000) > (Date.now() - 120000)) {
+                    const code = this.extractOtpCode(message.text.toLowerCase());
+                    if (code) {
+                        this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                        return code;
+                    }
+                }
+                await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
+            }
+            catch (error) {
+                this.logger.logError(mobile, 'Error checking OTP messages', error);
+                await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
+            }
+        }
+        throw new Error(`OTP timeout after ${this.OTP_WAIT_TIME}ms`);
+    }
+    extractOtpCode(messageText) {
+        const patterns = [
+            /code:\*\*(\d{5,6})/,
+            /login code:\s*(\d{5,6})/,
+            /your code is\s*(\d{5,6})/,
+            /verification code:\s*(\d{5,6})/,
+            /\b(\d{5,6})\b/
+        ];
+        for (const pattern of patterns) {
+            const match = messageText.match(pattern);
+            if (match)
+                return match[1];
+        }
+        return null;
+    }
+    async cleanupClient(client, mobile) {
+        if (!client)
+            return;
+        try {
+            await client.destroy();
+            client._eventBuilders = [];
+            await (0, utils_1.sleep)(1000);
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Client cleanup error', error);
+        }
+        finally {
+            client._destroyed = true;
+            if (client._sender && typeof client._sender.disconnect === 'function') {
+                await client._sender.disconnect().catch(() => { });
+            }
+        }
+    }
+    isRetryableError(errorMessage) {
+        const nonRetryableErrors = [
+            'user_deactivated_ban', 'auth_key_unregistered', 'session_revoked',
+            'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
+            'session_password_needed'
+        ];
+        const retryableErrors = [
+            'timeout', 'network_error', 'connection_error', 'flood_wait', 'internal_server_error'
+        ];
+        const lowerErrorMessage = errorMessage.toLowerCase();
+        if (nonRetryableErrors.some(error => lowerErrorMessage.includes(error))) {
+            return false;
+        }
+        if (retryableErrors.some(error => lowerErrorMessage.includes(error))) {
+            return true;
+        }
+        return true;
+    }
+    getSessionStatus(mobile) {
+        const clientInfo = this.clientRegistry.getClientInfo(mobile);
+        if (!clientInfo) {
+            return { status: 'inactive', activeClients: 0 };
+        }
+        return {
+            status: clientInfo.isCreating ? 'creating' : 'active',
+            activeClients: 1,
+            lastActivity: clientInfo.lastActivity
+        };
+    }
+    async cleanupSessions(mobile, force = false) {
+        try {
+            const clientInfo = this.clientRegistry.getClientInfo(mobile);
+            if (!clientInfo) {
+                return { success: true, cleanedCount: 0 };
+            }
+            if (clientInfo.isCreating && !force) {
+                return {
+                    success: false,
+                    cleanedCount: 0,
+                    error: 'Session creation in progress. Use force=true to cleanup anyway.'
+                };
+            }
+            const cleanedCount = await this.clientRegistry.forceCleanup(mobile);
+            return { success: true, cleanedCount };
+        }
+        catch (error) {
+            return {
+                success: false,
+                cleanedCount: 0,
+                error: error.message || 'Cleanup failed'
+            };
+        }
+    }
+    getRegistryStats() {
+        return this.clientRegistry.getStats();
+    }
+}
+exports.SessionManager = SessionManager;
+SessionManager.instance = null;
+let SessionService = class SessionService {
+    constructor(sessionAuditService) {
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.sessionManager = SessionManager.getInstance();
+        this.rateLimitMap = new Map();
+        this.MAX_SESSIONS_PER_HOUR = 3;
+        this.RATE_LIMIT_WINDOW = 3600000;
+        this.sessionAuditService = sessionAuditService;
+    }
+    checkRateLimit(mobile) {
+        const now = Date.now();
+        const rateLimit = this.rateLimitMap.get(mobile);
+        if (!rateLimit || now > rateLimit.resetTime) {
+            this.rateLimitMap.set(mobile, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
+            return { allowed: true };
+        }
+        if (rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: rateLimit.resetTime };
+        }
+        rateLimit.count++;
+        return { allowed: true };
+    }
+    async extractMobileFromSession(sessionString) {
+        let tempClient = null;
+        try {
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            await tempClient.connect();
+            const userInfo = await tempClient.getMe();
+            if (!userInfo || !userInfo.phone) {
+                return { error: 'Unable to extract phone number from session' };
+            }
+            return { mobile: userInfo.phone };
+        }
+        catch (error) {
+            return { error: error.message || error.toString() };
+        }
+        finally {
+            if (tempClient) {
+                try {
+                    await tempClient.destroy();
+                    tempClient._eventBuilders = [];
+                    await (0, utils_1.sleep)(1000);
+                }
+                catch (cleanupError) {
+                }
+                finally {
+                    tempClient._destroyed = true;
+                    if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                        await tempClient._sender.disconnect().catch(() => { });
+                    }
+                }
+            }
+        }
+    }
+    async createSession(options) {
+        let mobile = options.mobile;
+        if (!mobile && options.oldSession) {
+            const extractResult = await this.extractMobileFromSession(options.oldSession);
+            if (extractResult.error) {
+                return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+            }
+            mobile = extractResult.mobile;
+            options.mobile = mobile;
+        }
+        this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
+        if (!mobile) {
+            return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
+        }
+        const rateLimitCheck = this.checkRateLimit(mobile);
+        if (!rateLimitCheck.allowed) {
+            const resetTime = new Date(rateLimitCheck.resetTime || 0);
+            return {
+                success: false,
+                error: `Rate limit exceeded. Try again after ${resetTime.toISOString()}`,
+                retryable: true
+            };
+        }
+        try {
+            if (options.oldSession) {
+                this.logger.logOperation(mobile, 'Trying with provided old session (Priority 1)');
+                const result = await this.sessionManager.createSession(options);
+                if (result.success && result.session) {
+                    await this.updateAuditOnSuccess(mobile, result.session, sessions_schema_1.SessionCreationMethod.INPUT_SESSION);
+                    return result;
+                }
+                else {
+                    this.logger.logOperation(mobile, `Old session failed: ${result.error}`);
+                }
+            }
+            this.logger.logOperation(mobile, 'Trying with existing manager (Priority 2)');
+            const managerResult = await this.sessionManager.createSession({
+                ...options,
+                oldSession: undefined
+            });
+            if (managerResult.success && managerResult.session) {
+                await this.updateAuditOnSuccess(mobile, managerResult.session, sessions_schema_1.SessionCreationMethod.USER_MOBILE);
+                return managerResult;
+            }
+            else {
+                this.logger.logOperation(mobile, `Existing manager failed: ${managerResult.error}`);
+            }
+            this.logger.logOperation(mobile, 'Trying with audit sessions (Priority 3)');
+            const auditResult = await this.tryAuditSessions(mobile, options);
+            if (auditResult.success) {
+                await this.updateAuditOnSuccess(mobile, auditResult.session, sessions_schema_1.SessionCreationMethod.OLD_SESSION);
+                return auditResult;
+            }
+            else {
+                this.logger.logOperation(mobile, `Audit sessions failed: ${auditResult.error}`);
+            }
+            const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
+            (0, utils_1.parseError)(finalError);
+            return {
+                success: false,
+                error: finalError,
+                retryable: false
+            };
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error);
+            return {
+                success: false,
+                error: error.message || 'Unexpected error',
+                retryable: false
+            };
+        }
+    }
+    async tryAuditSessions(mobile, options) {
+        try {
+            const auditSessions = await this.sessionAuditService.getSessionsFormobile(mobile, true);
+            if (!auditSessions || auditSessions.length === 0) {
+                return { success: false, error: 'No audit sessions found', retryable: false };
+            }
+            for (let i = 0; i < Math.min(auditSessions.length, 2); i++) {
+                const auditSession = auditSessions[i];
+                try {
+                    const result = await this.sessionManager.createSession({
+                        ...options,
+                        oldSession: auditSession.sessionString,
+                        maxRetries: 1
+                    });
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                catch (error) {
+                    this.logger.logError(mobile, `Audit session ${i + 1} failed`, error);
+                }
+            }
+            return { success: false, error: 'All audit sessions failed', retryable: false };
+        }
+        catch (error) {
+            return { success: false, error: 'Failed to process audit sessions', retryable: false };
+        }
+    }
+    async updateAuditOnSuccess(mobile, sessionString, creationMethod) {
+        try {
+            await this.sessionAuditService.createAuditRecord({
+                mobile,
+                sessionString,
+                creationMethod,
+                creationMessage: 'Session created successfully'
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to create new audit record on success', error);
+        }
+    }
+    async getSessionAuditHistory(mobile, options) {
+        try {
+            const result = await this.sessionAuditService.querySessionAudits({
+                mobile,
+                limit: options?.limit,
+                offset: options?.offset,
+                status: options?.status
+            });
+            return { success: true, data: result.sessions, total: result.total };
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to get audit history' };
+        }
+    }
+    async getActiveSession(mobile) {
+        try {
+            const activeSession = await this.sessionAuditService.getLatestActiveSession(mobile);
+            return { success: true, session: activeSession || undefined };
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to get active session' };
+        }
+    }
+    async updateSessionLastUsed(mobile, sessionString) {
+        try {
+            const result = await this.sessionAuditService.markSessionUsed(mobile, sessionString);
+            if (result) {
+                this.logger.logOperation(mobile, 'Session last used timestamp updated');
+                return { success: true };
+            }
+            else {
+                return { success: false, error: 'No active session found to update' };
+            }
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to update session last used timestamp' };
+        }
+    }
+    async findValidSessionThisMonth(mobile) {
+        try {
+            const recentSessions = await this.sessionAuditService.findValidSessionThisMonth(mobile);
+            this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
+            for (const session of recentSessions) {
+                const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);
+                if (isActive.isValid) {
+                    return { success: true, session };
+                }
+                else {
+                    this.logger.logDebug(mobile, `Session found from this month but not valid: ${session}`);
+                    this.sessionAuditService.revokeSession(session.mobile, session.sessionString, isActive.error);
+                }
+            }
+            this.logger.logDebug(mobile, 'No valid session found from this month');
+            return { success: false, error: 'No valid session found from this month' };
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            return { success: false, error: error.message || 'Failed to find valid session from this month' };
+        }
+    }
+};
+exports.SessionService = SessionService;
+exports.SessionService = SessionService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [session_audit_service_1.SessionAuditService])
+], SessionService);
 
 
 /***/ }),

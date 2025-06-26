@@ -64,14 +64,16 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
+const session_manager_1 = require("../session-manager");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
+    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, npointSerive) {
         this.clientModel = clientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
+        this.sessionService = sessionService;
         this.npointSerive = npointSerive;
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
@@ -210,10 +212,23 @@ let ClientService = ClientService_1 = class ClientService {
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
         console.log("Updated Client: ", updatedUser);
-        setTimeout(async () => {
-            const newSession = await this.telegramService.createNewSession(updatedUser.mobile);
-            await this.archivedClientService.create({ mobile: updatedUser.mobile, session: newSession });
-        }, 60000);
+        if (previousUser &&
+            (previousUser.mobile !== updatedUser.mobile || previousUser.session !== updatedUser.session)) {
+            setTimeout(async () => {
+                await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+            }, 60000);
+        }
+        if (previousUser &&
+            Array.isArray(updatedUser.promoteMobile) &&
+            Array.isArray(previousUser.promoteMobile)) {
+            const prevSet = new Set(previousUser.promoteMobile);
+            const newPromoteMobiles = updatedUser.promoteMobile.filter(mobile => !prevSet.has(mobile));
+            for (const mobile of newPromoteMobiles) {
+                setTimeout(async () => {
+                    await this.sessionService.createSession({ mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+                }, 60000);
+            }
+        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -484,11 +499,13 @@ exports.ClientService = ClientService = ClientService_1 = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
         archived_client_service_1.ArchivedClientService,
+        session_manager_1.SessionService,
         npoint_service_1.NpointService])
 ], ClientService);
 //# sourceMappingURL=client.service.js.map
