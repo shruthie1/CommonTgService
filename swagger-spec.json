@@ -4833,37 +4833,66 @@
     },
     "/archived-clients": {
       "post": {
+        "description": "Creates a new archived client record with session information. Used when a Telegram client becomes inactive but needs to be preserved for potential future reactivation.",
         "operationId": "ArchivedClientController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
+          "description": "Archived client data including mobile number and session token",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateClientDto"
+                "$ref": "#/components/schemas/CreateArchivedClientDto"
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "Archived client successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data provided"
+          },
+          "500": {
+            "description": "Internal server error occurred"
           }
         },
-        "summary": "Create user data",
+        "summary": "Create new archived client",
         "tags": [
           "Archived Clients"
         ]
       },
       "get": {
+        "description": "Retrieves a complete list of all archived clients in the system. Use with caution on large datasets.",
         "operationId": "ArchivedClientController_findAll",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Complete list of all archived clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArchivedClient"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database error occurred"
           }
         },
-        "summary": "Get all user data",
+        "summary": "Get all archived clients",
         "tags": [
           "Archived Clients"
         ]
@@ -4871,13 +4900,14 @@
     },
     "/archived-clients/search": {
       "get": {
+        "description": "Search for archived clients using various filter criteria. Supports partial matching for names and exact matching for other fields.",
         "operationId": "ArchivedClientController_search",
         "parameters": [
           {
             "name": "clientId",
             "required": false,
             "in": "query",
-            "description": "Client ID",
+            "description": "Unique client identifier",
             "schema": {
               "type": "string"
             }
@@ -4886,7 +4916,7 @@
             "name": "dbcoll",
             "required": false,
             "in": "query",
-            "description": "Database collection name",
+            "description": "Database collection name for filtering",
             "schema": {
               "type": "string"
             }
@@ -4895,7 +4925,7 @@
             "name": "channelLink",
             "required": false,
             "in": "query",
-            "description": "Channel link",
+            "description": "Associated channel link",
             "schema": {
               "type": "string"
             }
@@ -4904,7 +4934,7 @@
             "name": "link",
             "required": false,
             "in": "query",
-            "description": "Client link",
+            "description": "Client profile link",
             "schema": {
               "type": "string"
             }
@@ -5019,29 +5049,61 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "firstName",
+            "required": false,
+            "in": "query",
+            "description": "First name (supports partial matching)",
+            "schema": {}
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "List of archived clients matching search criteria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArchivedClient"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid search parameters"
           }
         },
-        "summary": "Search user data",
+        "summary": "Search archived clients",
         "tags": [
           "Archived Clients"
         ]
       }
     },
-    "/archived-clients/checkArchivedClients": {
+    "/archived-clients/maintenance/check-archived-clients": {
       "get": {
+        "description": "Performs comprehensive maintenance on all archived clients including session validation, profile updates, and cleanup of inactive sessions. This is a long-running operation that should be used during maintenance windows.",
         "operationId": "ArchivedClientController_checkArchivedClients",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Maintenance check completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "example": "Archived clients check completed. Processed: 150, Updated: 23, Deleted: 5, Errors: 2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Maintenance operation failed"
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Run archived clients maintenance check",
         "tags": [
           "Archived Clients"
         ]
@@ -5049,41 +5111,58 @@
     },
     "/archived-clients/{mobile}": {
       "get": {
+        "description": "Retrieves a specific archived client using their mobile number. Returns null if not found.",
         "operationId": "ArchivedClientController_findOne",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "Mobile number of the archived client",
             "schema": {
+              "example": "916265240911",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Archived client found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Archived client not found"
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Get archived client by mobile number",
         "tags": [
           "Archived Clients"
         ]
       },
       "patch": {
+        "description": "Updates an existing archived client record. Uses upsert operation - creates if not exists.",
         "operationId": "ArchivedClientController_update",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "Mobile number of the archived client",
             "schema": {
+              "example": "916265240911",
               "type": "string"
             }
           }
         ],
         "requestBody": {
           "required": true,
+          "description": "Fields to update (partial update supported)",
           "content": {
             "application/json": {
               "schema": {
@@ -5094,56 +5173,95 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Archived client updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid update data"
           }
         },
-        "summary": "Update user data by ID",
+        "summary": "Update archived client",
         "tags": [
           "Archived Clients"
         ]
       },
       "delete": {
+        "description": "Permanently removes an archived client record from the system.",
         "operationId": "ArchivedClientController_remove",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "Mobile number of the archived client to delete",
             "schema": {
+              "example": "916265240911",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Archived client deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Archived client not found"
           }
         },
-        "summary": "Delete user data by ID",
+        "summary": "Delete archived client",
         "tags": [
           "Archived Clients"
         ]
       }
     },
-    "/archived-clients/fetchOne/{mobile}": {
+    "/archived-clients/fetch/{mobile}": {
       "get": {
+        "description": "Retrieves an archived client by mobile number. If not found, creates a new session and archived client record automatically.",
         "operationId": "ArchivedClientController_fetchOne",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "Mobile number of the client",
             "schema": {
+              "example": "916265240911",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Archived client retrieved or created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Could not create session for the mobile number"
+          },
+          "500": {
+            "description": "Session creation failed"
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Fetch or create archived client",
         "tags": [
           "Archived Clients"
         ]
@@ -5151,24 +5269,346 @@
     },
     "/archived-clients/query": {
       "post": {
+        "description": "Executes a custom MongoDB query against the archived clients collection. Use with caution as this provides direct database access.",
         "operationId": "ArchivedClientController_executeQuery",
         "parameters": [],
         "requestBody": {
           "required": true,
+          "description": "MongoDB query object",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Object"
+                "type": "object",
+                "example": {
+                  "mobile": "916265240911"
+                }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "Query executed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArchivedClient"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query provided"
+          },
+          "500": {
+            "description": "Query execution failed"
           }
         },
-        "summary": "Execute a custom MongoDB query",
+        "summary": "Execute custom MongoDB query",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/{mobile}/session": {
+      "put": {
+        "description": "Updates the main session for an archived client. If the current session is still active, it will be backed up to oldSessions array before being replaced.",
+        "operationId": "ArchivedClientController_updateSession",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the archived client",
+            "schema": {
+              "example": "916265240911",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "New session data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session token provided"
+          },
+          "404": {
+            "description": "Archived client not found"
+          }
+        },
+        "summary": "Update session with backup",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/{mobile}/old-sessions": {
+      "get": {
+        "description": "Retrieves all old session tokens stored for an archived client. These are previous sessions that were backed up when new sessions were set.",
+        "operationId": "ArchivedClientController_getOldSessions",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the archived client",
+            "schema": {
+              "example": "916265240911",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of old session tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Session token"
+                  },
+                  "example": [
+                    "1BQANOTEuM==",
+                    "2CRANOTEuN==",
+                    "3DRANOTEuO=="
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mobile number is required"
+          },
+          "404": {
+            "description": "Archived client not found"
+          }
+        },
+        "summary": "Get old sessions for client",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/{mobile}/cleanup-sessions": {
+      "post": {
+        "description": "Removes inactive old sessions and limits the number of stored old sessions. Only keeps the most recent active sessions up to the specified limit.",
+        "operationId": "ArchivedClientController_cleanupOldSessions",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the archived client",
+            "schema": {
+              "example": "916265240911",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Cleanup configuration",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupSessionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session cleanup completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedClient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid maxSessions value"
+          },
+          "404": {
+            "description": "Archived client not found"
+          }
+        },
+        "summary": "Clean up old sessions",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/{mobile}/session-status": {
+      "get": {
+        "description": "Checks if the current session for an archived client is active. This is useful for verifying session health before performing operations.",
+        "operationId": "ArchivedClientController_checkSessionStatus",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the archived client",
+            "schema": {
+              "example": "916265240911",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session status information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatusDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Archived client not found"
+          }
+        },
+        "summary": "Check session status",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/batch-fetch": {
+      "post": {
+        "description": "Efficiently retrieves or creates active sessions for multiple mobile numbers in a single request. Useful for bulk operations.",
+        "operationId": "ArchivedClientController_batchFetchSessions",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Array of mobile numbers to process",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mobiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "example": [
+                      "916265240911",
+                      "916265240912",
+                      "916265240913"
+                    ]
+                  }
+                },
+                "required": [
+                  "mobiles"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch processing results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "mobile": {
+                        "type": "string"
+                      },
+                      "client": {
+                        "$ref": "#/components/schemas/ArchivedClient"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid batch request or too many mobiles"
+          }
+        },
+        "summary": "Batch fetch sessions for multiple mobiles",
+        "tags": [
+          "Archived Clients"
+        ]
+      }
+    },
+    "/archived-clients/health/cache-stats": {
+      "get": {
+        "description": "Returns statistics about the internal session validation cache for monitoring and debugging purposes.",
+        "operationId": "ArchivedClientController_getCacheStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Cache statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalEntries": {
+                      "type": "number",
+                      "example": 150
+                    },
+                    "validEntries": {
+                      "type": "number",
+                      "example": 120
+                    },
+                    "expiredEntries": {
+                      "type": "number",
+                      "example": 30
+                    },
+                    "cacheHitRate": {
+                      "type": "string",
+                      "example": "85%"
+                    },
+                    "lastCleanup": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get session validation cache statistics",
         "tags": [
           "Archived Clients"
         ]
@@ -5680,6 +6120,177 @@
         "summary": "Execute a custom MongoDB query",
         "tags": [
           "Promote Clients"
+        ]
+      }
+    },
+    "/telegram/session/create": {
+      "post": {
+        "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
+        "operationId": "SessionController_createSession",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created or retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Session created successfully"
+                    },
+                    "session": {
+                      "type": "string",
+                      "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
+                    },
+                    "isNew": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - validation failed or session creation failed"
+          }
+        },
+        "summary": "Master session creation endpoint",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
+    "/telegram/session/audit/search": {
+      "get": {
+        "description": "Search and retrieve session audit records based on various criteria",
+        "operationId": "SessionController_searchAudit",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Phone number to search for",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter by session status",
+            "schema": {
+              "enum": [
+                "created",
+                "active",
+                "expired",
+                "revoked",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to return (default: 10)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to skip (default: 0)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit records retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "mobile": {
+                            "type": "string",
+                            "example": "916265240911"
+                          },
+                          "sessionString": {
+                            "type": "string",
+                            "example": "1BQANOTEuM==..."
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "active"
+                          },
+                          "creationMethod": {
+                            "type": "string",
+                            "example": "old_session"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2023-12-01T10:00:00Z"
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "example": "2023-12-01T15:30:00Z"
+                          },
+                          "usageCount": {
+                            "type": "number",
+                            "example": 5
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "number",
+                      "example": 25
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Audit records retrieved successfully"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search existing audit sessions",
+        "tags": [
+          "Telegram Session Management"
         ]
       }
     },
@@ -8917,6 +9528,189 @@
           }
         }
       },
+      "CreateArchivedClientDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "+916265240911",
+            "description": "Phone number of the user"
+          },
+          "session": {
+            "type": "string",
+            "example": "1BQANOTEuMTA4LjUg==",
+            "description": "Current session token"
+          },
+          "oldSessions": {
+            "example": [
+              "1BQANOTEuM==",
+              "2CRANOTEuN=="
+            ],
+            "description": "Array of old session tokens",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "mobile",
+          "session"
+        ]
+      },
+      "ArchivedClient": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number of the archived user"
+          },
+          "session": {
+            "type": "string",
+            "example": "1BQANOTEuM==",
+            "description": "Current session token of the archived user"
+          },
+          "oldSessions": {
+            "example": [
+              "1BQANOTEuM==",
+              "2CRANOTEuN=="
+            ],
+            "description": "Array of old session tokens",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastUpdated": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time the session was updated"
+          },
+          "lastCleanup": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time sessions were cleaned up"
+          },
+          "sessionHistory": {
+            "description": "Session history for auditing purposes",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "mobile",
+          "session",
+          "oldSessions",
+          "lastUpdated",
+          "lastCleanup",
+          "sessionHistory"
+        ]
+      },
+      "SessionUpdateDto": {
+        "type": "object",
+        "properties": {
+          "newSession": {
+            "type": "string",
+            "example": "1BQANOTEuMTA4LjUg==",
+            "description": "New session token to set as primary session"
+          }
+        },
+        "required": [
+          "newSession"
+        ]
+      },
+      "CleanupSessionsDto": {
+        "type": "object",
+        "properties": {
+          "maxSessions": {
+            "type": "number",
+            "example": 5,
+            "description": "Maximum number of old sessions to keep",
+            "minimum": 0,
+            "maximum": 20,
+            "default": 5
+          }
+        }
+      },
+      "SessionHealthMetricsDto": {
+        "type": "object",
+        "properties": {
+          "activeOldSessions": {
+            "type": "number",
+            "example": 2,
+            "description": "Number of active old sessions available as backup"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "example": "2024-01-15T08:30:00.000Z",
+            "description": "Timestamp when the session was last updated"
+          },
+          "sessionAge": {
+            "type": "string",
+            "example": "2 hours ago",
+            "description": "Human-readable session age"
+          },
+          "reliability": {
+            "type": "string",
+            "example": "high",
+            "description": "Session reliability rating based on availability",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        },
+        "required": [
+          "activeOldSessions",
+          "lastUpdated",
+          "sessionAge",
+          "reliability"
+        ]
+      },
+      "SessionStatusDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number of the archived client"
+          },
+          "isMainSessionActive": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether the main session is currently active"
+          },
+          "totalOldSessions": {
+            "type": "number",
+            "example": 3,
+            "description": "Total number of old sessions stored"
+          },
+          "lastChecked": {
+            "type": "string",
+            "example": "2024-01-15T10:30:00.000Z",
+            "description": "Timestamp when the status was last checked"
+          },
+          "healthMetrics": {
+            "description": "Detailed health metrics for the session",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SessionHealthMetricsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mobile",
+          "isMainSessionActive",
+          "totalOldSessions",
+          "lastChecked",
+          "healthMetrics"
+        ]
+      },
       "CreatePromoteClientDto": {
         "type": "object",
         "properties": {
@@ -8981,6 +9775,26 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
+          }
+        }
+      },
+      "CreateSessionDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "description": "Phone number with country code (optional if session provided)",
+            "example": "+1234567890"
+          },
+          "session": {
+            "type": "string",
+            "description": "Existing session string to use",
+            "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts..."
+          },
+          "forceNew": {
+            "type": "boolean",
+            "description": "Force creation of new session even if active session exists",
+            "default": false
           }
         }
       },

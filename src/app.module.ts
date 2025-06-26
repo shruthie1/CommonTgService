@@ -23,6 +23,7 @@ import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { MemoryCleanerService } from './memory-cleanup.service';
+import { SessionModule } from './components/session-manager';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MemoryCleanerService } from './memory-cleanup.service';
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,
+    SessionModule,
     UserDataModule,
     UsersModule,
     BufferClientModule,

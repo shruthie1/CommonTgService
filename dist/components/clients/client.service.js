@@ -210,6 +210,10 @@ let ClientService = ClientService_1 = class ClientService {
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
         console.log("Updated Client: ", updatedUser);
+        setTimeout(async () => {
+            const newSession = await this.telegramService.createNewSession(updatedUser.mobile);
+            await this.archivedClientService.create({ mobile: updatedUser.mobile, session: newSession });
+        }, 60000);
         return updatedUser;
     }
     async remove(clientId) {
@@ -338,7 +342,6 @@ let ClientService = ClientService_1 = class ClientService {
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
-                            await this.archivedClientService.remove(existingClientUser.mobile);
                         }
                         else {
                             console.log('Not Deleting user');

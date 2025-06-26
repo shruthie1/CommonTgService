@@ -17,11 +17,11 @@ import * as path from 'path';
 import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
-import axios from 'axios';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import { SessionService } from '../session-manager';
 
 let settingupClient = Date.now() - 250000;
 @Injectable()
@@ -38,6 +38,8 @@ export class ClientService {
         private usersService: UsersService,
         @Inject(forwardRef(() => ArchivedClientService))
         private archivedClientService: ArchivedClientService,
+        @Inject(forwardRef(() => SessionService))
+        private sessionService: SessionService,
         private npointSerive: NpointService
     ) {
         setInterval(async () => {
@@ -188,6 +190,30 @@ export class ClientService {
         await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps")
         console.log("Updated Client: ", updatedUser);
+        // Only trigger session creation if mobile or session has changed
+        if (
+            previousUser &&
+            (previousUser.mobile !== updatedUser.mobile || previousUser.session !== updatedUser.session)
+        ) {
+            setTimeout(async () => {
+                await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+            }, 60000);
+        }
+
+        // If promoteMobile field is updated, create sessions for new promoteMobile numbers
+        if (
+            previousUser &&
+            Array.isArray(updatedUser.promoteMobile) &&
+            Array.isArray(previousUser.promoteMobile)
+        ) {
+            const prevSet = new Set(previousUser.promoteMobile);
+            const newPromoteMobiles = updatedUser.promoteMobile.filter(mobile => !prevSet.has(mobile));
+            for (const mobile of newPromoteMobiles) {
+                setTimeout(async () => {
+                    await this.sessionService.createSession({ mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+                }, 60000);
+            }
+        }
         return updatedUser;
     }
 
@@ -323,7 +349,6 @@ export class ClientService {
                         if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
-                            await this.archivedClientService.remove(existingClientUser.mobile);
                         } else {
                             console.log('Not Deleting user');
                         }

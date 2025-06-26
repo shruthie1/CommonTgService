@@ -251,7 +251,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         if (error.errorMessage === "SESSION_REVOKED" ||
                             error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
                             error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
+                            error.errorMessage === "USER_DEACTIVATED_BAN" ||
+                            error.errorMessage === "FROZEN_METHOD_INVALID") {
                             this.logger.error(`Session invalid for ${mobile}, removing client`);
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);

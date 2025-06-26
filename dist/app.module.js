@@ -32,6 +32,7 @@ const npoint_module_1 = require("./components/n-point/npoint.module");
 const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const memory_cleanup_service_1 = require("./memory-cleanup.service");
+const session_manager_1 = require("./components/session-manager");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -45,6 +46,7 @@ exports.AppModule = AppModule = __decorate([
             Telegram_module_1.TelegramModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
+            session_manager_1.SessionModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,

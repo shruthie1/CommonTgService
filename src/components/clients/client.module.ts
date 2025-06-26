@@ -10,6 +10,7 @@ import { ArchivedClientModule } from '../archived-clients/archived-client.module
 import { InitModule } from '../ConfigurationInit/init.module';
 import { NpointModule } from '../n-point/npoint.module';
 import { TimestampModule } from '../timestamps/timestamp.module';
+import { SessionModule } from '../session-manager';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TimestampModule } from '../timestamps/timestamp.module';
     forwardRef(() => BufferClientModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ArchivedClientModule),
+    forwardRef(() => SessionModule),
     forwardRef(() => TimestampModule),
     NpointModule
   ],
@@ -26,4 +28,4 @@ import { TimestampModule } from '../timestamps/timestamp.module';
   providers: [ClientService],
   exports: [ClientService]
 })
-export class ClientModule { }
+export class ClientModule {}

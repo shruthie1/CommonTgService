@@ -168,7 +168,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             if (error.message === "SESSION_REVOKED" ||
                                 error.message === "AUTH_KEY_UNREGISTERED" ||
                                 error.message === "USER_DEACTIVATED" ||
-                                error.message === "USER_DEACTIVATED_BAN") {
+                                error.message === "USER_DEACTIVATED_BAN" ||
+                                error.message === "FROZEN_METHOD_INVALID") {
                                 this.logger.warn(`${document.mobile}: Session invalid, removing client`);
                                 await this.remove(document.mobile);
                             }

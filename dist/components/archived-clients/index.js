@@ -17,4 +17,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./archived-client.controller"), exports);
 __exportStar(require("./archived-client.module"), exports);
 __exportStar(require("./archived-client.service"), exports);
+__exportStar(require("./schemas/archived-client.schema"), exports);
+__exportStar(require("./dto/create-archived-client.dto"), exports);
+__exportStar(require("./dto/session-update.dto"), exports);
+__exportStar(require("./dto/cleanup-sessions.dto"), exports);
+__exportStar(require("./dto/maintenance-result.dto"), exports);
+__exportStar(require("./dto/session-status.dto"), exports);
 //# sourceMappingURL=index.js.map
