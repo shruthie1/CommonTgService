@@ -151,7 +151,7 @@ export class PromoteClientService {
                 const clients = await this.promoteClientModel.find({
                     channels: { "$lt": 300 },
                     mobile: { $nin: existingkeys }
-                }).sort({ channels: 1 }).limit(4);
+                }).sort({ channels: 1 }).limit(8);
 
                 this.logger.debug(`Found ${clients.length} clients to process`);
 
