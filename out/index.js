@@ -18907,12 +18907,14 @@ class SessionManager {
             return { success: true, session: newSession };
         }
         catch (error) {
-            connection_manager_1.connectionManager.unregisterClient(mobile);
             return {
                 success: false,
                 error: error.message || 'Existing manager method failed',
                 retryable: this.isRetryableError(error.message)
             };
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }
     async validateSession(sessionString, mobile) {
