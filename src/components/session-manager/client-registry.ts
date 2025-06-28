@@ -220,11 +220,13 @@ export class ClientRegistry {
                     } catch (cleanupError) {
                         this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
                     } finally {
-                        tempClient._destroyed = true;
-                        if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
-                            await tempClient._sender.disconnect();
+                        if (tempClient) {
+                            tempClient._destroyed = true;
+                            if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                                await tempClient._sender.disconnect();
+                            }
+                            tempClient = null;
                         }
-                        tempClient = null;
                     }
                 } this.logger.logOperation(mobile, 'Client disconnected during removal');
             } catch (error) {

@@ -1,7 +1,7 @@
 import { Api, TelegramClient } from "telegram";
 import { sleep } from "telegram/Helpers";
 
-export async function getUserFromSession(session: string, mobile: string):  Promise<Api.User> {
+export async function getUserFromSession(session: string, mobile: string): Promise<Api.User> {
     if (!session) {
         throw new Error('Session is required');
     }
@@ -50,11 +50,13 @@ export async function getUserFromSession(session: string, mobile: string):  Prom
             } catch (cleanupError) {
                 this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
             } finally {
-                tempClient._destroyed = true;
-                if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
-                    await tempClient._sender.disconnect();
+                if (tempClient) {
+                    tempClient._destroyed = true;
+                    if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                        await tempClient._sender.disconnect();
+                    }
+                    tempClient = null;
                 }
-                tempClient = null;
             }
         }
     }
