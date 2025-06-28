@@ -18930,13 +18930,16 @@ class SessionManager {
             if (!userInfo || userInfo.phone !== mobile) {
                 return { isValid: false, error: 'Phone number mismatch or invalid user info' };
             }
+            this.logger.logOperation(mobile, 'Session validation successful');
+            await this.cleanupClient(tempClient, mobile);
             return { isValid: true, userInfo };
         }
         catch (error) {
+            this.logger.logError(mobile, 'Session validation failed', error);
+            await this.cleanupClient(tempClient, mobile);
             return { isValid: false, error: error.message || error.toString() || error.errorMessage };
         }
         finally {
-            await this.cleanupClient(tempClient, mobile);
         }
     }
     async performSessionCreation(oldSessionString, mobile, password, attempt) {
@@ -19020,6 +19023,7 @@ class SessionManager {
                 if (client._sender && typeof client._sender.disconnect === 'function') {
                     await client._sender.disconnect().catch(() => { });
                 }
+                this.logger.logOperation(mobile, 'Client destroyed completed');
             }
         }
     }
