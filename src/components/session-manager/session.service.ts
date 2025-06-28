@@ -323,10 +323,10 @@ export class SessionManager {
      */
     private async cleanupClient(client: TelegramClient | null, mobile: string): Promise<void> {
         if (!client) return;
-
         try {
             await client.destroy();
             client._eventBuilders = [];
+            connectionManager.unregisterClient(mobile);
             await sleep(1000);
         } catch (error) {
             this.logger.logError(mobile, 'Client cleanup error', error);
