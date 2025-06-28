@@ -22,6 +22,7 @@ __exportStar(require("./channels"), exports);
 __exportStar(require("./clients"), exports);
 __exportStar(require("./ConfigurationInit"), exports);
 __exportStar(require("./n-point"), exports);
+__exportStar(require("./session-manager"), exports);
 __exportStar(require("./stats"), exports);
 __exportStar(require("./stats2"), exports);
 __exportStar(require("./promote-stats"), exports);
