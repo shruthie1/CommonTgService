@@ -315,11 +315,13 @@ class TelegramManager {
                 (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
             }
             finally {
-                this.client._destroyed = true;
-                if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
-                    await this.client._sender.disconnect();
+                if (this.client) {
+                    this.client._destroyed = true;
+                    if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
+                        await this.client._sender.disconnect();
+                    }
+                    this.client = null;
                 }
-                this.client = null;
             }
         }
     }

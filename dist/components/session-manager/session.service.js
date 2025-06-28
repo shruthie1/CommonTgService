@@ -235,9 +235,11 @@ class SessionManager {
             this.logger.logError(mobile, 'Client cleanup error', error);
         }
         finally {
-            client._destroyed = true;
-            if (client._sender && typeof client._sender.disconnect === 'function') {
-                await client._sender.disconnect().catch(() => { });
+            if (client) {
+                client._destroyed = true;
+                if (client._sender && typeof client._sender.disconnect === 'function') {
+                    await client._sender.disconnect().catch(() => { });
+                }
             }
         }
     }
@@ -346,9 +348,11 @@ let SessionService = class SessionService {
                 catch (cleanupError) {
                 }
                 finally {
-                    tempClient._destroyed = true;
-                    if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
-                        await tempClient._sender.disconnect().catch(() => { });
+                    if (tempClient) {
+                        tempClient._destroyed = true;
+                        if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                            await tempClient._sender.disconnect().catch(() => { });
+                        }
                     }
                 }
             }

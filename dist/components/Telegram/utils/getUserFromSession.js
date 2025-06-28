@@ -52,11 +52,13 @@ async function getUserFromSession(session, mobile) {
                 this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
             }
             finally {
-                tempClient._destroyed = true;
-                if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
-                    await tempClient._sender.disconnect();
+                if (tempClient) {
+                    tempClient._destroyed = true;
+                    if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                        await tempClient._sender.disconnect();
+                    }
+                    tempClient = null;
                 }
-                tempClient = null;
             }
         }
     }
