@@ -18,7 +18,7 @@ async function overwriteFile(branch) {
 
     const url = `https://uptimechecker2.glitch.me/builds`;
     const bodyData = {};
-    bodyData[`cts`] = `https://res.cloudinary.com/${process.env.CL_NAME}/raw/upload/v${result.version}/${result.public_id}`
+    bodyData[`cts-${branch}`] = `https://res.cloudinary.com/${process.env.CL_NAME}/raw/upload/v${result.version}/${result.public_id}`
 
     const resp = await fetch(url, {
       method: 'PATCH',

@@ -28,6 +28,12 @@
     "node_modules",
     "dist",
     "test",
-    "**/*spec.ts"
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "coverage",
+    "*.config.js",
+    "*.config.ts",
+    "webpack*.js",
+    "upload-build.js"
   ]
 }
