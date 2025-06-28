@@ -181,6 +181,7 @@ export class SessionManager {
             const newSession = await client.createNewSession();
             return { success: true, session: newSession };
         } catch (error) {
+            connectionManager.unregisterClient(mobile);
             return {
                 success: false,
                 error: error.message || 'Existing manager method failed',
