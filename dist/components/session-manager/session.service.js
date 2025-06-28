@@ -225,6 +225,7 @@ class SessionManager {
         try {
             await client.destroy();
             client._eventBuilders = [];
+            connection_manager_1.connectionManager.unregisterClient(mobile);
             await (0, utils_1.sleep)(1000);
         }
         catch (error) {
