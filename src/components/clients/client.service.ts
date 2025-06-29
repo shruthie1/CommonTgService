@@ -44,6 +44,7 @@ export class ClientService {
     ) {
         setInterval(async () => {
             await this.refreshMap();
+            await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
 
