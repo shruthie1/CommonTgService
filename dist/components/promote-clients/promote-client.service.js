@@ -482,7 +482,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (error) {
-                        (0, parseError_1.parseError)(error);
+                        (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
                     }
