@@ -1122,8 +1122,8 @@ class TelegramManager {
                     }
                     else {
                         if (increment >= 6) {
-                            const randomChars = Math.random().toString(36).substring(2, 6);
-                            username = baseUsername + randomChars;
+                            const randomNums = Math.floor(Math.random() * 90 + 10);
+                            username = baseUsername + randomNums;
                         }
                         else {
                             username = baseUsername + increment;
