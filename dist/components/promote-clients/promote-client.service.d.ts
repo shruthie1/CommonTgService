@@ -1,4 +1,5 @@
 import { ChannelsService } from '../channels/channels.service';
+import { OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { PromoteClient, PromoteClientDocument } from './schemas/promote-client.schema';
@@ -8,7 +9,7 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
-export declare class PromoteClientService {
+export declare class PromoteClientService implements OnModuleDestroy {
     private promoteClientModel;
     private telegramService;
     private usersService;
@@ -24,6 +25,8 @@ export declare class PromoteClientService {
     private isLeaveChannelProcessing;
     private isJoinChannelProcessing;
     private readonly JOIN_CHANNEL_INTERVAL;
+    private readonly LEAVE_CHANNEL_INTERVAL;
+    private readonly LEAVE_CHANNEL_BATCH_SIZE;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(): Promise<PromoteClient[]>;
@@ -45,4 +48,5 @@ export declare class PromoteClientService {
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[]): Promise<void>;
+    onModuleDestroy(): Promise<void>;
 }
