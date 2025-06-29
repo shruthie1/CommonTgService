@@ -528,7 +528,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         await this.telegramService.removeOtherAuths(document.mobile);
                         await sleep(2000);
                     } catch (error) {
-                        parseError(error);
+                        parseError(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
                         badIds.push(document.mobile);
                         this.remove(document.mobile);
                     } finally {
