@@ -80,6 +80,7 @@ let ClientService = ClientService_1 = class ClientService {
         this.lastUpdateMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
+            await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
     async checkNpoint() {
