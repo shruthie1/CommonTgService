@@ -519,14 +519,7 @@ let SessionService = class SessionService {
             const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
             this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
             for (const session of recentSessions) {
-                const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);
-                if (isActive.isValid) {
-                    return { success: true, session };
-                }
-                else {
-                    this.logger.logDebug(mobile, `Session found from this month but not valid: ${session}`);
-                    this.sessionAuditService.revokeSession(session.mobile, session.sessionString, isActive.error);
-                }
+                return { success: true, session };
             }
             this.logger.logDebug(mobile, 'No valid session found from this month');
             return { success: false, error: 'No valid session found from this month' };
