@@ -88,7 +88,7 @@ export declare class SessionService {
         success: boolean;
         error?: string;
     }>;
-    findValidSessionThisMonth(mobile: string): Promise<{
+    findRecentValidSession(mobile: string): Promise<{
         success: boolean;
         session?: SessionAudit;
         error?: string;

@@ -18422,21 +18422,21 @@ let SessionAuditService = class SessionAuditService {
             throw error;
         }
     }
-    async findValidSessionThisMonth(mobile) {
+    async findRecentSessions(mobile) {
         try {
-            const thisMonth = new Date();
-            thisMonth.setDate(1);
-            thisMonth.setHours(0, 0, 0, 0);
+            const tenDaysAgo = new Date();
+            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+            tenDaysAgo.setHours(0, 0, 0, 0);
             const recentSessions = await this.sessionAuditModel
                 .find({
                 mobile,
                 isActive: true,
                 status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
                 $or: [
-                    { lastUsedAt: { $gte: thisMonth } },
+                    { lastUsedAt: { $gte: tenDaysAgo } },
                     {
                         lastUsedAt: { $exists: false },
-                        createdAt: { $gte: thisMonth }
+                        createdAt: { $gte: tenDaysAgo }
                     }
                 ]
             })
@@ -18445,7 +18445,7 @@ let SessionAuditService = class SessionAuditService {
             return recentSessions;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            this.logger.logError(mobile, 'Failed to find valid session from last 10 days', error);
             throw error;
         }
     }
@@ -18596,7 +18596,7 @@ let SessionController = class SessionController {
                 }, common_1.HttpStatus.BAD_REQUEST);
             }
             if (!body.forceNew && body.mobile) {
-                const validSessionResult = await this.sessionService.findValidSessionThisMonth(body.mobile);
+                const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
                     await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
                     return {
@@ -19333,9 +19333,9 @@ let SessionService = class SessionService {
             return { success: false, error: error.message || 'Failed to update session last used timestamp' };
         }
     }
-    async findValidSessionThisMonth(mobile) {
+    async findRecentValidSession(mobile) {
         try {
-            const recentSessions = await this.sessionAuditService.findValidSessionThisMonth(mobile);
+            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
             this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
             for (const session of recentSessions) {
                 const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);

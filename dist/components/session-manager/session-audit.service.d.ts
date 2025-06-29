@@ -22,7 +22,7 @@ export declare class SessionAuditService {
     cleanupOldSessions(days?: number): Promise<{
         deletedCount: number;
     }>;
-    findValidSessionThisMonth(mobile: string): Promise<SessionAudit[]>;
+    findRecentSessions(mobile: string): Promise<SessionAudit[]>;
     markExpiredSessions(inactiveDays?: number): Promise<{
         modifiedCount: number;
     }>;

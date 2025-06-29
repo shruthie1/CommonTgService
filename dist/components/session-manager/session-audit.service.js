@@ -272,21 +272,21 @@ let SessionAuditService = class SessionAuditService {
             throw error;
         }
     }
-    async findValidSessionThisMonth(mobile) {
+    async findRecentSessions(mobile) {
         try {
-            const thisMonth = new Date();
-            thisMonth.setDate(1);
-            thisMonth.setHours(0, 0, 0, 0);
+            const tenDaysAgo = new Date();
+            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+            tenDaysAgo.setHours(0, 0, 0, 0);
             const recentSessions = await this.sessionAuditModel
                 .find({
                 mobile,
                 isActive: true,
                 status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
                 $or: [
-                    { lastUsedAt: { $gte: thisMonth } },
+                    { lastUsedAt: { $gte: tenDaysAgo } },
                     {
                         lastUsedAt: { $exists: false },
-                        createdAt: { $gte: thisMonth }
+                        createdAt: { $gte: tenDaysAgo }
                     }
                 ]
             })
@@ -295,7 +295,7 @@ let SessionAuditService = class SessionAuditService {
             return recentSessions;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            this.logger.logError(mobile, 'Failed to find valid session from last 10 days', error);
             throw error;
         }
     }

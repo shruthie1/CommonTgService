@@ -514,9 +514,9 @@ let SessionService = class SessionService {
             return { success: false, error: error.message || 'Failed to update session last used timestamp' };
         }
     }
-    async findValidSessionThisMonth(mobile) {
+    async findRecentValidSession(mobile) {
         try {
-            const recentSessions = await this.sessionAuditService.findValidSessionThisMonth(mobile);
+            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
             this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
             for (const session of recentSessions) {
                 const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);

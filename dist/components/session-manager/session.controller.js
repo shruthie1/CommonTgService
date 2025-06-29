@@ -104,7 +104,7 @@ let SessionController = class SessionController {
                 }, common_1.HttpStatus.BAD_REQUEST);
             }
             if (!body.forceNew && body.mobile) {
-                const validSessionResult = await this.sessionService.findValidSessionThisMonth(body.mobile);
+                const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
                     await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
                     return {
