@@ -1270,10 +1270,10 @@ class TelegramManager {
                         newUserName = username
                         break;
                     } else {
-                        // Use random characters for last 4 attempts (6, 7, 8, 9)
+                        // Use only 2 numbers, no alphabets, for last 4 attempts (6, 7, 8, 9)
                         if (increment >= 6) {
-                            const randomChars = Math.random().toString(36).substring(2, 6);
-                            username = baseUsername + randomChars;
+                            const randomNums = Math.floor(Math.random() * 90 + 10); // 2 digit number
+                            username = baseUsername + randomNums;
                         } else {
                             username = baseUsername + increment;
                         }
