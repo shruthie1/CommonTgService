@@ -684,9 +684,9 @@ export class SessionService {
         }
     }
 
-    async findValidSessionThisMonth(mobile: string): Promise<{ success: boolean; session?: SessionAudit; error?: string }> {
+    async findRecentValidSession(mobile: string): Promise<{ success: boolean; session?: SessionAudit; error?: string }> {
         try {
-            const recentSessions = await this.sessionAuditService.findValidSessionThisMonth(mobile);
+            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
             this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
             for (const session of recentSessions) {
                 const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);
