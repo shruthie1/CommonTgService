@@ -14272,12 +14272,13 @@ let ClientService = ClientService_1 = class ClientService {
             delete updateClientDto._doc['_id'];
         }
         const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}\nOld Mobile: ${previousUser?.mobile}\nOld Session: ${previousUser?.session}\n\nNew Mobile: ${updateClientDto.mobile}\nNew Session: ${updateClientDto.session}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
         console.log("Previous Client Values:", previousUser);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).lean().exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        await this.checkNpoint();
         this.clientsMap.set(clientId, updatedUser);
         console.log("Updated Client Values:", updatedUser);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
@@ -14386,7 +14387,7 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
-                await this.updateClient(clientId);
+                await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
             try {
                 if (existingClientUser) {
@@ -14450,7 +14451,8 @@ let ClientService = ClientService_1 = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
         }
     }
-    async updateClient(clientId) {
+    async updateClient(clientId, message = '') {
+        console.log(`Updating Client: ${clientId} - ${message}`);
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
@@ -14492,6 +14494,8 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
@@ -14504,7 +14508,7 @@ let ClientService = ClientService_1 = class ClientService {
     async updateClients() {
         const clients = await this.findAll();
         for (const client of Object.values(clients)) {
-            await this.updateClient(client.clientId);
+            await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
         }
     }
     async generateNewSession(phoneNumber, attempt = 1) {
@@ -16920,55 +16924,65 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let goodIds = [];
             const badIds = [];
             if (promoteclients.length < 80) {
-                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 4; i++) {
+                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 10; i++) {
                     badIds.push(i.toString());
                 }
             }
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => client.promoteMobile)].filter(Boolean);
-            const bufferClientIds = bufferClients.map(client => client.mobile);
-            const today = (new Date(Date.now())).toISOString().split('T')[0];
-            for (const document of promoteclients) {
-                if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
-                    try {
-                        const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
-                        const me = await cli.getMe();
-                        if (me.username) {
-                            await this.telegramService.updateUsername(document.mobile, '');
+            const clientIds = [...clients.map(c => c.mobile), ...clients.flatMap(c => c.promoteMobile)].filter(Boolean);
+            const bufferClientIds = bufferClients.map(c => c.mobile);
+            const today = new Date().toISOString().split('T')[0];
+            const chunkArray = (arr, size) => {
+                const chunks = [];
+                for (let i = 0; i < arr.length; i += size) {
+                    chunks.push(arr.slice(i, i + size));
+                }
+                return chunks;
+            };
+            const chunks = chunkArray(promoteclients, 4);
+            for (const batch of chunks) {
+                await Promise.all(batch.map(async (document) => {
+                    if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
+                        try {
+                            const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
+                            const me = await cli.getMe();
+                            if (me.username) {
+                                await this.telegramService.updateUsername(document.mobile, '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            if (me.firstName !== "Deleted Account") {
+                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            await this.telegramService.deleteProfilePhotos(document.mobile);
+                            const hasPassword = await cli.hasPassword();
+                            if (!hasPassword && badIds.length < 4) {
+                                console.log("Client does not have password");
+                                badIds.push(document.mobile);
+                            }
+                            else {
+                                console.log(document.mobile, " :  ALL Good");
+                                goodIds.push(document.mobile);
+                            }
+                            await this.telegramService.removeOtherAuths(document.mobile);
                             await (0, Helpers_1.sleep)(2000);
                         }
-                        if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        await this.telegramService.deleteProfilePhotos(document.mobile);
-                        const hasPassword = await cli.hasPassword();
-                        if (!hasPassword && badIds.length < 4) {
-                            console.log("Client does not have password");
+                        catch (error) {
+                            (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
                             badIds.push(document.mobile);
+                            await this.remove(document.mobile);
                         }
-                        else {
-                            console.log(document.mobile, " :  ALL Good");
-                            goodIds.push(document.mobile);
+                        finally {
+                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                         }
-                        await this.telegramService.removeOtherAuths(document.mobile);
-                        await (0, Helpers_1.sleep)(2000);
                     }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
-                        badIds.push(document.mobile);
-                        this.remove(document.mobile);
+                    else {
+                        console.log("Number is an Active Client");
+                        goodIds.push(document.mobile);
+                        await this.remove(document.mobile);
                     }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                    }
-                }
-                else {
-                    console.log("Number is a Active Client");
-                    goodIds.push(document.mobile);
-                    this.remove(document.mobile);
-                }
+                }));
             }
             goodIds = [...new Set([...goodIds, ...clientIds, ...bufferClientIds])];
             this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
