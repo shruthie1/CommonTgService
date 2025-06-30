@@ -28,8 +28,9 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
+const session_manager_1 = require("../session-manager");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -37,6 +38,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -558,6 +560,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         this.logger.debug("=============Created BufferClient=============");
@@ -601,12 +604,14 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        promote_client_service_1.PromoteClientService])
+        promote_client_service_1.PromoteClientService,
+        session_manager_1.SessionService])
 ], BufferClientService);
 //# sourceMappingURL=buffer-client.service.js.map

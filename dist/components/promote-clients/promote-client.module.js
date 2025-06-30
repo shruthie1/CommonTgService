@@ -19,6 +19,7 @@ const client_module_1 = require("../clients/client.module");
 const init_module_1 = require("../ConfigurationInit/init.module");
 const channels_module_1 = require("../channels/channels.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
+const session_manager_1 = require("../session-manager");
 let PromoteClientModule = class PromoteClientModule {
 };
 exports.PromoteClientModule = PromoteClientModule;
@@ -33,6 +34,7 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
         providers: [promote_client_service_1.PromoteClientService],
