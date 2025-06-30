@@ -386,6 +386,8 @@ export class ClientService {
             const telegramClient = await connectionManager.getClient(client.mobile, { handler: false });
             await sleep(2000)
             const me = await telegramClient.getMe();
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             if (!me.username || me.username !== client.username || !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const client = await this.findOne(clientId);
                 const firstName = (client.name).split(' ')[0];
@@ -405,7 +407,6 @@ export class ClientService {
             await sleep(1000)
             await telegramClient.updatePrivacy();
             await sleep(1000)
-            const rootPath = process.cwd();
             console.log(rootPath, "trying to update dp");
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await sleep(1000);
