@@ -448,7 +448,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let goodIds = [];
             const badIds = [];
             if (promoteclients.length < 80) {
-                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 4; i++) {
+                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 10; i++) {
                     badIds.push(i.toString());
                 }
             }

@@ -201,12 +201,13 @@ let ClientService = ClientService_1 = class ClientService {
             delete updateClientDto._doc['_id'];
         }
         const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}\nOld Mobile: ${previousUser?.mobile}\nOld Session: ${previousUser?.session}\n\nNew Mobile: ${updateClientDto.mobile}\nNew Session: ${updateClientDto.session}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
         console.log("Previous Client Values:", previousUser);
         const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).lean().exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        await this.checkNpoint();
         this.clientsMap.set(clientId, updatedUser);
         console.log("Updated Client Values:", updatedUser);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
@@ -315,7 +316,7 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
-                await this.updateClient(clientId);
+                await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
             try {
                 if (existingClientUser) {
@@ -379,7 +380,8 @@ let ClientService = ClientService_1 = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
         }
     }
-    async updateClient(clientId) {
+    async updateClient(clientId, message = '') {
+        console.log(`Updating Client: ${clientId} - ${message}`);
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
@@ -421,6 +423,8 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
@@ -433,7 +437,7 @@ let ClientService = ClientService_1 = class ClientService {
     async updateClients() {
         const clients = await this.findAll();
         for (const client of Object.values(clients)) {
-            await this.updateClient(client.clientId);
+            await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
         }
     }
     async generateNewSession(phoneNumber, attempt = 1) {
