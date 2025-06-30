@@ -173,9 +173,8 @@ export class ClientService {
         }
 
         const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
-        await fetchWithTimeout(`${notifbot()}&text=Updating the Existing client: ${clientId}\nOld Mobile: ${previousUser?.mobile}\nOld Session: ${previousUser?.session}\n\nNew Mobile: ${updateClientDto.mobile}\nNew Session: ${updateClientDto.session}`);
+        await fetchWithTimeout(`${notifbot()}&text=Updating the Existing client: ${clientId}`);
         console.log("Previous Client Values:", previousUser);
-
         const updatedUser = await this.clientModel.findOneAndUpdate(
             { clientId },
             { $set: updateClientDto },
@@ -185,6 +184,7 @@ export class ClientService {
         if (!updatedUser) {
             throw new NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        await this.checkNpoint();
         this.clientsMap.set(clientId, updatedUser);
         console.log("Updated Client Values:", updatedUser);
         await fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`);
@@ -308,7 +308,7 @@ export class ClientService {
             await fetchWithTimeout(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
-                await this.updateClient(clientId);
+                await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
 
             try {
@@ -369,7 +369,8 @@ export class ClientService {
         }
     }
 
-    async updateClient(clientId: string) {
+    async updateClient(clientId: string, message: string = '') {
+        console.log(`Updating Client: ${clientId} - ${message}`);
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
@@ -412,6 +413,8 @@ export class ClientService {
             await sleep(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await sleep(1000);
+            await fetchWithTimeout(`${notifbot()}&text=Updated Client: ${clientId} - ${message}`);
+            await fetchWithTimeout(client.deployKey);
         } catch (error) {
             this.lastUpdateMap.delete(clientId);
             parseError(error)
@@ -423,7 +426,7 @@ export class ClientService {
     async updateClients() {
         const clients = await this.findAll();
         for (const client of Object.values(clients)) {
-            await this.updateClient(client.clientId)
+            await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
         }
     }
 
