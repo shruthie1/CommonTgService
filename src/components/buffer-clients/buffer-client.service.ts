@@ -19,6 +19,7 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import { SessionService } from '../session-manager';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -46,6 +47,8 @@ export class BufferClientService implements OnModuleDestroy {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,
+        @Inject(forwardRef(() => SessionService))
+        private sessionService: SessionService
     ) {}
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
@@ -622,7 +625,7 @@ export class BufferClientService implements OnModuleDestroy {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
-
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         this.logger.debug("=============Created BufferClient=============");

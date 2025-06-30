@@ -16,6 +16,7 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager'
+import { SessionService } from '../session-manager';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -41,6 +42,8 @@ export class PromoteClientService implements OnModuleDestroy {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
+        @Inject(forwardRef(() => SessionService))
+        private sessionService: SessionService,
     ) {}
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
@@ -596,6 +599,7 @@ export class PromoteClientService implements OnModuleDestroy {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         }
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(promoteClient);
                         await this.usersService.update(document.tgId, { twoFA: true })
                         console.log("=============Created PromoteClient=============")
