@@ -5614,6 +5614,177 @@
         ]
       }
     },
+    "/telegram/session/create": {
+      "post": {
+        "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
+        "operationId": "SessionController_createSession",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created or retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Session created successfully"
+                    },
+                    "session": {
+                      "type": "string",
+                      "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
+                    },
+                    "isNew": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - validation failed or session creation failed"
+          }
+        },
+        "summary": "Master session creation endpoint",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
+    "/telegram/session/audit/search": {
+      "get": {
+        "description": "Search and retrieve session audit records based on various criteria",
+        "operationId": "SessionController_searchAudit",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Phone number to search for",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter by session status",
+            "schema": {
+              "enum": [
+                "created",
+                "active",
+                "expired",
+                "revoked",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to return (default: 10)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to skip (default: 0)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit records retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "mobile": {
+                            "type": "string",
+                            "example": "916265240911"
+                          },
+                          "sessionString": {
+                            "type": "string",
+                            "example": "1BQANOTEuM==..."
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "active"
+                          },
+                          "creationMethod": {
+                            "type": "string",
+                            "example": "old_session"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2023-12-01T10:00:00Z"
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "example": "2023-12-01T15:30:00Z"
+                          },
+                          "usageCount": {
+                            "type": "number",
+                            "example": 5
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "number",
+                      "example": 25
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Audit records retrieved successfully"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search existing audit sessions",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
     "/timestamps": {
       "get": {
         "operationId": "TimestampController_findOne",
@@ -6120,177 +6291,6 @@
         "summary": "Execute a custom MongoDB query",
         "tags": [
           "Promote Clients"
-        ]
-      }
-    },
-    "/telegram/session/create": {
-      "post": {
-        "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
-        "operationId": "SessionController_createSession",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSessionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Session created or retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Session created successfully"
-                    },
-                    "session": {
-                      "type": "string",
-                      "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
-                    },
-                    "isNew": {
-                      "type": "boolean",
-                      "example": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request - validation failed or session creation failed"
-          }
-        },
-        "summary": "Master session creation endpoint",
-        "tags": [
-          "Telegram Session Management"
-        ]
-      }
-    },
-    "/telegram/session/audit/search": {
-      "get": {
-        "description": "Search and retrieve session audit records based on various criteria",
-        "operationId": "SessionController_searchAudit",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": false,
-            "in": "query",
-            "description": "Phone number to search for",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "description": "Filter by session status",
-            "schema": {
-              "enum": [
-                "created",
-                "active",
-                "expired",
-                "revoked",
-                "failed"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "Number of records to return (default: 10)",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "offset",
-            "required": false,
-            "in": "query",
-            "description": "Number of records to skip (default: 0)",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Audit records retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "mobile": {
-                            "type": "string",
-                            "example": "916265240911"
-                          },
-                          "sessionString": {
-                            "type": "string",
-                            "example": "1BQANOTEuM==..."
-                          },
-                          "status": {
-                            "type": "string",
-                            "example": "active"
-                          },
-                          "creationMethod": {
-                            "type": "string",
-                            "example": "old_session"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "example": "2023-12-01T10:00:00Z"
-                          },
-                          "lastUsedAt": {
-                            "type": "string",
-                            "example": "2023-12-01T15:30:00Z"
-                          },
-                          "usageCount": {
-                            "type": "number",
-                            "example": 5
-                          }
-                        }
-                      }
-                    },
-                    "total": {
-                      "type": "number",
-                      "example": 25
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Audit records retrieved successfully"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Search existing audit sessions",
-        "tags": [
-          "Telegram Session Management"
         ]
       }
     },
@@ -9711,6 +9711,26 @@
           "healthMetrics"
         ]
       },
+      "CreateSessionDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "description": "Phone number with country code (optional if session provided)",
+            "example": "+1234567890"
+          },
+          "session": {
+            "type": "string",
+            "description": "Existing session string to use",
+            "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts..."
+          },
+          "forceNew": {
+            "type": "boolean",
+            "description": "Force creation of new session even if active session exists",
+            "default": false
+          }
+        }
+      },
       "CreatePromoteClientDto": {
         "type": "object",
         "properties": {
@@ -9775,26 +9795,6 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
-          }
-        }
-      },
-      "CreateSessionDto": {
-        "type": "object",
-        "properties": {
-          "mobile": {
-            "type": "string",
-            "description": "Phone number with country code (optional if session provided)",
-            "example": "+1234567890"
-          },
-          "session": {
-            "type": "string",
-            "description": "Existing session string to use",
-            "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts..."
-          },
-          "forceNew": {
-            "type": "boolean",
-            "description": "Force creation of new session even if active session exists",
-            "default": false
           }
         }
       },

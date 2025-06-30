@@ -9,6 +9,7 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
+import { SessionService } from '../session-manager';
 export declare class BufferClientService implements OnModuleDestroy {
     private bufferClientModel;
     private telegramService;
@@ -17,6 +18,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private clientService;
     private channelsService;
     private promoteClientService;
+    private sessionService;
     private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
@@ -27,7 +29,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
-    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService);
+    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService);
     onModuleDestroy(): Promise<void>;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;
     findAll(): Promise<BufferClient[]>;

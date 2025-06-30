@@ -28,8 +28,9 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
+const session_manager_1 = require("../session-manager");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -37,6 +38,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -452,49 +454,59 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => client.promoteMobile)].filter(Boolean);
-            const bufferClientIds = bufferClients.map(client => client.mobile);
-            const today = (new Date(Date.now())).toISOString().split('T')[0];
-            for (const document of promoteclients) {
-                if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
-                    try {
-                        const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
-                        const me = await cli.getMe();
-                        if (me.username) {
-                            await this.telegramService.updateUsername(document.mobile, '');
+            const clientIds = [...clients.map(c => c.mobile), ...clients.flatMap(c => c.promoteMobile)].filter(Boolean);
+            const bufferClientIds = bufferClients.map(c => c.mobile);
+            const today = new Date().toISOString().split('T')[0];
+            const chunkArray = (arr, size) => {
+                const chunks = [];
+                for (let i = 0; i < arr.length; i += size) {
+                    chunks.push(arr.slice(i, i + size));
+                }
+                return chunks;
+            };
+            const chunks = chunkArray(promoteclients, 4);
+            for (const batch of chunks) {
+                await Promise.all(batch.map(async (document) => {
+                    if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
+                        try {
+                            const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
+                            const me = await cli.getMe();
+                            if (me.username) {
+                                await this.telegramService.updateUsername(document.mobile, '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            if (me.firstName !== "Deleted Account") {
+                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                                await (0, Helpers_1.sleep)(2000);
+                            }
+                            await this.telegramService.deleteProfilePhotos(document.mobile);
+                            const hasPassword = await cli.hasPassword();
+                            if (!hasPassword && badIds.length < 4) {
+                                console.log("Client does not have password");
+                                badIds.push(document.mobile);
+                            }
+                            else {
+                                console.log(document.mobile, " :  ALL Good");
+                                goodIds.push(document.mobile);
+                            }
+                            await this.telegramService.removeOtherAuths(document.mobile);
                             await (0, Helpers_1.sleep)(2000);
                         }
-                        if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        await this.telegramService.deleteProfilePhotos(document.mobile);
-                        const hasPassword = await cli.hasPassword();
-                        if (!hasPassword && badIds.length < 4) {
-                            console.log("Client does not have password");
+                        catch (error) {
+                            (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
                             badIds.push(document.mobile);
+                            await this.remove(document.mobile);
                         }
-                        else {
-                            console.log(document.mobile, " :  ALL Good");
-                            goodIds.push(document.mobile);
+                        finally {
+                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                         }
-                        await this.telegramService.removeOtherAuths(document.mobile);
-                        await (0, Helpers_1.sleep)(2000);
                     }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
-                        badIds.push(document.mobile);
-                        this.remove(document.mobile);
+                    else {
+                        console.log("Number is an Active Client");
+                        goodIds.push(document.mobile);
+                        await this.remove(document.mobile);
                     }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                    }
-                }
-                else {
-                    console.log("Number is a Active Client");
-                    goodIds.push(document.mobile);
-                    this.remove(document.mobile);
-                }
+                }));
             }
             goodIds = [...new Set([...goodIds, ...clientIds, ...bufferClientIds])];
             this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
@@ -546,6 +558,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(promoteClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         console.log("=============Created PromoteClient=============");
@@ -595,12 +608,14 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService])
+        buffer_client_service_1.BufferClientService,
+        session_manager_1.SessionService])
 ], PromoteClientService);
 //# sourceMappingURL=promote-client.service.js.map
