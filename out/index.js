@@ -12012,6 +12012,7 @@ const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./s
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -12025,7 +12026,8 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
-            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
@@ -12072,8 +12074,9 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -12081,6 +12084,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -12602,6 +12606,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         this.logger.debug("=============Created BufferClient=============");
@@ -12645,13 +12650,15 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        promote_client_service_1.PromoteClientService])
+        promote_client_service_1.PromoteClientService,
+        session_manager_1.SessionService])
 ], BufferClientService);
 
 
@@ -16431,6 +16438,7 @@ const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./s
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let PromoteClientModule = class PromoteClientModule {
 };
 exports.PromoteClientModule = PromoteClientModule;
@@ -16445,6 +16453,7 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
         providers: [promote_client_service_1.PromoteClientService],
@@ -16491,8 +16500,9 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -16500,6 +16510,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -17009,6 +17020,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
+                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(promoteClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         console.log("=============Created PromoteClient=============");
@@ -17058,13 +17070,15 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService])
+        buffer_client_service_1.BufferClientService,
+        session_manager_1.SessionService])
 ], PromoteClientService);
 
 
