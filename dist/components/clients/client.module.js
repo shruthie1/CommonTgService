@@ -31,7 +31,7 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
-            mongoose_1.MongooseModule.forFeature([{ name: 'PromoteClient', schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_clients_1.PromoteClient.name, schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),

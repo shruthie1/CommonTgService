@@ -14330,7 +14330,7 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
-            mongoose_1.MongooseModule.forFeature([{ name: 'PromoteClient', schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_clients_1.PromoteClient.name, schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
@@ -14424,6 +14424,7 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const ip_management_service_1 = __webpack_require__(/*! ../ip-management/ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const promote_client_schema_1 = __webpack_require__(/*! ../promote-clients/schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
@@ -15403,7 +15404,7 @@ exports.ClientService = ClientService;
 exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, mongoose_1.InjectModel)('PromoteClient')),
+    __param(1, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
@@ -18640,7 +18641,7 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ name: 'PromoteClient', schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_client_schema_1.PromoteClient.name, schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
@@ -18684,6 +18685,7 @@ const channels_service_1 = __webpack_require__(/*! ../channels/channels.service 
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
@@ -19418,7 +19420,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
 exports.PromoteClientService = PromoteClientService;
 exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('PromoteClient')),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),

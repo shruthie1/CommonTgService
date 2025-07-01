@@ -18,6 +18,7 @@ const channels_service_1 = require("../channels/channels.service");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
@@ -752,7 +753,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
 exports.PromoteClientService = PromoteClientService;
 exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('PromoteClient')),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
