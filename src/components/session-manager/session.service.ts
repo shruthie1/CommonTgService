@@ -38,17 +38,6 @@ export class SessionManager {
     private readonly OTP_CHECK_INTERVAL = 3000; // 3 seconds
 
     private constructor() {
-        // Validate required environment variables on initialization
-        this.validateEnvironmentVariables();
-    }
-
-    private validateEnvironmentVariables(): void {
-        if (!process.env.API_ID || isNaN(parseInt(process.env.API_ID))) {
-            throw new Error('API_ID environment variable is required and must be a valid number');
-        }
-        if (!process.env.API_HASH) {
-            throw new Error('API_HASH environment variable is required');
-        }
     }
 
     private getApiId(): number {
