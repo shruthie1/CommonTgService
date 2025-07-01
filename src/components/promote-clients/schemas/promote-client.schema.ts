@@ -26,6 +26,12 @@ export class PromoteClient {
 
   @Prop({ required: true, type: Number })
   channels: number;
+
+  @Prop({ required: true })
+  clientId: string;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);
+
+// Create index for better performance when querying by clientId
+PromoteClientSchema.index({ clientId: 1 });

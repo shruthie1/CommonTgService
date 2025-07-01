@@ -81,13 +81,12 @@ export class SearchClientDto {
     @IsString()
     product?: string;
 
-    @ApiPropertyOptional({ description: 'Promote mobile numbers of the client' })
-    @Transform(({ value }: TransformFnParams) => value?.map((v: string) => v?.trim()))
+    @ApiPropertyOptional({ description: 'Search by client ID that has promote mobiles assigned' })
+    @Transform(({ value }: TransformFnParams) => value?.trim().toLowerCase())
     @IsOptional()
-    @IsArray()
-    @ArrayNotEmpty({ message: 'Promote mobile numbers must not be empty if provided' })
-    @Matches(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' })
-    promoteMobile?: string[];
+    @IsString()
+    @Matches(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' })
+    hasPromoteMobiles?: string;
 
     @ApiPropertyOptional({ description: 'Paytm QR ID of the client' })
     @Transform(({ value }: TransformFnParams) => value?.trim())

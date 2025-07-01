@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {  IsNumber, IsString } from 'class-validator';
+import {  IsNumber, IsString, IsOptional } from 'class-validator';
 
 export class CreatePromoteClientDto {
   @ApiProperty({
@@ -37,4 +37,13 @@ export class CreatePromoteClientDto {
   })
   @IsNumber()
   readonly channels: number;
+
+  @ApiProperty({
+    description: 'Client ID this promote mobile belongs to',
+    example: 'client123',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  readonly clientId?: string;
 }

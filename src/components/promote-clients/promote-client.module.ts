@@ -15,7 +15,7 @@ import { SessionModule } from '../session-manager';
 @Module({
   imports: [
     InitModule,
-    MongooseModule.forFeature([{ name: 'promoteClientModule', schema: PromoteClientSchema, collection: 'promoteClients' }]),
+    MongooseModule.forFeature([{ name: 'PromoteClient', schema: PromoteClientSchema, collection: 'promoteClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ActiveChannelsModule),

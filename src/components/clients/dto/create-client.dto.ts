@@ -43,12 +43,18 @@ export class CreateClientDto {
     @ApiProperty({ example: 'booklet_10', description: 'Product associated with the user' })
     readonly product: string;
 
-    @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] })
-    readonly promoteMobile: string[];
-
     @ApiProperty({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user', required: false })
     readonly qrId: string;
 
     @ApiProperty({ example: 'myred1808@postbank', description: 'Google Pay ID of the user', required: false })
     readonly gpayId: string;
+
+    @ApiProperty({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client', required: false })
+    readonly dedicatedIps?: string[];
+
+    @ApiProperty({ example: 'US', description: 'Preferred country for IP assignment', required: false })
+    readonly preferredIpCountry?: string;
+
+    @ApiProperty({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false })
+    readonly autoAssignIps?: boolean;
 }

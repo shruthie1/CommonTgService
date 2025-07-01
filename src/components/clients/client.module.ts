@@ -11,21 +11,27 @@ import { InitModule } from '../ConfigurationInit/init.module';
 import { NpointModule } from '../n-point/npoint.module';
 import { TimestampModule } from '../timestamps/timestamp.module';
 import { SessionModule } from '../session-manager';
+import { IpManagementModule } from '../ip-management/ip-management.module';
+import { PromoteClientModule } from '../promote-clients/promote-client.module';
+import { PromoteClientSchema } from '../promote-clients';
 
 @Module({
   imports: [
     InitModule,
     MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
+    MongooseModule.forFeature([{ name: 'PromoteClient', schema: PromoteClientSchema, collection: 'promoteClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => BufferClientModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ArchivedClientModule),
     forwardRef(() => SessionModule),
     forwardRef(() => TimestampModule),
+    forwardRef(() => IpManagementModule),
+    forwardRef(() => PromoteClientModule),
     NpointModule
   ],
   controllers: [ClientController],
   providers: [ClientService],
-  exports: [ClientService]
+  exports: [ClientService, MongooseModule]
 })
 export class ClientModule {}

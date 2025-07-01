@@ -24,6 +24,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { MemoryCleanerService } from './memory-cleanup.service';
 import { SessionModule } from './components/session-manager';
+import { IpManagementModule } from './components/ip-management/ip-management.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SessionModule } from './components/session-manager';
     ActiveChannelsModule,
     ClientModule,
     SessionModule,
+    IpManagementModule,
     UserDataModule,
     UsersModule,
     BufferClientModule,

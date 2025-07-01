@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { PromoteClientService } from './promote-client.service';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
@@ -36,15 +36,48 @@ export class PromoteClientController {
   @Get('checkPromoteClients')
   @ApiOperation({ summary: 'Check Promote Clients' })
   async checkpromoteClients(): Promise<string> {
-    this.clientService.checkPromoteClients();
+    // Fire-and-forget pattern for long-running operations
+    this.clientService.checkPromoteClients().catch(error => {
+      console.error('Error in checkPromoteClients:', error);
+    });
     return "initiated Checking"
   }
 
   @Post('addNewUserstoPromoteClients')
   @ApiOperation({ summary: 'Add New Users to Promote Clients' })
-  @ApiBody({ type: Object })
-  async addNewUserstoPromoteClients(@Body() body: { goodIds: string[], badIds: string[] }): Promise<string> {
-    this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds);
+  @ApiBody({ 
+    schema: {
+      type: 'object',
+      properties: {
+        goodIds: { type: 'array', items: { type: 'string' } },
+        badIds: { type: 'array', items: { type: 'string' } },
+        clientsNeedingPromoteClients: { type: 'array', items: { type: 'string' } }
+      }
+    }
+  })
+  async addNewUserstoPromoteClients(@Body() body: { 
+    goodIds: string[], 
+    badIds: string[], 
+    clientsNeedingPromoteClients?: string[] 
+  }): Promise<string> {
+    // Validate input parameters
+    if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
+      throw new BadRequestException('goodIds and badIds must be arrays');
+    }
+    
+    if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
+      throw new BadRequestException('clientsNeedingPromoteClients must be an array');
+    }
+
+    // Fire-and-forget pattern for long-running operations
+    this.clientService.addNewUserstoPromoteClients(
+      body.badIds, 
+      body.goodIds, 
+      body.clientsNeedingPromoteClients || [],
+      undefined // No promoteClientsPerClient map available in controller
+    ).catch(error => {
+      console.error('Error in addNewUserstoPromoteClients:', error);
+    });
     return "initiated Checking"
   }
 
@@ -96,6 +129,12 @@ export class PromoteClientController {
     } catch (error) {
       throw error;  // You might want to handle errors more gracefully
     }
+  }
+
+  @Get('distribution')
+  @ApiOperation({ summary: 'Get promote client distribution per client' })
+  async getPromoteClientDistribution(): Promise<any> {
+    return this.clientService.getPromoteClientDistribution();
   }
 
 }

