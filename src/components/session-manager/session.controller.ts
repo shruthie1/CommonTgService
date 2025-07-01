@@ -2,7 +2,7 @@ import { Controller, Post, Body, HttpException, HttpStatus, Get, Query, UsePipes
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { SessionService } from './session.service';
 import { IsString, IsOptional, IsBoolean, IsNumber, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 // DTOs for the two main endpoints
 export class CreateSessionDto {
@@ -113,14 +113,21 @@ export class SessionController {
             if (!body.forceNew && body.mobile) {
                 const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
-                    await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    // Add error handling for updateSessionLastUsed
+                    try {
+                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    } catch (updateError) {
+                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
+                        // Continue execution even if update fails
+                    }
+
                     return {
                         success: true,
                         message: 'Valid session found from this month',
                         session: validSessionResult.session.sessionString,
                         isNew: false
                     };
-                }else{
+                } else {
                     console.log('No valid session found from this month');
                 }
             }
@@ -208,9 +215,13 @@ export class SessionController {
         @Query('offset') offset?: number
     ) {
         try {
+            // Validate and sanitize numeric inputs
+            const safeLimit = limit && !isNaN(Number(limit)) && Number(limit) > 0 ? Number(limit) : 10;
+            const safeOffset = offset && !isNaN(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+
             const options = {
-                limit: limit ? Number(limit) : 10,
-                offset: offset ? Number(offset) : 0
+                limit: safeLimit,
+                offset: safeOffset
             };
 
             let result;
@@ -235,8 +246,8 @@ export class SessionController {
             if (result.success) {
                 return {
                     success: true,
-                    data: result.data,
-                    total: result.total,
+                    data: result.data || [],
+                    total: result.total || 0,
                     message: `Retrieved ${result.data?.length || 0} audit records`
                 };
             } else {

@@ -37,7 +37,35 @@ export class SessionManager {
     private readonly OTP_WAIT_TIME = 120000; // 2 minutes
     private readonly OTP_CHECK_INTERVAL = 3000; // 3 seconds
 
-    private constructor() {}
+    private constructor() {
+        // Validate required environment variables on initialization
+        this.validateEnvironmentVariables();
+    }
+
+    private validateEnvironmentVariables(): void {
+        if (!process.env.API_ID || isNaN(parseInt(process.env.API_ID))) {
+            throw new Error('API_ID environment variable is required and must be a valid number');
+        }
+        if (!process.env.API_HASH) {
+            throw new Error('API_HASH environment variable is required');
+        }
+    }
+
+    private getApiId(): number {
+        const apiId = parseInt(process.env.API_ID!);
+        if (isNaN(apiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return apiId;
+    }
+
+    private getApiHash(): string {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
+    }
 
     public static getInstance(): SessionManager {
         if (!SessionManager.instance) {
@@ -51,6 +79,11 @@ export class SessionManager {
      */
     public async createSession(options: SessionCreationOptions): Promise<SessionCreationResult> {
         const { mobile, oldSession, password = this.DEFAULT_PASSWORD } = options;
+
+        // Validate mobile parameter
+        if (!mobile) {
+            return { success: false, error: 'Mobile number is required', retryable: false };
+        }
 
         this.logger.logOperation(mobile, 'Starting session creation process with priority order');
 
@@ -86,6 +119,14 @@ export class SessionManager {
      * Check if session creation can proceed
      */
     private checkExistingSession(mobile: string): { canProceed: boolean; result?: SessionCreationResult } {
+        // Validate mobile parameter
+        if (!mobile || typeof mobile !== 'string') {
+            return {
+                canProceed: false,
+                result: { success: false, error: 'Invalid mobile number provided', retryable: false }
+            };
+        }
+
         if (this.clientRegistry.hasClient(mobile)) {
             const clientInfo = this.clientRegistry.getClientInfo(mobile);
             if (clientInfo?.isCreating) {
@@ -200,8 +241,8 @@ export class SessionManager {
         try {
             tempClient = new TelegramClient(
                 new StringSession(sessionString),
-                parseInt(process.env.API_ID!),
-                process.env.API_HASH!,
+                this.getApiId(),
+                this.getApiHash(),
                 { connectionRetries: 1 }
             );
 
@@ -233,8 +274,8 @@ export class SessionManager {
             // Connect to old session
             oldClient = new TelegramClient(
                 new StringSession(oldSessionString),
-                parseInt(process.env.API_ID!),
-                process.env.API_HASH!,
+                this.getApiId(),
+                this.getApiHash(),
                 { connectionRetries: 1 }
             );
 
@@ -244,8 +285,8 @@ export class SessionManager {
             // Create new client
             newClient = new TelegramClient(
                 new StringSession(''),
-                parseInt(process.env.API_ID!),
-                process.env.API_HASH!,
+                this.getApiId(),
+                this.getApiHash(),
                 { connectionRetries: 1 }
             );
 
@@ -283,10 +324,14 @@ export class SessionManager {
                 const message = messages[0];
 
                 if (message && message.date && (message.date * 1000) > (Date.now() - 120000)) {
-                    const code = this.extractOtpCode(message.text.toLowerCase());
-                    if (code) {
-                        this.logger.logOperation(mobile, `OTP extracted: ${code}`);
-                        return code;
+                    // Safely check if message has text before processing
+                    const messageText = message.text || message.message || '';
+                    if (messageText) {
+                        const code = this.extractOtpCode(messageText.toLowerCase());
+                        if (code) {
+                            this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                            return code;
+                        }
                     }
                 }
 
@@ -322,24 +367,39 @@ export class SessionManager {
     }
 
     /**
-     * Clean up Telegram client
+     * Clean up Telegram client with enhanced safety
      */
     private async cleanupClient(client: TelegramClient | null, mobile: string): Promise<void> {
         if (!client) return;
         try {
+            // Check if client is already destroyed to prevent double cleanup
+            if ((client as any)._destroyed) {
+                this.logger.logOperation(mobile, 'Client already destroyed, skipping cleanup');
+                return;
+            }
+
             await client.destroy();
-            client._eventBuilders = [];
+
+            // Safely handle private properties that might not exist
+            if ((client as any)._eventBuilders) {
+                (client as any)._eventBuilders = [];
+            }
+
             connectionManager.unregisterClient(mobile);
             await sleep(1000);
         } catch (error) {
             this.logger.logError(mobile, 'Client cleanup error', error);
         } finally {
             if (client) {
-                client._destroyed = true;
-                if (client._sender && typeof client._sender.disconnect === 'function') {
-                    await client._sender.disconnect().catch(() => {});
+                try {
+                    (client as any)._destroyed = true;
+                    if ((client as any)._sender && typeof (client as any)._sender.disconnect === 'function') {
+                        await (client as any)._sender.disconnect().catch(() => {});
+                    }
+                } catch (finalCleanupError) {
+                    this.logger.logError(mobile, 'Final cleanup error', finalCleanupError);
                 }
-                this.logger.logOperation(mobile, 'Client destroyed completed');
+                this.logger.logOperation(mobile, 'Client cleanup completed');
             }
         }
     }
@@ -449,6 +509,26 @@ export class SessionService {
         this.sessionAuditService = sessionAuditService;
     }
 
+    private getApiId(): number {
+        const apiId = process.env.API_ID;
+        if (!apiId) {
+            throw new Error('API_ID environment variable is required');
+        }
+        const parsedApiId = parseInt(apiId);
+        if (isNaN(parsedApiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return parsedApiId;
+    }
+
+    private getApiHash(): string {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
+    }
+
     private checkRateLimit(mobile: string): { allowed: boolean; resetTime?: number } {
         const now = Date.now();
         const rateLimit = this.rateLimitMap.get(mobile);
@@ -472,8 +552,8 @@ export class SessionService {
         try {
             tempClient = new TelegramClient(
                 new StringSession(sessionString),
-                parseInt(process.env.API_ID!),
-                process.env.API_HASH!,
+                this.getApiId(),
+                this.getApiHash(),
                 { connectionRetries: 1 }
             );
 
@@ -508,20 +588,29 @@ export class SessionService {
     }
 
     async createSession(options: SessionCreationOptions): Promise<SessionCreationResult> {
+        // Validate input parameters
+        if (!options || typeof options !== 'object') {
+            return { success: false, error: 'Invalid options provided', retryable: false };
+        }
+
         let mobile = options.mobile;
 
         if (!mobile && options.oldSession) {
-            const extractResult = await this.extractMobileFromSession(options.oldSession);
-            if (extractResult.error) {
-                return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+            try {
+                const extractResult = await this.extractMobileFromSession(options.oldSession);
+                if (extractResult.error) {
+                    return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+                }
+                mobile = extractResult.mobile!;
+                options.mobile = mobile;
+            } catch (error) {
+                return { success: false, error: `Error extracting mobile from session: ${error.message}`, retryable: false };
             }
-            mobile = extractResult.mobile!;
-            options.mobile = mobile;
         }
 
         this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
 
-        if (!mobile) {
+        if (!mobile || typeof mobile !== 'string') {
             return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
         }
 
@@ -686,19 +775,32 @@ export class SessionService {
 
     async findRecentValidSession(mobile: string): Promise<{ success: boolean; session?: SessionAudit; error?: string }> {
         try {
-            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
-            this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
-            for (const session of recentSessions) {
-                return { success: true, session };
-
-                // const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);
-                // if (isActive.isValid) {
-                //     return { success: true, session };
-                // } else {
-                //     this.logger.logDebug(mobile, `Session found from this month but not valid: ${session}`);
-                //     this.sessionAuditService.revokeSession(session.mobile, session.sessionString, isActive.error);
-                // }
+            // Validate mobile parameter
+            if (!mobile || typeof mobile !== 'string') {
+                return { success: false, error: 'Invalid mobile number provided' };
             }
+
+            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
+            this.logger.logDebug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
+
+            if (!recentSessions || recentSessions.length === 0) {
+                this.logger.logDebug(mobile, 'No recent sessions found for this month');
+                return { success: false, error: 'No recent sessions found for this month' };
+            }
+
+            for (const session of recentSessions) {
+                if (session && session.sessionString) {
+                    return { success: true, session };
+                    // const isActive = await this.sessionManager.validateSession(session.sessionString, mobile);
+                    // if (isActive.isValid) {
+                    //     return { success: true, session };
+                    // } else {
+                    //     this.logger.logDebug(mobile, `Session found from this month but not valid: ${session}`);
+                    //     this.sessionAuditService.revokeSession(session.mobile, session.sessionString, isActive.error);
+                    // }
+                }
+            }
+
             this.logger.logDebug(mobile, 'No valid session found from this month');
             return { success: false, error: 'No valid session found from this month' };
         } catch (error) {

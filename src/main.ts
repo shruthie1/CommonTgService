@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 import { NestFactory } from '@nestjs/core';
 import mongoose from 'mongoose'
 import { AppModule } from './app.module';
@@ -50,6 +51,7 @@ async function bootstrap() {
   });
 
   process.on('uncaughtException', (reason, promise) => {
+    console.log('Uncaught Exception at:');
     console.error(promise, reason);
   });
 
@@ -67,14 +69,17 @@ async function bootstrap() {
   });
 
   process.on('SIGINT', async () => {
+    console.log('SIGINT received');
     await shutdown('SIGINT');
   });
 
   process.on('SIGTERM', async () => {
+    console.log('SIGTERM received');
     await shutdown('SIGTERM');
   });
 
   process.on('SIGQUIT', async () => {
+    console.log('SIGQUIT received');
     await shutdown('SIGQUIT');
   });
 

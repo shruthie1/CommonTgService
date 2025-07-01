@@ -57,7 +57,6 @@ class ConnectionManager {
     private readonly logger: TelegramLogger;
     private cleanupInterval: NodeJS.Timeout | null = null;
     private usersService: UsersService | null = null;
-    private boundShutdownHandler: () => Promise<void>;
     private isShuttingDown: boolean = false;
 
     private readonly DEFAULT_RETRY_CONFIG: RetryConfig = {
@@ -78,9 +77,6 @@ class ConnectionManager {
     private constructor() {
         this.clients = new Map();
         this.logger = TelegramLogger.getInstance();
-        this.boundShutdownHandler = this.handleShutdown.bind(this);
-        process.on('SIGTERM', this.boundShutdownHandler);
-        process.on('SIGINT', this.boundShutdownHandler);
         this.startCleanupInterval();
     }
 
@@ -95,18 +91,11 @@ class ConnectionManager {
         return ConnectionManager.instance;
     }
 
-    public dispose(): void {
-        this.isShuttingDown = true;
-        this.stopCleanupInterval();
-        process.off('SIGTERM', this.boundShutdownHandler);
-        process.off('SIGINT', this.boundShutdownHandler);
-    }
-
-    private async handleShutdown(): Promise<void> {
+    public async handleShutdown(): Promise<void> {
         this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
-        this.dispose();
+        this.isShuttingDown = true;
         await this.disconnectAll();
-        process.exit(0);
+        this.stopCleanupInterval();
     }
 
     private createTimeoutPromise<T>(timeoutMs: number, signal?: AbortSignal): Promise<T> {

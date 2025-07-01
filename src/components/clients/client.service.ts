@@ -1,5 +1,5 @@
 import { TelegramService } from './../Telegram/Telegram.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef, Query } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef, Query, OnModuleDestroy } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
@@ -25,7 +25,7 @@ import { SessionService } from '../session-manager';
 
 let settingupClient = Date.now() - 250000;
 @Injectable()
-export class ClientService {
+export class ClientService implements OnModuleDestroy {
     private readonly logger = new Logger(ClientService.name);
     private clientsMap: Map<string, Client> = new Map();
     private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
@@ -46,6 +46,11 @@ export class ClientService {
             await this.refreshMap();
             await this.checkNpoint();
         }, 5 * 60 * 1000);
+    }
+
+    async onModuleDestroy() {
+        console.log('Module is being Destroyed, Disconnecting all clients');
+        await connectionManager.handleShutdown();
     }
 
     async checkNpoint() {
