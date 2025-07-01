@@ -307,7 +307,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());

@@ -4013,9 +4013,7 @@ class TelegramManager {
                 }
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
-                console.log(`${this.phoneNumber} Failed to leave channel :`, errorDetails.message);
-                break;
+                const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
             }
         }
         console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
@@ -12344,7 +12342,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());
@@ -16794,7 +16792,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());
