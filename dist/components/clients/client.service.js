@@ -258,32 +258,32 @@ let ClientService = ClientService_1 = class ClientService {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log("setupClientQueryDto:", setupClientQueryDto);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
-            try {
-                if (newBufferClient) {
+            if (newBufferClient) {
+                try {
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession);
                 }
-                else {
-                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available`);
-                    console.log("Buffer Clients not available");
+                catch (error) {
+                    (0, parseError_1.parseError)(error);
+                    console.log("Removing buffer as error");
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+                    this.telegramService.setActiveClientSetup(undefined);
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
                 }
             }
-            catch (error) {
-                (0, parseError_1.parseError)(error);
-                console.log("Removing buffer as error");
-                const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
-                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
-                this.telegramService.setActiveClientSetup(undefined);
-            }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
+            else {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available. Requested by ${clientId}`);
+                console.log("Buffer Clients not available");
             }
         }
         else {
