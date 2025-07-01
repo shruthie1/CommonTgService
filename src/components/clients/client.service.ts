@@ -248,7 +248,6 @@ export class ClientService implements OnModuleDestroy {
             const existingClientMobile = existingClient.mobile
             await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log("setupClientQueryDto:", setupClientQueryDto);
-            await connectionManager.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } }
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
