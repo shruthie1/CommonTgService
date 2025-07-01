@@ -18899,15 +18899,6 @@ class SessionManager {
         this.DEFAULT_RETRY_DELAY = 5000;
         this.OTP_WAIT_TIME = 120000;
         this.OTP_CHECK_INTERVAL = 3000;
-        this.validateEnvironmentVariables();
-    }
-    validateEnvironmentVariables() {
-        if (!process.env.API_ID || isNaN(parseInt(process.env.API_ID))) {
-            throw new Error('API_ID environment variable is required and must be a valid number');
-        }
-        if (!process.env.API_HASH) {
-            throw new Error('API_HASH environment variable is required');
-        }
     }
     getApiId() {
         const apiId = parseInt(process.env.API_ID);

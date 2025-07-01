@@ -24,7 +24,6 @@ export declare class SessionManager {
     private readonly OTP_WAIT_TIME;
     private readonly OTP_CHECK_INTERVAL;
     private constructor();
-    private validateEnvironmentVariables;
     private getApiId;
     private getApiHash;
     static getInstance(): SessionManager;
