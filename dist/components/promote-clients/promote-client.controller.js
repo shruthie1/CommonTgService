@@ -33,11 +33,21 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients();
+        this.clientService.checkPromoteClients().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
         return "initiated Checking";
     }
     async addNewUserstoPromoteClients(body) {
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds);
+        if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
+            throw new common_1.BadRequestException('goodIds and badIds must be arrays');
+        }
+        if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
+            throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
+        }
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch(error => {
+            console.error('Error in addNewUserstoPromoteClients:', error);
+        });
         return "initiated Checking";
     }
     async findAll() {
@@ -65,6 +75,9 @@ let PromoteClientController = class PromoteClientController {
         catch (error) {
             throw error;
         }
+    }
+    async getPromoteClientDistribution() {
+        return this.clientService.getPromoteClientDistribution();
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -105,7 +118,16 @@ __decorate([
 __decorate([
     (0, common_1.Post)('addNewUserstoPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Promote Clients' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                goodIds: { type: 'array', items: { type: 'string' } },
+                badIds: { type: 'array', items: { type: 'string' } },
+                clientsNeedingPromoteClients: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -170,6 +192,13 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Get)('distribution'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientDistribution", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),

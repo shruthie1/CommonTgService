@@ -13,6 +13,7 @@ export declare class PromoteClientController {
     addNewUserstoPromoteClients(body: {
         goodIds: string[];
         badIds: string[];
+        clientsNeedingPromoteClients?: string[];
     }): Promise<string>;
     findAll(): Promise<PromoteClient[]>;
     setAsPromoteClient(mobile: string): Promise<string>;
@@ -21,4 +22,5 @@ export declare class PromoteClientController {
     createdOrupdate(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
     remove(mobile: string): Promise<void>;
     executeQuery(query: object): Promise<any>;
+    getPromoteClientDistribution(): Promise<any>;
 }

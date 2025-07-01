@@ -29,6 +29,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
+    private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(): Promise<PromoteClient[]>;
@@ -49,6 +50,23 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
-    addNewUserstoPromoteClients(badIds: string[], goodIds: string[]): Promise<void>;
+    addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
     onModuleDestroy(): Promise<void>;
+    getPromoteClientDistribution(): Promise<{
+        totalPromoteClients: number;
+        unassignedPromoteClients: number;
+        distributionPerClient: Array<{
+            clientId: string;
+            assignedCount: number;
+            needed: number;
+            status: 'sufficient' | 'needs_more';
+        }>;
+        summary: {
+            clientsWithSufficientPromoteClients: number;
+            clientsNeedingPromoteClients: number;
+            totalPromoteClientsNeeded: number;
+            maxPromoteClientsPerTrigger: number;
+            triggersNeededToSatisfyAll: number;
+        };
+    }>;
 }

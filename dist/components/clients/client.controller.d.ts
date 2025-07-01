@@ -8,6 +8,23 @@ export declare class ClientController {
     constructor(clientService: ClientService);
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
+    searchByPromoteMobile(mobile: string): Promise<{
+        clients: Client[];
+        matches: Array<{
+            clientId: string;
+            mobile: string;
+        }>;
+        searchedMobile: string;
+    }>;
+    enhancedSearch(query: any): Promise<{
+        clients: Client[];
+        searchType: string;
+        promoteMobileMatches?: Array<{
+            clientId: string;
+            mobile: string;
+        }>;
+        totalResults: number;
+    }>;
     updateClient(clientId: string): Promise<string>;
     findAllMasked(): Promise<Partial<Client>[]>;
     findAll(): Promise<Client[]>;
@@ -16,6 +33,75 @@ export declare class ClientController {
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     executeQuery(requestBody: any): Promise<any>;
-    addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
-    removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
+    addPromoteMobile(clientId: string, body: {
+        mobileNumber: string;
+    }): Promise<Client>;
+    removePromoteMobile(clientId: string, body: {
+        mobileNumber: string;
+    }): Promise<Client>;
+    getClientIpInfo(clientId: string): Promise<{
+        clientId: string;
+        mobiles: {
+            mainMobile?: {
+                mobile: string;
+                hasIp: boolean;
+                ipAddress?: string;
+            };
+            promoteMobiles: {
+                mobile: string;
+                hasIp: boolean;
+                ipAddress?: string;
+            }[];
+        };
+        needingAssignment: {
+            mainMobile?: string;
+            promoteMobiles: string[];
+        };
+    }>;
+    getIpForMobile(mobile: string, clientId?: string): Promise<{
+        mobile: string;
+        ipAddress: string | null;
+        hasAssignment: boolean;
+    }>;
+    autoAssignIpsToClient(clientId: string): Promise<any>;
+    getMobilesNeedingIpAssignment(clientId: string): Promise<{
+        clientId: string;
+        mobilesNeedingIps: {
+            mainMobile?: string;
+            promoteMobiles: string[];
+        };
+        summary: {
+            totalNeedingAssignment: number;
+            mainMobileNeedsIp: boolean;
+            promoteMobilesNeedingIp: number;
+        };
+    }>;
+    releaseIpFromMobile(mobile: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    checkMigrationStatus(): Promise<{
+        isLegacyData: boolean;
+        legacyClientsCount: number;
+        modernClientsCount: number;
+        totalPromoteClients: number;
+        recommendations: string[];
+    }>;
+    migratePromoteMobiles(): Promise<{
+        success: boolean;
+        message: string;
+        results: any;
+    }>;
+    verifyMigration(): Promise<{
+        success: boolean;
+        message: string;
+        verification: any;
+    }>;
+    rollbackMigration(body: {
+        backupCollectionName: string;
+    }): Promise<{
+        success: boolean;
+        message: string;
+        restored: number;
+    }>;
 }

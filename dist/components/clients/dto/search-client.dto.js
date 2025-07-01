@@ -108,14 +108,13 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Promote mobile numbers of the client' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.map((v) => v?.trim())),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Search by client ID that has promote mobiles assigned' }),
+    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayNotEmpty)({ message: 'Promote mobile numbers must not be empty if provided' }),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' }),
-    __metadata("design:type", Array)
-], SearchClientDto.prototype, "promoteMobile", void 0);
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' }),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "hasPromoteMobiles", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID of the client' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),

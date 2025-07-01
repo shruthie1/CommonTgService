@@ -16,6 +16,7 @@ export * from './user-data';
 export * from './users';
 export * from './Telegram';
 export * from './TgSignup';
+export * from './ip-management';
 export * from './timestamps';
 export * from './transactions';
 export * from './upi-ids';

@@ -201,6 +201,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async joinChannelQueue() {
+        this.logger.debug('Attempting to start join channel queue');
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
             this.logger.warn('Join channel process is already running');
             return;
@@ -403,8 +404,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
                 await telegramClient.set2fa();
@@ -454,10 +459,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const promoteclients = await this.promoteClientService.findAll();
-        const clientIds = [
-            ...clients.map(c => c.mobile),
-            ...clients.flatMap(c => c.promoteMobile),
-        ].filter(Boolean);
+        const clientMainMobiles = clients.map(c => c.mobile);
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
         const promoteclientIds = promoteclients.map(c => c.mobile);
         const today = new Date().toISOString().split('T')[0];
         const toProcess = bufferclients.filter(doc => !clientIds.includes(doc.mobile) &&
@@ -600,6 +608,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
         }
         setTimeout(() => {
+            this.logger.log('Starting next join channel process');
             this.joinchannelForBufferClients();
         }, 2 * 60 * 1000);
     }

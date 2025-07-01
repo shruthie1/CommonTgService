@@ -20,6 +20,9 @@ const init_module_1 = require("../ConfigurationInit/init.module");
 const npoint_module_1 = require("../n-point/npoint.module");
 const timestamp_module_1 = require("../timestamps/timestamp.module");
 const session_manager_1 = require("../session-manager");
+const ip_management_module_1 = require("../ip-management/ip-management.module");
+const promote_client_module_1 = require("../promote-clients/promote-client.module");
+const promote_clients_1 = require("../promote-clients");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -28,17 +31,20 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: 'PromoteClient', schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => archived_client_module_1.ArchivedClientModule),
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
             (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
+            (0, common_1.forwardRef)(() => ip_management_module_1.IpManagementModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             npoint_module_1.NpointModule
         ],
         controllers: [client_controller_1.ClientController],
         providers: [client_service_1.ClientService],
-        exports: [client_service_1.ClientService]
+        exports: [client_service_1.ClientService, mongoose_1.MongooseModule]
     })
 ], ClientModule);
 //# sourceMappingURL=client.module.js.map
