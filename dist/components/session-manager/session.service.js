@@ -28,6 +28,29 @@ class SessionManager {
         this.DEFAULT_RETRY_DELAY = 5000;
         this.OTP_WAIT_TIME = 120000;
         this.OTP_CHECK_INTERVAL = 3000;
+        this.validateEnvironmentVariables();
+    }
+    validateEnvironmentVariables() {
+        if (!process.env.API_ID || isNaN(parseInt(process.env.API_ID))) {
+            throw new Error('API_ID environment variable is required and must be a valid number');
+        }
+        if (!process.env.API_HASH) {
+            throw new Error('API_HASH environment variable is required');
+        }
+    }
+    getApiId() {
+        const apiId = parseInt(process.env.API_ID);
+        if (isNaN(apiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return apiId;
+    }
+    getApiHash() {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
     }
     static getInstance() {
         if (!SessionManager.instance) {
@@ -37,6 +60,9 @@ class SessionManager {
     }
     async createSession(options) {
         const { mobile, oldSession, password = this.DEFAULT_PASSWORD } = options;
+        if (!mobile) {
+            return { success: false, error: 'Mobile number is required', retryable: false };
+        }
         this.logger.logOperation(mobile, 'Starting session creation process with priority order');
         const existingCheck = this.checkExistingSession(mobile);
         if (!existingCheck.canProceed) {
@@ -61,6 +87,12 @@ class SessionManager {
         return { success: false, error: 'All SessionManager strategies failed', retryable: false };
     }
     checkExistingSession(mobile) {
+        if (!mobile || typeof mobile !== 'string') {
+            return {
+                canProceed: false,
+                result: { success: false, error: 'Invalid mobile number provided', retryable: false }
+            };
+        }
         if (this.clientRegistry.hasClient(mobile)) {
             const clientInfo = this.clientRegistry.getClientInfo(mobile);
             if (clientInfo?.isCreating) {
@@ -144,7 +176,7 @@ class SessionManager {
     async validateSession(sessionString, mobile) {
         let tempClient = null;
         try {
-            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
             await tempClient.connect();
             const userInfo = await tempClient.getMe();
             if (!userInfo || userInfo.phone !== mobile) {
@@ -166,10 +198,10 @@ class SessionManager {
         let oldClient = null;
         let newClient = null;
         try {
-            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
             await oldClient.connect();
             await oldClient.getMe();
-            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
             await newClient.start({
                 phoneNumber: mobile,
                 password: async () => password,
@@ -195,10 +227,13 @@ class SessionManager {
                 const messages = await oldClient.getMessages('777000', { limit: 1 });
                 const message = messages[0];
                 if (message && message.date && (message.date * 1000) > (Date.now() - 120000)) {
-                    const code = this.extractOtpCode(message.text.toLowerCase());
-                    if (code) {
-                        this.logger.logOperation(mobile, `OTP extracted: ${code}`);
-                        return code;
+                    const messageText = message.text || message.message || '';
+                    if (messageText) {
+                        const code = this.extractOtpCode(messageText.toLowerCase());
+                        if (code) {
+                            this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                            return code;
+                        }
                     }
                 }
                 await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
@@ -229,8 +264,14 @@ class SessionManager {
         if (!client)
             return;
         try {
+            if (client._destroyed) {
+                this.logger.logOperation(mobile, 'Client already destroyed, skipping cleanup');
+                return;
+            }
             await client.destroy();
-            client._eventBuilders = [];
+            if (client._eventBuilders) {
+                client._eventBuilders = [];
+            }
             connection_manager_1.connectionManager.unregisterClient(mobile);
             await (0, utils_1.sleep)(1000);
         }
@@ -239,11 +280,16 @@ class SessionManager {
         }
         finally {
             if (client) {
-                client._destroyed = true;
-                if (client._sender && typeof client._sender.disconnect === 'function') {
-                    await client._sender.disconnect().catch(() => { });
+                try {
+                    client._destroyed = true;
+                    if (client._sender && typeof client._sender.disconnect === 'function') {
+                        await client._sender.disconnect().catch(() => { });
+                    }
                 }
-                this.logger.logOperation(mobile, 'Client destroyed completed');
+                catch (finalCleanupError) {
+                    this.logger.logError(mobile, 'Final cleanup error', finalCleanupError);
+                }
+                this.logger.logOperation(mobile, 'Client cleanup completed');
             }
         }
     }
@@ -315,6 +361,24 @@ let SessionService = class SessionService {
         this.RATE_LIMIT_WINDOW = 3600000;
         this.sessionAuditService = sessionAuditService;
     }
+    getApiId() {
+        const apiId = process.env.API_ID;
+        if (!apiId) {
+            throw new Error('API_ID environment variable is required');
+        }
+        const parsedApiId = parseInt(apiId);
+        if (isNaN(parsedApiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return parsedApiId;
+    }
+    getApiHash() {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
+    }
     checkRateLimit(mobile) {
         const now = Date.now();
         const rateLimit = this.rateLimitMap.get(mobile);
@@ -331,7 +395,7 @@ let SessionService = class SessionService {
     async extractMobileFromSession(sessionString) {
         let tempClient = null;
         try {
-            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), parseInt(process.env.API_ID), process.env.API_HASH, { connectionRetries: 1 });
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
             await tempClient.connect();
             const userInfo = await tempClient.getMe();
             if (!userInfo || !userInfo.phone) {
@@ -363,17 +427,25 @@ let SessionService = class SessionService {
         }
     }
     async createSession(options) {
+        if (!options || typeof options !== 'object') {
+            return { success: false, error: 'Invalid options provided', retryable: false };
+        }
         let mobile = options.mobile;
         if (!mobile && options.oldSession) {
-            const extractResult = await this.extractMobileFromSession(options.oldSession);
-            if (extractResult.error) {
-                return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+            try {
+                const extractResult = await this.extractMobileFromSession(options.oldSession);
+                if (extractResult.error) {
+                    return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+                }
+                mobile = extractResult.mobile;
+                options.mobile = mobile;
             }
-            mobile = extractResult.mobile;
-            options.mobile = mobile;
+            catch (error) {
+                return { success: false, error: `Error extracting mobile from session: ${error.message}`, retryable: false };
+            }
         }
         this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
-        if (!mobile) {
+        if (!mobile || typeof mobile !== 'string') {
             return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
         }
         const rateLimitCheck = this.checkRateLimit(mobile);
@@ -516,10 +588,19 @@ let SessionService = class SessionService {
     }
     async findRecentValidSession(mobile) {
         try {
+            if (!mobile || typeof mobile !== 'string') {
+                return { success: false, error: 'Invalid mobile number provided' };
+            }
             const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
-            this.logger.logDebug(mobile, `Found ${recentSessions.length} recent sessions for this month`);
+            this.logger.logDebug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
+            if (!recentSessions || recentSessions.length === 0) {
+                this.logger.logDebug(mobile, 'No recent sessions found for this month');
+                return { success: false, error: 'No recent sessions found for this month' };
+            }
             for (const session of recentSessions) {
-                return { success: true, session };
+                if (session && session.sessionString) {
+                    return { success: true, session };
+                }
             }
             this.logger.logDebug(mobile, 'No valid session found from this month');
             return { success: false, error: 'No valid session found from this month' };

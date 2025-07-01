@@ -74,19 +74,19 @@ let InitModule = InitModule_1 = class InitModule {
     }
     setupConnectionEventHandlers() {
         this.connection.on('connected', () => {
-            console.log('MongoDB connected');
+            console.log('MongoDB Connected');
         });
         this.connection.on('error', (error) => {
-            console.error('MongoDB connection error:', error);
+            console.error('MongoDB Connection Error:', error);
         });
         this.connection.on('disconnected', () => {
-            console.warn('MongoDB disconnected');
+            console.warn('MongoDB Disconnected');
         });
         this.connection.on('reconnected', () => {
-            console.log('MongoDB reconnected');
+            console.log('MongoDB Reconnected');
         });
         this.connection.on('close', () => {
-            console.log('MongoDB connection closed');
+            console.log('MongoDB Connection Closed');
         });
     }
     startHealthCheck() {

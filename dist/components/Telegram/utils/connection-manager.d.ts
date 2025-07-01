@@ -40,7 +40,6 @@ declare class ConnectionManager {
     private readonly logger;
     private cleanupInterval;
     private usersService;
-    private boundShutdownHandler;
     private isShuttingDown;
     private readonly DEFAULT_RETRY_CONFIG;
     private readonly CONNECTION_TIMEOUT;
@@ -52,8 +51,7 @@ declare class ConnectionManager {
     private constructor();
     setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
-    dispose(): void;
-    private handleShutdown;
+    handleShutdown(): Promise<void>;
     private createTimeoutPromise;
     private calculateRetryDelay;
     private shouldRetry;
