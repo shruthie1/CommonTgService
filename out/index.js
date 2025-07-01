@@ -12248,6 +12248,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async joinChannelQueue() {
+        this.logger.debug('Attempting to start join channel queue');
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
             this.logger.warn('Join channel process is already running');
             return;
@@ -12647,6 +12648,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
         }
         setTimeout(() => {
+            this.logger.log('Starting next join channel process');
             this.joinchannelForBufferClients();
         }, 2 * 60 * 1000);
     }
@@ -14342,7 +14344,6 @@ let ClientService = ClientService_1 = class ClientService {
             const existingClientMobile = existingClient.mobile;
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log("setupClientQueryDto:", setupClientQueryDto);
-            await connection_manager_1.connectionManager.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];

@@ -201,6 +201,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async joinChannelQueue() {
+        this.logger.debug('Attempting to start join channel queue');
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
             this.logger.warn('Join channel process is already running');
             return;
@@ -600,6 +601,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
         }
         setTimeout(() => {
+            this.logger.log('Starting next join channel process');
             this.joinchannelForBufferClients();
         }, 2 * 60 * 1000);
     }
