@@ -598,6 +598,20 @@ class TelegramManager {
                 }
             } catch (error) {
                 const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
+                if (errorDetails.message.includes('CHANNEL_INVALID')) {
+                    try {
+                        const entity = await this.client.getInputEntity(id);
+                        await this.client.invoke(
+                            new Api.channels.LeaveChannel({
+                                channel: entity
+                            })
+                        );
+                    } catch (err) {
+                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${id}, likely not a member or invalid`);
+                        continue;
+                    }
+
+                }
             }
         }
         console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
