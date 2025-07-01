@@ -344,7 +344,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
 

@@ -596,11 +596,8 @@ class TelegramManager {
                 if (chats.length > 1) {
                     await sleep(3000);
                 }
-
             } catch (error) {
-                const errorDetails = parseError(error);
-                console.log(`${this.phoneNumber} Failed to leave channel :`, errorDetails.message);
-                break;
+                const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
             }
         }
         console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
