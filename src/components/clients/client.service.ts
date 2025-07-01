@@ -246,38 +246,38 @@ export class ClientService implements OnModuleDestroy {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile
-            await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log("setupClientQueryDto:", setupClientQueryDto);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } }
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
-            try {
-                if (newBufferClient) {
+            if (newBufferClient) {
+                try {
+                    await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile })
                     await connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession)
-                } else {
-                    await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available`);
-                    console.log("Buffer Clients not available")
-                }
 
-                // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
-                // if (archivedClient) {
-                //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
-                //     await this.updateClientSession(archivedClient.session)
-                // } else {
-                //     await connectionManager.getClientnewBufferClient.mobile, false, true);
-                //     await this.generateNewSession(newBufferClient.mobile)
-                // }
-            } catch (error) {
-                parseError(error);
-                console.log("Removing buffer as error")
-                const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
-                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
-                this.telegramService.setActiveClientSetup(undefined)
-            } finally {
-                await connectionManager.unregisterClient(newBufferClient.mobile)
+                    // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
+                    // if (archivedClient) {
+                    //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
+                    //     await this.updateClientSession(archivedClient.session)
+                    // } else {
+                    //     await connectionManager.getClientnewBufferClient.mobile, false, true);
+                    //     await this.generateNewSession(newBufferClient.mobile)
+                    // }
+                } catch (error) {
+                    parseError(error);
+                    console.log("Removing buffer as error")
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0]
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+                    this.telegramService.setActiveClientSetup(undefined)
+                } finally {
+                    await connectionManager.unregisterClient(newBufferClient.mobile)
+                }
+            } else {
+                await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available. Requested by ${clientId}`);
+                console.log("Buffer Clients not available")
             }
         } else {
             console.log("Profile Setup Recently tried, wait ::", settingupClient - Date.now());
