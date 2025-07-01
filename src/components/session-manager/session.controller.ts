@@ -113,20 +113,24 @@ export class SessionController {
             if (!body.forceNew && body.mobile) {
                 const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
-                    // Add error handling for updateSessionLastUsed
-                    try {
-                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
-                    } catch (updateError) {
-                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
-                        // Continue execution even if update fails
-                    }
+                    if (validSessionResult.session.usageCount < 30) {
+                        // Add error handling for updateSessionLastUsed
+                        try {
+                            await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                        } catch (updateError) {
+                            console.log('Warning: Failed to update session last used timestamp:', updateError.message);
+                            // Continue execution even if update fails
+                        }
 
-                    return {
-                        success: true,
-                        message: 'Valid session found from this month',
-                        session: validSessionResult.session.sessionString,
-                        isNew: false
-                    };
+                        return {
+                            success: true,
+                            message: 'Valid session found from this month',
+                            session: validSessionResult.session.sessionString,
+                            isNew: false
+                        };
+                    } else {
+                        console.log('Valid session found but usage count exceeded, Proceeding with new session creation');
+                    }
                 } else {
                     console.log('No valid session found from this month');
                 }
