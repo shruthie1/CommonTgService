@@ -207,7 +207,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            this.logger.warn('Join channel process is already running, instance:', this.joinChannelIntervalId);
+            this.logger.warn('Join channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.joinChannelMap.keys());
