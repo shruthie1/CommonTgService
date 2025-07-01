@@ -230,6 +230,7 @@ export class BufferClientService implements OnModuleDestroy {
     }
 
     async joinChannelQueue() {
+        this.logger.debug('Attempting to start join channel queue');
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
             this.logger.warn('Join channel process is already running');
             return;
@@ -685,6 +686,7 @@ export class BufferClientService implements OnModuleDestroy {
 
         // Schedule next join channel process
         setTimeout(() => {
+            this.logger.log('Starting next join channel process');
             this.joinchannelForBufferClients();
         }, 2 * 60 * 1000);
     }
