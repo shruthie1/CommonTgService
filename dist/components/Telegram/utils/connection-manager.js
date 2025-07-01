@@ -30,9 +30,6 @@ class ConnectionManager {
         this.MAX_CLEANUP_ATTEMPTS = 3;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
-        this.boundShutdownHandler = this.handleShutdown.bind(this);
-        process.on('SIGTERM', this.boundShutdownHandler);
-        process.on('SIGINT', this.boundShutdownHandler);
         this.startCleanupInterval();
     }
     setUsersService(usersService) {
@@ -44,17 +41,11 @@ class ConnectionManager {
         }
         return ConnectionManager.instance;
     }
-    dispose() {
-        this.isShuttingDown = true;
-        this.stopCleanupInterval();
-        process.off('SIGTERM', this.boundShutdownHandler);
-        process.off('SIGINT', this.boundShutdownHandler);
-    }
     async handleShutdown() {
         this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
-        this.dispose();
+        this.isShuttingDown = true;
         await this.disconnectAll();
-        process.exit(0);
+        this.stopCleanupInterval();
     }
     createTimeoutPromise(timeoutMs, signal) {
         return new Promise((_, reject) => {

@@ -1,4 +1,5 @@
 import { TelegramService } from './../Telegram/Telegram.service';
+import { OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -10,7 +11,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
 import { SessionService } from '../session-manager';
-export declare class ClientService {
+export declare class ClientService implements OnModuleDestroy {
     private clientModel;
     private telegramService;
     private bufferClientService;
@@ -22,6 +23,7 @@ export declare class ClientService {
     private clientsMap;
     private lastUpdateMap;
     constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, npointSerive: NpointService);
+    onModuleDestroy(): Promise<void>;
     checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;

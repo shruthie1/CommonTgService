@@ -83,6 +83,10 @@ let ClientService = ClientService_1 = class ClientService {
             await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
+    async onModuleDestroy() {
+        console.log('Module is being Destroyed, Disconnecting all clients');
+        await connection_manager_1.connectionManager.handleShutdown();
+    }
     async checkNpoint() {
         const npointIdFull = "7c2682f37bb93ef486ba";
         const npointIdMasked = "f0d1e44d82893490bbde";

@@ -73,6 +73,7 @@ async function bootstrap() {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     });
     process.on('uncaughtException', (reason, promise) => {
+        console.log('Uncaught Exception at:');
         console.error(promise, reason);
     });
     let isShuttingDown = false;
@@ -88,12 +89,15 @@ async function bootstrap() {
         console.log('Application closed');
     });
     process.on('SIGINT', async () => {
+        console.log('SIGINT received');
         await shutdown('SIGINT');
     });
     process.on('SIGTERM', async () => {
+        console.log('SIGTERM received');
         await shutdown('SIGTERM');
     });
     process.on('SIGQUIT', async () => {
+        console.log('SIGQUIT received');
         await shutdown('SIGQUIT');
     });
     await app.init();

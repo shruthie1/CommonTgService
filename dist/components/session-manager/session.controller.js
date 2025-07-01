@@ -106,7 +106,12 @@ let SessionController = class SessionController {
             if (!body.forceNew && body.mobile) {
                 const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
-                    await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    try {
+                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    }
+                    catch (updateError) {
+                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
+                    }
                     return {
                         success: true,
                         message: 'Valid session found from this month',
@@ -151,9 +156,11 @@ let SessionController = class SessionController {
     }
     async searchAudit(mobile, status, limit, offset) {
         try {
+            const safeLimit = limit && !isNaN(Number(limit)) && Number(limit) > 0 ? Number(limit) : 10;
+            const safeOffset = offset && !isNaN(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
             const options = {
-                limit: limit ? Number(limit) : 10,
-                offset: offset ? Number(offset) : 0
+                limit: safeLimit,
+                offset: safeOffset
             };
             let result;
             if (mobile) {
@@ -171,8 +178,8 @@ let SessionController = class SessionController {
             if (result.success) {
                 return {
                     success: true,
-                    data: result.data,
-                    total: result.total,
+                    data: result.data || [],
+                    total: result.total || 0,
                     message: `Retrieved ${result.data?.length || 0} audit records`
                 };
             }
