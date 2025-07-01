@@ -227,7 +227,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            this.logger.warn('Join channel process is already running, instance:', this.joinChannelIntervalId);
+            this.logger.warn('Join channel process is already running');
             return;
         }
 
