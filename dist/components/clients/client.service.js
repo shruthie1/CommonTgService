@@ -65,15 +65,18 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
+const ip_management_service_1 = require("../ip-management/ip-management.service");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, npointSerive) {
+    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
         this.clientModel = clientModel;
+        this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
         this.sessionService = sessionService;
+        this.ipManagementService = ipManagementService;
         this.npointSerive = npointSerive;
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
@@ -132,7 +135,7 @@ let ClientService = ClientService_1 = class ClientService {
     async findAllMasked() {
         const clients = await this.findAll();
         const maskedClients = clients.map(client => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            const { session, mobile, password, ...maskedClient } = client;
             return { ...maskedClient };
         });
         return maskedClients;
@@ -167,15 +170,17 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async findAllMaskedObject(query) {
-        const allClients = await this.findAll();
-        const clients = Object.values(allClients);
-        const filteredClients = query
-            ? clients.filter(client => {
-                return Object.keys(query).every(key => client[key] === query[key]);
-            })
-            : clients;
+        let filteredClients;
+        if (query) {
+            const searchResult = await this.enhancedSearch(query);
+            filteredClients = searchResult.clients;
+        }
+        else {
+            const allClients = await this.findAll();
+            filteredClients = Array.isArray(allClients) ? allClients : Object.values(allClients);
+        }
         const results = filteredClients.reduce((acc, client) => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            const { session, mobile, password, ...maskedClient } = client;
             acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
             return acc;
         }, {});
@@ -183,7 +188,8 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async refreshMap() {
         console.log("Refreshed Clients");
-        this.clientsMap.clear();
+        const tempMap = new Map();
+        this.clientsMap = tempMap;
     }
     async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
@@ -192,9 +198,11 @@ let ClientService = ClientService_1 = class ClientService {
         }
         else {
             const user = await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).lean().exec();
-            this.clientsMap.set(clientId, user);
             if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            if (user) {
+                this.clientsMap.set(clientId, user);
             }
             return user;
         }
@@ -224,17 +232,6 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
             }, 60000);
         }
-        if (previousUser &&
-            Array.isArray(updatedUser.promoteMobile) &&
-            Array.isArray(previousUser.promoteMobile)) {
-            const prevSet = new Set(previousUser.promoteMobile);
-            const newPromoteMobiles = updatedUser.promoteMobile.filter(mobile => !prevSet.has(mobile));
-            for (const mobile of newPromoteMobiles) {
-                setTimeout(async () => {
-                    await this.sessionService.createSession({ mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
-                }, 60000);
-            }
-        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -245,12 +242,72 @@ let ClientService = ClientService_1 = class ClientService {
         return deletedUser;
     }
     async search(filter) {
-        console.log(filter);
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
+        console.log('Original filter:', filter);
+        if (filter.hasPromoteMobiles !== undefined) {
+            const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
+            delete filter.hasPromoteMobiles;
+            if (hasPromoteMobiles) {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $in: clientsWithPromoteMobiles };
+            }
+            else {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $nin: clientsWithPromoteMobiles };
+            }
         }
-        console.log(filter);
+        if (filter.firstName) {
+            const escapedFirstName = filter.firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.firstName = { $regex: new RegExp(escapedFirstName, 'i') };
+        }
+        if (filter.name) {
+            const escapedName = filter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.name = { $regex: new RegExp(escapedName, 'i') };
+        }
+        console.log('Final filter:', filter);
         return this.clientModel.find(filter).exec();
+    }
+    async searchClientsByPromoteMobile(mobileNumbers) {
+        const promoteClients = await this.promoteClientModel
+            .find({
+            mobile: { $in: mobileNumbers },
+            clientId: { $exists: true }
+        })
+            .lean();
+        const clientIds = [...new Set(promoteClients.map(pc => pc.clientId))];
+        return this.clientModel.find({ clientId: { $in: clientIds } }).exec();
+    }
+    async enhancedSearch(filter) {
+        let searchType = 'direct';
+        let promoteMobileMatches = [];
+        if (filter.promoteMobileNumber) {
+            searchType = 'promoteMobile';
+            const mobileNumber = filter.promoteMobileNumber;
+            delete filter.promoteMobileNumber;
+            const promoteClients = await this.promoteClientModel
+                .find({
+                mobile: { $regex: new RegExp(mobileNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+                clientId: { $exists: true }
+            })
+                .lean();
+            promoteMobileMatches = promoteClients.map(pc => ({
+                clientId: pc.clientId,
+                mobile: pc.mobile
+            }));
+            const clientIds = promoteClients.map(pc => pc.clientId);
+            filter.clientId = { $in: clientIds };
+        }
+        const clients = await this.search(filter);
+        return {
+            clients,
+            searchType,
+            promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined
+        };
     }
     async setupClient(clientId, setupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`, settingupClient);
@@ -258,33 +315,32 @@ let ClientService = ClientService_1 = class ClientService {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
             console.log("setupClientQueryDto:", setupClientQueryDto);
-            await connection_manager_1.connectionManager.disconnectAll();
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
-            try {
-                if (newBufferClient) {
+            if (newBufferClient) {
+                try {
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession);
                 }
-                else {
-                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available`);
-                    console.log("Buffer Clients not available");
+                catch (error) {
+                    (0, parseError_1.parseError)(error);
+                    console.log("Removing buffer as error");
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+                    this.telegramService.setActiveClientSetup(undefined);
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
                 }
             }
-            catch (error) {
-                (0, parseError_1.parseError)(error);
-                console.log("Removing buffer as error");
-                const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
-                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
-                this.telegramService.setActiveClientSetup(undefined);
-            }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
+            else {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available, Requested by ${clientId}`);
+                console.log("Buffer Clients not available");
             }
         }
         else {
@@ -494,28 +550,516 @@ let ClientService = ClientService_1 = class ClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async getPromoteMobiles(clientId) {
+        if (!clientId) {
+            throw new common_1.BadRequestException('ClientId is required');
+        }
+        const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
+        return promoteClients.map(pc => pc.mobile).filter(mobile => mobile);
+    }
+    async getAllPromoteMobiles() {
+        const allPromoteClients = await this.promoteClientModel.find({ clientId: { $exists: true } }).lean();
+        return allPromoteClients.map(pc => pc.mobile);
+    }
+    async isPromoteMobile(mobile) {
+        const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+        return {
+            isPromote: !!promoteClient && !!promoteClient.clientId,
+            clientId: promoteClient?.clientId
+        };
+    }
     async addPromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $addToSet: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
+        if (existingPromoteClient) {
+            if (existingPromoteClient.clientId === clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
+            }
+            else if (existingPromoteClient.clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
+            }
+            else {
+                await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
+            }
+        }
+        else {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
+        }
+        return client;
     }
     async removePromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $pull: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const result = await this.promoteClientModel.updateOne({ mobile: mobileNumber, clientId }, { $unset: { clientId: 1 } });
+        if (result.matchedCount === 0) {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
+        }
+        return client;
+    }
+    async getIpForMobile(mobile, clientId) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            if (ipAddress) {
+                this.logger.debug(`Found IP for mobile ${mobile}: ${ipAddress}`);
+                return ipAddress;
+            }
+            this.logger.debug(`No IP found for mobile ${mobile}`);
+            return null;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get IP for mobile ${mobile}: ${error.message}`, error.stack);
+            return null;
+        }
+    }
+    async hasMobileAssignedIp(mobile) {
+        const ip = await this.getIpForMobile(mobile);
+        return ip !== null;
+    }
+    async getMobilesNeedingIpAssignment(clientId) {
+        this.logger.debug(`Getting mobiles needing IP assignment for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const result = {
+            mainMobile: undefined,
+            promoteMobiles: []
+        };
+        if (client.mobile && !(await this.hasMobileAssignedIp(client.mobile))) {
+            result.mainMobile = client.mobile;
+        }
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            if (!(await this.hasMobileAssignedIp(mobile))) {
+                result.promoteMobiles.push(mobile);
+            }
+        }
+        this.logger.debug(`Mobiles needing IP assignment for client ${clientId}:`, result);
+        return result;
+    }
+    async autoAssignIpsToClient(clientId) {
+        this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const errors = [];
+        let assigned = 0;
+        let failed = 0;
+        let mainMobileResult;
+        try {
+            const mainMapping = await this.ipManagementService.assignIpToMobile({
+                mobile: client.mobile,
+                clientId: client.clientId
+            });
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: mainMapping.ipAddress,
+                status: 'assigned'
+            };
+            assigned++;
+        }
+        catch (error) {
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: null,
+                status: 'failed'
+            };
+            errors.push(`Main mobile ${client.mobile}: ${error.message}`);
+            failed++;
+        }
+        const promoteMobileResults = [];
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const promoteMobile of promoteMobiles) {
+            try {
+                const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: promoteMobile,
+                    clientId: client.clientId
+                });
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: promoteMapping.ipAddress,
+                    status: 'assigned'
+                });
+                assigned++;
+            }
+            catch (error) {
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: null,
+                    status: 'failed'
+                });
+                errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
+                failed++;
+            }
+        }
+        const totalMobiles = 1 + promoteMobiles.length;
+        this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
+        return {
+            clientId,
+            mainMobile: mainMobileResult,
+            promoteMobiles: promoteMobileResults,
+            summary: {
+                totalMobiles,
+                assigned,
+                failed,
+                errors
+            }
+        };
+    }
+    async getClientIpInfo(clientId) {
+        this.logger.debug(`Getting IP info for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const mainMobileIp = await this.getIpForMobile(client.mobile, clientId);
+        const mainMobile = {
+            mobile: client.mobile,
+            ipAddress: mainMobileIp,
+            hasIp: mainMobileIp !== null
+        };
+        const promoteMobiles = [];
+        let mobilesWithIp = mainMobile.hasIp ? 1 : 0;
+        const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of clientPromoteMobiles) {
+            const ip = await this.getIpForMobile(mobile, clientId);
+            const hasIp = ip !== null;
+            promoteMobiles.push({
+                mobile,
+                ipAddress: ip,
+                hasIp
+            });
+            if (hasIp)
+                mobilesWithIp++;
+        }
+        const totalMobiles = 1 + clientPromoteMobiles.length;
+        const mobilesWithoutIp = totalMobiles - mobilesWithIp;
+        return {
+            clientId,
+            clientName: client.name,
+            mainMobile,
+            promoteMobiles,
+            dedicatedIps: client.dedicatedIps || [],
+            summary: {
+                totalMobiles,
+                mobilesWithIp,
+                mobilesWithoutIp
+            }
+        };
+    }
+    async releaseIpFromMobile(mobile) {
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            await this.ipManagementService.releaseIpFromMobile({ mobile });
+            this.logger.log(`Successfully released IP from mobile: ${mobile}`);
+            return {
+                success: true,
+                message: `IP released from mobile ${mobile}`
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`, error.stack);
+            return {
+                success: false,
+                message: `Failed to release IP: ${error.message}`
+            };
+        }
+    }
+    async migratePromoteMobilesToClientId() {
+        this.logger.log('🚀 Starting promote mobile migration...');
+        const results = {
+            totalClients: 0,
+            clientsWithPromoteMobiles: 0,
+            mobilesProcessed: 0,
+            mobilesUpdated: 0,
+            mobilesCreated: 0,
+            errors: [],
+            backupCollection: ''
+        };
+        try {
+            const backupCollectionName = `clients_backup_${Date.now()}`;
+            results.backupCollection = backupCollectionName;
+            const allClients = await this.clientModel.find().lean();
+            results.totalClients = allClients.length;
+            const clientsWithPromoteMobiles = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            results.clientsWithPromoteMobiles = clientsWithPromoteMobiles.length;
+            this.logger.log(`📊 Found ${clientsWithPromoteMobiles.length} clients with promote mobiles out of ${allClients.length} total clients`);
+            if (clientsWithPromoteMobiles.length === 0) {
+                return {
+                    success: true,
+                    message: 'No clients with promoteMobile arrays found. Migration not needed.',
+                    results
+                };
+            }
+            await this.clientModel.db.collection(backupCollectionName).insertMany(clientsWithPromoteMobiles);
+            this.logger.log(`💾 Backup created: ${backupCollectionName}`);
+            for (const client of clientsWithPromoteMobiles) {
+                this.logger.debug(`📱 Processing client: ${client.clientId} (${client.name})`);
+                this.logger.debug(`   Promote mobiles: ${client.promoteMobile.join(', ')}`);
+                for (const mobile of client.promoteMobile) {
+                    try {
+                        results.mobilesProcessed++;
+                        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+                        if (existingPromoteClient) {
+                            if (existingPromoteClient.clientId !== client.clientId) {
+                                await this.promoteClientModel.updateOne({ mobile }, { $set: { clientId: client.clientId } });
+                                results.mobilesUpdated++;
+                                this.logger.debug(`   ✅ Updated ${mobile} with clientId: ${client.clientId}`);
+                            }
+                            else {
+                                this.logger.debug(`   ⚠️  ${mobile} already has correct clientId: ${client.clientId}`);
+                            }
+                        }
+                        else {
+                            const newPromoteClient = {
+                                mobile,
+                                clientId: client.clientId,
+                                tgId: `migrated_${mobile}`,
+                                lastActive: new Date().toISOString().split('T')[0],
+                                availableDate: new Date().toISOString().split('T')[0],
+                                channels: 0
+                            };
+                            await this.promoteClientModel.create(newPromoteClient);
+                            results.mobilesCreated++;
+                            this.logger.debug(`   🆕 Created PromoteClient for ${mobile} with clientId: ${client.clientId}`);
+                            this.logger.debug(`   ⚠️  Note: Created with placeholder data - please update tgId, lastActive, and channels manually`);
+                        }
+                    }
+                    catch (mobileError) {
+                        const errorMsg = `Error processing mobile ${mobile}: ${mobileError.message}`;
+                        this.logger.error(`   ❌ ${errorMsg}`);
+                        results.errors.push({
+                            clientId: client.clientId,
+                            mobile,
+                            error: errorMsg
+                        });
+                    }
+                }
+            }
+            this.logger.log('\n📊 Migration Summary:');
+            this.logger.log(`   ✅ Mobiles processed: ${results.mobilesProcessed}`);
+            this.logger.log(`   🔄 Existing mobiles updated: ${results.mobilesUpdated}`);
+            this.logger.log(`   🆕 New PromoteClient documents created: ${results.mobilesCreated}`);
+            this.logger.log(`   ❌ Errors encountered: ${results.errors.length}`);
+            this.logger.log(`   💾 Backup collection: ${results.backupCollection}`);
+            if (results.errors.length > 0) {
+                this.logger.warn('⚠️  Some errors occurred during migration:');
+                results.errors.forEach(error => {
+                    this.logger.warn(`   - Client ${error.clientId}, Mobile ${error.mobile}: ${error.error}`);
+                });
+            }
+            this.logger.log('🧹 Cleaning up old promoteMobile fields...');
+            const cleanupResult = await this.clientModel.updateMany({ promoteMobile: { $exists: true } }, { $unset: { promoteMobile: '' } });
+            this.logger.log(`   ✅ Removed promoteMobile field from ${cleanupResult.modifiedCount} clients`);
+            const successMessage = `Migration completed successfully! ` +
+                `Processed ${results.mobilesProcessed} promote mobiles from ${results.clientsWithPromoteMobiles} clients. ` +
+                `Updated ${results.mobilesUpdated} existing and created ${results.mobilesCreated} new PromoteClient documents. ` +
+                `Cleaned up promoteMobile field from ${cleanupResult.modifiedCount} clients.`;
+            this.logger.log(`🎉 ${successMessage}`);
+            return {
+                success: true,
+                message: successMessage,
+                results
+            };
+        }
+        catch (error) {
+            const errorMessage = `Migration failed: ${error.message}`;
+            this.logger.error(`💥 ${errorMessage}`, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                results
+            };
+        }
+    }
+    async verifyPromoteMobileMigration() {
+        this.logger.log('🔍 Verifying promote mobile migration...');
+        try {
+            const verification = {
+                totalClientsWithPromoteMobile: 0,
+                totalPromoteClientsWithClientId: 0,
+                totalPromoteClientsWithoutClientId: 0,
+                consistencyIssues: []
+            };
+            const clientsWithPromoteMobile = await this.clientModel.countDocuments({
+                promoteMobile: { $exists: true, $type: 'array', $not: { $size: 0 } }
+            });
+            verification.totalClientsWithPromoteMobile = clientsWithPromoteMobile;
+            const promoteClientsWithClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true }
+            });
+            verification.totalPromoteClientsWithClientId = promoteClientsWithClientId;
+            const promoteClientsWithoutClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: false }
+            });
+            verification.totalPromoteClientsWithoutClientId = promoteClientsWithoutClientId;
+            if (clientsWithPromoteMobile > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'clients_still_have_promote_mobile_arrays',
+                    details: `${clientsWithPromoteMobile} clients still have promoteMobile arrays. Migration may not be complete.`
+                });
+            }
+            if (promoteClientsWithoutClientId > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'promote_clients_without_client_id',
+                    details: `${promoteClientsWithoutClientId} PromoteClient documents don't have clientId assigned. These may be unassigned promote clients.`
+                });
+            }
+            const promoteClientsWithClientIds = await this.promoteClientModel.find({
+                clientId: { $exists: true }
+            }).lean();
+            const allClientIds = new Set((await this.clientModel.find().lean()).map(c => c.clientId));
+            for (const promoteClient of promoteClientsWithClientIds) {
+                if (!allClientIds.has(promoteClient.clientId)) {
+                    verification.consistencyIssues.push({
+                        issue: 'orphaned_promote_client',
+                        mobile: promoteClient.mobile,
+                        clientId: promoteClient.clientId,
+                        details: `PromoteClient ${promoteClient.mobile} references non-existent client ${promoteClient.clientId}`
+                    });
+                }
+            }
+            let message;
+            let success;
+            if (verification.consistencyIssues.length === 0) {
+                message = `✅ Migration verification passed! All ${promoteClientsWithClientId} PromoteClient documents have valid clientId assignments.`;
+                success = true;
+            }
+            else {
+                message = `⚠️  Migration verification found ${verification.consistencyIssues.length} consistency issues that may need attention.`;
+                success = false;
+            }
+            this.logger.log(message);
+            if (verification.consistencyIssues.length > 0) {
+                this.logger.warn('Consistency issues found:');
+                verification.consistencyIssues.forEach(issue => {
+                    this.logger.warn(`  - ${issue.issue}: ${issue.details}`);
+                });
+            }
+            return {
+                success,
+                message,
+                verification
+            };
+        }
+        catch (error) {
+            const errorMessage = `Verification failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                verification: {
+                    totalClientsWithPromoteMobile: 0,
+                    totalPromoteClientsWithClientId: 0,
+                    totalPromoteClientsWithoutClientId: 0,
+                    consistencyIssues: [{
+                            issue: 'verification_error',
+                            details: error.message
+                        }]
+                }
+            };
+        }
+    }
+    async rollbackPromoteMobileMigration(backupCollectionName) {
+        this.logger.warn(`🔄 Rolling back migration using backup: ${backupCollectionName}`);
+        try {
+            const backupData = await this.clientModel.db.collection(backupCollectionName).find().toArray();
+            if (backupData.length === 0) {
+                throw new Error(`Backup collection ${backupCollectionName} is empty or doesn't exist`);
+            }
+            let restored = 0;
+            for (const backupClient of backupData) {
+                await this.clientModel.updateOne({ clientId: backupClient.clientId }, { $set: { promoteMobile: backupClient.promoteMobile } });
+                if (backupClient.promoteMobile && Array.isArray(backupClient.promoteMobile)) {
+                    for (const mobile of backupClient.promoteMobile) {
+                        await this.promoteClientModel.updateOne({ mobile }, { $unset: { clientId: 1 } });
+                    }
+                }
+                restored++;
+            }
+            const message = `✅ Rollback completed! Restored ${restored} clients to original state.`;
+            this.logger.log(message);
+            return {
+                success: true,
+                message,
+                restored
+            };
+        }
+        catch (error) {
+            const errorMessage = `❌ Rollback failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                restored: 0
+            };
+        }
+    }
+    async checkPromoteMobileMigrationStatus() {
+        this.logger.log('🔍 Checking promote mobile migration status...');
+        try {
+            const allClients = await this.clientModel.find().lean();
+            const legacyClients = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            const modernPromoteClients = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true, $ne: null }
+            });
+            const totalPromoteClients = await this.promoteClientModel.countDocuments();
+            const isLegacyData = legacyClients.length > 0;
+            const recommendations = [];
+            if (isLegacyData) {
+                recommendations.push(`🔄 Migration needed: ${legacyClients.length} clients still use legacy array storage`);
+                recommendations.push('📦 Run migratePromoteMobilesToClientId() to migrate data');
+                recommendations.push('✅ Run verifyPromoteMobileMigration() after migration to verify');
+            }
+            else {
+                recommendations.push('✅ All clients are using modern reference-based storage');
+                if (modernPromoteClients === 0) {
+                    recommendations.push('ℹ️ No promote mobile relationships found');
+                }
+                else {
+                    recommendations.push(`📊 ${modernPromoteClients} promote mobile relationships are properly configured`);
+                }
+            }
+            const status = {
+                isLegacyData,
+                legacyClientsCount: legacyClients.length,
+                modernClientsCount: modernPromoteClients,
+                totalPromoteClients,
+                recommendations
+            };
+            this.logger.log(`📋 Migration Status: ${JSON.stringify(status, null, 2)}`);
+            return status;
+        }
+        catch (error) {
+            this.logger.error('❌ Error checking migration status:', error.stack);
+            throw error;
+        }
     }
 };
 exports.ClientService = ClientService;
 exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
+    __param(1, (0, mongoose_1.InjectModel)('PromoteClient')),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => ip_management_service_1.IpManagementService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
         archived_client_service_1.ArchivedClientService,
         session_manager_1.SessionService,
+        ip_management_service_1.IpManagementService,
         npoint_service_1.NpointService])
 ], ClientService);
 //# sourceMappingURL=client.service.js.map

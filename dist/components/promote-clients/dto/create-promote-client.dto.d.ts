@@ -4,4 +4,5 @@ export declare class CreatePromoteClientDto {
     readonly availableDate: string;
     readonly lastActive: string;
     readonly channels: number;
+    readonly clientId?: string;
 }

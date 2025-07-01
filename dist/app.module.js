@@ -33,6 +33,7 @@ const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const memory_cleanup_service_1 = require("./memory-cleanup.service");
 const session_manager_1 = require("./components/session-manager");
+const ip_management_module_1 = require("./components/ip-management/ip-management.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -47,6 +48,7 @@ exports.AppModule = AppModule = __decorate([
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             session_manager_1.SessionModule,
+            ip_management_module_1.IpManagementModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
