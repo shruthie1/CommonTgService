@@ -40,7 +40,7 @@ export class ClientService implements OnModuleDestroy {
     private clientsMap: Map<string, Client> = new Map();
     private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
     constructor(@InjectModel(Client.name) private clientModel: Model<ClientDocument>,
-        @InjectModel('PromoteClient') private promoteClientModel: Model<PromoteClientDocument>,
+        @InjectModel(PromoteClient.name) private promoteClientModel: Model<PromoteClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
         @Inject(forwardRef(() => BufferClientService))

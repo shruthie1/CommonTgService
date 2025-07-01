@@ -13,13 +13,13 @@ import { TimestampModule } from '../timestamps/timestamp.module';
 import { SessionModule } from '../session-manager';
 import { IpManagementModule } from '../ip-management/ip-management.module';
 import { PromoteClientModule } from '../promote-clients/promote-client.module';
-import { PromoteClientSchema } from '../promote-clients';
+import { PromoteClient, PromoteClientSchema } from '../promote-clients';
 
 @Module({
   imports: [
     InitModule,
     MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }]),
-    MongooseModule.forFeature([{ name: 'PromoteClient', schema: PromoteClientSchema, collection: 'promoteClients' }]),
+    MongooseModule.forFeature([{ name: PromoteClient.name, schema: PromoteClientSchema, collection: 'promoteClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => BufferClientModule),
     forwardRef(() => UsersModule),
