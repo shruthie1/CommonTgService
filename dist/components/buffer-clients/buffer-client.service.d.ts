@@ -50,5 +50,6 @@ export declare class BufferClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
+    private processBufferClient;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[]): Promise<void>;
 }

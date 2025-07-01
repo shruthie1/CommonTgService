@@ -438,82 +438,92 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async checkBufferClients() {
-        if (!this.telegramService.getActiveClientSetup()) {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            const bufferclients = await this.findAll();
-            let goodIds = [];
-            const badIds = [];
-            if (bufferclients.length < 70) {
-                for (let i = 0; i < 70 - bufferclients.length; i++) {
-                    badIds.push(i.toString());
-                }
+        if (this.telegramService.getActiveClientSetup()) {
+            this.logger.warn("Ignored active check buffer channels as active client setup exists");
+            return;
+        }
+        await connection_manager_1.connectionManager.disconnectAll();
+        await (0, Helpers_1.sleep)(2000);
+        const bufferclients = await this.findAll();
+        const badIds = [];
+        let goodIds = [];
+        if (bufferclients.length < 80) {
+            for (let i = 0; i < 80 - bufferclients.length; i++) {
+                badIds.push(i.toString());
             }
-            const clients = await this.clientService.findAll();
-            const promoteclients = await this.promoteClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => client.promoteMobile)].filter(Boolean);
-            const promoteclientIds = promoteclients.map(client => client.mobile);
-            const today = (new Date(Date.now())).toISOString().split('T')[0];
-            for (const document of bufferclients) {
-                if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
-                    try {
-                        const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
-                        try {
-                            const me = await cli.getMe();
-                            if (me.username) {
-                                await this.telegramService.updateUsername(document.mobile, '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            if (me.firstName !== "Deleted Account") {
-                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            await this.telegramService.deleteProfilePhotos(document.mobile);
-                            const hasPassword = await cli.hasPassword();
-                            if (!hasPassword) {
-                                this.logger.warn("Client does not have password");
-                                badIds.push(document.mobile);
-                            }
-                            else {
-                                this.logger.debug(document.mobile + " : ALL Good");
-                                goodIds.push(document.mobile);
-                            }
-                        }
-                        catch (innerError) {
-                            this.logger.error(`Error processing client ${document.mobile}: ${innerError.message}`);
-                            badIds.push(document.mobile);
-                            await this.remove(document.mobile);
-                        }
-                        finally {
-                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        }
-                        await (0, Helpers_1.sleep)(2000);
-                    }
-                    catch (error) {
-                        this.logger.error(`Error with client ${document.mobile}: ${error.message}`);
-                        (0, parseError_1.parseError)(error);
-                        badIds.push(document.mobile);
-                        await this.remove(document.mobile);
-                        try {
-                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        }
-                        catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
-                        }
-                    }
+        }
+        const clients = await this.clientService.findAll();
+        const promoteclients = await this.promoteClientService.findAll();
+        const clientIds = [
+            ...clients.map(c => c.mobile),
+            ...clients.flatMap(c => c.promoteMobile),
+        ].filter(Boolean);
+        const promoteclientIds = promoteclients.map(c => c.mobile);
+        const today = new Date().toISOString().split('T')[0];
+        const toProcess = bufferclients.filter(doc => !clientIds.includes(doc.mobile) &&
+            !promoteclientIds.includes(doc.mobile));
+        const parallelLimit = 4;
+        for (let i = 0; i < toProcess.length; i += parallelLimit) {
+            const chunk = toProcess.slice(i, i + parallelLimit);
+            const results = await Promise.allSettled(chunk.map(doc => this.processBufferClient(doc, badIds, goodIds)));
+            await (0, Helpers_1.sleep)(2000);
+        }
+        for (const doc of bufferclients) {
+            if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
+                this.logger.warn("Number is an Active Client");
+                goodIds.push(doc.mobile);
+                await this.remove(doc.mobile);
+            }
+        }
+        goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
+        this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
+        await this.addNewUserstoBufferClients(badIds, goodIds);
+    }
+    async processBufferClient(doc, badIds, goodIds) {
+        try {
+            const cli = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+            try {
+                const me = await cli.getMe();
+                if (me.username) {
+                    await this.telegramService.updateUsername(doc.mobile, '');
+                    await (0, Helpers_1.sleep)(2000);
+                }
+                if (me.firstName !== "Deleted Account") {
+                    await this.telegramService.updateNameandBio(doc.mobile, 'Deleted Account', '');
+                    await (0, Helpers_1.sleep)(2000);
+                }
+                await this.telegramService.deleteProfilePhotos(doc.mobile);
+                const hasPassword = await cli.hasPassword();
+                if (!hasPassword) {
+                    this.logger.warn("Client does not have password");
+                    badIds.push(doc.mobile);
                 }
                 else {
-                    this.logger.warn("Number is a Active Client");
-                    goodIds.push(document.mobile);
-                    await this.remove(document.mobile);
+                    this.logger.debug(doc.mobile + " : ALL Good");
+                    goodIds.push(doc.mobile);
                 }
             }
-            goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
-            this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
-            await this.addNewUserstoBufferClients(badIds, goodIds);
+            catch (innerError) {
+                this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
+                badIds.push(doc.mobile);
+                await this.remove(doc.mobile);
+            }
+            finally {
+                await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
+            }
+            await (0, Helpers_1.sleep)(2000);
         }
-        else {
-            this.logger.warn("Ignored active check buffer channels as active client setup exists");
+        catch (error) {
+            this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
+            (0, parseError_1.parseError)(error);
+            badIds.push(doc.mobile);
+            await this.remove(doc.mobile);
+            try {
+                await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
+            }
+            catch (unregisterError) {
+                this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+            }
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
