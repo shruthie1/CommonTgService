@@ -18244,6 +18244,38 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status of the promote client',
+        example: 'active',
+        default: 'active',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreatePromoteClientDto.prototype, "lastUsed", void 0);
 
 
 /***/ }),
@@ -18390,6 +18422,295 @@ __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-clie
 
 /***/ }),
 
+/***/ "./src/components/promote-clients/migration.service.ts":
+/*!*************************************************************!*\
+  !*** ./src/components/promote-clients/migration.service.ts ***!
+  \*************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var PromoteClientMigrationService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PromoteClientMigrationService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
+const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
+let PromoteClientMigrationService = PromoteClientMigrationService_1 = class PromoteClientMigrationService {
+    constructor(promoteClientModel, promoteClientService, clientService) {
+        this.promoteClientModel = promoteClientModel;
+        this.promoteClientService = promoteClientService;
+        this.clientService = clientService;
+        this.logger = new common_1.Logger(PromoteClientMigrationService_1.name);
+    }
+    async executeRoundRobinMigration(dryRun = false) {
+        const startTime = Date.now();
+        this.logger.log('🚀 Starting PromoteClient Round-Robin Migration');
+        this.logger.log(`📋 Mode: ${dryRun ? 'DRY RUN (no changes will be made)' : 'LIVE MIGRATION'}`);
+        const stats = {
+            totalPromoteClients: 0,
+            unassignedPromoteClients: 0,
+            availableClients: 0,
+            assignedCount: 0,
+            skippedCount: 0,
+            errorCount: 0,
+            distributionBefore: {},
+            distributionAfter: {}
+        };
+        try {
+            await this.gatherInitialStats(stats);
+            const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+            if (unassignedPromoteClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.log('✅ No unassigned promote clients found. Migration not needed.');
+                return {
+                    success: true,
+                    message: 'No unassigned promote clients found. Migration not needed.',
+                    stats,
+                    executionTime
+                };
+            }
+            const availableClients = await this.getAvailableClients();
+            if (availableClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.error('❌ No available clients found. Cannot proceed with migration.');
+                return {
+                    success: false,
+                    message: 'No available clients found. Cannot proceed with migration.',
+                    stats,
+                    executionTime
+                };
+            }
+            const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+            this.logAssignmentPlan(assignments, availableClients);
+            if (!dryRun) {
+                await this.executeAssignments(assignments, stats);
+                await this.gatherFinalStats(stats);
+            }
+            const executionTime = Date.now() - startTime;
+            const message = dryRun
+                ? `DRY RUN: Would assign ${assignments.length} promote clients across ${availableClients.length} clients`
+                : `Successfully assigned ${stats.assignedCount} promote clients with ${stats.errorCount} errors`;
+            return {
+                success: true,
+                message,
+                stats,
+                executionTime
+            };
+        }
+        catch (error) {
+            const executionTime = Date.now() - startTime;
+            this.logger.error('💥 Migration failed:', error.message);
+            return {
+                success: false,
+                message: `Migration failed: ${error.message}`,
+                stats,
+                executionTime
+            };
+        }
+    }
+    async getMigrationPreview() {
+        const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+        const availableClients = await this.getAvailableClients();
+        const currentDistribution = await this.getCurrentDistribution();
+        if (unassignedPromoteClients.length === 0 || availableClients.length === 0) {
+            return {
+                unassignedCount: unassignedPromoteClients.length,
+                availableClients,
+                projectedDistribution: currentDistribution,
+                currentDistribution,
+                isBalanced: true
+            };
+        }
+        const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+        const projectedDistribution = { ...currentDistribution };
+        for (const assignment of assignments) {
+            projectedDistribution[assignment.clientId] = (projectedDistribution[assignment.clientId] || 0) + 1;
+        }
+        const counts = Object.values(projectedDistribution);
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        const isBalanced = (maxCount - minCount) <= 1;
+        return {
+            unassignedCount: unassignedPromoteClients.length,
+            availableClients,
+            projectedDistribution,
+            currentDistribution,
+            isBalanced
+        };
+    }
+    async getMigrationStatus() {
+        const totalPromoteClients = await this.promoteClientModel.countDocuments();
+        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const assignedPromoteClients = totalPromoteClients - unassignedPromoteClients;
+        const distributionPerClient = await this.getCurrentDistribution();
+        return {
+            totalPromoteClients,
+            assignedPromoteClients,
+            unassignedPromoteClients,
+            distributionPerClient,
+            lastMigrationNeeded: unassignedPromoteClients > 0
+        };
+    }
+    async gatherInitialStats(stats) {
+        this.logger.log('📊 Gathering initial statistics...');
+        stats.totalPromoteClients = await this.promoteClientModel.countDocuments();
+        stats.unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const clients = await this.clientService.findAll();
+        stats.availableClients = clients.length;
+        stats.distributionBefore = await this.getCurrentDistribution();
+        this.logger.log(`📈 Initial Stats:`);
+        this.logger.log(`   Total PromoteClients: ${stats.totalPromoteClients}`);
+        this.logger.log(`   Unassigned PromoteClients: ${stats.unassignedPromoteClients}`);
+        this.logger.log(`   Available Clients: ${stats.availableClients}`);
+    }
+    async getUnassignedPromoteClientsSorted() {
+        this.logger.log('🔍 Finding unassigned promote clients...');
+        const unassigned = await this.promoteClientModel.find({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        }).sort({ channels: 1 }).exec();
+        this.logger.log(`📱 Found ${unassigned.length} unassigned promote clients`);
+        if (unassigned.length > 0) {
+            const channelRange = {
+                min: Math.min(...unassigned.map(pc => pc.channels)),
+                max: Math.max(...unassigned.map(pc => pc.channels)),
+                avg: Math.round(unassigned.reduce((sum, pc) => sum + pc.channels, 0) / unassigned.length)
+            };
+            this.logger.log(`📊 Channel count range: ${channelRange.min} - ${channelRange.max} (avg: ${channelRange.avg})`);
+        }
+        return unassigned;
+    }
+    async getAvailableClients() {
+        this.logger.log('👥 Getting available clients...');
+        const clients = await this.clientService.findAll();
+        const clientIds = clients.map(client => client.clientId).filter(Boolean);
+        this.logger.log(`👤 Found ${clientIds.length} available clients: ${clientIds.join(', ')}`);
+        return clientIds;
+    }
+    calculateRoundRobinAssignments(promoteClients, availableClients) {
+        this.logger.log('🔄 Calculating round-robin assignments...');
+        const assignments = [];
+        let clientIndex = 0;
+        for (const promoteClient of promoteClients) {
+            const assignedClientId = availableClients[clientIndex];
+            assignments.push({
+                mobile: promoteClient.mobile,
+                clientId: assignedClientId,
+                channels: promoteClient.channels
+            });
+            clientIndex = (clientIndex + 1) % availableClients.length;
+        }
+        return assignments;
+    }
+    logAssignmentPlan(assignments, availableClients) {
+        this.logger.log('📋 Assignment Plan:');
+        const assignmentsByClient = availableClients.reduce((acc, clientId) => {
+            acc[clientId] = assignments.filter(a => a.clientId === clientId);
+            return acc;
+        }, {});
+        for (const clientId of availableClients) {
+            const clientAssignments = assignmentsByClient[clientId];
+            const totalChannels = clientAssignments.reduce((sum, a) => sum + a.channels, 0);
+            this.logger.log(`   ${clientId}: ${clientAssignments.length} promote clients, ${totalChannels} total channels`);
+        }
+        const countsPerClient = availableClients.map(clientId => assignmentsByClient[clientId].length);
+        const minCount = Math.min(...countsPerClient);
+        const maxCount = Math.max(...countsPerClient);
+        const isBalanced = (maxCount - minCount) <= 1;
+        this.logger.log(`⚖️  Distribution balance: ${isBalanced ? '✅ BALANCED' : '⚠️  UNBALANCED'} (min: ${minCount}, max: ${maxCount})`);
+    }
+    async executeAssignments(assignments, stats) {
+        this.logger.log('💾 Executing assignments...');
+        const batchSize = 10;
+        for (let i = 0; i < assignments.length; i += batchSize) {
+            const batch = assignments.slice(i, i + batchSize);
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(assignments.length / batchSize);
+            this.logger.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} assignments)...`);
+            const results = await Promise.allSettled(batch.map(async (assignment) => {
+                try {
+                    await this.promoteClientModel.findOneAndUpdate({ mobile: assignment.mobile }, {
+                        $set: {
+                            clientId: assignment.clientId,
+                            status: 'active',
+                            message: `Assigned to ${assignment.clientId} via round-robin migration`
+                        }
+                    }, { new: true }).exec();
+                    stats.assignedCount++;
+                    this.logger.debug(`✅ Assigned ${assignment.mobile} → ${assignment.clientId}`);
+                }
+                catch (error) {
+                    stats.errorCount++;
+                    this.logger.error(`❌ Failed to assign ${assignment.mobile}: ${error.message}`);
+                    throw error;
+                }
+            }));
+            const failedCount = results.filter(result => result.status === 'rejected').length;
+            if (failedCount > 0) {
+                this.logger.warn(`⚠️  Batch ${batchNumber}: ${failedCount} failed assignments`);
+            }
+            if (i + batchSize < assignments.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        this.logger.log(`✅ Assignment execution completed: ${stats.assignedCount} assigned, ${stats.errorCount} errors`);
+    }
+    async gatherFinalStats(stats) {
+        this.logger.log('📊 Gathering final statistics...');
+        stats.distributionAfter = await this.getCurrentDistribution();
+    }
+    async getCurrentDistribution() {
+        const distribution = {};
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            const count = await this.promoteClientModel.countDocuments({ clientId: client.clientId });
+            distribution[client.clientId] = count;
+        }
+        return distribution;
+    }
+};
+exports.PromoteClientMigrationService = PromoteClientMigrationService;
+exports.PromoteClientMigrationService = PromoteClientMigrationService = PromoteClientMigrationService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        promote_client_service_1.PromoteClientService,
+        client_service_1.ClientService])
+], PromoteClientMigrationService);
+
+
+/***/ }),
+
 /***/ "./src/components/promote-clients/promote-client.controller.ts":
 /*!*********************************************************************!*\
   !*** ./src/components/promote-clients/promote-client.controller.ts ***!
@@ -18414,12 +18735,14 @@ exports.PromoteClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts");
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService) {
+    constructor(clientService, migrationService) {
         this.clientService = clientService;
+        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -18448,8 +18771,8 @@ let PromoteClientController = class PromoteClientController {
         });
         return "initiated Checking";
     }
-    async findAll() {
-        return this.clientService.findAll();
+    async findAll(status) {
+        return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
         return await this.clientService.setAsPromoteClient(mobile);
@@ -18476,6 +18799,52 @@ let PromoteClientController = class PromoteClientController {
     }
     async getPromoteClientDistribution() {
         return this.clientService.getPromoteClientDistribution();
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.clientService.getPromoteClientsByStatus(status);
+    }
+    async getPromoteClientsWithMessages() {
+        return this.clientService.getPromoteClientsWithMessages();
+    }
+    async updateStatus(mobile, body) {
+        return this.clientService.updateStatus(mobile, body.status, body.message);
+    }
+    async markAsActive(mobile, body = {}) {
+        return this.clientService.markAsActive(mobile, body.message);
+    }
+    async markAsInactive(mobile, body) {
+        return this.clientService.markAsInactive(mobile, body.reason);
+    }
+    async markAsUsed(mobile, body = {}) {
+        return this.clientService.markAsUsed(mobile, body.message);
+    }
+    async updateLastUsed(mobile) {
+        return this.clientService.updateLastUsed(mobile);
+    }
+    async getLeastRecentlyUsed(clientId, limit) {
+        return this.clientService.getLeastRecentlyUsedPromoteClients(clientId, limit || 1);
+    }
+    async getNextAvailable(clientId) {
+        return this.clientService.getNextAvailablePromoteClient(clientId);
+    }
+    async getUnusedPromoteClients(hoursAgo, clientId) {
+        return this.clientService.getUnusedPromoteClients(hoursAgo || 24, clientId);
+    }
+    async getUsageStatistics(clientId) {
+        return this.clientService.getUsageStatistics(clientId);
+    }
+    async getMigrationStatus() {
+        return this.migrationService.getMigrationStatus();
+    }
+    async getMigrationPreview() {
+        return this.migrationService.getMigrationPreview();
+    }
+    async executeRoundRobinMigration(body = {}) {
+        const dryRun = body.dryRun !== false;
+        return this.migrationService.executeRoundRobinMigration(dryRun);
+    }
+    async executeRoundRobinMigrationLive() {
+        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -18534,8 +18903,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findAll", null);
 __decorate([
@@ -18597,10 +18968,195 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getPromoteClientDistribution", null);
+__decorate([
+    (0, common_1.Get)('status/:status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
+    (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    __param(0, (0, common_1.Param)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsByStatus", null);
+__decorate([
+    (0, common_1.Get)('messages/all'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all promote clients with their status messages' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsWithMessages", null);
+__decorate([
+    (0, common_1.Patch)('status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update status of a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', description: 'New status (active/inactive)' },
+                message: { type: 'string', description: 'Status message (optional)' }
+            },
+            required: ['status']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)('activate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as active' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Activation message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsActive", null);
+__decorate([
+    (0, common_1.Patch)('deactivate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as inactive' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                reason: { type: 'string', description: 'Reason for deactivation' }
+            },
+            required: ['reason']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsInactive", null);
+__decorate([
+    (0, common_1.Patch)('mark-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as used (update lastUsed timestamp)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Usage message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Patch)('update-last-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateLastUsed", null);
+__decorate([
+    (0, common_1.Get)('least-recently-used/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getLeastRecentlyUsed", null);
+__decorate([
+    (0, common_1.Get)('next-available/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getNextAvailable", null);
+__decorate([
+    (0, common_1.Get)('unused'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('hoursAgo')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUnusedPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('usage-stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUsageStatistics", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationStatus", null);
+__decorate([
+    (0, common_1.Get)('migration/preview'),
+    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationPreview", null);
+__decorate([
+    (0, common_1.Post)('migration/execute'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                dryRun: {
+                    type: 'boolean',
+                    description: 'Run in dry-run mode (no changes will be made)',
+                    default: true
+                }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/execute-live'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
+        description: 'This endpoint will make actual changes to the database. Use with caution!'
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
+        migration_service_1.PromoteClientMigrationService])
 ], PromoteClientController);
 
 
@@ -18624,6 +19180,7 @@ exports.PromoteClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const promote_client_controller_1 = __webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
@@ -18651,8 +19208,8 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
-        providers: [promote_client_service_1.PromoteClientService],
-        exports: [promote_client_service_1.PromoteClientService]
+        providers: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService],
+        exports: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService]
     })
 ], PromoteClientModule);
 
@@ -18718,11 +19275,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
     }
     async create(promoteClient) {
-        const newUser = new this.promoteClientModel(promoteClient);
+        const promoteClientData = {
+            ...promoteClient,
+            status: promoteClient.status || 'active',
+            message: promoteClient.message || 'Account is functioning properly'
+        };
+        const newUser = new this.promoteClientModel(promoteClientData);
         return newUser.save();
     }
-    async findAll() {
-        return this.promoteClientModel.find().exec();
+    async findAll(statusFilter) {
+        const filter = statusFilter ? { status: statusFilter } : {};
+        return this.promoteClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
         const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
@@ -18738,14 +19301,37 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         return updatedUser;
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async updateLastUsed(mobile) {
+        return this.update(mobile, { lastUsed: new Date() });
+    }
+    async markAsUsed(mobile, message) {
+        const updateData = { lastUsed: new Date() };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async markAsActive(mobile, message = 'Account is functioning properly') {
+        return this.updateStatus(mobile, 'active', message);
+    }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            console.log("Updating");
+            this.logger.debug("Updating existing promote client");
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            console.log("creating");
+            this.logger.debug("Creating new promote client");
             return this.create(createOrUpdateUserDto);
         }
     }
@@ -18769,11 +19355,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log(`PromoteClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        console.log(filter);
+        this.logger.debug(`Search filter: ${JSON.stringify(filter)}`);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter);
+        this.logger.debug(`Modified filter: ${JSON.stringify(filter)}`);
         return this.promoteClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
@@ -18801,7 +19387,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelMap.delete(key);
     }
     clearPromoteMap() {
-        console.log("PromoteMap cleared");
+        this.logger.debug("PromoteMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
@@ -18814,7 +19400,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 await connection_manager_1.connectionManager.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
                 const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-                const clients = await this.promoteClientModel.find({ channels: { "$lt": 300 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
+                const clients = await this.promoteClientModel.find({
+                    channels: { "$lt": 300 },
+                    mobile: { $nin: existingkeys },
+                    status: 'active'
+                }).sort({ channels: 1 }).limit(8);
                 this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
                 if (clients.length > 0) {
                     for (const document of clients) {
@@ -18847,12 +19437,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (error) {
                             const errorDetails = (0, parseError_1.parseError)(error);
                             this.logger.error(`Error processing client ${document.mobile}:`, errorDetails);
-                            if (error.message === "SESSION_REVOKED" ||
-                                error.message === "AUTH_KEY_UNREGISTERED" ||
-                                error.message === "USER_DEACTIVATED" ||
-                                error.message === "USER_DEACTIVATED_BAN" ||
-                                error.message === "FROZEN_METHOD_INVALID") {
-                                this.logger.warn(`${document.mobile}: Session invalid, removing client`);
+                            const errorMsg = error.errorMessage || error.message || 'Unknown error';
+                            if (errorMsg === "SESSION_REVOKED" ||
+                                errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                                errorMsg === "USER_DEACTIVATED" ||
+                                errorMsg === "USER_DEACTIVATED_BAN" ||
+                                errorMsg === "FROZEN_METHOD_INVALID") {
+                                this.logger.warn(`${document.mobile}: Session invalid, marking as inactive and removing client`);
+                                try {
+                                    await this.markAsInactive(document.mobile, `Session error: ${errorMsg}`);
+                                }
+                                catch (statusUpdateError) {
+                                    this.logger.error(`Failed to update status for ${document.mobile}:`, statusUpdateError);
+                                }
                                 await this.remove(document.mobile);
                             }
                         }
@@ -18925,17 +19522,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
                         this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
-                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                        const errorMsg = error.errorMessage || error.message;
+                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
                         }
-                        if (error.errorMessage === "SESSION_REVOKED" ||
-                            error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
-                            error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                        if (errorMsg === "SESSION_REVOKED" ||
+                            errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                            errorMsg === "USER_DEACTIVATED" ||
+                            errorMsg === "USER_DEACTIVATED_BAN") {
+                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            try {
+                                await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
+                            }
+                            catch (statusUpdateError) {
+                                this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
+                            }
                             await this.remove(mobile);
                         }
                     }
@@ -18977,7 +19581,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
     }
     clearLeaveMap() {
-        console.log("LeaveMap cleared");
+        this.logger.debug("LeaveMap cleared");
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
     }
@@ -19100,6 +19704,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
+                    status: 'active',
+                    message: 'Manually configured as promote client',
+                    lastUsed: null
                 };
                 await this.promoteClientModel.findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             }
@@ -19116,25 +19723,35 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async checkPromoteClients() {
         if (!this.telegramService.getActiveClientSetup()) {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            const promoteclients = await this.findAll();
-            let goodIds = [];
-            const badPromoteClientMobiles = [];
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
             const clientMainMobiles = clients.map(c => c.mobile);
-            const assignedPromoteMobiles = await this.promoteClientModel
-                .find({ clientId: { $exists: true } })
-                .distinct('mobile');
-            const clientIds = [...clientMainMobiles, ...assignedPromoteMobiles].filter(Boolean);
             const bufferClientIds = bufferClients.map(c => c.mobile);
+            const assignedPromoteMobiles = await this.promoteClientModel
+                .find({ clientId: { $exists: true }, status: 'active' })
+                .distinct('mobile');
+            const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
             const promoteClientsPerClient = new Map();
             const clientNeedingPromoteClients = [];
+            const promoteClientCounts = await this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active'
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$clientId',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+            for (const result of promoteClientCounts) {
+                promoteClientsPerClient.set(result._id, result.count);
+            }
             for (const client of clients) {
-                const assignedCount = await this.promoteClientModel.countDocuments({
-                    clientId: client.clientId
-                });
+                const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
                 promoteClientsPerClient.set(client.clientId, assignedCount);
                 const needed = Math.max(0, 12 - assignedCount);
                 if (needed > 0) {
@@ -19153,64 +19770,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`);
             this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
             this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
-            const today = new Date().toISOString().split('T')[0];
-            const chunkArray = (arr, size) => {
-                const chunks = [];
-                for (let i = 0; i < arr.length; i += size) {
-                    chunks.push(arr.slice(i, i + size));
-                }
-                return chunks;
-            };
-            const chunks = chunkArray(promoteclients, 4);
-            for (const batch of chunks) {
-                await Promise.all(batch.map(async (document) => {
-                    if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
-                        try {
-                            const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
-                            const me = await cli.getMe();
-                            if (me.username) {
-                                await this.telegramService.updateUsername(document.mobile, '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            if (me.firstName !== "Deleted Account") {
-                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            await this.telegramService.deleteProfilePhotos(document.mobile);
-                            const hasPassword = await cli.hasPassword();
-                            if (!hasPassword) {
-                                console.log("Client does not have password, potential candidate");
-                                badPromoteClientMobiles.push(document.mobile);
-                            }
-                            else {
-                                console.log(document.mobile, " :  ALL Good");
-                                goodIds.push(document.mobile);
-                            }
-                            await this.telegramService.removeOtherAuths(document.mobile);
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        catch (error) {
-                            (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
-                            badPromoteClientMobiles.push(document.mobile);
-                            await this.remove(document.mobile);
-                        }
-                        finally {
-                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        }
-                    }
-                    else {
-                        console.log("Number is an Active Client");
-                        goodIds.push(document.mobile);
-                        await this.remove(document.mobile);
-                    }
-                }));
-            }
-            goodIds = [...new Set([...goodIds, ...clientIds, ...bufferClientIds])];
-            this.logger.debug(`GoodIds: ${goodIds.length}, BadPromoteClientMobiles: ${badPromoteClientMobiles.length}, Total slots needed: ${totalSlotsNeeded}`);
-            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
-            if (badPromoteClientMobiles.length > 0) {
-                this.logger.warn(`Found ${badPromoteClientMobiles.length} existing promote clients with issues: ${badPromoteClientMobiles.join(', ')}`);
-            }
+            const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
+            this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
                 await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
             }
@@ -19232,7 +19793,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 needed = Math.max(0, 12 - currentCount);
             }
             else {
-                const currentCount = await this.promoteClientModel.countDocuments({ clientId });
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
                 needed = Math.max(0, 12 - currentCount);
             }
             totalNeededFromClients += needed;
@@ -19260,7 +19824,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 needed = Math.max(0, 12 - currentCount);
             }
             else {
-                const currentCount = await this.promoteClientModel.countDocuments({ clientId });
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
                 needed = Math.max(0, 12 - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
@@ -19291,7 +19858,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        console.log("waiting for setting 2FA");
+                        this.logger.debug("Waiting for setting 2FA");
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
@@ -19301,23 +19868,41 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
                         const channels = await client.channelInfo(true);
-                        console.log(`Inserting Document for client ${targetClientId}`);
+                        this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: "today",
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
-                            clientId: targetClientId
+                            clientId: targetClientId,
+                            status: 'active',
+                            message: 'Account successfully configured as promote client',
+                            lastUsed: null
                         };
-                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
+                        try {
+                            await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
+                        }
+                        catch (sessionError) {
+                            this.logger.warn(`Failed to create session for ${document.mobile}:`, sessionError);
+                        }
                         await this.create(promoteClient);
-                        await this.usersService.update(document.tgId, { twoFA: true });
-                        console.log(`=============Created PromoteClient for ${targetClientId}==============`);
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
+                        this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        console.log("Failed to Update as PromoteClient has Password");
-                        await this.usersService.update(document.tgId, { twoFA: true });
+                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
                     }
                     const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
                     const newNeeded = Math.max(0, currentNeeded - 1);
@@ -19328,7 +19913,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             clientsNeedingPromoteClients.splice(index, 1);
                         }
                     }
-                    console.log(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
                     processedCount++;
                 }
                 catch (error) {
@@ -19373,25 +19958,75 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
-        const totalPromoteClients = await this.promoteClientModel.countDocuments();
-        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
-            clientId: { $exists: false }
-        });
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts] = await Promise.all([
+            this.promoteClientModel.countDocuments(),
+            this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
+            this.promoteClientModel.countDocuments({ status: 'active' }),
+            this.promoteClientModel.countDocuments({ status: 'inactive' }),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null } } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        $or: [
+                            { lastUsed: { $exists: false } },
+                            { lastUsed: null }
+                        ]
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        lastUsed: { $gte: last24Hours }
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ])
+        ]);
+        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
+        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
+        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
+        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
+        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
         const distributionPerClient = [];
         let clientsWithSufficient = 0;
         let clientsNeedingMore = 0;
         let totalNeeded = 0;
         for (const client of clients) {
-            const assignedCount = await this.promoteClientModel.countDocuments({
-                clientId: client.clientId
-            });
-            const needed = Math.max(0, 12 - assignedCount);
+            const assignedCount = assignedCountMap.get(client.clientId) || 0;
+            const activeCount = activeCountMap.get(client.clientId) || 0;
+            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
+            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
+            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
+            const needed = Math.max(0, 12 - activeCount);
             const status = needed === 0 ? 'sufficient' : 'needs_more';
             distributionPerClient.push({
                 clientId: client.clientId,
                 assignedCount,
+                activeCount,
+                inactiveCount,
                 needed,
-                status
+                status,
+                neverUsed,
+                usedInLast24Hours
             });
             if (status === 'sufficient') {
                 clientsWithSufficient++;
@@ -19406,6 +20041,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return {
             totalPromoteClients,
             unassignedPromoteClients,
+            activePromoteClients,
+            inactivePromoteClients,
             distributionPerClient,
             summary: {
                 clientsWithSufficientPromoteClients: clientsWithSufficient,
@@ -19414,6 +20051,85 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 maxPromoteClientsPerTrigger: maxPerTrigger,
                 triggersNeededToSatisfyAll: triggersNeeded
             }
+        };
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.promoteClientModel.find({ status }).exec();
+    }
+    async getPromoteClientsWithMessages() {
+        return this.promoteClientModel
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .exec();
+    }
+    async getLeastRecentlyUsedPromoteClients(clientId, limit = 1) {
+        return this.promoteClientModel
+            .find({ clientId, status: 'active' })
+            .sort({ lastUsed: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+    }
+    async getNextAvailablePromoteClient(clientId) {
+        const clients = await this.getLeastRecentlyUsedPromoteClients(clientId, 1);
+        return clients.length > 0 ? clients[0] : null;
+    }
+    async getUnusedPromoteClients(hoursAgo = 24, clientId) {
+        const cutoffDate = new Date(Date.now() - (hoursAgo * 60 * 60 * 1000));
+        const filter = {
+            status: 'active',
+            $or: [
+                { lastUsed: { $lt: cutoffDate } },
+                { lastUsed: { $exists: false } },
+                { lastUsed: null }
+            ]
+        };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        return this.promoteClientModel.find(filter).exec();
+    }
+    async getUsageStatistics(clientId) {
+        const filter = { status: 'active' };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients] = await Promise.all([
+            this.promoteClientModel.countDocuments(filter),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                $or: [
+                    { lastUsed: { $exists: false } },
+                    { lastUsed: null }
+                ]
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: last24Hours }
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: lastWeek }
+            }),
+            this.promoteClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec()
+        ]);
+        let totalGap = 0;
+        let gapCount = 0;
+        for (const client of allClients) {
+            if (client.lastUsed) {
+                const gap = now.getTime() - new Date(client.lastUsed).getTime();
+                totalGap += gap;
+                gapCount++;
+            }
+        }
+        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
+        return {
+            totalClients,
+            neverUsed,
+            usedInLast24Hours,
+            usedInLastWeek,
+            averageUsageGap
         };
     }
 };
@@ -19514,6 +20230,18 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'active' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,

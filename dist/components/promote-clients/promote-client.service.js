@@ -549,6 +549,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
             this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
+                await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
             }
             else {
                 this.logger.debug('No new promote clients needed - all clients have sufficient promote clients');
