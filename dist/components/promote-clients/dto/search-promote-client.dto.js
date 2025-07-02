@@ -48,6 +48,7 @@ __decorate([
         example: 23,
         type: Number
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchPromoteClientDto.prototype, "channels", void 0);

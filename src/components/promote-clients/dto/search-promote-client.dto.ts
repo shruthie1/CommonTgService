@@ -31,6 +31,7 @@ export class SearchPromoteClientDto {
     example: 23,
     type: Number
   })
+  @IsOptional()
   @IsNumber()
   readonly channels?: number;
 }

@@ -56,4 +56,46 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreatePromoteClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Client ID this promote mobile belongs to',
+        example: 'client123',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status of the promote client',
+        example: 'active',
+        default: 'active',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreatePromoteClientDto.prototype, "lastUsed", void 0);
 //# sourceMappingURL=create-promote-client.dto.js.map
