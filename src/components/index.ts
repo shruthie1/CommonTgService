@@ -26,6 +26,9 @@ export * from './users';
 export * from './Telegram';
 export * from './TgSignup';
 
+// IP Management
+export * from './ip-management';
+
 // System components
 export * from './timestamps';
 export * from './transactions';

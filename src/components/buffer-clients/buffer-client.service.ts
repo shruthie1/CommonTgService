@@ -461,8 +461,15 @@ export class BufferClientService implements OnModuleDestroy {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
+        
+        // Get promote mobiles using the new schema
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        
+        if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false })
                 await telegramClient.set2fa();
@@ -516,10 +523,14 @@ export class BufferClientService implements OnModuleDestroy {
         const clients = await this.clientService.findAll();
         const promoteclients = await this.promoteClientService.findAll();
 
-        const clientIds = [
-            ...clients.map(c => c.mobile),
-            ...clients.flatMap(c => c.promoteMobile),
-        ].filter(Boolean);
+        // Get all client mobiles including promote mobiles using new schema
+        const clientMainMobiles = clients.map(c => c.mobile);
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
 
         const promoteclientIds = promoteclients.map(c => c.mobile);
         const today = new Date().toISOString().split('T')[0];

@@ -4519,15 +4519,12 @@
             }
           },
           {
-            "name": "promoteMobile",
+            "name": "hasPromoteMobiles",
             "required": false,
             "in": "query",
-            "description": "Promote mobile numbers of the client",
+            "description": "Search by client ID that has promote mobiles assigned",
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+              "type": "string"
             }
           },
           {
@@ -4555,6 +4552,61 @@
           }
         },
         "summary": "Search user data",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/search/promote-mobile": {
+      "get": {
+        "operationId": "ClientController_searchByPromoteMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "query",
+            "description": "Promote mobile number to search for",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clients with matching promote mobiles returned successfully."
+          }
+        },
+        "summary": "Search clients by promote mobile numbers",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/search/enhanced": {
+      "get": {
+        "operationId": "ClientController_enhancedSearch",
+        "parameters": [
+          {
+            "name": "hasPromoteMobiles",
+            "required": false,
+            "in": "query",
+            "description": "Filter by clients that have promote mobiles (true/false)",
+            "schema": {}
+          },
+          {
+            "name": "promoteMobileNumber",
+            "required": false,
+            "in": "query",
+            "description": "Promote mobile number to search for",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enhanced search results with promote mobile context."
+          }
+        },
+        "summary": "Enhanced search with promote mobile support",
         "tags": [
           "Clients"
         ]
@@ -4776,13 +4828,13 @@
         },
         "responses": {
           "200": {
-            "description": "Mobile number added successfully."
+            "description": "Mobile number assigned as promote mobile successfully."
           },
           "404": {
             "description": "Client not found."
           }
         },
-        "summary": "Add a mobile number to the promoteMobile array for a specific client",
+        "summary": "Add a mobile number as a promote mobile for a specific client",
         "tags": [
           "Clients"
         ]
@@ -4819,13 +4871,227 @@
         },
         "responses": {
           "200": {
-            "description": "Mobile number removed successfully."
+            "description": "Promote mobile assignment removed successfully."
           },
           "404": {
             "description": "Client not found."
           }
         },
-        "summary": "Remove a mobile number from the promoteMobile array for a specific client",
+        "summary": "Remove a promote mobile assignment from a specific client",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{clientId}/ip-info": {
+      "get": {
+        "operationId": "ClientController_getClientIpInfo",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP information retrieved successfully"
+          }
+        },
+        "summary": "Get IP assignment information for a client",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/mobile/{mobile}/ip": {
+      "get": {
+        "operationId": "ClientController_getIpForMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID for context",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP address retrieved successfully"
+          }
+        },
+        "summary": "Get IP address for a specific mobile number",
+        "tags": [
+          "Clients"
+        ]
+      },
+      "delete": {
+        "operationId": "ClientController_releaseIpFromMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number to release IP from",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP released successfully"
+          }
+        },
+        "summary": "Release IP from a mobile number",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{clientId}/auto-assign-ips": {
+      "post": {
+        "operationId": "ClientController_autoAssignIpsToClient",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IPs assigned successfully"
+          },
+          "400": {
+            "description": "Assignment failed"
+          }
+        },
+        "summary": "Auto-assign IPs to all client mobile numbers (Simplified System)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{clientId}/mobiles-needing-ips": {
+      "get": {
+        "operationId": "ClientController_getMobilesNeedingIpAssignment",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mobile numbers needing IP assignment"
+          }
+        },
+        "summary": "Get mobile numbers that need IP assignment",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/migration/status": {
+      "get": {
+        "operationId": "ClientController_checkMigrationStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Migration status retrieved successfully"
+          }
+        },
+        "summary": "Check promote mobile migration status",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/migration/migrate": {
+      "post": {
+        "operationId": "ClientController_migratePromoteMobiles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Migration completed successfully"
+          }
+        },
+        "summary": "Migrate promote mobiles from array to clientId reference",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/migration/verify": {
+      "post": {
+        "operationId": "ClientController_verifyMigration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Migration verification completed"
+          }
+        },
+        "summary": "Verify promote mobile migration",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/migration/rollback": {
+      "post": {
+        "operationId": "ClientController_rollbackMigration",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "backupCollectionName": {
+                    "type": "string",
+                    "description": "Name of backup collection to restore from"
+                  }
+                },
+                "required": [
+                  "backupCollectionName"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Migration rollback completed"
+          }
+        },
+        "summary": "Rollback promote mobile migration",
         "tags": [
           "Clients"
         ]
@@ -5021,15 +5287,12 @@
             }
           },
           {
-            "name": "promoteMobile",
+            "name": "hasPromoteMobiles",
             "required": false,
             "in": "query",
-            "description": "Promote mobile numbers of the client",
+            "description": "Search by client ID that has promote mobiles assigned",
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+              "type": "string"
             }
           },
           {
@@ -5848,119 +6111,568 @@
         ]
       }
     },
-    "/npoint/documents/{id}": {
-      "get": {
-        "operationId": "NpointController_fetchDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to fetch",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Document fetched successfully"
-          },
-          "404": {
-            "description": "Document not found"
-          }
-        },
-        "summary": "Fetch a document by ID",
-        "tags": [
-          "NPoint API"
-        ]
-      },
-      "put": {
-        "operationId": "NpointController_updateDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to update",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+    "/ip-management/proxy-ips": {
+      "post": {
+        "operationId": "IpManagementController_createProxyIp",
+        "parameters": [],
         "requestBody": {
           "required": true,
-          "description": "The updated document",
           "content": {
             "application/json": {
               "schema": {
-                "example": {
-                  "title": "Updated Document",
-                  "content": "This is the updated content of the document."
-                }
+                "$ref": "#/components/schemas/CreateProxyIpDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Document updated successfully"
+            "description": "Proxy IP created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
           },
-          "404": {
-            "description": "Document not found"
+          "400": {
+            "description": "Invalid input data"
+          },
+          "409": {
+            "description": "Proxy IP already exists"
           }
         },
-        "summary": "Update a document by ID",
+        "summary": "Create a new proxy IP",
         "tags": [
-          "NPoint API"
+          "IP Management"
+        ]
+      },
+      "get": {
+        "operationId": "IpManagementController_getAllProxyIps",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Proxy IPs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProxyIp"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get all proxy IPs",
+        "tags": [
+          "IP Management"
         ]
       }
     },
-    "/npoint/documents": {
+    "/ip-management/proxy-ips/bulk": {
       "post": {
-        "operationId": "NpointController_postDocument",
+        "operationId": "IpManagementController_bulkCreateProxyIps",
         "parameters": [],
         "requestBody": {
           "required": true,
-          "description": "The document to post",
           "content": {
             "application/json": {
               "schema": {
-                "example": {
-                  "title": "My Document",
-                  "content": "This is the content of the document."
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateProxyIpDto"
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Document posted successfully"
-          },
-          "400": {
-            "description": "Invalid input"
+          "200": {
+            "description": "Bulk creation completed"
           }
         },
-        "summary": "Post a new document",
+        "summary": "Bulk create proxy IPs",
         "tags": [
-          "NPoint API"
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/proxy-ips/{ipAddress}/{port}": {
+      "put": {
+        "operationId": "IpManagementController_updateProxyIp",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "required": true,
+            "in": "path",
+            "description": "IP address",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "path",
+            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProxyIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proxy IP updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proxy IP not found"
+          }
+        },
+        "summary": "Update a proxy IP",
+        "tags": [
+          "IP Management"
         ]
       },
+      "delete": {
+        "operationId": "IpManagementController_deleteProxyIp",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "required": true,
+            "in": "path",
+            "description": "IP address",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "path",
+            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proxy IP deleted successfully"
+          },
+          "400": {
+            "description": "Cannot delete assigned IP"
+          },
+          "404": {
+            "description": "Proxy IP not found"
+          }
+        },
+        "summary": "Delete a proxy IP",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/mappings/mobile/{mobile}/ip": {
       "get": {
-        "operationId": "NpointController_fetchAllDocuments",
+        "operationId": "IpManagementController_getIpForMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP address found"
+          },
+          "404": {
+            "description": "No IP assigned to this mobile"
+          }
+        },
+        "summary": "Get IP address assigned to a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign": {
+      "post": {
+        "operationId": "IpManagementController_assignIpToMobile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignIpToMobileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP assigned successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpMobileMapping"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Assignment failed"
+          }
+        },
+        "summary": "Assign an IP to a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign/bulk": {
+      "post": {
+        "operationId": "IpManagementController_bulkAssignIps",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk assignment completed"
+          }
+        },
+        "summary": "Bulk assign IPs to multiple mobile numbers",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign/mobile/{mobile}": {
+      "delete": {
+        "operationId": "IpManagementController_releaseIpFromMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseIpFromMobileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP released successfully"
+          },
+          "404": {
+            "description": "No IP assignment found for mobile"
+          }
+        },
+        "summary": "Release IP from a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/clients/{clientId}/mappings": {
+      "get": {
+        "operationId": "IpManagementController_getClientMappings",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client mappings retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IpMobileMapping"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get all mobile mappings for a client",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/statistics": {
+      "get": {
+        "operationId": "IpManagementController_getStatistics",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "List of all documents fetched successfully"
-          },
-          "500": {
-            "description": "Internal server error"
+            "description": "Statistics retrieved successfully"
           }
         },
-        "summary": "Fetch all documents",
+        "summary": "Get IP management statistics",
         "tags": [
-          "NPoint API"
+          "IP Management"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/auto-assign-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_autoAssignIpsToClient",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IPs assigned successfully"
+          }
+        },
+        "summary": "Auto-assign IPs to all client mobile numbers",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/mobile/{mobile}/ip": {
+      "get": {
+        "operationId": "ClientIpIntegrationController_getIpForMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Optional client ID for context",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP address retrieved or assigned"
+          }
+        },
+        "summary": "Get IP assigned to a mobile number with smart assignment",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/ip-summary": {
+      "get": {
+        "operationId": "ClientIpIntegrationController_getClientIpSummary",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client IP summary retrieved successfully"
+          }
+        },
+        "summary": "Get comprehensive IP information for a client",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/auto-assign-all-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_autoAssignAllIpsViaClientService",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IPs auto-assigned using ClientService"
+          }
+        },
+        "summary": "Auto-assign IPs to all client mobile numbers (alternative endpoint)",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/assign-main-mobile-ip": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_assignIpToMainMobile",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mobile": {
+                    "type": "string",
+                    "description": "Mobile number"
+                  },
+                  "preferredCountry": {
+                    "type": "string",
+                    "description": "Preferred country code"
+                  }
+                },
+                "required": [
+                  "mobile"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP assigned to main mobile"
+          }
+        },
+        "summary": "Assign IP to client main mobile number",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/assign-promote-mobiles-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_assignIpsToPromoteMobiles",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "promoteMobiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of promote mobile numbers"
+                  },
+                  "preferredCountry": {
+                    "type": "string",
+                    "description": "Preferred country code"
+                  }
+                },
+                "required": [
+                  "promoteMobiles"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IPs assigned to promote mobiles"
+          }
+        },
+        "summary": "Assign IPs to client promote mobile numbers",
+        "tags": [
+          "Client IP Integration"
         ]
       }
     },
@@ -5990,7 +6702,17 @@
       },
       "get": {
         "operationId": "PromoteClientController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (active/inactive)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -6118,7 +6840,27 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Object"
+                "type": "object",
+                "properties": {
+                  "goodIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "badIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "clientsNeedingPromoteClients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           }
@@ -6291,6 +7033,572 @@
         "summary": "Execute a custom MongoDB query",
         "tags": [
           "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/distribution": {
+      "get": {
+        "operationId": "PromoteClientController_getPromoteClientDistribution",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get promote client distribution per client",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/status/{status}": {
+      "get": {
+        "operationId": "PromoteClientController_getPromoteClientsByStatus",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "path",
+            "description": "Status to filter by (active/inactive)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get promote clients by status",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/messages/all": {
+      "get": {
+        "operationId": "PromoteClientController_getPromoteClientsWithMessages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all promote clients with their status messages",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/status/{mobile}": {
+      "patch": {
+        "operationId": "PromoteClientController_updateStatus",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "description": "New status (active/inactive)"
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "Status message (optional)"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update status of a promote client",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/activate/{mobile}": {
+      "patch": {
+        "operationId": "PromoteClientController_markAsActive",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "Activation message (optional)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Mark a promote client as active",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/deactivate/{mobile}": {
+      "patch": {
+        "operationId": "PromoteClientController_markAsInactive",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "description": "Reason for deactivation"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Mark a promote client as inactive",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/mark-used/{mobile}": {
+      "patch": {
+        "operationId": "PromoteClientController_markAsUsed",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "Usage message (optional)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Mark a promote client as used (update lastUsed timestamp)",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/update-last-used/{mobile}": {
+      "patch": {
+        "operationId": "PromoteClientController_updateLastUsed",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update last used timestamp for a promote client",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/least-recently-used/{clientId}": {
+      "get": {
+        "operationId": "PromoteClientController_getLeastRecentlyUsed",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID to get promote clients for",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of promote clients to return",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get least recently used promote clients for a specific client",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/next-available/{clientId}": {
+      "get": {
+        "operationId": "PromoteClientController_getNextAvailable",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID to get next available promote client for",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get next available promote client for a specific client",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/unused": {
+      "get": {
+        "operationId": "PromoteClientController_getUnusedPromoteClients",
+        "parameters": [
+          {
+            "name": "hoursAgo",
+            "required": false,
+            "in": "query",
+            "description": "Hours ago cutoff (default: 24)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specific client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get promote clients that haven't been used for a specified time period",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/usage-stats": {
+      "get": {
+        "operationId": "PromoteClientController_getUsageStatistics",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specific client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get usage statistics for promote clients",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/migration/status": {
+      "get": {
+        "operationId": "PromoteClientController_getMigrationStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get current migration status",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/migration/preview": {
+      "get": {
+        "operationId": "PromoteClientController_getMigrationPreview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Preview round-robin migration without executing",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/migration/execute": {
+      "post": {
+        "operationId": "PromoteClientController_executeRoundRobinMigration",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean",
+                    "description": "Run in dry-run mode (no changes will be made)",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Execute round-robin migration for unassigned promote clients",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/migration/execute-live": {
+      "post": {
+        "description": "This endpoint will make actual changes to the database. Use with caution!",
+        "operationId": "PromoteClientController_executeRoundRobinMigrationLive",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Execute round-robin migration in LIVE mode (makes actual changes)",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/npoint/documents/{id}": {
+      "get": {
+        "operationId": "NpointController_fetchDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The ID of the document to fetch",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document fetched successfully"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        },
+        "summary": "Fetch a document by ID",
+        "tags": [
+          "NPoint API"
+        ]
+      },
+      "put": {
+        "operationId": "NpointController_updateDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The ID of the document to update",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The updated document",
+          "content": {
+            "application/json": {
+              "schema": {
+                "example": {
+                  "title": "Updated Document",
+                  "content": "This is the updated content of the document."
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document updated successfully"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        },
+        "summary": "Update a document by ID",
+        "tags": [
+          "NPoint API"
+        ]
+      }
+    },
+    "/npoint/documents": {
+      "post": {
+        "operationId": "NpointController_postDocument",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "The document to post",
+          "content": {
+            "application/json": {
+              "schema": {
+                "example": {
+                  "title": "My Document",
+                  "content": "This is the content of the document."
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document posted successfully"
+          },
+          "400": {
+            "description": "Invalid input"
+          }
+        },
+        "summary": "Post a new document",
+        "tags": [
+          "NPoint API"
+        ]
+      },
+      "get": {
+        "operationId": "NpointController_fetchAllDocuments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of all documents fetched successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Fetch all documents",
+        "tags": [
+          "NPoint API"
         ]
       }
     },
@@ -9395,16 +10703,6 @@
             "example": "booklet_10",
             "description": "Product associated with the user"
           },
-          "promoteMobile": {
-            "example": [
-              "916265240911"
-            ],
-            "description": "Promote mobile number of the user",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "qrId": {
             "type": "string",
             "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
@@ -9414,6 +10712,27 @@
             "type": "string",
             "example": "myred1808@postbank",
             "description": "Google Pay ID of the user"
+          },
+          "dedicatedIps": {
+            "example": [
+              "192.168.1.100:8080",
+              "192.168.1.101:8080"
+            ],
+            "description": "Dedicated proxy IPs assigned to this client",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredIpCountry": {
+            "type": "string",
+            "example": "US",
+            "description": "Preferred country for IP assignment"
+          },
+          "autoAssignIps": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether to auto-assign IPs to mobile numbers"
           }
         },
         "required": [
@@ -9506,16 +10825,6 @@
             "example": "booklet_10",
             "description": "Product associated with the user"
           },
-          "promoteMobile": {
-            "example": [
-              "916265240911"
-            ],
-            "description": "Promote mobile number of the user",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "qrId": {
             "type": "string",
             "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
@@ -9525,6 +10834,27 @@
             "type": "string",
             "example": "myred1808@postbank",
             "description": "Google Pay ID of the user"
+          },
+          "dedicatedIps": {
+            "example": [
+              "192.168.1.100:8080",
+              "192.168.1.101:8080"
+            ],
+            "description": "Dedicated proxy IPs assigned to this client",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredIpCountry": {
+            "type": "string",
+            "example": "US",
+            "description": "Preferred country for IP assignment"
+          },
+          "autoAssignIps": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether to auto-assign IPs to mobile numbers"
           }
         }
       },
@@ -9731,6 +11061,270 @@
           }
         }
       },
+      "CreateProxyIpDto": {
+        "type": "object",
+        "properties": {
+          "ipAddress": {
+            "type": "string",
+            "example": "192.168.1.100",
+            "description": "IP address of the proxy"
+          },
+          "port": {
+            "type": "number",
+            "example": 8080,
+            "description": "Port number of the proxy"
+          },
+          "protocol": {
+            "type": "string",
+            "example": "http",
+            "description": "Protocol type",
+            "enum": [
+              "http",
+              "https",
+              "socks5"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "example": "username",
+            "description": "Username for proxy authentication"
+          },
+          "password": {
+            "type": "string",
+            "example": "password",
+            "description": "Password for proxy authentication"
+          },
+          "status": {
+            "type": "string",
+            "example": "active",
+            "description": "Status of the proxy IP",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "assignedToClient": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns this IP"
+          }
+        },
+        "required": [
+          "ipAddress",
+          "port",
+          "protocol"
+        ]
+      },
+      "ProxyIp": {
+        "type": "object",
+        "properties": {
+          "ipAddress": {
+            "type": "string",
+            "example": "192.168.1.100",
+            "description": "IP address of the proxy"
+          },
+          "port": {
+            "type": "number",
+            "example": 8080,
+            "description": "Port number of the proxy"
+          },
+          "protocol": {
+            "type": "string",
+            "example": "http",
+            "description": "Protocol type (http, https, socks5)",
+            "enum": [
+              "http",
+              "https",
+              "socks5"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "example": "username",
+            "description": "Username for proxy authentication"
+          },
+          "password": {
+            "type": "string",
+            "example": "password",
+            "description": "Password for proxy authentication"
+          },
+          "status": {
+            "type": "string",
+            "example": "active",
+            "description": "Status of the proxy IP",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "isAssigned": {
+            "type": "boolean",
+            "example": false,
+            "description": "Whether this IP is currently assigned to a mobile number"
+          },
+          "assignedToClient": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns this IP"
+          }
+        },
+        "required": [
+          "ipAddress",
+          "port",
+          "protocol",
+          "username",
+          "password",
+          "status",
+          "isAssigned",
+          "assignedToClient"
+        ]
+      },
+      "UpdateProxyIpDto": {
+        "type": "object",
+        "properties": {
+          "ipAddress": {
+            "type": "string",
+            "example": "192.168.1.100",
+            "description": "IP address of the proxy"
+          },
+          "port": {
+            "type": "number",
+            "example": 8080,
+            "description": "Port number of the proxy"
+          },
+          "protocol": {
+            "type": "string",
+            "example": "http",
+            "description": "Protocol type",
+            "enum": [
+              "http",
+              "https",
+              "socks5"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "example": "username",
+            "description": "Username for proxy authentication"
+          },
+          "password": {
+            "type": "string",
+            "example": "password",
+            "description": "Password for proxy authentication"
+          },
+          "status": {
+            "type": "string",
+            "example": "active",
+            "description": "Status of the proxy IP",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "assignedToClient": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns this IP"
+          }
+        }
+      },
+      "AssignIpToMobileDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number to assign IP to"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns this mobile number"
+          },
+          "preferredIp": {
+            "type": "string",
+            "example": "192.168.1.100:8080",
+            "description": "Specific IP to assign (optional - if not provided, will auto-assign)"
+          }
+        },
+        "required": [
+          "mobile",
+          "clientId"
+        ]
+      },
+      "IpMobileMapping": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number"
+          },
+          "ipAddress": {
+            "type": "string",
+            "example": "192.168.1.100:8080",
+            "description": "IP address and port combination"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns this mobile number"
+          },
+          "status": {
+            "type": "string",
+            "example": "active",
+            "description": "Status of this mapping",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          }
+        },
+        "required": [
+          "mobile",
+          "ipAddress",
+          "clientId",
+          "status"
+        ]
+      },
+      "BulkAssignIpDto": {
+        "type": "object",
+        "properties": {
+          "mobiles": {
+            "example": [
+              "916265240911",
+              "916265240912"
+            ],
+            "description": "Array of mobile numbers to assign IPs to",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clientId": {
+            "type": "string",
+            "example": "client1",
+            "description": "Client ID that owns these mobile numbers"
+          }
+        },
+        "required": [
+          "mobiles",
+          "clientId"
+        ]
+      },
+      "ReleaseIpFromMobileDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number to release IP from"
+          }
+        },
+        "required": [
+          "mobile"
+        ]
+      },
       "CreatePromoteClientDto": {
         "type": "object",
         "properties": {
@@ -9758,6 +11352,29 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this promote mobile belongs to",
+            "example": "client123"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the promote client",
+            "example": "active",
+            "default": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Status message for the promote client",
+            "example": "Account is functioning properly",
+            "default": "Account is functioning properly"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last used timestamp for the promote client",
+            "example": "2023-06-22T10:30:00.000Z"
           }
         },
         "required": [
@@ -9795,6 +11412,29 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this promote mobile belongs to",
+            "example": "client123"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the promote client",
+            "example": "active",
+            "default": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Status message for the promote client",
+            "example": "Account is functioning properly",
+            "default": "Account is functioning properly"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last used timestamp for the promote client",
+            "example": "2023-06-22T10:30:00.000Z"
           }
         }
       },

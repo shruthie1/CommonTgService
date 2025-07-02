@@ -70,10 +70,6 @@ export class Client {
     @Prop({ required: true })
     product: string;
 
-    @ApiProperty({ example: ['916265240911'], description: 'Promote mobile number of the user' })
-    @Prop({ required: true, type: [String] })
-    promoteMobile: string[];
-
     @ApiProperty({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' })
     @Prop({ required: true })
     qrId: string;
@@ -81,6 +77,10 @@ export class Client {
     @ApiProperty({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' })
     @Prop({ required: true })
     gpayId: string;
+
+    @ApiProperty({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' })
+    @Prop({ required: false, type: [String], default: [] })
+    dedicatedIps?: string[];
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

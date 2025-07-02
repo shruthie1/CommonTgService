@@ -1,8 +1,9 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PromoteClientService } from './promote-client.service';
+import { PromoteClientMigrationService } from './migration.service';
 import { PromoteClientController } from './promote-client.controller';
-import { PromoteClientSchema } from './schemas/promote-client.schema';
+import { PromoteClient, PromoteClientSchema } from './schemas/promote-client.schema';
 import { TelegramModule } from '../Telegram/Telegram.module';
 import { ActiveChannelsModule } from '../active-channels/active-channels.module';
 import { UsersModule } from '../users/users.module';
@@ -15,7 +16,7 @@ import { SessionModule } from '../session-manager';
 @Module({
   imports: [
     InitModule,
-    MongooseModule.forFeature([{ name: 'promoteClientModule', schema: PromoteClientSchema, collection: 'promoteClients' }]),
+    MongooseModule.forFeature([{ name: PromoteClient.name, schema: PromoteClientSchema, collection: 'promoteClients' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ActiveChannelsModule),
@@ -25,7 +26,7 @@ import { SessionModule } from '../session-manager';
     forwardRef(() => SessionModule)
  ],
   controllers: [PromoteClientController],
-  providers: [PromoteClientService],
-  exports: [PromoteClientService]
+  providers: [PromoteClientService, PromoteClientMigrationService],
+  exports: [PromoteClientService, PromoteClientMigrationService]
 })
 export class PromoteClientModule { }
