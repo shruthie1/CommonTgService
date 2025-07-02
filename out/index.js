@@ -498,6 +498,7 @@ const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/times
 const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
 const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
 const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -512,6 +513,7 @@ exports.AppModule = AppModule = __decorate([
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             session_manager_1.SessionModule,
+            ip_management_module_1.IpManagementModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
@@ -12195,7 +12197,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveChannelInterval();
             await (0, Helpers_1.sleep)(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             if (clients.length > 0) {
                 for (const document of clients) {
@@ -12451,8 +12453,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
                 await telegramClient.set2fa();
@@ -12502,10 +12508,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const promoteclients = await this.promoteClientService.findAll();
-        const clientIds = [
-            ...clients.map(c => c.mobile),
-            ...clients.flatMap(c => c.promoteMobile),
-        ].filter(Boolean);
+        const clientMainMobiles = clients.map(c => c.mobile);
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
         const promoteclientIds = promoteclients.map(c => c.mobile);
         const today = new Date().toISOString().split('T')[0];
         const toProcess = bufferclients.filter(doc => !clientIds.includes(doc.mobile) &&
@@ -13811,6 +13820,33 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
+    async searchByPromoteMobile(mobile) {
+        try {
+            const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+            return {
+                clients: result.clients,
+                matches: result.promoteMobileMatches || [],
+                searchedMobile: mobile
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async enhancedSearch(query) {
+        try {
+            const result = await this.clientService.enhancedSearch(query);
+            return {
+                clients: result.clients,
+                searchType: result.searchType,
+                promoteMobileMatches: result.promoteMobileMatches,
+                totalResults: result.clients.length
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
     async updateClient(clientId) {
         this.clientService.updateClient(clientId);
         return "Update client initiated";
@@ -13872,20 +13908,136 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async addPromoteMobile(clientId, mobileNumber) {
+    async addPromoteMobile(clientId, body) {
+        return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
+    }
+    async removePromoteMobile(clientId, body) {
         try {
-            return await this.clientService.addPromoteMobile(clientId, mobileNumber);
+            return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
         }
     }
-    async removePromoteMobile(clientId, mobileNumber) {
+    async getClientIpInfo(clientId) {
         try {
-            return await this.clientService.removePromoteMobile(clientId, mobileNumber);
+            const client = await this.clientService.findOne(clientId);
+            const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+            const result = {
+                clientId,
+                mobiles: {
+                    mainMobile: undefined,
+                    promoteMobiles: []
+                },
+                needingAssignment
+            };
+            if (client.mobile) {
+                const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
+                const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
+                result.mobiles.mainMobile = {
+                    mobile: client.mobile,
+                    hasIp,
+                    ipAddress: ipAddress || undefined
+                };
+            }
+            const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
+            for (const mobile of promoteMobiles) {
+                const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
+                const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
+                result.mobiles.promoteMobiles.push({
+                    mobile,
+                    hasIp,
+                    ipAddress: ipAddress || undefined
+                });
+            }
+            return result;
         }
         catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile, clientId) {
+        try {
+            const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
+            return {
+                mobile,
+                ipAddress,
+                hasAssignment: ipAddress !== null
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async autoAssignIpsToClient(clientId) {
+        try {
+            const result = await this.clientService.autoAssignIpsToClient(clientId);
+            return {
+                success: true,
+                message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
+                data: result
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getMobilesNeedingIpAssignment(clientId) {
+        try {
+            const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+            const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
+            return {
+                clientId,
+                mobilesNeedingIps,
+                summary: {
+                    totalNeedingAssignment,
+                    mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
+                    promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
+                }
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async releaseIpFromMobile(mobile) {
+        try {
+            return await this.clientService.releaseIpFromMobile(mobile);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async checkMigrationStatus() {
+        try {
+            return await this.clientService.checkPromoteMobileMigrationStatus();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async migratePromoteMobiles() {
+        try {
+            return await this.clientService.migratePromoteMobilesToClientId();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async verifyMigration() {
+        try {
+            return await this.clientService.verifyPromoteMobileMigration();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async rollbackMigration(body) {
+        try {
+            return await this.clientService.rollbackPromoteMobileMigration(body.backupCollectionName);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 };
@@ -13913,6 +14065,27 @@ __decorate([
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('search/promote-mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients with matching promote mobiles returned successfully.' }),
+    __param(0, (0, common_1.Query)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "searchByPromoteMobile", null);
+__decorate([
+    (0, common_1.Get)('search/enhanced'),
+    (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
+    (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
+    (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Enhanced search results with promote mobile context.' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "enhancedSearch", null);
 __decorate([
     (0, common_1.Get)('updateClient/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
@@ -13990,30 +14163,125 @@ __decorate([
 ], ClientController.prototype, "executeQuery", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/add'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number to the promoteMobile array for a specific client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
     (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number added successfully.' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number assigned as promote mobile successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)('mobileNumber')),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "addPromoteMobile", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/remove'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove a mobile number from the promoteMobile array for a specific client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
     (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number removed successfully.' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Promote mobile assignment removed successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)('mobileNumber')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "removePromoteMobile", null);
+__decorate([
+    (0, common_1.Get)(':clientId/ip-info'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP assignment information for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP information retrieved successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getClientIpInfo", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP address for a specific mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID for context' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
-], ClientController.prototype, "removePromoteMobile", null);
+], ClientController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Post)(':clientId/auto-assign-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (Simplified System)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Assignment failed' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "autoAssignIpsToClient", null);
+__decorate([
+    (0, common_1.Get)(':clientId/mobiles-needing-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get mobile numbers that need IP assignment' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile numbers needing IP assignment' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getMobilesNeedingIpAssignment", null);
+__decorate([
+    (0, common_1.Delete)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number to release IP from' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check promote mobile migration status' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration status retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "checkMigrationStatus", null);
+__decorate([
+    (0, common_1.Post)('migration/migrate'),
+    (0, swagger_1.ApiOperation)({ summary: 'Migrate promote mobiles from array to clientId reference' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration completed successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "migratePromoteMobiles", null);
+__decorate([
+    (0, common_1.Post)('migration/verify'),
+    (0, swagger_1.ApiOperation)({ summary: 'Verify promote mobile migration' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration verification completed' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "verifyMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/rollback'),
+    (0, swagger_1.ApiOperation)({ summary: 'Rollback promote mobile migration' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                backupCollectionName: { type: 'string', description: 'Name of backup collection to restore from' }
+            },
+            required: ['backupCollectionName']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration rollback completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "rollbackMigration", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),
@@ -14051,6 +14319,9 @@ const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module *
 const npoint_module_1 = __webpack_require__(/*! ../n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ../timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_module_1 = __webpack_require__(/*! ../ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
+const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+const promote_clients_1 = __webpack_require__(/*! ../promote-clients */ "./src/components/promote-clients/index.ts");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -14059,17 +14330,20 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_clients_1.PromoteClient.name, schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => archived_client_module_1.ArchivedClientModule),
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
             (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
+            (0, common_1.forwardRef)(() => ip_management_module_1.IpManagementModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             npoint_module_1.NpointModule
         ],
         controllers: [client_controller_1.ClientController],
         providers: [client_service_1.ClientService],
-        exports: [client_service_1.ClientService]
+        exports: [client_service_1.ClientService, mongoose_1.MongooseModule]
     })
 ], ClientModule);
 
@@ -14149,15 +14423,19 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_service_1 = __webpack_require__(/*! ../ip-management/ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const promote_client_schema_1 = __webpack_require__(/*! ../promote-clients/schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, npointSerive) {
+    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
         this.clientModel = clientModel;
+        this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
         this.sessionService = sessionService;
+        this.ipManagementService = ipManagementService;
         this.npointSerive = npointSerive;
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
@@ -14216,7 +14494,7 @@ let ClientService = ClientService_1 = class ClientService {
     async findAllMasked() {
         const clients = await this.findAll();
         const maskedClients = clients.map(client => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            const { session, mobile, password, ...maskedClient } = client;
             return { ...maskedClient };
         });
         return maskedClients;
@@ -14251,15 +14529,17 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async findAllMaskedObject(query) {
-        const allClients = await this.findAll();
-        const clients = Object.values(allClients);
-        const filteredClients = query
-            ? clients.filter(client => {
-                return Object.keys(query).every(key => client[key] === query[key]);
-            })
-            : clients;
+        let filteredClients;
+        if (query) {
+            const searchResult = await this.enhancedSearch(query);
+            filteredClients = searchResult.clients;
+        }
+        else {
+            const allClients = await this.findAll();
+            filteredClients = Array.isArray(allClients) ? allClients : Object.values(allClients);
+        }
         const results = filteredClients.reduce((acc, client) => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
+            const { session, mobile, password, ...maskedClient } = client;
             acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
             return acc;
         }, {});
@@ -14267,7 +14547,8 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async refreshMap() {
         console.log("Refreshed Clients");
-        this.clientsMap.clear();
+        const tempMap = new Map();
+        this.clientsMap = tempMap;
     }
     async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
@@ -14276,9 +14557,11 @@ let ClientService = ClientService_1 = class ClientService {
         }
         else {
             const user = await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).lean().exec();
-            this.clientsMap.set(clientId, user);
             if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            if (user) {
+                this.clientsMap.set(clientId, user);
             }
             return user;
         }
@@ -14308,17 +14591,6 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
             }, 60000);
         }
-        if (previousUser &&
-            Array.isArray(updatedUser.promoteMobile) &&
-            Array.isArray(previousUser.promoteMobile)) {
-            const prevSet = new Set(previousUser.promoteMobile);
-            const newPromoteMobiles = updatedUser.promoteMobile.filter(mobile => !prevSet.has(mobile));
-            for (const mobile of newPromoteMobiles) {
-                setTimeout(async () => {
-                    await this.sessionService.createSession({ mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
-                }, 60000);
-            }
-        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -14329,12 +14601,72 @@ let ClientService = ClientService_1 = class ClientService {
         return deletedUser;
     }
     async search(filter) {
-        console.log(filter);
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
+        console.log('Original filter:', filter);
+        if (filter.hasPromoteMobiles !== undefined) {
+            const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
+            delete filter.hasPromoteMobiles;
+            if (hasPromoteMobiles) {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $in: clientsWithPromoteMobiles };
+            }
+            else {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $nin: clientsWithPromoteMobiles };
+            }
         }
-        console.log(filter);
+        if (filter.firstName) {
+            const escapedFirstName = filter.firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.firstName = { $regex: new RegExp(escapedFirstName, 'i') };
+        }
+        if (filter.name) {
+            const escapedName = filter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.name = { $regex: new RegExp(escapedName, 'i') };
+        }
+        console.log('Final filter:', filter);
         return this.clientModel.find(filter).exec();
+    }
+    async searchClientsByPromoteMobile(mobileNumbers) {
+        const promoteClients = await this.promoteClientModel
+            .find({
+            mobile: { $in: mobileNumbers },
+            clientId: { $exists: true }
+        })
+            .lean();
+        const clientIds = [...new Set(promoteClients.map(pc => pc.clientId))];
+        return this.clientModel.find({ clientId: { $in: clientIds } }).exec();
+    }
+    async enhancedSearch(filter) {
+        let searchType = 'direct';
+        let promoteMobileMatches = [];
+        if (filter.promoteMobileNumber) {
+            searchType = 'promoteMobile';
+            const mobileNumber = filter.promoteMobileNumber;
+            delete filter.promoteMobileNumber;
+            const promoteClients = await this.promoteClientModel
+                .find({
+                mobile: { $regex: new RegExp(mobileNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+                clientId: { $exists: true }
+            })
+                .lean();
+            promoteMobileMatches = promoteClients.map(pc => ({
+                clientId: pc.clientId,
+                mobile: pc.mobile
+            }));
+            const clientIds = promoteClients.map(pc => pc.clientId);
+            filter.clientId = { $in: clientIds };
+        }
+        const clients = await this.search(filter);
+        return {
+            clients,
+            searchType,
+            promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined
+        };
     }
     async setupClient(clientId, setupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`, settingupClient);
@@ -14366,7 +14698,7 @@ let ClientService = ClientService_1 = class ClientService {
                 }
             }
             else {
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available. Requested by ${clientId}`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available, Requested by ${clientId}`);
                 console.log("Buffer Clients not available");
             }
         }
@@ -14577,28 +14909,516 @@ let ClientService = ClientService_1 = class ClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async getPromoteMobiles(clientId) {
+        if (!clientId) {
+            throw new common_1.BadRequestException('ClientId is required');
+        }
+        const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
+        return promoteClients.map(pc => pc.mobile).filter(mobile => mobile);
+    }
+    async getAllPromoteMobiles() {
+        const allPromoteClients = await this.promoteClientModel.find({ clientId: { $exists: true } }).lean();
+        return allPromoteClients.map(pc => pc.mobile);
+    }
+    async isPromoteMobile(mobile) {
+        const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+        return {
+            isPromote: !!promoteClient && !!promoteClient.clientId,
+            clientId: promoteClient?.clientId
+        };
+    }
     async addPromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $addToSet: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
+        if (existingPromoteClient) {
+            if (existingPromoteClient.clientId === clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
+            }
+            else if (existingPromoteClient.clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
+            }
+            else {
+                await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
+            }
+        }
+        else {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
+        }
+        return client;
     }
     async removePromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $pull: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const result = await this.promoteClientModel.updateOne({ mobile: mobileNumber, clientId }, { $unset: { clientId: 1 } });
+        if (result.matchedCount === 0) {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
+        }
+        return client;
+    }
+    async getIpForMobile(mobile, clientId) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            if (ipAddress) {
+                this.logger.debug(`Found IP for mobile ${mobile}: ${ipAddress}`);
+                return ipAddress;
+            }
+            this.logger.debug(`No IP found for mobile ${mobile}`);
+            return null;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get IP for mobile ${mobile}: ${error.message}`, error.stack);
+            return null;
+        }
+    }
+    async hasMobileAssignedIp(mobile) {
+        const ip = await this.getIpForMobile(mobile);
+        return ip !== null;
+    }
+    async getMobilesNeedingIpAssignment(clientId) {
+        this.logger.debug(`Getting mobiles needing IP assignment for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const result = {
+            mainMobile: undefined,
+            promoteMobiles: []
+        };
+        if (client.mobile && !(await this.hasMobileAssignedIp(client.mobile))) {
+            result.mainMobile = client.mobile;
+        }
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            if (!(await this.hasMobileAssignedIp(mobile))) {
+                result.promoteMobiles.push(mobile);
+            }
+        }
+        this.logger.debug(`Mobiles needing IP assignment for client ${clientId}:`, result);
+        return result;
+    }
+    async autoAssignIpsToClient(clientId) {
+        this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const errors = [];
+        let assigned = 0;
+        let failed = 0;
+        let mainMobileResult;
+        try {
+            const mainMapping = await this.ipManagementService.assignIpToMobile({
+                mobile: client.mobile,
+                clientId: client.clientId
+            });
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: mainMapping.ipAddress,
+                status: 'assigned'
+            };
+            assigned++;
+        }
+        catch (error) {
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: null,
+                status: 'failed'
+            };
+            errors.push(`Main mobile ${client.mobile}: ${error.message}`);
+            failed++;
+        }
+        const promoteMobileResults = [];
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const promoteMobile of promoteMobiles) {
+            try {
+                const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: promoteMobile,
+                    clientId: client.clientId
+                });
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: promoteMapping.ipAddress,
+                    status: 'assigned'
+                });
+                assigned++;
+            }
+            catch (error) {
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: null,
+                    status: 'failed'
+                });
+                errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
+                failed++;
+            }
+        }
+        const totalMobiles = 1 + promoteMobiles.length;
+        this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
+        return {
+            clientId,
+            mainMobile: mainMobileResult,
+            promoteMobiles: promoteMobileResults,
+            summary: {
+                totalMobiles,
+                assigned,
+                failed,
+                errors
+            }
+        };
+    }
+    async getClientIpInfo(clientId) {
+        this.logger.debug(`Getting IP info for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const mainMobileIp = await this.getIpForMobile(client.mobile, clientId);
+        const mainMobile = {
+            mobile: client.mobile,
+            ipAddress: mainMobileIp,
+            hasIp: mainMobileIp !== null
+        };
+        const promoteMobiles = [];
+        let mobilesWithIp = mainMobile.hasIp ? 1 : 0;
+        const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of clientPromoteMobiles) {
+            const ip = await this.getIpForMobile(mobile, clientId);
+            const hasIp = ip !== null;
+            promoteMobiles.push({
+                mobile,
+                ipAddress: ip,
+                hasIp
+            });
+            if (hasIp)
+                mobilesWithIp++;
+        }
+        const totalMobiles = 1 + clientPromoteMobiles.length;
+        const mobilesWithoutIp = totalMobiles - mobilesWithIp;
+        return {
+            clientId,
+            clientName: client.name,
+            mainMobile,
+            promoteMobiles,
+            dedicatedIps: client.dedicatedIps || [],
+            summary: {
+                totalMobiles,
+                mobilesWithIp,
+                mobilesWithoutIp
+            }
+        };
+    }
+    async releaseIpFromMobile(mobile) {
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            await this.ipManagementService.releaseIpFromMobile({ mobile });
+            this.logger.log(`Successfully released IP from mobile: ${mobile}`);
+            return {
+                success: true,
+                message: `IP released from mobile ${mobile}`
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`, error.stack);
+            return {
+                success: false,
+                message: `Failed to release IP: ${error.message}`
+            };
+        }
+    }
+    async migratePromoteMobilesToClientId() {
+        this.logger.log('🚀 Starting promote mobile migration...');
+        const results = {
+            totalClients: 0,
+            clientsWithPromoteMobiles: 0,
+            mobilesProcessed: 0,
+            mobilesUpdated: 0,
+            mobilesCreated: 0,
+            errors: [],
+            backupCollection: ''
+        };
+        try {
+            const backupCollectionName = `clients_backup_${Date.now()}`;
+            results.backupCollection = backupCollectionName;
+            const allClients = await this.clientModel.find().lean();
+            results.totalClients = allClients.length;
+            const clientsWithPromoteMobiles = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            results.clientsWithPromoteMobiles = clientsWithPromoteMobiles.length;
+            this.logger.log(`📊 Found ${clientsWithPromoteMobiles.length} clients with promote mobiles out of ${allClients.length} total clients`);
+            if (clientsWithPromoteMobiles.length === 0) {
+                return {
+                    success: true,
+                    message: 'No clients with promoteMobile arrays found. Migration not needed.',
+                    results
+                };
+            }
+            await this.clientModel.db.collection(backupCollectionName).insertMany(clientsWithPromoteMobiles);
+            this.logger.log(`💾 Backup created: ${backupCollectionName}`);
+            for (const client of clientsWithPromoteMobiles) {
+                this.logger.debug(`📱 Processing client: ${client.clientId} (${client.name})`);
+                this.logger.debug(`   Promote mobiles: ${client.promoteMobile.join(', ')}`);
+                for (const mobile of client.promoteMobile) {
+                    try {
+                        results.mobilesProcessed++;
+                        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+                        if (existingPromoteClient) {
+                            if (existingPromoteClient.clientId !== client.clientId) {
+                                await this.promoteClientModel.updateOne({ mobile }, { $set: { clientId: client.clientId } });
+                                results.mobilesUpdated++;
+                                this.logger.debug(`   ✅ Updated ${mobile} with clientId: ${client.clientId}`);
+                            }
+                            else {
+                                this.logger.debug(`   ⚠️  ${mobile} already has correct clientId: ${client.clientId}`);
+                            }
+                        }
+                        else {
+                            const newPromoteClient = {
+                                mobile,
+                                clientId: client.clientId,
+                                tgId: `migrated_${mobile}`,
+                                lastActive: new Date().toISOString().split('T')[0],
+                                availableDate: new Date().toISOString().split('T')[0],
+                                channels: 0
+                            };
+                            await this.promoteClientModel.create(newPromoteClient);
+                            results.mobilesCreated++;
+                            this.logger.debug(`   🆕 Created PromoteClient for ${mobile} with clientId: ${client.clientId}`);
+                            this.logger.debug(`   ⚠️  Note: Created with placeholder data - please update tgId, lastActive, and channels manually`);
+                        }
+                    }
+                    catch (mobileError) {
+                        const errorMsg = `Error processing mobile ${mobile}: ${mobileError.message}`;
+                        this.logger.error(`   ❌ ${errorMsg}`);
+                        results.errors.push({
+                            clientId: client.clientId,
+                            mobile,
+                            error: errorMsg
+                        });
+                    }
+                }
+            }
+            this.logger.log('\n📊 Migration Summary:');
+            this.logger.log(`   ✅ Mobiles processed: ${results.mobilesProcessed}`);
+            this.logger.log(`   🔄 Existing mobiles updated: ${results.mobilesUpdated}`);
+            this.logger.log(`   🆕 New PromoteClient documents created: ${results.mobilesCreated}`);
+            this.logger.log(`   ❌ Errors encountered: ${results.errors.length}`);
+            this.logger.log(`   💾 Backup collection: ${results.backupCollection}`);
+            if (results.errors.length > 0) {
+                this.logger.warn('⚠️  Some errors occurred during migration:');
+                results.errors.forEach(error => {
+                    this.logger.warn(`   - Client ${error.clientId}, Mobile ${error.mobile}: ${error.error}`);
+                });
+            }
+            this.logger.log('🧹 Cleaning up old promoteMobile fields...');
+            const cleanupResult = await this.clientModel.updateMany({ promoteMobile: { $exists: true } }, { $unset: { promoteMobile: '' } });
+            this.logger.log(`   ✅ Removed promoteMobile field from ${cleanupResult.modifiedCount} clients`);
+            const successMessage = `Migration completed successfully! ` +
+                `Processed ${results.mobilesProcessed} promote mobiles from ${results.clientsWithPromoteMobiles} clients. ` +
+                `Updated ${results.mobilesUpdated} existing and created ${results.mobilesCreated} new PromoteClient documents. ` +
+                `Cleaned up promoteMobile field from ${cleanupResult.modifiedCount} clients.`;
+            this.logger.log(`🎉 ${successMessage}`);
+            return {
+                success: true,
+                message: successMessage,
+                results
+            };
+        }
+        catch (error) {
+            const errorMessage = `Migration failed: ${error.message}`;
+            this.logger.error(`💥 ${errorMessage}`, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                results
+            };
+        }
+    }
+    async verifyPromoteMobileMigration() {
+        this.logger.log('🔍 Verifying promote mobile migration...');
+        try {
+            const verification = {
+                totalClientsWithPromoteMobile: 0,
+                totalPromoteClientsWithClientId: 0,
+                totalPromoteClientsWithoutClientId: 0,
+                consistencyIssues: []
+            };
+            const clientsWithPromoteMobile = await this.clientModel.countDocuments({
+                promoteMobile: { $exists: true, $type: 'array', $not: { $size: 0 } }
+            });
+            verification.totalClientsWithPromoteMobile = clientsWithPromoteMobile;
+            const promoteClientsWithClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true }
+            });
+            verification.totalPromoteClientsWithClientId = promoteClientsWithClientId;
+            const promoteClientsWithoutClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: false }
+            });
+            verification.totalPromoteClientsWithoutClientId = promoteClientsWithoutClientId;
+            if (clientsWithPromoteMobile > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'clients_still_have_promote_mobile_arrays',
+                    details: `${clientsWithPromoteMobile} clients still have promoteMobile arrays. Migration may not be complete.`
+                });
+            }
+            if (promoteClientsWithoutClientId > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'promote_clients_without_client_id',
+                    details: `${promoteClientsWithoutClientId} PromoteClient documents don't have clientId assigned. These may be unassigned promote clients.`
+                });
+            }
+            const promoteClientsWithClientIds = await this.promoteClientModel.find({
+                clientId: { $exists: true }
+            }).lean();
+            const allClientIds = new Set((await this.clientModel.find().lean()).map(c => c.clientId));
+            for (const promoteClient of promoteClientsWithClientIds) {
+                if (!allClientIds.has(promoteClient.clientId)) {
+                    verification.consistencyIssues.push({
+                        issue: 'orphaned_promote_client',
+                        mobile: promoteClient.mobile,
+                        clientId: promoteClient.clientId,
+                        details: `PromoteClient ${promoteClient.mobile} references non-existent client ${promoteClient.clientId}`
+                    });
+                }
+            }
+            let message;
+            let success;
+            if (verification.consistencyIssues.length === 0) {
+                message = `✅ Migration verification passed! All ${promoteClientsWithClientId} PromoteClient documents have valid clientId assignments.`;
+                success = true;
+            }
+            else {
+                message = `⚠️  Migration verification found ${verification.consistencyIssues.length} consistency issues that may need attention.`;
+                success = false;
+            }
+            this.logger.log(message);
+            if (verification.consistencyIssues.length > 0) {
+                this.logger.warn('Consistency issues found:');
+                verification.consistencyIssues.forEach(issue => {
+                    this.logger.warn(`  - ${issue.issue}: ${issue.details}`);
+                });
+            }
+            return {
+                success,
+                message,
+                verification
+            };
+        }
+        catch (error) {
+            const errorMessage = `Verification failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                verification: {
+                    totalClientsWithPromoteMobile: 0,
+                    totalPromoteClientsWithClientId: 0,
+                    totalPromoteClientsWithoutClientId: 0,
+                    consistencyIssues: [{
+                            issue: 'verification_error',
+                            details: error.message
+                        }]
+                }
+            };
+        }
+    }
+    async rollbackPromoteMobileMigration(backupCollectionName) {
+        this.logger.warn(`🔄 Rolling back migration using backup: ${backupCollectionName}`);
+        try {
+            const backupData = await this.clientModel.db.collection(backupCollectionName).find().toArray();
+            if (backupData.length === 0) {
+                throw new Error(`Backup collection ${backupCollectionName} is empty or doesn't exist`);
+            }
+            let restored = 0;
+            for (const backupClient of backupData) {
+                await this.clientModel.updateOne({ clientId: backupClient.clientId }, { $set: { promoteMobile: backupClient.promoteMobile } });
+                if (backupClient.promoteMobile && Array.isArray(backupClient.promoteMobile)) {
+                    for (const mobile of backupClient.promoteMobile) {
+                        await this.promoteClientModel.updateOne({ mobile }, { $unset: { clientId: 1 } });
+                    }
+                }
+                restored++;
+            }
+            const message = `✅ Rollback completed! Restored ${restored} clients to original state.`;
+            this.logger.log(message);
+            return {
+                success: true,
+                message,
+                restored
+            };
+        }
+        catch (error) {
+            const errorMessage = `❌ Rollback failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                restored: 0
+            };
+        }
+    }
+    async checkPromoteMobileMigrationStatus() {
+        this.logger.log('🔍 Checking promote mobile migration status...');
+        try {
+            const allClients = await this.clientModel.find().lean();
+            const legacyClients = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            const modernPromoteClients = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true, $ne: null }
+            });
+            const totalPromoteClients = await this.promoteClientModel.countDocuments();
+            const isLegacyData = legacyClients.length > 0;
+            const recommendations = [];
+            if (isLegacyData) {
+                recommendations.push(`🔄 Migration needed: ${legacyClients.length} clients still use legacy array storage`);
+                recommendations.push('📦 Run migratePromoteMobilesToClientId() to migrate data');
+                recommendations.push('✅ Run verifyPromoteMobileMigration() after migration to verify');
+            }
+            else {
+                recommendations.push('✅ All clients are using modern reference-based storage');
+                if (modernPromoteClients === 0) {
+                    recommendations.push('ℹ️ No promote mobile relationships found');
+                }
+                else {
+                    recommendations.push(`📊 ${modernPromoteClients} promote mobile relationships are properly configured`);
+                }
+            }
+            const status = {
+                isLegacyData,
+                legacyClientsCount: legacyClients.length,
+                modernClientsCount: modernPromoteClients,
+                totalPromoteClients,
+                recommendations
+            };
+            this.logger.log(`📋 Migration Status: ${JSON.stringify(status, null, 2)}`);
+            return status;
+        }
+        catch (error) {
+            this.logger.error('❌ Error checking migration status:', error.stack);
+            throw error;
+        }
     }
 };
 exports.ClientService = ClientService;
 exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
+    __param(1, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => ip_management_service_1.IpManagementService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
         archived_client_service_1.ArchivedClientService,
         session_manager_1.SessionService,
+        ip_management_service_1.IpManagementService,
         npoint_service_1.NpointService])
 ], ClientService);
 
@@ -14684,10 +15504,6 @@ __decorate([
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] }),
-    __metadata("design:type", Array)
-], CreateClientDto.prototype, "promoteMobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user', required: false }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "qrId", void 0);
@@ -14695,6 +15511,18 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user', required: false }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "gpayId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client', required: false }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "dedicatedIps", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Preferred country for IP assignment', required: false }),
+    __metadata("design:type", String)
+], CreateClientDto.prototype, "preferredIpCountry", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false }),
+    __metadata("design:type", Boolean)
+], CreateClientDto.prototype, "autoAssignIps", void 0);
 
 
 /***/ }),
@@ -14815,14 +15643,13 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Promote mobile numbers of the client' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.map((v) => v?.trim())),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Search by client ID that has promote mobiles assigned' }),
+    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayNotEmpty)({ message: 'Promote mobile numbers must not be empty if provided' }),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' }),
-    __metadata("design:type", Array)
-], SearchClientDto.prototype, "promoteMobile", void 0);
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' }),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "hasPromoteMobiles", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID of the client' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
@@ -14953,11 +15780,6 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: true, type: [String] }),
-    __metadata("design:type", Array)
-], Client.prototype, "promoteMobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -14967,6 +15789,11 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "dedicatedIps", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,
@@ -15720,6 +16547,1253 @@ exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decor
 
 /***/ }),
 
+/***/ "./src/components/ip-management/client-ip-integration.controller.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/client-ip-integration.controller.ts ***!
+  \**************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientIpIntegrationController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const client_ip_integration_service_1 = __webpack_require__(/*! ./client-ip-integration.service */ "./src/components/ip-management/client-ip-integration.service.ts");
+let ClientIpIntegrationController = class ClientIpIntegrationController {
+    constructor(clientIpIntegrationService) {
+        this.clientIpIntegrationService = clientIpIntegrationService;
+    }
+    async autoAssignIpsToClient(clientId) {
+        try {
+            return await this.clientIpIntegrationService.autoAssignIpsToClient(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile, clientId) {
+        try {
+            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId);
+            const source = ipAddress ? 'existing_mapping' : 'not_found';
+            return { mobile, ipAddress, source };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getClientIpSummary(clientId) {
+        try {
+            return await this.clientIpIntegrationService.getClientIpSummary(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async autoAssignAllIpsViaClientService(clientId) {
+        try {
+            return await this.clientIpIntegrationService.autoAssignIpsToClient(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpToMainMobile(clientId, body) {
+        try {
+            return await this.clientIpIntegrationService.assignIpToMainMobile(clientId, body.mobile, body.preferredCountry);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpsToPromoteMobiles(clientId, body) {
+        try {
+            return await this.clientIpIntegrationService.assignIpsToPromoteMobiles(clientId, body.promoteMobiles, body.preferredCountry);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+};
+exports.ClientIpIntegrationController = ClientIpIntegrationController;
+__decorate([
+    (0, common_1.Post)('clients/:clientId/auto-assign-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "autoAssignIpsToClient", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP assigned to a mobile number with smart assignment' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved or assigned' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/ip-summary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive IP information for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Client IP summary retrieved successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "getClientIpSummary", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/auto-assign-all-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (alternative endpoint)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs auto-assigned using ClientService' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "autoAssignAllIpsViaClientService", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/assign-main-mobile-ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign IP to client main mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                mobile: { type: 'string', description: 'Mobile number' },
+                preferredCountry: { type: 'string', description: 'Preferred country code' }
+            },
+            required: ['mobile']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP assigned to main mobile' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "assignIpToMainMobile", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/assign-promote-mobiles-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign IPs to client promote mobile numbers' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                promoteMobiles: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Array of promote mobile numbers'
+                },
+                preferredCountry: { type: 'string', description: 'Preferred country code' }
+            },
+            required: ['promoteMobiles']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned to promote mobiles' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "assignIpsToPromoteMobiles", null);
+exports.ClientIpIntegrationController = ClientIpIntegrationController = __decorate([
+    (0, swagger_1.ApiTags)('Client IP Integration'),
+    (0, common_1.Controller)('client-ip-integration'),
+    __metadata("design:paramtypes", [client_ip_integration_service_1.ClientIpIntegrationService])
+], ClientIpIntegrationController);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/client-ip-integration.service.ts":
+/*!***********************************************************************!*\
+  !*** ./src/components/ip-management/client-ip-integration.service.ts ***!
+  \***********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var ClientIpIntegrationService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientIpIntegrationService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
+const promote_client_service_1 = __webpack_require__(/*! ../promote-clients/promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIntegrationService {
+    constructor(clientService, promoteClientService, ipManagementService) {
+        this.clientService = clientService;
+        this.promoteClientService = promoteClientService;
+        this.ipManagementService = ipManagementService;
+        this.logger = new common_1.Logger(ClientIpIntegrationService_1.name);
+    }
+    async getPromoteMobiles(clientId) {
+        return await this.clientService.getPromoteMobiles(clientId);
+    }
+    async autoAssignIpsToClient(clientId) {
+        this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const errors = [];
+        let assigned = 0;
+        let failed = 0;
+        let mainMobileResult;
+        try {
+            const mainMapping = await this.ipManagementService.assignIpToMobile({
+                mobile: client.mobile,
+                clientId: client.clientId
+            });
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: mainMapping.ipAddress,
+                status: 'assigned'
+            };
+            assigned++;
+        }
+        catch (error) {
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: null,
+                status: 'failed'
+            };
+            errors.push(`Main mobile ${client.mobile}: ${error.message}`);
+            failed++;
+        }
+        const promoteMobileResults = [];
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const promoteMobile of promoteMobiles) {
+            try {
+                const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: promoteMobile,
+                    clientId: client.clientId
+                });
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: promoteMapping.ipAddress,
+                    status: 'assigned'
+                });
+                assigned++;
+            }
+            catch (error) {
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: null,
+                    status: 'failed'
+                });
+                errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
+                failed++;
+            }
+        }
+        const totalMobiles = 1 + promoteMobiles.length;
+        this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
+        return {
+            clientId,
+            mainMobile: mainMobileResult,
+            promoteMobiles: promoteMobileResults,
+            summary: {
+                totalMobiles,
+                assigned,
+                failed,
+                errors
+            }
+        };
+    }
+    async getIpForMobile(mobile, clientId) {
+        this.logger.debug(`Getting IP for mobile: ${mobile} (clientId: ${clientId})`);
+        const existingIp = await this.ipManagementService.getIpForMobile(mobile);
+        if (existingIp) {
+            this.logger.debug(`Found existing IP mapping for ${mobile}: ${existingIp}`);
+            return existingIp;
+        }
+        if (clientId) {
+            const client = await this.clientService.findOne(clientId);
+            if (client) {
+                const isMainMobile = mobile === client.mobile;
+                const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+                if (isMainMobile || isPromote) {
+                    this.logger.debug(`Mobile ${mobile} belongs to client ${clientId} as ${isMainMobile ? 'main' : 'promote'} mobile`);
+                }
+            }
+        }
+        return null;
+    }
+    async getClientIpSummary(clientId) {
+        this.logger.debug(`Getting IP summary for client: ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const clientIpInfo = await this.clientService.getClientIpInfo(clientId);
+        const mainMobile = {
+            mobile: client.mobile,
+            ipAddress: clientIpInfo.mainMobile.ipAddress,
+            type: 'main',
+            status: clientIpInfo.mainMobile.hasIp ? 'assigned' : 'unassigned'
+        };
+        const promoteMobilesData = clientIpInfo.promoteMobiles.map(pm => ({
+            mobile: pm.mobile,
+            ipAddress: pm.ipAddress,
+            type: 'promote',
+            status: pm.hasIp ? 'assigned' : 'unassigned'
+        }));
+        const totalMobiles = clientIpInfo.summary.totalMobiles;
+        const assignedMobiles = clientIpInfo.summary.mobilesWithIp;
+        const unassignedMobiles = clientIpInfo.summary.mobilesWithoutIp;
+        return {
+            clientId,
+            clientName: client.name,
+            mainMobile,
+            promoteMobiles: promoteMobilesData,
+            dedicatedIps: clientIpInfo.dedicatedIps,
+            statistics: {
+                totalMobiles,
+                assignedMobiles,
+                unassignedMobiles,
+                totalDedicatedIps: clientIpInfo.dedicatedIps.length
+            }
+        };
+    }
+    async assignIpToMainMobile(clientId, mobile, preferredCountry) {
+        this.logger.debug(`Assigning IP to main mobile ${mobile} for client ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        if (client.mobile !== mobile) {
+            throw new common_1.BadRequestException(`Mobile ${mobile} is not the main mobile for client ${clientId}`);
+        }
+        const mapping = await this.ipManagementService.assignIpToMobile({
+            mobile,
+            clientId
+        });
+        return {
+            clientId,
+            mobile,
+            mobileType: 'main',
+            ipAddress: mapping.ipAddress,
+            status: 'assigned'
+        };
+    }
+    async assignIpsToPromoteMobiles(clientId, promoteMobiles, preferredCountry) {
+        this.logger.debug(`Assigning IPs to ${promoteMobiles.length} promote mobiles for client ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            if (!clientPromoteMobiles.includes(mobile)) {
+                throw new common_1.BadRequestException(`Mobile ${mobile} is not a promote mobile for client ${clientId}`);
+            }
+        }
+        const bulkResult = await this.ipManagementService.bulkAssignIpsToMobiles({
+            mobiles: promoteMobiles,
+            clientId
+        });
+        const results = bulkResult.results.map(result => ({
+            mobile: result.mobile,
+            mobileType: 'promote',
+            ipAddress: result.ipAddress,
+            status: result.ipAddress ? 'assigned' : 'failed',
+            error: result.error
+        }));
+        return {
+            clientId,
+            assigned: bulkResult.assigned,
+            failed: bulkResult.failed,
+            results
+        };
+    }
+    async getMobileType(mobile, clientId) {
+        if (!clientId) {
+            const existingIp = await this.ipManagementService.getIpForMobile(mobile);
+            if (!existingIp) {
+                return 'unknown';
+            }
+            return 'unknown';
+        }
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            return 'unknown';
+        }
+        if (mobile === client.mobile) {
+            return 'main';
+        }
+        else {
+            const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+            return isPromote ? 'promote' : 'unknown';
+        }
+    }
+};
+exports.ClientIpIntegrationService = ClientIpIntegrationService;
+exports.ClientIpIntegrationService = ClientIpIntegrationService = ClientIpIntegrationService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
+    __metadata("design:paramtypes", [client_service_1.ClientService,
+        promote_client_service_1.PromoteClientService,
+        ip_management_service_1.IpManagementService])
+], ClientIpIntegrationService);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/assign-ip.dto.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/ip-management/dto/assign-ip.dto.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ReleaseIpFromMobileDto = exports.BulkAssignIpDto = exports.AssignIpToMobileDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class AssignIpToMobileDto {
+}
+exports.AssignIpToMobileDto = AssignIpToMobileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to assign IP to' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this mobile number' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'Specific IP to assign (optional - if not provided, will auto-assign)', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "preferredIp", void 0);
+class BulkAssignIpDto {
+}
+exports.BulkAssignIpDto = BulkAssignIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['916265240911', '916265240912'], description: 'Array of mobile numbers to assign IPs to' }),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], BulkAssignIpDto.prototype, "mobiles", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns these mobile numbers' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], BulkAssignIpDto.prototype, "clientId", void 0);
+class ReleaseIpFromMobileDto {
+}
+exports.ReleaseIpFromMobileDto = ReleaseIpFromMobileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to release IP from' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ReleaseIpFromMobileDto.prototype, "mobile", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/create-proxy-ip.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/dto/create-proxy-ip.dto.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateProxyIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateProxyIpDto {
+}
+exports.CreateProxyIpDto = CreateProxyIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], CreateProxyIpDto.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
+    (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "protocol", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['active', 'inactive']),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "assignedToClient", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/update-proxy-ip.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/dto/update-proxy-ip.dto.ts ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateProxyIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const create_proxy_ip_dto_1 = __webpack_require__(/*! ./create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts");
+class UpdateProxyIpDto extends (0, swagger_1.PartialType)(create_proxy_ip_dto_1.CreateProxyIpDto) {
+}
+exports.UpdateProxyIpDto = UpdateProxyIpDto;
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.controller.ts":
+/*!******************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.controller.ts ***!
+  \******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const create_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts");
+const update_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/components/ip-management/dto/update-proxy-ip.dto.ts");
+const assign_ip_dto_1 = __webpack_require__(/*! ./dto/assign-ip.dto */ "./src/components/ip-management/dto/assign-ip.dto.ts");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+let IpManagementController = class IpManagementController {
+    constructor(ipManagementService) {
+        this.ipManagementService = ipManagementService;
+    }
+    async createProxyIp(createProxyIpDto) {
+        try {
+            return await this.ipManagementService.createProxyIp(createProxyIpDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async bulkCreateProxyIps(proxyIps) {
+        try {
+            return await this.ipManagementService.bulkCreateProxyIps(proxyIps);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getAllProxyIps() {
+        try {
+            return await this.ipManagementService.findAllProxyIps();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async updateProxyIp(ipAddress, port, updateProxyIpDto) {
+        try {
+            return await this.ipManagementService.updateProxyIp(ipAddress, parseInt(port), updateProxyIpDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async deleteProxyIp(ipAddress, port) {
+        try {
+            await this.ipManagementService.deleteProxyIp(ipAddress, parseInt(port));
+            return { message: 'Proxy IP deleted successfully' };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile) {
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            return { mobile, ipAddress };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpToMobile(assignDto) {
+        try {
+            return await this.ipManagementService.assignIpToMobile(assignDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async bulkAssignIps(bulkAssignDto) {
+        try {
+            return await this.ipManagementService.bulkAssignIpsToMobiles(bulkAssignDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async releaseIpFromMobile(mobile, releaseDto) {
+        try {
+            releaseDto.mobile = mobile;
+            await this.ipManagementService.releaseIpFromMobile(releaseDto);
+            return { message: 'IP released successfully' };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getClientMappings(clientId) {
+        try {
+            return await this.ipManagementService.getClientMobileMappings(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getStatistics() {
+        try {
+            return await this.ipManagementService.getStats();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+};
+exports.IpManagementController = IpManagementController;
+__decorate([
+    (0, common_1.Post)('proxy-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new proxy IP' }),
+    (0, swagger_1.ApiBody)({ type: create_proxy_ip_dto_1.CreateProxyIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP created successfully', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid input data' }),
+    (0, swagger_1.ApiConflictResponse)({ description: 'Proxy IP already exists' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_proxy_ip_dto_1.CreateProxyIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "createProxyIp", null);
+__decorate([
+    (0, common_1.Post)('proxy-ips/bulk'),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk create proxy IPs' }),
+    (0, swagger_1.ApiBody)({ type: [create_proxy_ip_dto_1.CreateProxyIpDto] }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Bulk creation completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Array]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "bulkCreateProxyIps", null);
+__decorate([
+    (0, common_1.Get)('proxy-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all proxy IPs' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IPs retrieved successfully', type: [proxy_ip_schema_1.ProxyIp] }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getAllProxyIps", null);
+__decorate([
+    (0, common_1.Put)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update a proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiBody)({ type: update_proxy_ip_dto_1.UpdateProxyIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP updated successfully', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_proxy_ip_dto_1.UpdateProxyIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "updateProxyIp", null);
+__decorate([
+    (0, common_1.Delete)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete a proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP deleted successfully' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Cannot delete assigned IP' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "deleteProxyIp", null);
+__decorate([
+    (0, common_1.Get)('mappings/mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP address assigned to a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP address found' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No IP assigned to this mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Post)('assign'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign an IP to a mobile number' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.AssignIpToMobileDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP assigned successfully', type: ip_mobile_mapping_schema_1.IpMobileMapping }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Assignment failed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [assign_ip_dto_1.AssignIpToMobileDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "assignIpToMobile", null);
+__decorate([
+    (0, common_1.Post)('assign/bulk'),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk assign IPs to multiple mobile numbers' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.BulkAssignIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Bulk assignment completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [assign_ip_dto_1.BulkAssignIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "bulkAssignIps", null);
+__decorate([
+    (0, common_1.Delete)('assign/mobile/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.ReleaseIpFromMobileDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP released successfully' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No IP assignment found for mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, assign_ip_dto_1.ReleaseIpFromMobileDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/mappings'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all mobile mappings for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Client mappings retrieved successfully', type: [ip_mobile_mapping_schema_1.IpMobileMapping] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getClientMappings", null);
+__decorate([
+    (0, common_1.Get)('statistics'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP management statistics' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Statistics retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getStatistics", null);
+exports.IpManagementController = IpManagementController = __decorate([
+    (0, swagger_1.ApiTags)('IP Management'),
+    (0, common_1.Controller)('ip-management'),
+    __metadata("design:paramtypes", [ip_management_service_1.IpManagementService])
+], IpManagementController);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.module.ts":
+/*!**************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.module.ts ***!
+  \**************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const ip_management_controller_1 = __webpack_require__(/*! ./ip-management.controller */ "./src/components/ip-management/ip-management.controller.ts");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const client_ip_integration_service_1 = __webpack_require__(/*! ./client-ip-integration.service */ "./src/components/ip-management/client-ip-integration.service.ts");
+const client_ip_integration_controller_1 = __webpack_require__(/*! ./client-ip-integration.controller */ "./src/components/ip-management/client-ip-integration.controller.ts");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
+const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+let IpManagementModule = class IpManagementModule {
+};
+exports.IpManagementModule = IpManagementModule;
+exports.IpManagementModule = IpManagementModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: proxy_ip_schema_1.ProxyIp.name, schema: proxy_ip_schema_1.ProxyIpSchema },
+                { name: ip_mobile_mapping_schema_1.IpMobileMapping.name, schema: ip_mobile_mapping_schema_1.IpMobileMappingSchema }
+            ]),
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
+        ],
+        controllers: [ip_management_controller_1.IpManagementController, client_ip_integration_controller_1.ClientIpIntegrationController],
+        providers: [ip_management_service_1.IpManagementService, client_ip_integration_service_1.ClientIpIntegrationService],
+        exports: [ip_management_service_1.IpManagementService, client_ip_integration_service_1.ClientIpIntegrationService]
+    })
+], IpManagementModule);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.service.ts":
+/*!***************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.service.ts ***!
+  \***************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var IpManagementService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+let IpManagementService = IpManagementService_1 = class IpManagementService {
+    constructor(proxyIpModel, ipMobileMappingModel) {
+        this.proxyIpModel = proxyIpModel;
+        this.ipMobileMappingModel = ipMobileMappingModel;
+        this.logger = new common_1.Logger(IpManagementService_1.name);
+    }
+    async createProxyIp(createProxyIpDto) {
+        this.logger.debug(`Creating new proxy IP: ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}`);
+        const existingIp = await this.proxyIpModel.findOne({
+            ipAddress: createProxyIpDto.ipAddress,
+            port: createProxyIpDto.port
+        });
+        if (existingIp) {
+            throw new common_1.ConflictException(`Proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port} already exists`);
+        }
+        const createdIp = new this.proxyIpModel(createProxyIpDto);
+        const savedIp = await createdIp.save();
+        this.logger.log(`Created proxy IP: ${savedIp.ipAddress}:${savedIp.port}`);
+        return savedIp.toJSON();
+    }
+    async bulkCreateProxyIps(proxyIps) {
+        this.logger.debug(`Bulk creating ${proxyIps.length} proxy IPs`);
+        let created = 0;
+        let failed = 0;
+        const errors = [];
+        for (const ipDto of proxyIps) {
+            try {
+                await this.createProxyIp(ipDto);
+                created++;
+            }
+            catch (error) {
+                failed++;
+                errors.push(`${ipDto.ipAddress}:${ipDto.port} - ${error.message}`);
+            }
+        }
+        this.logger.log(`Bulk creation completed: ${created} created, ${failed} failed`);
+        return { created, failed, errors };
+    }
+    async findAllProxyIps() {
+        return this.proxyIpModel.find().lean();
+    }
+    async getAvailableProxyIps() {
+        return this.proxyIpModel.find({
+            status: 'active',
+            isAssigned: false
+        }).lean();
+    }
+    async updateProxyIp(ipAddress, port, updateDto) {
+        this.logger.debug(`Updating proxy IP: ${ipAddress}:${port}`);
+        const updatedIp = await this.proxyIpModel.findOneAndUpdate({ ipAddress, port }, { $set: updateDto }, { new: true }).lean();
+        if (!updatedIp) {
+            throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+        }
+        this.logger.log(`Updated proxy IP: ${ipAddress}:${port}`);
+        return updatedIp;
+    }
+    async deleteProxyIp(ipAddress, port) {
+        this.logger.debug(`Deleting proxy IP: ${ipAddress}:${port}`);
+        const mapping = await this.ipMobileMappingModel.findOne({
+            ipAddress: `${ipAddress}:${port}`,
+            status: 'active'
+        });
+        if (mapping) {
+            throw new common_1.BadRequestException(`Cannot delete IP ${ipAddress}:${port} - it is currently assigned to mobile ${mapping.mobile}`);
+        }
+        const result = await this.proxyIpModel.deleteOne({ ipAddress, port });
+        if (result.deletedCount === 0) {
+            throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+        }
+        this.logger.log(`Deleted proxy IP: ${ipAddress}:${port}`);
+    }
+    async getIpForMobile(mobile) {
+        this.logger.debug(`Getting IP for mobile: ${mobile}`);
+        const mapping = await this.ipMobileMappingModel.findOne({
+            mobile,
+            status: 'active'
+        }).lean();
+        return mapping ? mapping.ipAddress : null;
+    }
+    async assignIpToMobile(assignDto) {
+        this.logger.debug(`Assigning IP to mobile: ${assignDto.mobile}`);
+        const existingMapping = await this.ipMobileMappingModel.findOne({
+            mobile: assignDto.mobile,
+            status: 'active'
+        });
+        if (existingMapping) {
+            this.logger.debug(`Mobile ${assignDto.mobile} already has IP: ${existingMapping.ipAddress}`);
+            return existingMapping;
+        }
+        let selectedIp;
+        if (assignDto.preferredIp) {
+            const [ipAddress, portStr] = assignDto.preferredIp.split(':');
+            const port = parseInt(portStr);
+            selectedIp = await this.proxyIpModel.findOne({
+                ipAddress,
+                port,
+                status: 'active',
+                isAssigned: false
+            }).lean();
+            if (!selectedIp) {
+                throw new common_1.NotFoundException(`Preferred IP ${assignDto.preferredIp} not available`);
+            }
+        }
+        else {
+            selectedIp = await this.proxyIpModel.findOne({
+                status: 'active',
+                isAssigned: false
+            }).lean();
+            if (!selectedIp) {
+                throw new common_1.NotFoundException('No available proxy IPs');
+            }
+        }
+        const mappingDto = {
+            mobile: assignDto.mobile,
+            ipAddress: `${selectedIp.ipAddress}:${selectedIp.port}`,
+            clientId: assignDto.clientId,
+            status: 'active'
+        };
+        const [newMapping] = await Promise.all([
+            this.ipMobileMappingModel.create(mappingDto),
+            this.proxyIpModel.updateOne({ ipAddress: selectedIp.ipAddress, port: selectedIp.port }, { $set: { isAssigned: true, assignedToClient: assignDto.clientId } })
+        ]);
+        this.logger.log(`Assigned IP ${mappingDto.ipAddress} to mobile ${assignDto.mobile}`);
+        return newMapping.toJSON();
+    }
+    async bulkAssignIpsToMobiles(bulkDto) {
+        this.logger.debug(`Bulk assigning IPs to ${bulkDto.mobiles.length} mobiles`);
+        let assigned = 0;
+        let failed = 0;
+        const results = [];
+        for (const mobile of bulkDto.mobiles) {
+            try {
+                const assignDto = {
+                    mobile,
+                    clientId: bulkDto.clientId
+                };
+                const mapping = await this.assignIpToMobile(assignDto);
+                assigned++;
+                results.push({ mobile, ipAddress: mapping.ipAddress });
+            }
+            catch (error) {
+                failed++;
+                results.push({ mobile, error: error.message });
+            }
+        }
+        this.logger.log(`Bulk assignment completed: ${assigned} assigned, ${failed} failed`);
+        return { assigned, failed, results };
+    }
+    async releaseIpFromMobile(releaseDto) {
+        this.logger.debug(`Releasing IP from mobile: ${releaseDto.mobile}`);
+        const mapping = await this.ipMobileMappingModel.findOne({
+            mobile: releaseDto.mobile,
+            status: 'active'
+        });
+        if (!mapping) {
+            throw new common_1.NotFoundException(`No active IP mapping found for mobile: ${releaseDto.mobile}`);
+        }
+        const [ipAddress, portStr] = mapping.ipAddress.split(':');
+        const port = parseInt(portStr);
+        await Promise.all([
+            this.ipMobileMappingModel.updateOne({ mobile: releaseDto.mobile }, { $set: { status: 'inactive' } }),
+            this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { isAssigned: false }, $unset: { assignedToClient: 1 } })
+        ]);
+        this.logger.log(`Released IP ${mapping.ipAddress} from mobile ${releaseDto.mobile}`);
+    }
+    async getClientMobileMappings(clientId) {
+        return this.ipMobileMappingModel.find({
+            clientId,
+            status: 'active'
+        }).lean();
+    }
+    async getStats() {
+        const [total, available, assigned, inactive] = await Promise.all([
+            this.proxyIpModel.countDocuments(),
+            this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
+            this.proxyIpModel.countDocuments({ isAssigned: true }),
+            this.proxyIpModel.countDocuments({ status: 'inactive' })
+        ]);
+        return { total, available, assigned, inactive };
+    }
+};
+exports.IpManagementService = IpManagementService;
+exports.IpManagementService = IpManagementService = IpManagementService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(proxy_ip_schema_1.ProxyIp.name)),
+    __param(1, (0, mongoose_1.InjectModel)(ip_mobile_mapping_schema_1.IpMobileMapping.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model])
+], IpManagementService);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts ***!
+  \**************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpMobileMappingSchema = exports.IpMobileMapping = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let IpMobileMapping = class IpMobileMapping {
+};
+exports.IpMobileMapping = IpMobileMapping;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address and port combination' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this mobile number' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of this mapping', enum: ['active', 'inactive'] }),
+    (0, mongoose_1.Prop)({ required: true, default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "status", void 0);
+exports.IpMobileMapping = IpMobileMapping = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'ip_mobile_mappings',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], IpMobileMapping);
+exports.IpMobileMappingSchema = mongoose_1.SchemaFactory.createForClass(IpMobileMapping);
+exports.IpMobileMappingSchema.index({ mobile: 1 }, { unique: true });
+exports.IpMobileMappingSchema.index({ clientId: 1 });
+exports.IpMobileMappingSchema.index({ ipAddress: 1 });
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/schemas/proxy-ip.schema.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/schemas/proxy-ip.schema.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProxyIpSchema = exports.ProxyIp = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let ProxyIp = class ProxyIp {
+};
+exports.ProxyIp = ProxyIp;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] }),
+    (0, mongoose_1.Prop)({ required: true, enum: ['http', 'https', 'socks5'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "protocol", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'] }),
+    (0, mongoose_1.Prop)({ required: true, default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned to a mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, default: false }),
+    __metadata("design:type", Boolean)
+], ProxyIp.prototype, "isAssigned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "assignedToClient", void 0);
+exports.ProxyIp = ProxyIp = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'proxy_ips',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], ProxyIp);
+exports.ProxyIpSchema = mongoose_1.SchemaFactory.createForClass(ProxyIp);
+exports.ProxyIpSchema.index({ ipAddress: 1, port: 1 }, { unique: true });
+exports.ProxyIpSchema.index({ status: 1, isAssigned: 1 });
+exports.ProxyIpSchema.index({ assignedToClient: 1 });
+
+
+/***/ }),
+
 /***/ "./src/components/n-point/index.ts":
 /*!*****************************************!*\
   !*** ./src/components/n-point/index.ts ***!
@@ -16160,6 +18234,77 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreatePromoteClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Client ID this promote mobile belongs to',
+        example: 'client123',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status of the promote client',
+        example: 'active',
+        default: 'active',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreatePromoteClientDto.prototype, "lastUsed", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/dto/index.ts":
+/*!*****************************************************!*\
+  !*** ./src/components/promote-clients/dto/index.ts ***!
+  \*****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts"), exports);
 
 
 /***/ }),
@@ -16220,6 +18365,7 @@ __decorate([
         example: 23,
         type: Number
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchPromoteClientDto.prototype, "channels", void 0);
@@ -16241,6 +18387,326 @@ const create_promote_client_dto_1 = __webpack_require__(/*! ./create-promote-cli
 class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_client_dto_1.CreatePromoteClientDto) {
 }
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/promote-clients/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-client.module */ "./src/components/promote-clients/promote-client.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/promote-clients/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-clients/schemas/index.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/migration.service.ts":
+/*!*************************************************************!*\
+  !*** ./src/components/promote-clients/migration.service.ts ***!
+  \*************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var PromoteClientMigrationService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PromoteClientMigrationService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
+const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
+let PromoteClientMigrationService = PromoteClientMigrationService_1 = class PromoteClientMigrationService {
+    constructor(promoteClientModel, promoteClientService, clientService) {
+        this.promoteClientModel = promoteClientModel;
+        this.promoteClientService = promoteClientService;
+        this.clientService = clientService;
+        this.logger = new common_1.Logger(PromoteClientMigrationService_1.name);
+    }
+    async executeRoundRobinMigration(dryRun = false) {
+        const startTime = Date.now();
+        this.logger.log('🚀 Starting PromoteClient Round-Robin Migration');
+        this.logger.log(`📋 Mode: ${dryRun ? 'DRY RUN (no changes will be made)' : 'LIVE MIGRATION'}`);
+        const stats = {
+            totalPromoteClients: 0,
+            unassignedPromoteClients: 0,
+            availableClients: 0,
+            assignedCount: 0,
+            skippedCount: 0,
+            errorCount: 0,
+            distributionBefore: {},
+            distributionAfter: {}
+        };
+        try {
+            await this.gatherInitialStats(stats);
+            const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+            if (unassignedPromoteClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.log('✅ No unassigned promote clients found. Migration not needed.');
+                return {
+                    success: true,
+                    message: 'No unassigned promote clients found. Migration not needed.',
+                    stats,
+                    executionTime
+                };
+            }
+            const availableClients = await this.getAvailableClients();
+            if (availableClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.error('❌ No available clients found. Cannot proceed with migration.');
+                return {
+                    success: false,
+                    message: 'No available clients found. Cannot proceed with migration.',
+                    stats,
+                    executionTime
+                };
+            }
+            const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+            this.logAssignmentPlan(assignments, availableClients);
+            if (!dryRun) {
+                await this.executeAssignments(assignments, stats);
+                await this.gatherFinalStats(stats);
+            }
+            const executionTime = Date.now() - startTime;
+            const message = dryRun
+                ? `DRY RUN: Would assign ${assignments.length} promote clients across ${availableClients.length} clients`
+                : `Successfully assigned ${stats.assignedCount} promote clients with ${stats.errorCount} errors`;
+            return {
+                success: true,
+                message,
+                stats,
+                executionTime
+            };
+        }
+        catch (error) {
+            const executionTime = Date.now() - startTime;
+            this.logger.error('💥 Migration failed:', error.message);
+            return {
+                success: false,
+                message: `Migration failed: ${error.message}`,
+                stats,
+                executionTime
+            };
+        }
+    }
+    async getMigrationPreview() {
+        const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+        const availableClients = await this.getAvailableClients();
+        const currentDistribution = await this.getCurrentDistribution();
+        if (unassignedPromoteClients.length === 0 || availableClients.length === 0) {
+            return {
+                unassignedCount: unassignedPromoteClients.length,
+                availableClients,
+                projectedDistribution: currentDistribution,
+                currentDistribution,
+                isBalanced: true
+            };
+        }
+        const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+        const projectedDistribution = { ...currentDistribution };
+        for (const assignment of assignments) {
+            projectedDistribution[assignment.clientId] = (projectedDistribution[assignment.clientId] || 0) + 1;
+        }
+        const counts = Object.values(projectedDistribution);
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        const isBalanced = (maxCount - minCount) <= 1;
+        return {
+            unassignedCount: unassignedPromoteClients.length,
+            availableClients,
+            projectedDistribution,
+            currentDistribution,
+            isBalanced
+        };
+    }
+    async getMigrationStatus() {
+        const totalPromoteClients = await this.promoteClientModel.countDocuments();
+        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const assignedPromoteClients = totalPromoteClients - unassignedPromoteClients;
+        const distributionPerClient = await this.getCurrentDistribution();
+        return {
+            totalPromoteClients,
+            assignedPromoteClients,
+            unassignedPromoteClients,
+            distributionPerClient,
+            lastMigrationNeeded: unassignedPromoteClients > 0
+        };
+    }
+    async gatherInitialStats(stats) {
+        this.logger.log('📊 Gathering initial statistics...');
+        stats.totalPromoteClients = await this.promoteClientModel.countDocuments();
+        stats.unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const clients = await this.clientService.findAll();
+        stats.availableClients = clients.length;
+        stats.distributionBefore = await this.getCurrentDistribution();
+        this.logger.log(`📈 Initial Stats:`);
+        this.logger.log(`   Total PromoteClients: ${stats.totalPromoteClients}`);
+        this.logger.log(`   Unassigned PromoteClients: ${stats.unassignedPromoteClients}`);
+        this.logger.log(`   Available Clients: ${stats.availableClients}`);
+    }
+    async getUnassignedPromoteClientsSorted() {
+        this.logger.log('🔍 Finding unassigned promote clients...');
+        const unassigned = await this.promoteClientModel.find({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        }).sort({ channels: 1 }).exec();
+        this.logger.log(`📱 Found ${unassigned.length} unassigned promote clients`);
+        if (unassigned.length > 0) {
+            const channelRange = {
+                min: Math.min(...unassigned.map(pc => pc.channels)),
+                max: Math.max(...unassigned.map(pc => pc.channels)),
+                avg: Math.round(unassigned.reduce((sum, pc) => sum + pc.channels, 0) / unassigned.length)
+            };
+            this.logger.log(`📊 Channel count range: ${channelRange.min} - ${channelRange.max} (avg: ${channelRange.avg})`);
+        }
+        return unassigned;
+    }
+    async getAvailableClients() {
+        this.logger.log('👥 Getting available clients...');
+        const clients = await this.clientService.findAll();
+        const clientIds = clients.map(client => client.clientId).filter(Boolean);
+        this.logger.log(`👤 Found ${clientIds.length} available clients: ${clientIds.join(', ')}`);
+        return clientIds;
+    }
+    calculateRoundRobinAssignments(promoteClients, availableClients) {
+        this.logger.log('🔄 Calculating round-robin assignments...');
+        const assignments = [];
+        let clientIndex = 0;
+        for (const promoteClient of promoteClients) {
+            const assignedClientId = availableClients[clientIndex];
+            assignments.push({
+                mobile: promoteClient.mobile,
+                clientId: assignedClientId,
+                channels: promoteClient.channels
+            });
+            clientIndex = (clientIndex + 1) % availableClients.length;
+        }
+        return assignments;
+    }
+    logAssignmentPlan(assignments, availableClients) {
+        this.logger.log('📋 Assignment Plan:');
+        const assignmentsByClient = availableClients.reduce((acc, clientId) => {
+            acc[clientId] = assignments.filter(a => a.clientId === clientId);
+            return acc;
+        }, {});
+        for (const clientId of availableClients) {
+            const clientAssignments = assignmentsByClient[clientId];
+            const totalChannels = clientAssignments.reduce((sum, a) => sum + a.channels, 0);
+            this.logger.log(`   ${clientId}: ${clientAssignments.length} promote clients, ${totalChannels} total channels`);
+        }
+        const countsPerClient = availableClients.map(clientId => assignmentsByClient[clientId].length);
+        const minCount = Math.min(...countsPerClient);
+        const maxCount = Math.max(...countsPerClient);
+        const isBalanced = (maxCount - minCount) <= 1;
+        this.logger.log(`⚖️  Distribution balance: ${isBalanced ? '✅ BALANCED' : '⚠️  UNBALANCED'} (min: ${minCount}, max: ${maxCount})`);
+    }
+    async executeAssignments(assignments, stats) {
+        this.logger.log('💾 Executing assignments...');
+        const batchSize = 10;
+        for (let i = 0; i < assignments.length; i += batchSize) {
+            const batch = assignments.slice(i, i + batchSize);
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(assignments.length / batchSize);
+            this.logger.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} assignments)...`);
+            const results = await Promise.allSettled(batch.map(async (assignment) => {
+                try {
+                    await this.promoteClientModel.findOneAndUpdate({ mobile: assignment.mobile }, {
+                        $set: {
+                            clientId: assignment.clientId,
+                            status: 'active',
+                            message: `Assigned to ${assignment.clientId} via round-robin migration`
+                        }
+                    }, { new: true }).exec();
+                    stats.assignedCount++;
+                    this.logger.debug(`✅ Assigned ${assignment.mobile} → ${assignment.clientId}`);
+                }
+                catch (error) {
+                    stats.errorCount++;
+                    this.logger.error(`❌ Failed to assign ${assignment.mobile}: ${error.message}`);
+                    throw error;
+                }
+            }));
+            const failedCount = results.filter(result => result.status === 'rejected').length;
+            if (failedCount > 0) {
+                this.logger.warn(`⚠️  Batch ${batchNumber}: ${failedCount} failed assignments`);
+            }
+            if (i + batchSize < assignments.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        this.logger.log(`✅ Assignment execution completed: ${stats.assignedCount} assigned, ${stats.errorCount} errors`);
+    }
+    async gatherFinalStats(stats) {
+        this.logger.log('📊 Gathering final statistics...');
+        stats.distributionAfter = await this.getCurrentDistribution();
+    }
+    async getCurrentDistribution() {
+        const distribution = {};
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            const count = await this.promoteClientModel.countDocuments({ clientId: client.clientId });
+            distribution[client.clientId] = count;
+        }
+        return distribution;
+    }
+};
+exports.PromoteClientMigrationService = PromoteClientMigrationService;
+exports.PromoteClientMigrationService = PromoteClientMigrationService = PromoteClientMigrationService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        promote_client_service_1.PromoteClientService,
+        client_service_1.ClientService])
+], PromoteClientMigrationService);
 
 
 /***/ }),
@@ -16269,12 +18735,14 @@ exports.PromoteClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts");
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService) {
+    constructor(clientService, migrationService) {
         this.clientService = clientService;
+        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -16286,15 +18754,25 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients();
+        this.clientService.checkPromoteClients().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
         return "initiated Checking";
     }
     async addNewUserstoPromoteClients(body) {
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds);
+        if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
+            throw new common_1.BadRequestException('goodIds and badIds must be arrays');
+        }
+        if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
+            throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
+        }
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch(error => {
+            console.error('Error in addNewUserstoPromoteClients:', error);
+        });
         return "initiated Checking";
     }
-    async findAll() {
-        return this.clientService.findAll();
+    async findAll(status) {
+        return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
         return await this.clientService.setAsPromoteClient(mobile);
@@ -16318,6 +18796,55 @@ let PromoteClientController = class PromoteClientController {
         catch (error) {
             throw error;
         }
+    }
+    async getPromoteClientDistribution() {
+        return this.clientService.getPromoteClientDistribution();
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.clientService.getPromoteClientsByStatus(status);
+    }
+    async getPromoteClientsWithMessages() {
+        return this.clientService.getPromoteClientsWithMessages();
+    }
+    async updateStatus(mobile, body) {
+        return this.clientService.updateStatus(mobile, body.status, body.message);
+    }
+    async markAsActive(mobile, body = {}) {
+        return this.clientService.markAsActive(mobile, body.message);
+    }
+    async markAsInactive(mobile, body) {
+        return this.clientService.markAsInactive(mobile, body.reason);
+    }
+    async markAsUsed(mobile, body = {}) {
+        return this.clientService.markAsUsed(mobile, body.message);
+    }
+    async updateLastUsed(mobile) {
+        return this.clientService.updateLastUsed(mobile);
+    }
+    async getLeastRecentlyUsed(clientId, limit) {
+        return this.clientService.getLeastRecentlyUsedPromoteClients(clientId, limit || 1);
+    }
+    async getNextAvailable(clientId) {
+        return this.clientService.getNextAvailablePromoteClient(clientId);
+    }
+    async getUnusedPromoteClients(hoursAgo, clientId) {
+        return this.clientService.getUnusedPromoteClients(hoursAgo || 24, clientId);
+    }
+    async getUsageStatistics(clientId) {
+        return this.clientService.getUsageStatistics(clientId);
+    }
+    async getMigrationStatus() {
+        return this.migrationService.getMigrationStatus();
+    }
+    async getMigrationPreview() {
+        return this.migrationService.getMigrationPreview();
+    }
+    async executeRoundRobinMigration(body = {}) {
+        const dryRun = body.dryRun !== false;
+        return this.migrationService.executeRoundRobinMigration(dryRun);
+    }
+    async executeRoundRobinMigrationLive() {
+        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -16358,7 +18885,16 @@ __decorate([
 __decorate([
     (0, common_1.Post)('addNewUserstoPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Promote Clients' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                goodIds: { type: 'array', items: { type: 'string' } },
+                badIds: { type: 'array', items: { type: 'string' } },
+                clientsNeedingPromoteClients: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -16367,8 +18903,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findAll", null);
 __decorate([
@@ -16423,10 +18961,202 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Get)('distribution'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientDistribution", null);
+__decorate([
+    (0, common_1.Get)('status/:status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
+    (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    __param(0, (0, common_1.Param)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsByStatus", null);
+__decorate([
+    (0, common_1.Get)('messages/all'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all promote clients with their status messages' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsWithMessages", null);
+__decorate([
+    (0, common_1.Patch)('status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update status of a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', description: 'New status (active/inactive)' },
+                message: { type: 'string', description: 'Status message (optional)' }
+            },
+            required: ['status']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)('activate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as active' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Activation message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsActive", null);
+__decorate([
+    (0, common_1.Patch)('deactivate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as inactive' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                reason: { type: 'string', description: 'Reason for deactivation' }
+            },
+            required: ['reason']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsInactive", null);
+__decorate([
+    (0, common_1.Patch)('mark-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as used (update lastUsed timestamp)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Usage message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Patch)('update-last-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateLastUsed", null);
+__decorate([
+    (0, common_1.Get)('least-recently-used/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getLeastRecentlyUsed", null);
+__decorate([
+    (0, common_1.Get)('next-available/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getNextAvailable", null);
+__decorate([
+    (0, common_1.Get)('unused'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('hoursAgo')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUnusedPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('usage-stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUsageStatistics", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationStatus", null);
+__decorate([
+    (0, common_1.Get)('migration/preview'),
+    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationPreview", null);
+__decorate([
+    (0, common_1.Post)('migration/execute'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                dryRun: {
+                    type: 'boolean',
+                    description: 'Run in dry-run mode (no changes will be made)',
+                    default: true
+                }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/execute-live'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
+        description: 'This endpoint will make actual changes to the database. Use with caution!'
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
+        migration_service_1.PromoteClientMigrationService])
 ], PromoteClientController);
 
 
@@ -16450,6 +19180,7 @@ exports.PromoteClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const promote_client_controller_1 = __webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
@@ -16467,7 +19198,7 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ name: 'promoteClientModule', schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_client_schema_1.PromoteClient.name, schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
@@ -16477,8 +19208,8 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
-        providers: [promote_client_service_1.PromoteClientService],
-        exports: [promote_client_service_1.PromoteClientService]
+        providers: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService],
+        exports: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService]
     })
 ], PromoteClientModule);
 
@@ -16511,6 +19242,7 @@ const channels_service_1 = __webpack_require__(/*! ../channels/channels.service 
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
@@ -16540,13 +19272,20 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
+        this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
     }
     async create(promoteClient) {
-        const newUser = new this.promoteClientModel(promoteClient);
+        const promoteClientData = {
+            ...promoteClient,
+            status: promoteClient.status || 'active',
+            message: promoteClient.message || 'Account is functioning properly'
+        };
+        const newUser = new this.promoteClientModel(promoteClientData);
         return newUser.save();
     }
-    async findAll() {
-        return this.promoteClientModel.find().exec();
+    async findAll(statusFilter) {
+        const filter = statusFilter ? { status: statusFilter } : {};
+        return this.promoteClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
         const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
@@ -16556,34 +19295,59 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return user;
     }
     async update(mobile, updateClientDto) {
-        const updatedUser = await this.promoteClientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true, returnDocument: 'after' }).exec();
+        const updatedUser = await this.promoteClientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         }
         return updatedUser;
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async updateLastUsed(mobile) {
+        return this.update(mobile, { lastUsed: new Date() });
+    }
+    async markAsUsed(mobile, message) {
+        const updateData = { lastUsed: new Date() };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async markAsActive(mobile, message = 'Account is functioning properly') {
+        return this.updateStatus(mobile, 'active', message);
+    }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            console.log("Updating");
+            this.logger.debug("Updating existing promote client");
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            console.log("creating");
+            this.logger.debug("Creating new promote client");
             return this.create(createOrUpdateUserDto);
         }
     }
     async remove(mobile) {
         try {
-            const promoteClient = await this.findOne(mobile, false);
-            if (!promoteClient) {
+            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
+            const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
+            if (deleteResult.deletedCount === 0) {
                 throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
-            await this.promoteClientModel.deleteOne({ mobile }).exec();
         }
         catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
             const errorDetails = (0, parseError_1.parseError)(error);
             this.logger.error(`Error removing PromoteClient with mobile ${mobile}: ${errorDetails.message}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
@@ -16591,11 +19355,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log(`PromoteClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        console.log(filter);
+        this.logger.debug(`Search filter: ${JSON.stringify(filter)}`);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter);
+        this.logger.debug(`Modified filter: ${JSON.stringify(filter)}`);
         return this.promoteClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
@@ -16623,7 +19387,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelMap.delete(key);
     }
     clearPromoteMap() {
-        console.log("PromoteMap cleared");
+        this.logger.debug("PromoteMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
@@ -16636,7 +19400,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 await connection_manager_1.connectionManager.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
                 const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-                const clients = await this.promoteClientModel.find({ channels: { "$lt": 300 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
+                const clients = await this.promoteClientModel.find({
+                    channels: { "$lt": 300 },
+                    mobile: { $nin: existingkeys },
+                    status: 'active'
+                }).sort({ channels: 1 }).limit(8);
                 this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
                 if (clients.length > 0) {
                     for (const document of clients) {
@@ -16669,12 +19437,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (error) {
                             const errorDetails = (0, parseError_1.parseError)(error);
                             this.logger.error(`Error processing client ${document.mobile}:`, errorDetails);
-                            if (error.message === "SESSION_REVOKED" ||
-                                error.message === "AUTH_KEY_UNREGISTERED" ||
-                                error.message === "USER_DEACTIVATED" ||
-                                error.message === "USER_DEACTIVATED_BAN" ||
-                                error.message === "FROZEN_METHOD_INVALID") {
-                                this.logger.warn(`${document.mobile}: Session invalid, removing client`);
+                            const errorMsg = error.errorMessage || error.message || 'Unknown error';
+                            if (errorMsg === "SESSION_REVOKED" ||
+                                errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                                errorMsg === "USER_DEACTIVATED" ||
+                                errorMsg === "USER_DEACTIVATED_BAN" ||
+                                errorMsg === "FROZEN_METHOD_INVALID") {
+                                this.logger.warn(`${document.mobile}: Session invalid, marking as inactive and removing client`);
+                                try {
+                                    await this.markAsInactive(document.mobile, `Session error: ${errorMsg}`);
+                                }
+                                catch (statusUpdateError) {
+                                    this.logger.error(`Failed to update status for ${document.mobile}:`, statusUpdateError);
+                                }
                                 await this.remove(document.mobile);
                             }
                         }
@@ -16747,17 +19522,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
                         this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
-                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                        const errorMsg = error.errorMessage || error.message;
+                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
                         }
-                        if (error.errorMessage === "SESSION_REVOKED" ||
-                            error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
-                            error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                        if (errorMsg === "SESSION_REVOKED" ||
+                            errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                            errorMsg === "USER_DEACTIVATED" ||
+                            errorMsg === "USER_DEACTIVATED_BAN") {
+                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            try {
+                                await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
+                            }
+                            catch (statusUpdateError) {
+                                this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
+                            }
                             await this.remove(mobile);
                         }
                     }
@@ -16799,7 +19581,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
     }
     clearLeaveMap() {
-        console.log("LeaveMap cleared");
+        this.logger.debug("LeaveMap cleared");
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
     }
@@ -16899,8 +19681,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
+        const existingAssignment = await this.promoteClientModel.findOne({
+            mobile,
+            clientId: { $exists: true }
+        });
+        if (!clientMobiles.includes(mobile) && !existingAssignment) {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
             try {
                 await telegramClient.set2fa();
@@ -16919,8 +19704,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
+                    status: 'active',
+                    message: 'Manually configured as promote client',
+                    lastUsed: null
                 };
-                await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel.findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
@@ -16935,95 +19723,132 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async checkPromoteClients() {
         if (!this.telegramService.getActiveClientSetup()) {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            const promoteclients = await this.findAll();
-            let goodIds = [];
-            const badIds = [];
-            if (promoteclients.length < 80) {
-                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 10; i++) {
-                    badIds.push(i.toString());
-                }
-            }
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientIds = [...clients.map(c => c.mobile), ...clients.flatMap(c => c.promoteMobile)].filter(Boolean);
+            const clientMainMobiles = clients.map(c => c.mobile);
             const bufferClientIds = bufferClients.map(c => c.mobile);
-            const today = new Date().toISOString().split('T')[0];
-            const chunkArray = (arr, size) => {
-                const chunks = [];
-                for (let i = 0; i < arr.length; i += size) {
-                    chunks.push(arr.slice(i, i + size));
+            const assignedPromoteMobiles = await this.promoteClientModel
+                .find({ clientId: { $exists: true }, status: 'active' })
+                .distinct('mobile');
+            const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
+            const promoteClientsPerClient = new Map();
+            const clientNeedingPromoteClients = [];
+            const promoteClientCounts = await this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active'
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$clientId',
+                        count: { $sum: 1 }
+                    }
                 }
-                return chunks;
-            };
-            const chunks = chunkArray(promoteclients, 4);
-            for (const batch of chunks) {
-                await Promise.all(batch.map(async (document) => {
-                    if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
-                        try {
-                            const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
-                            const me = await cli.getMe();
-                            if (me.username) {
-                                await this.telegramService.updateUsername(document.mobile, '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            if (me.firstName !== "Deleted Account") {
-                                await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                                await (0, Helpers_1.sleep)(2000);
-                            }
-                            await this.telegramService.deleteProfilePhotos(document.mobile);
-                            const hasPassword = await cli.hasPassword();
-                            if (!hasPassword && badIds.length < 4) {
-                                console.log("Client does not have password");
-                                badIds.push(document.mobile);
-                            }
-                            else {
-                                console.log(document.mobile, " :  ALL Good");
-                                goodIds.push(document.mobile);
-                            }
-                            await this.telegramService.removeOtherAuths(document.mobile);
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        catch (error) {
-                            (0, parseError_1.parseError)(error, `Error occurred while creating client for ${document.mobile} in checkPromoteClients: `, false);
-                            badIds.push(document.mobile);
-                            await this.remove(document.mobile);
-                        }
-                        finally {
-                            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        }
-                    }
-                    else {
-                        console.log("Number is an Active Client");
-                        goodIds.push(document.mobile);
-                        await this.remove(document.mobile);
-                    }
-                }));
+            ]);
+            for (const result of promoteClientCounts) {
+                promoteClientsPerClient.set(result._id, result.count);
             }
-            goodIds = [...new Set([...goodIds, ...clientIds, ...bufferClientIds])];
-            this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
-            await this.addNewUserstoPromoteClients(badIds, goodIds);
+            for (const client of clients) {
+                const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
+                promoteClientsPerClient.set(client.clientId, assignedCount);
+                const needed = Math.max(0, 12 - assignedCount);
+                if (needed > 0) {
+                    clientNeedingPromoteClients.push(client.clientId);
+                }
+            }
+            let totalSlotsNeeded = 0;
+            for (const clientId of clientNeedingPromoteClients) {
+                if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
+                    break;
+                const assignedCount = promoteClientsPerClient.get(clientId) || 0;
+                const needed = Math.max(0, 12 - assignedCount);
+                const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+                totalSlotsNeeded += allocatedForThisClient;
+            }
+            this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`);
+            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
+            this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
+            const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
+            this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
+            if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
+                await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            }
+            else {
+                this.logger.debug('No new promote clients needed - all clients have sufficient promote clients');
+            }
         }
         else {
             this.logger.warn("Ignored active check promote channels as active client setup exists");
         }
     }
-    async addNewUserstoPromoteClients(badIds, goodIds) {
+    async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        let totalNeededFromClients = 0;
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            }
+            else {
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            totalNeededFromClients += needed;
+        }
+        const totalNeeded = Math.min(totalNeededFromClients, 10);
+        if (totalNeeded === 0) {
+            this.logger.debug('No promote clients needed - all clients have sufficient promote clients or limit reached');
+            return;
+        }
+        this.logger.debug(`Limited to creating ${totalNeeded} new promote clients (max 10 per trigger)`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
             totalChats: { $gt: 250 }
-        }, { tgId: 1 }, badIds.length + 3);
-        this.logger.debug(`New promote documents to be added: ${documents.length}`);
-        while (badIds.length > 0 && documents.length > 0) {
+        }, { tgId: 1 }, totalNeeded + 5);
+        this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
+        let processedCount = 0;
+        const clientAssignmentTracker = new Map();
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            }
+            else {
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            clientAssignmentTracker.set(clientId, needed);
+        }
+        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) && documents.length > 0 && clientsNeedingPromoteClients.length > 0) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) {
                 this.logger.warn('Invalid document found, skipping');
                 continue;
+            }
+            let targetClientId = null;
+            for (const clientId of clientsNeedingPromoteClients) {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                if (needed > 0) {
+                    targetClientId = clientId;
+                    break;
+                }
+            }
+            if (!targetClientId) {
+                this.logger.debug('All clients have sufficient promote clients assigned');
+                break;
             }
             try {
                 const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
@@ -17033,7 +19858,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        console.log("waiting for setting 2FA");
+                        this.logger.debug("Waiting for setting 2FA");
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
@@ -17043,28 +19868,58 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
                         const channels = await client.channelInfo(true);
-                        console.log("Inserting Document");
+                        this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: "today",
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
+                            clientId: targetClientId,
+                            status: 'active',
+                            message: 'Account successfully configured as promote client',
+                            lastUsed: null
                         };
-                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
+                        try {
+                            await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
+                        }
+                        catch (sessionError) {
+                            this.logger.warn(`Failed to create session for ${document.mobile}:`, sessionError);
+                        }
                         await this.create(promoteClient);
-                        await this.usersService.update(document.tgId, { twoFA: true });
-                        console.log("=============Created PromoteClient=============");
-                        badIds.pop();
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
+                        this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        console.log("Failed to Update as PromoteClient has Password");
-                        await this.usersService.update(document.tgId, { twoFA: true });
+                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
                     }
+                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
+                    const newNeeded = Math.max(0, currentNeeded - 1);
+                    clientAssignmentTracker.set(targetClientId, newNeeded);
+                    if (newNeeded === 0) {
+                        const index = clientsNeedingPromoteClients.indexOf(targetClientId);
+                        if (index > -1) {
+                            clientsNeedingPromoteClients.splice(index, 1);
+                        }
+                    }
+                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    processedCount++;
                 }
                 catch (error) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     (0, parseError_1.parseError)(error);
+                    processedCount++;
                 }
                 finally {
                     try {
@@ -17080,6 +19935,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 (0, parseError_1.parseError)(error);
             }
         }
+        this.logger.log(`✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`);
+        if (clientsNeedingPromoteClients.length > 0) {
+            const stillNeeded = clientsNeedingPromoteClients.map(clientId => {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                return `${clientId}:${needed}`;
+            }).join(', ');
+            this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
+        }
+        else {
+            this.logger.log(`🎉 All clients now have sufficient promote clients!`);
+        }
         setTimeout(() => {
             this.joinchannelForPromoteClients();
         }, 2 * 60 * 1000);
@@ -17090,16 +19956,192 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clearLeaveMap();
         await connection_manager_1.connectionManager.disconnectAll();
     }
+    async getPromoteClientDistribution() {
+        const clients = await this.clientService.findAll();
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts] = await Promise.all([
+            this.promoteClientModel.countDocuments(),
+            this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
+            this.promoteClientModel.countDocuments({ status: 'active' }),
+            this.promoteClientModel.countDocuments({ status: 'inactive' }),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null } } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        $or: [
+                            { lastUsed: { $exists: false } },
+                            { lastUsed: null }
+                        ]
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        lastUsed: { $gte: last24Hours }
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ])
+        ]);
+        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
+        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
+        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
+        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
+        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
+        const distributionPerClient = [];
+        let clientsWithSufficient = 0;
+        let clientsNeedingMore = 0;
+        let totalNeeded = 0;
+        for (const client of clients) {
+            const assignedCount = assignedCountMap.get(client.clientId) || 0;
+            const activeCount = activeCountMap.get(client.clientId) || 0;
+            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
+            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
+            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
+            const needed = Math.max(0, 12 - activeCount);
+            const status = needed === 0 ? 'sufficient' : 'needs_more';
+            distributionPerClient.push({
+                clientId: client.clientId,
+                assignedCount,
+                activeCount,
+                inactiveCount,
+                needed,
+                status,
+                neverUsed,
+                usedInLast24Hours
+            });
+            if (status === 'sufficient') {
+                clientsWithSufficient++;
+            }
+            else {
+                clientsNeedingMore++;
+                totalNeeded += needed;
+            }
+        }
+        const maxPerTrigger = 10;
+        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
+        return {
+            totalPromoteClients,
+            unassignedPromoteClients,
+            activePromoteClients,
+            inactivePromoteClients,
+            distributionPerClient,
+            summary: {
+                clientsWithSufficientPromoteClients: clientsWithSufficient,
+                clientsNeedingPromoteClients: clientsNeedingMore,
+                totalPromoteClientsNeeded: totalNeeded,
+                maxPromoteClientsPerTrigger: maxPerTrigger,
+                triggersNeededToSatisfyAll: triggersNeeded
+            }
+        };
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.promoteClientModel.find({ status }).exec();
+    }
+    async getPromoteClientsWithMessages() {
+        return this.promoteClientModel
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .exec();
+    }
+    async getLeastRecentlyUsedPromoteClients(clientId, limit = 1) {
+        return this.promoteClientModel
+            .find({ clientId, status: 'active' })
+            .sort({ lastUsed: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+    }
+    async getNextAvailablePromoteClient(clientId) {
+        const clients = await this.getLeastRecentlyUsedPromoteClients(clientId, 1);
+        return clients.length > 0 ? clients[0] : null;
+    }
+    async getUnusedPromoteClients(hoursAgo = 24, clientId) {
+        const cutoffDate = new Date(Date.now() - (hoursAgo * 60 * 60 * 1000));
+        const filter = {
+            status: 'active',
+            $or: [
+                { lastUsed: { $lt: cutoffDate } },
+                { lastUsed: { $exists: false } },
+                { lastUsed: null }
+            ]
+        };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        return this.promoteClientModel.find(filter).exec();
+    }
+    async getUsageStatistics(clientId) {
+        const filter = { status: 'active' };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients] = await Promise.all([
+            this.promoteClientModel.countDocuments(filter),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                $or: [
+                    { lastUsed: { $exists: false } },
+                    { lastUsed: null }
+                ]
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: last24Hours }
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: lastWeek }
+            }),
+            this.promoteClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec()
+        ]);
+        let totalGap = 0;
+        let gapCount = 0;
+        for (const client of allClients) {
+            if (client.lastUsed) {
+                const gap = now.getTime() - new Date(client.lastUsed).getTime();
+                totalGap += gap;
+                gapCount++;
+            }
+        }
+        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
+        return {
+            totalClients,
+            neverUsed,
+            usedInLast24Hours,
+            usedInLastWeek,
+            averageUsageGap
+        };
+    }
 };
 exports.PromoteClientService = PromoteClientService;
 exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('promoteClientModule')),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
@@ -17111,6 +20153,33 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
         buffer_client_service_1.BufferClientService,
         session_manager_1.SessionService])
 ], PromoteClientService);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/schemas/index.ts":
+/*!*********************************************************!*\
+  !*** ./src/components/promote-clients/schemas/index.ts ***!
+  \*********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts"), exports);
 
 
 /***/ }),
@@ -17157,6 +20226,22 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "channels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'active' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,
@@ -17169,6 +20254,7 @@ exports.PromoteClient = PromoteClient = __decorate([
     })
 ], PromoteClient);
 exports.PromoteClientSchema = mongoose_1.SchemaFactory.createForClass(PromoteClient);
+exports.PromoteClientSchema.index({ clientId: 1 });
 
 
 /***/ }),
@@ -18644,23 +21730,18 @@ let SessionController = class SessionController {
             if (!body.forceNew && body.mobile) {
                 const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
-                    if (validSessionResult.session.usageCount < 30) {
-                        try {
-                            await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
-                        }
-                        catch (updateError) {
-                            console.log('Warning: Failed to update session last used timestamp:', updateError.message);
-                        }
-                        return {
-                            success: true,
-                            message: 'Valid session found from this month',
-                            session: validSessionResult.session.sessionString,
-                            isNew: false
-                        };
+                    try {
+                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
                     }
-                    else {
-                        console.log('Valid session found but usage count exceeded, Proceeding with new session creation');
+                    catch (updateError) {
+                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
                     }
+                    return {
+                        success: true,
+                        message: 'Valid session found from this month',
+                        session: validSessionResult.session.sessionString,
+                        isNew: false
+                    };
                 }
                 else {
                     console.log('No valid session found from this month');
