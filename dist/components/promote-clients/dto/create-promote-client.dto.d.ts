@@ -5,4 +5,7 @@ export declare class CreatePromoteClientDto {
     readonly lastActive: string;
     readonly channels: number;
     readonly clientId?: string;
+    readonly status?: string;
+    readonly message?: string;
+    readonly lastUsed?: Date;
 }

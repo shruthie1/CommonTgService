@@ -16,12 +16,14 @@ exports.PromoteClientController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const promote_client_service_1 = require("./promote-client.service");
+const migration_service_1 = require("./migration.service");
 const create_promote_client_dto_1 = require("./dto/create-promote-client.dto");
 const search_promote_client_dto_1 = require("./dto/search-promote-client.dto");
 const update_promote_client_dto_1 = require("./dto/update-promote-client.dto");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService) {
+    constructor(clientService, migrationService) {
         this.clientService = clientService;
+        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -50,8 +52,8 @@ let PromoteClientController = class PromoteClientController {
         });
         return "initiated Checking";
     }
-    async findAll() {
-        return this.clientService.findAll();
+    async findAll(status) {
+        return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
         return await this.clientService.setAsPromoteClient(mobile);
@@ -78,6 +80,52 @@ let PromoteClientController = class PromoteClientController {
     }
     async getPromoteClientDistribution() {
         return this.clientService.getPromoteClientDistribution();
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.clientService.getPromoteClientsByStatus(status);
+    }
+    async getPromoteClientsWithMessages() {
+        return this.clientService.getPromoteClientsWithMessages();
+    }
+    async updateStatus(mobile, body) {
+        return this.clientService.updateStatus(mobile, body.status, body.message);
+    }
+    async markAsActive(mobile, body = {}) {
+        return this.clientService.markAsActive(mobile, body.message);
+    }
+    async markAsInactive(mobile, body) {
+        return this.clientService.markAsInactive(mobile, body.reason);
+    }
+    async markAsUsed(mobile, body = {}) {
+        return this.clientService.markAsUsed(mobile, body.message);
+    }
+    async updateLastUsed(mobile) {
+        return this.clientService.updateLastUsed(mobile);
+    }
+    async getLeastRecentlyUsed(clientId, limit) {
+        return this.clientService.getLeastRecentlyUsedPromoteClients(clientId, limit || 1);
+    }
+    async getNextAvailable(clientId) {
+        return this.clientService.getNextAvailablePromoteClient(clientId);
+    }
+    async getUnusedPromoteClients(hoursAgo, clientId) {
+        return this.clientService.getUnusedPromoteClients(hoursAgo || 24, clientId);
+    }
+    async getUsageStatistics(clientId) {
+        return this.clientService.getUsageStatistics(clientId);
+    }
+    async getMigrationStatus() {
+        return this.migrationService.getMigrationStatus();
+    }
+    async getMigrationPreview() {
+        return this.migrationService.getMigrationPreview();
+    }
+    async executeRoundRobinMigration(body = {}) {
+        const dryRun = body.dryRun !== false;
+        return this.migrationService.executeRoundRobinMigration(dryRun);
+    }
+    async executeRoundRobinMigrationLive() {
+        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -136,8 +184,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findAll", null);
 __decorate([
@@ -199,9 +249,194 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getPromoteClientDistribution", null);
+__decorate([
+    (0, common_1.Get)('status/:status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
+    (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    __param(0, (0, common_1.Param)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsByStatus", null);
+__decorate([
+    (0, common_1.Get)('messages/all'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all promote clients with their status messages' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsWithMessages", null);
+__decorate([
+    (0, common_1.Patch)('status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update status of a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', description: 'New status (active/inactive)' },
+                message: { type: 'string', description: 'Status message (optional)' }
+            },
+            required: ['status']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)('activate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as active' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Activation message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsActive", null);
+__decorate([
+    (0, common_1.Patch)('deactivate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as inactive' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                reason: { type: 'string', description: 'Reason for deactivation' }
+            },
+            required: ['reason']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsInactive", null);
+__decorate([
+    (0, common_1.Patch)('mark-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as used (update lastUsed timestamp)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Usage message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Patch)('update-last-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateLastUsed", null);
+__decorate([
+    (0, common_1.Get)('least-recently-used/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getLeastRecentlyUsed", null);
+__decorate([
+    (0, common_1.Get)('next-available/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getNextAvailable", null);
+__decorate([
+    (0, common_1.Get)('unused'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('hoursAgo')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUnusedPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('usage-stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUsageStatistics", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationStatus", null);
+__decorate([
+    (0, common_1.Get)('migration/preview'),
+    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationPreview", null);
+__decorate([
+    (0, common_1.Post)('migration/execute'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                dryRun: {
+                    type: 'boolean',
+                    description: 'Run in dry-run mode (no changes will be made)',
+                    default: true
+                }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/execute-live'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
+        description: 'This endpoint will make actual changes to the database. Use with caution!'
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
+        migration_service_1.PromoteClientMigrationService])
 ], PromoteClientController);
 //# sourceMappingURL=promote-client.controller.js.map

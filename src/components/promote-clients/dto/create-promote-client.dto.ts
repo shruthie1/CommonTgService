@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {  IsNumber, IsString, IsOptional } from 'class-validator';
+import {  IsNumber, IsString, IsOptional, IsDateString } from 'class-validator';
 
 export class CreatePromoteClientDto {
   @ApiProperty({
@@ -46,4 +46,33 @@ export class CreatePromoteClientDto {
   @IsOptional()
   @IsString()
   readonly clientId?: string;
+
+  @ApiProperty({
+    description: 'Status of the promote client',
+    example: 'active',
+    default: 'active',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  readonly status?: string;
+
+  @ApiProperty({
+    description: 'Status message for the promote client',
+    example: 'Account is functioning properly',
+    default: 'Account is functioning properly',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  readonly message?: string;
+
+  @ApiProperty({
+    description: 'Last used timestamp for the promote client',
+    example: '2023-06-22T10:30:00.000Z',
+    required: false
+  })
+  @IsOptional()
+  @IsDateString()
+  readonly lastUsed?: Date;
 }

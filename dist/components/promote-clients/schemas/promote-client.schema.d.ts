@@ -7,6 +7,9 @@ export declare class PromoteClient {
     availableDate: string;
     channels: number;
     clientId: string;
+    status: string;
+    message: string;
+    lastUsed: Date;
 }
 export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClient, import("mongoose").Model<PromoteClient, any, any, any, Document<unknown, any, PromoteClient, any> & PromoteClient & {
     _id: import("mongoose").Types.ObjectId;

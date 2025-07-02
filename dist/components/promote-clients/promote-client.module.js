@@ -10,6 +10,7 @@ exports.PromoteClientModule = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const promote_client_service_1 = require("./promote-client.service");
+const migration_service_1 = require("./migration.service");
 const promote_client_controller_1 = require("./promote-client.controller");
 const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const Telegram_module_1 = require("../Telegram/Telegram.module");
@@ -37,8 +38,8 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
-        providers: [promote_client_service_1.PromoteClientService],
-        exports: [promote_client_service_1.PromoteClientService]
+        providers: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService],
+        exports: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService]
     })
 ], PromoteClientModule);
 //# sourceMappingURL=promote-client.module.js.map

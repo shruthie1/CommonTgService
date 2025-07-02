@@ -1,9 +1,9 @@
 import { Controller, Get, Post, Body, Param, Query, HttpException, HttpStatus } from '@nestjs/common';
-import { 
-    ApiTags, 
-    ApiOperation, 
-    ApiResponse, 
-    ApiParam, 
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiParam,
     ApiBody,
     ApiQuery
 } from '@nestjs/swagger';
@@ -72,7 +72,7 @@ export class ClientIpIntegrationController {
     @Post('clients/:clientId/assign-main-mobile-ip')
     @ApiOperation({ summary: 'Assign IP to client main mobile number' })
     @ApiParam({ name: 'clientId', description: 'Client ID' })
-    @ApiBody({ 
+    @ApiBody({
         schema: {
             type: 'object',
             properties: {
@@ -89,8 +89,8 @@ export class ClientIpIntegrationController {
     ): Promise<any> {
         try {
             return await this.clientIpIntegrationService.assignIpToMainMobile(
-                clientId, 
-                body.mobile, 
+                clientId,
+                body.mobile,
                 body.preferredCountry
             );
         } catch (error) {
@@ -101,14 +101,14 @@ export class ClientIpIntegrationController {
     @Post('clients/:clientId/assign-promote-mobiles-ips')
     @ApiOperation({ summary: 'Assign IPs to client promote mobile numbers' })
     @ApiParam({ name: 'clientId', description: 'Client ID' })
-    @ApiBody({ 
+    @ApiBody({
         schema: {
             type: 'object',
             properties: {
-                promoteMobiles: { 
-                    type: 'array', 
+                promoteMobiles: {
+                    type: 'array',
                     items: { type: 'string' },
-                    description: 'Array of promote mobile numbers' 
+                    description: 'Array of promote mobile numbers'
                 },
                 preferredCountry: { type: 'string', description: 'Preferred country code' }
             },
@@ -122,8 +122,8 @@ export class ClientIpIntegrationController {
     ): Promise<any> {
         try {
             return await this.clientIpIntegrationService.assignIpsToPromoteMobiles(
-                clientId, 
-                body.promoteMobiles, 
+                clientId,
+                body.promoteMobiles,
                 body.preferredCountry
             );
         } catch (error) {

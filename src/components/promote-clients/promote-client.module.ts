@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PromoteClientService } from './promote-client.service';
+import { PromoteClientMigrationService } from './migration.service';
 import { PromoteClientController } from './promote-client.controller';
 import { PromoteClient, PromoteClientSchema } from './schemas/promote-client.schema';
 import { TelegramModule } from '../Telegram/Telegram.module';
@@ -25,7 +26,7 @@ import { SessionModule } from '../session-manager';
     forwardRef(() => SessionModule)
  ],
   controllers: [PromoteClientController],
-  providers: [PromoteClientService],
-  exports: [PromoteClientService]
+  providers: [PromoteClientService, PromoteClientMigrationService],
+  exports: [PromoteClientService, PromoteClientMigrationService]
 })
 export class PromoteClientModule { }
