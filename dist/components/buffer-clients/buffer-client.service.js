@@ -148,7 +148,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveChannelInterval();
             await (0, Helpers_1.sleep)(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             if (clients.length > 0) {
                 for (const document of clients) {
@@ -404,8 +404,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
                 await telegramClient.set2fa();
@@ -455,10 +459,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const promoteclients = await this.promoteClientService.findAll();
-        const clientIds = [
-            ...clients.map(c => c.mobile),
-            ...clients.flatMap(c => c.promoteMobile),
-        ].filter(Boolean);
+        const clientMainMobiles = clients.map(c => c.mobile);
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
         const promoteclientIds = promoteclients.map(c => c.mobile);
         const today = new Date().toISOString().split('T')[0];
         const toProcess = bufferclients.filter(doc => !clientIds.includes(doc.mobile) &&

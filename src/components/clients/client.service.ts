@@ -371,7 +371,7 @@ export class ClientService implements OnModuleDestroy {
                     //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
                     //     await this.updateClientSession(archivedClient.session)
                     // } else {
-                    //     await connectionManager.getClientnewBufferClient.mobile, false, true);
+                    //     await connectionManager.getClient(newBufferClient.mobile, false, true);
                     //     await this.generateNewSession(newBufferClient.mobile)
                     // }
                 } catch (error) {
@@ -384,7 +384,7 @@ export class ClientService implements OnModuleDestroy {
                     await connectionManager.unregisterClient(newBufferClient.mobile)
                 }
             } else {
-                await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available. Requested by ${clientId}`);
+                await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available, Requested by ${clientId}`);
                 console.log("Buffer Clients not available")
             }
         } else {

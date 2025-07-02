@@ -32,6 +32,7 @@ __exportStar(require("./user-data"), exports);
 __exportStar(require("./users"), exports);
 __exportStar(require("./Telegram"), exports);
 __exportStar(require("./TgSignup"), exports);
+__exportStar(require("./ip-management"), exports);
 __exportStar(require("./timestamps"), exports);
 __exportStar(require("./transactions"), exports);
 __exportStar(require("./upi-ids"), exports);

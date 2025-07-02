@@ -34,6 +34,22 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "channels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'active' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,
@@ -46,4 +62,5 @@ exports.PromoteClient = PromoteClient = __decorate([
     })
 ], PromoteClient);
 exports.PromoteClientSchema = mongoose_1.SchemaFactory.createForClass(PromoteClient);
+exports.PromoteClientSchema.index({ clientId: 1 });
 //# sourceMappingURL=promote-client.schema.js.map

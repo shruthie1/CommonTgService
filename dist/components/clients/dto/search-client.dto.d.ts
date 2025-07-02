@@ -12,7 +12,7 @@ export declare class SearchClientDto {
     deployKey?: string;
     mainAccount?: string;
     product?: string;
-    promoteMobile?: string[];
+    hasPromoteMobiles?: string;
     qrId?: string;
     gpayId?: string;
 }

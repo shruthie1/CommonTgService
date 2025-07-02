@@ -106,23 +106,18 @@ let SessionController = class SessionController {
             if (!body.forceNew && body.mobile) {
                 const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
                 if (validSessionResult.success && validSessionResult.session) {
-                    if (validSessionResult.session.usageCount < 30) {
-                        try {
-                            await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
-                        }
-                        catch (updateError) {
-                            console.log('Warning: Failed to update session last used timestamp:', updateError.message);
-                        }
-                        return {
-                            success: true,
-                            message: 'Valid session found from this month',
-                            session: validSessionResult.session.sessionString,
-                            isNew: false
-                        };
+                    try {
+                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
                     }
-                    else {
-                        console.log('Valid session found but usage count exceeded, Proceeding with new session creation');
+                    catch (updateError) {
+                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
                     }
+                    return {
+                        success: true,
+                        message: 'Valid session found from this month',
+                        session: validSessionResult.session.sessionString,
+                        isNew: false
+                    };
                 }
                 else {
                     console.log('No valid session found from this month');
