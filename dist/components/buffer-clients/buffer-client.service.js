@@ -148,7 +148,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveChannelInterval();
             await (0, Helpers_1.sleep)(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             if (clients.length > 0) {
                 for (const document of clients) {
