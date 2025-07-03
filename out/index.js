@@ -12627,7 +12627,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
-                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         this.logger.debug("=============Created BufferClient=============");
@@ -19879,12 +19878,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             message: 'Account successfully configured as promote client',
                             lastUsed: null
                         };
-                        try {
-                            await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
-                        }
-                        catch (sessionError) {
-                            this.logger.warn(`Failed to create session for ${document.mobile}:`, sessionError);
-                        }
                         await this.create(promoteClient);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
