@@ -39,6 +39,5 @@ export class IpMobileMapping {
 export const IpMobileMappingSchema = SchemaFactory.createForClass(IpMobileMapping);
 
 // Create indexes for better performance
-IpMobileMappingSchema.index({ mobile: 1 }, { unique: true });
 IpMobileMappingSchema.index({ clientId: 1 });
 IpMobileMappingSchema.index({ ipAddress: 1 });
