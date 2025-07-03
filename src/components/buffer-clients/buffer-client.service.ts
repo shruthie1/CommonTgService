@@ -670,7 +670,6 @@ export class BufferClientService implements OnModuleDestroy {
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
                         };
-                        await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
                         this.logger.debug("=============Created BufferClient=============");

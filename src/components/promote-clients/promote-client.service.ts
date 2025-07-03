@@ -756,16 +756,7 @@ export class PromoteClientService implements OnModuleDestroy {
                             message: 'Account successfully configured as promote client', // Set initial message
                             lastUsed: null // Initially not used
                         }
-
-                        try {
-                            await this.sessionService.createSession({ mobile: document.mobile, password: 'Ajtdmwajt1@' });
-                        } catch (sessionError) {
-                            this.logger.warn(`Failed to create session for ${document.mobile}:`, sessionError);
-                            // Continue anyway as session creation is not critical for promote client creation
-                        }
-
                         await this.create(promoteClient);
-
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         } catch (userUpdateError) {
