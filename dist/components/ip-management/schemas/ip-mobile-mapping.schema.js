@@ -50,7 +50,6 @@ exports.IpMobileMapping = IpMobileMapping = __decorate([
     })
 ], IpMobileMapping);
 exports.IpMobileMappingSchema = mongoose_1.SchemaFactory.createForClass(IpMobileMapping);
-exports.IpMobileMappingSchema.index({ mobile: 1 }, { unique: true });
 exports.IpMobileMappingSchema.index({ clientId: 1 });
 exports.IpMobileMappingSchema.index({ ipAddress: 1 });
 //# sourceMappingURL=ip-mobile-mapping.schema.js.map
