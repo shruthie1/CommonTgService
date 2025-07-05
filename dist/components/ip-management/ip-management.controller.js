@@ -117,6 +117,39 @@ let IpManagementController = class IpManagementController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getHealthStatus() {
+        try {
+            return await this.ipManagementService.healthCheck();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getProxyIpById(ipAddress, port) {
+        try {
+            return await this.ipManagementService.findProxyIpById(ipAddress, parseInt(port));
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+        }
+    }
+    async getClientAssignedIps(clientId) {
+        try {
+            return await this.ipManagementService.getClientAssignedIps(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getAvailableIpCount() {
+        try {
+            const count = await this.ipManagementService.getAvailableIpCount();
+            return { count };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 };
 exports.IpManagementController = IpManagementController;
 __decorate([
@@ -241,6 +274,45 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getStatistics", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP management health status' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Health status retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getHealthStatus", null);
+__decorate([
+    (0, common_1.Get)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a specific proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP found', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getProxyIpById", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/assigned-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all IPs assigned to a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Client assigned IPs retrieved successfully', type: [proxy_ip_schema_1.ProxyIp] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getClientAssignedIps", null);
+__decorate([
+    (0, common_1.Get)('available-count'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get count of available IPs' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Available IP count retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getAvailableIpCount", null);
 exports.IpManagementController = IpManagementController = __decorate([
     (0, swagger_1.ApiTags)('IP Management'),
     (0, common_1.Controller)('ip-management'),

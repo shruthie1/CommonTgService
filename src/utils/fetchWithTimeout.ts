@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import { extractMessage, parseError } from "./parseError";
-import { ppplbot } from "./logbots";
-import { sleep } from "../utils";
+import { clog } from "./ChannelLogger";
+import { sleep } from "./common";
 
 // Configuration types
 interface RetryConfig {
@@ -55,21 +55,11 @@ async function notifyInternal(
                 extractMessage(errorDetails?.message);
 
         console.error(`${prefix}\n${formattedMessage}`);
-
-        // Skip notification for rate limiting errors
         if (errorDetails.status === 429) return;
-
         const notificationText = `${prefix}\n\n${formattedMessage}`;
 
         try {
-            const channelUrl = ppplbot(process.env[config.channelEnvVar] || '');
-            if (!channelUrl) {
-                console.warn(`Notification channel URL not available. Environment variable ${config.channelEnvVar} might not be set.`);
-                return;
-            }
-
-            const notifUrl = `${channelUrl}&text=${encodeURIComponent(notificationText)}`;
-            await axios.get(notifUrl, { timeout: config.timeout });
+            await clog.sendHttpFailures(notificationText);
         } catch (error) {
             parseError(error, "Failed to send notification:", false);
         }
@@ -229,6 +219,7 @@ export async function fetchWithTimeout(
     options: FetchWithTimeoutOptions = {},
     maxRetries?: number // Kept for backward compatibility
 ): Promise<AxiosResponse | undefined> {
+    console.log(`Fetching URL: ${url} with options:`, options);
     // Input validation
     if (!url) {
         console.error('URL is empty');
@@ -342,7 +333,7 @@ export async function fetchWithTimeout(
 
                     await notifyInternal(
                         `Bypass attempt failed`,
-                        { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}`}` },
+                        { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}` },
                         notificationConfig
                     );
                 }

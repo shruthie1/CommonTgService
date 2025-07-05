@@ -27,7 +27,7 @@ export declare class ClientIpIntegrationService {
             errors: string[];
         };
     }>;
-    getIpForMobile(mobile: string, clientId?: string): Promise<string | null>;
+    getIpForMobile(mobile: string, clientId?: string, autoAssign?: boolean): Promise<string | null>;
     getClientIpSummary(clientId: string): Promise<{
         clientId: string;
         clientName: string;
@@ -71,4 +71,17 @@ export declare class ClientIpIntegrationService {
         }>;
     }>;
     getMobileType(mobile: string, clientId?: string): Promise<'main' | 'promote' | 'unknown'>;
+    releaseIpFromMobile(mobile: string, clientId?: string): Promise<{
+        mobile: string;
+        releasedIp: string | null;
+        status: string;
+        message: string;
+    }>;
+    checkMobileIpStatus(mobile: string): Promise<{
+        mobile: string;
+        hasIp: boolean;
+        ipAddress: string | null;
+        mobileType?: 'main' | 'promote' | 'unknown';
+        clientId?: string;
+    }>;
 }

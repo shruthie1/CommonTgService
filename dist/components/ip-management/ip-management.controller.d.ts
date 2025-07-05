@@ -41,5 +41,22 @@ export declare class IpManagementController {
         available: number;
         assigned: number;
         inactive: number;
+        mappings: {
+            total: number;
+            active: number;
+            inactive: number;
+        };
+    }>;
+    getHealthStatus(): Promise<{
+        status: 'healthy' | 'warning' | 'critical';
+        availableIps: number;
+        totalActiveIps: number;
+        utilizationRate: number;
+        issues: string[];
+    }>;
+    getProxyIpById(ipAddress: string, port: string): Promise<ProxyIp>;
+    getClientAssignedIps(clientId: string): Promise<ProxyIp[]>;
+    getAvailableIpCount(): Promise<{
+        count: number;
     }>;
 }

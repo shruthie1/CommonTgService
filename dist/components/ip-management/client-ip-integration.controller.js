@@ -28,10 +28,11 @@ let ClientIpIntegrationController = class ClientIpIntegrationController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async getIpForMobile(mobile, clientId) {
+    async getIpForMobile(mobile, clientId, autoAssign) {
         try {
-            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId);
-            const source = ipAddress ? 'existing_mapping' : 'not_found';
+            const shouldAutoAssign = autoAssign === 'true' || autoAssign === '1';
+            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId, shouldAutoAssign);
+            const source = ipAddress ? (shouldAutoAssign ? 'auto_assigned' : 'existing_mapping') : 'not_found';
             return { mobile, ipAddress, source };
         }
         catch (error) {
@@ -70,6 +71,22 @@ let ClientIpIntegrationController = class ClientIpIntegrationController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
+    async releaseIpFromMobile(mobile, clientId) {
+        try {
+            return await this.clientIpIntegrationService.releaseIpFromMobile(mobile, clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async checkMobileIpStatus(mobile) {
+        try {
+            return await this.clientIpIntegrationService.checkMobileIpStatus(mobile);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
 };
 exports.ClientIpIntegrationController = ClientIpIntegrationController;
 __decorate([
@@ -87,11 +104,13 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get IP assigned to a mobile number with smart assignment' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'autoAssign', description: 'Auto-assign IP if not found and context available', required: false }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved or assigned' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Query)('autoAssign')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], ClientIpIntegrationController.prototype, "getIpForMobile", null);
 __decorate([
@@ -160,6 +179,28 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], ClientIpIntegrationController.prototype, "assignIpsToPromoteMobiles", null);
+__decorate([
+    (0, common_1.Delete)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check IP assignment status for a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile IP status retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "checkMobileIpStatus", null);
 exports.ClientIpIntegrationController = ClientIpIntegrationController = __decorate([
     (0, swagger_1.ApiTags)('Client IP Integration'),
     (0, common_1.Controller)('client-ip-integration'),
