@@ -293,9 +293,69 @@ export class IpManagementController {
         available: number;
         assigned: number;
         inactive: number;
+        mappings: {
+            total: number;
+            active: number;
+            inactive: number;
+        };
     }> {
         try {
             return await this.ipManagementService.getStats();
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Get('health')
+    @ApiOperation({ summary: 'Get IP management health status' })
+    @ApiOkResponse({ description: 'Health status retrieved successfully' })
+    async getHealthStatus(): Promise<{
+        status: 'healthy' | 'warning' | 'critical';
+        availableIps: number;
+        totalActiveIps: number;
+        utilizationRate: number;
+        issues: string[];
+    }> {
+        try {
+            return await this.ipManagementService.healthCheck();
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Get('proxy-ips/:ipAddress/:port')
+    @ApiOperation({ summary: 'Get a specific proxy IP' })
+    @ApiParam({ name: 'ipAddress', description: 'IP address' })
+    @ApiParam({ name: 'port', description: 'Port number' })
+    @ApiOkResponse({ description: 'Proxy IP found', type: ProxyIp })
+    @ApiNotFoundResponse({ description: 'Proxy IP not found' })
+    async getProxyIpById(@Param('ipAddress') ipAddress: string, @Param('port') port: string): Promise<ProxyIp> {
+        try {
+            return await this.ipManagementService.findProxyIpById(ipAddress, parseInt(port));
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Get('clients/:clientId/assigned-ips')
+    @ApiOperation({ summary: 'Get all IPs assigned to a client' })
+    @ApiParam({ name: 'clientId', description: 'Client ID' })
+    @ApiOkResponse({ description: 'Client assigned IPs retrieved successfully', type: [ProxyIp] })
+    async getClientAssignedIps(@Param('clientId') clientId: string): Promise<ProxyIp[]> {
+        try {
+            return await this.ipManagementService.getClientAssignedIps(clientId);
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @Get('available-count')
+    @ApiOperation({ summary: 'Get count of available IPs' })
+    @ApiOkResponse({ description: 'Available IP count retrieved successfully' })
+    async getAvailableIpCount(): Promise<{ count: number }> {
+        try {
+            const count = await this.ipManagementService.getAvailableIpCount();
+            return { count };
         } catch (error) {
             throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
         }

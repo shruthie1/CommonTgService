@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, HttpException, HttpStatus } from '@nestjs/common';
 import {
     ApiTags,
     ApiOperation,
@@ -30,14 +30,21 @@ export class ClientIpIntegrationController {
     @ApiOperation({ summary: 'Get IP assigned to a mobile number with smart assignment' })
     @ApiParam({ name: 'mobile', description: 'Mobile number' })
     @ApiQuery({ name: 'clientId', description: 'Optional client ID for context', required: false })
+    @ApiQuery({ name: 'autoAssign', description: 'Auto-assign IP if not found and context available', required: false })
     @ApiResponse({ status: 200, description: 'IP address retrieved or assigned' })
     async getIpForMobile(
         @Param('mobile') mobile: string,
-        @Query('clientId') clientId?: string
+        @Query('clientId') clientId?: string,
+        @Query('autoAssign') autoAssign?: string
     ): Promise<{ mobile: string; ipAddress: string | null; source: string }> {
         try {
-            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId);
-            const source = ipAddress ? 'existing_mapping' : 'not_found';
+            const shouldAutoAssign = autoAssign === 'true' || autoAssign === '1';
+            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(
+                mobile, 
+                clientId, 
+                shouldAutoAssign
+            );
+            const source = ipAddress ? (shouldAutoAssign ? 'auto_assigned' : 'existing_mapping') : 'not_found';
             return { mobile, ipAddress, source };
         } catch (error) {
             throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
@@ -126,6 +133,34 @@ export class ClientIpIntegrationController {
                 body.promoteMobiles,
                 body.preferredCountry
             );
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @Delete('mobile/:mobile/ip')
+    @ApiOperation({ summary: 'Release IP from a mobile number' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number' })
+    @ApiQuery({ name: 'clientId', description: 'Optional client ID for context', required: false })
+    @ApiResponse({ status: 200, description: 'IP released successfully' })
+    async releaseIpFromMobile(
+        @Param('mobile') mobile: string,
+        @Query('clientId') clientId?: string
+    ): Promise<any> {
+        try {
+            return await this.clientIpIntegrationService.releaseIpFromMobile(mobile, clientId);
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @Get('mobile/:mobile/status')
+    @ApiOperation({ summary: 'Check IP assignment status for a mobile number' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number' })
+    @ApiResponse({ status: 200, description: 'Mobile IP status retrieved successfully' })
+    async checkMobileIpStatus(@Param('mobile') mobile: string): Promise<any> {
+        try {
+            return await this.clientIpIntegrationService.checkMobileIpStatus(mobile);
         } catch (error) {
             throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
         }
