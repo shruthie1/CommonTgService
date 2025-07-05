@@ -101,25 +101,25 @@ export class PromoteClientController {
     return await this.clientService.setAsPromoteClient(mobile);
   }
 
-  @Get(':mobile')
+  @Get('mobile/:mobile')
   @ApiOperation({ summary: 'Get user data by ID' })
   async findOne(@Param('mobile') mobile: string): Promise<PromoteClient> {
     return this.clientService.findOne(mobile);
   }
 
-  @Patch(':mobile')
+  @Patch('mobile/:mobile')
   @ApiOperation({ summary: 'Update user data by ID' })
   async update(@Param('mobile') mobile: string, @Body() updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient> {
     return this.clientService.update(mobile, updateClientDto);
   }
 
-  @Put(':mobile')
+  @Put('mobile/:mobile')
   @ApiOperation({ summary: 'Update user data by ID' })
   async createdOrupdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient> {
     return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
-  @Delete(':mobile')
+  @Delete('mobile/:mobile')
   @ApiOperation({ summary: 'Delete user data by ID' })
   async remove(@Param('mobile') mobile: string): Promise<void> {
     return this.clientService.remove(mobile);
