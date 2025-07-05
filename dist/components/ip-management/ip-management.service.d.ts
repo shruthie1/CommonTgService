@@ -37,5 +37,22 @@ export declare class IpManagementService {
         available: number;
         assigned: number;
         inactive: number;
+        mappings: {
+            total: number;
+            active: number;
+            inactive: number;
+        };
+    }>;
+    findProxyIpById(ipAddress: string, port: number): Promise<ProxyIp>;
+    getClientAssignedIps(clientId: string): Promise<ProxyIp[]>;
+    findMappingByMobile(mobile: string): Promise<IpMobileMapping | null>;
+    isIpAvailable(ipAddress: string, port: number): Promise<boolean>;
+    getAvailableIpCount(): Promise<number>;
+    healthCheck(): Promise<{
+        status: 'healthy' | 'warning' | 'critical';
+        availableIps: number;
+        totalActiveIps: number;
+        utilizationRate: number;
+        issues: string[];
     }>;
 }

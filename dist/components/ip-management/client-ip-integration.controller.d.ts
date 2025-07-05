@@ -3,7 +3,7 @@ export declare class ClientIpIntegrationController {
     private readonly clientIpIntegrationService;
     constructor(clientIpIntegrationService: ClientIpIntegrationService);
     autoAssignIpsToClient(clientId: string): Promise<any>;
-    getIpForMobile(mobile: string, clientId?: string): Promise<{
+    getIpForMobile(mobile: string, clientId?: string, autoAssign?: string): Promise<{
         mobile: string;
         ipAddress: string | null;
         source: string;
@@ -18,4 +18,6 @@ export declare class ClientIpIntegrationController {
         promoteMobiles: string[];
         preferredCountry?: string;
     }): Promise<any>;
+    releaseIpFromMobile(mobile: string, clientId?: string): Promise<any>;
+    checkMobileIpStatus(mobile: string): Promise<any>;
 }
