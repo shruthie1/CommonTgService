@@ -18917,7 +18917,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "setAsPromoteClient", null);
 __decorate([
-    (0, common_1.Get)(':mobile'),
+    (0, common_1.Get)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -18925,7 +18925,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Patch)(':mobile'),
+    (0, common_1.Patch)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
@@ -18934,7 +18934,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "update", null);
 __decorate([
-    (0, common_1.Put)(':mobile'),
+    (0, common_1.Put)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
@@ -18943,7 +18943,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "createdOrupdate", null);
 __decorate([
-    (0, common_1.Delete)(':mobile'),
+    (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
