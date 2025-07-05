@@ -16582,10 +16582,11 @@ let ClientIpIntegrationController = class ClientIpIntegrationController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async getIpForMobile(mobile, clientId) {
+    async getIpForMobile(mobile, clientId, autoAssign) {
         try {
-            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId);
-            const source = ipAddress ? 'existing_mapping' : 'not_found';
+            const shouldAutoAssign = autoAssign === 'true' || autoAssign === '1';
+            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId, shouldAutoAssign);
+            const source = ipAddress ? (shouldAutoAssign ? 'auto_assigned' : 'existing_mapping') : 'not_found';
             return { mobile, ipAddress, source };
         }
         catch (error) {
@@ -16624,6 +16625,22 @@ let ClientIpIntegrationController = class ClientIpIntegrationController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
+    async releaseIpFromMobile(mobile, clientId) {
+        try {
+            return await this.clientIpIntegrationService.releaseIpFromMobile(mobile, clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async checkMobileIpStatus(mobile) {
+        try {
+            return await this.clientIpIntegrationService.checkMobileIpStatus(mobile);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
 };
 exports.ClientIpIntegrationController = ClientIpIntegrationController;
 __decorate([
@@ -16641,11 +16658,13 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get IP assigned to a mobile number with smart assignment' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'autoAssign', description: 'Auto-assign IP if not found and context available', required: false }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved or assigned' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Query)('autoAssign')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], ClientIpIntegrationController.prototype, "getIpForMobile", null);
 __decorate([
@@ -16714,6 +16733,28 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], ClientIpIntegrationController.prototype, "assignIpsToPromoteMobiles", null);
+__decorate([
+    (0, common_1.Delete)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check IP assignment status for a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile IP status retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "checkMobileIpStatus", null);
 exports.ClientIpIntegrationController = ClientIpIntegrationController = __decorate([
     (0, swagger_1.ApiTags)('Client IP Integration'),
     (0, common_1.Controller)('client-ip-integration'),
@@ -16760,129 +16801,219 @@ let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIn
         return await this.clientService.getPromoteMobiles(clientId);
     }
     async autoAssignIpsToClient(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
         this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
-        const client = await this.clientService.findOne(clientId);
-        if (!client) {
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        }
-        const errors = [];
-        let assigned = 0;
-        let failed = 0;
-        let mainMobileResult;
         try {
-            const mainMapping = await this.ipManagementService.assignIpToMobile({
-                mobile: client.mobile,
-                clientId: client.clientId
-            });
-            mainMobileResult = {
-                mobile: client.mobile,
-                ipAddress: mainMapping.ipAddress,
-                status: 'assigned'
-            };
-            assigned++;
-        }
-        catch (error) {
-            mainMobileResult = {
-                mobile: client.mobile,
-                ipAddress: null,
-                status: 'failed'
-            };
-            errors.push(`Main mobile ${client.mobile}: ${error.message}`);
-            failed++;
-        }
-        const promoteMobileResults = [];
-        const promoteMobiles = await this.getPromoteMobiles(clientId);
-        for (const promoteMobile of promoteMobiles) {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                throw new common_1.NotFoundException(`Client ${clientId} not found`);
+            }
+            if (!client.mobile || client.mobile.trim() === '') {
+                throw new common_1.BadRequestException(`Client ${clientId} does not have a valid main mobile number`);
+            }
+            const errors = [];
+            let assigned = 0;
+            let failed = 0;
+            let mainMobileResult;
             try {
-                const promoteMapping = await this.ipManagementService.assignIpToMobile({
-                    mobile: promoteMobile,
+                const mainMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: client.mobile,
                     clientId: client.clientId
                 });
-                promoteMobileResults.push({
-                    mobile: promoteMobile,
-                    ipAddress: promoteMapping.ipAddress,
+                mainMobileResult = {
+                    mobile: client.mobile,
+                    ipAddress: mainMapping.ipAddress,
                     status: 'assigned'
-                });
+                };
                 assigned++;
+                this.logger.debug(`Successfully assigned IP ${mainMapping.ipAddress} to main mobile ${client.mobile}`);
             }
             catch (error) {
-                promoteMobileResults.push({
-                    mobile: promoteMobile,
+                mainMobileResult = {
+                    mobile: client.mobile,
                     ipAddress: null,
                     status: 'failed'
-                });
-                errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
+                };
+                const errorMsg = `Main mobile ${client.mobile}: ${error.message}`;
+                errors.push(errorMsg);
                 failed++;
+                this.logger.error(errorMsg);
             }
-        }
-        const totalMobiles = 1 + promoteMobiles.length;
-        this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
-        return {
-            clientId,
-            mainMobile: mainMobileResult,
-            promoteMobiles: promoteMobileResults,
-            summary: {
-                totalMobiles,
-                assigned,
-                failed,
-                errors
-            }
-        };
-    }
-    async getIpForMobile(mobile, clientId) {
-        this.logger.debug(`Getting IP for mobile: ${mobile} (clientId: ${clientId})`);
-        const existingIp = await this.ipManagementService.getIpForMobile(mobile);
-        if (existingIp) {
-            this.logger.debug(`Found existing IP mapping for ${mobile}: ${existingIp}`);
-            return existingIp;
-        }
-        if (clientId) {
-            const client = await this.clientService.findOne(clientId);
-            if (client) {
-                const isMainMobile = mobile === client.mobile;
-                const { isPromote } = await this.clientService.isPromoteMobile(mobile);
-                if (isMainMobile || isPromote) {
-                    this.logger.debug(`Mobile ${mobile} belongs to client ${clientId} as ${isMainMobile ? 'main' : 'promote'} mobile`);
+            const promoteMobileResults = [];
+            try {
+                const promoteMobiles = await this.getPromoteMobiles(clientId);
+                this.logger.debug(`Found ${promoteMobiles.length} promote mobiles for client ${clientId}`);
+                for (const promoteMobile of promoteMobiles) {
+                    if (!promoteMobile || promoteMobile.trim() === '') {
+                        const errorMsg = `Invalid promote mobile: empty or null`;
+                        errors.push(errorMsg);
+                        failed++;
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: null,
+                            status: 'failed'
+                        });
+                        continue;
+                    }
+                    try {
+                        const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                            mobile: promoteMobile,
+                            clientId: client.clientId
+                        });
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: promoteMapping.ipAddress,
+                            status: 'assigned'
+                        });
+                        assigned++;
+                        this.logger.debug(`Successfully assigned IP ${promoteMapping.ipAddress} to promote mobile ${promoteMobile}`);
+                    }
+                    catch (error) {
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: null,
+                            status: 'failed'
+                        });
+                        const errorMsg = `Promote mobile ${promoteMobile}: ${error.message}`;
+                        errors.push(errorMsg);
+                        failed++;
+                        this.logger.error(errorMsg);
+                    }
                 }
             }
+            catch (error) {
+                const errorMsg = `Failed to retrieve promote mobiles for client ${clientId}: ${error.message}`;
+                errors.push(errorMsg);
+                this.logger.error(errorMsg);
+            }
+            const totalMobiles = 1 + promoteMobileResults.length;
+            this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned, ${failed} failed`);
+            return {
+                clientId,
+                mainMobile: mainMobileResult,
+                promoteMobiles: promoteMobileResults,
+                summary: {
+                    totalMobiles,
+                    assigned,
+                    failed,
+                    errors
+                }
+            };
         }
-        return null;
+        catch (error) {
+            this.logger.error(`Failed to auto-assign IPs for client ${clientId}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to auto-assign IPs for client ${clientId}: ${error.message}`);
+        }
+    }
+    async getIpForMobile(mobile, clientId, autoAssign = false) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile} (clientId: ${clientId}, autoAssign: ${autoAssign})`);
+        try {
+            const existingIp = await this.ipManagementService.getIpForMobile(mobile);
+            if (existingIp) {
+                this.logger.debug(`Found existing IP mapping for ${mobile}: ${existingIp}`);
+                return existingIp;
+            }
+            if (autoAssign && clientId) {
+                const client = await this.clientService.findOne(clientId);
+                if (client) {
+                    const isMainMobile = mobile === client.mobile;
+                    const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+                    if (isMainMobile || isPromote) {
+                        this.logger.debug(`Mobile ${mobile} belongs to client ${clientId} as ${isMainMobile ? 'main' : 'promote'} mobile - attempting auto-assignment`);
+                        try {
+                            const mapping = await this.ipManagementService.assignIpToMobile({
+                                mobile,
+                                clientId
+                            });
+                            this.logger.log(`Auto-assigned IP ${mapping.ipAddress} to mobile ${mobile}`);
+                            return mapping.ipAddress;
+                        }
+                        catch (assignError) {
+                            this.logger.warn(`Failed to auto-assign IP to mobile ${mobile}: ${assignError.message}`);
+                        }
+                    }
+                    else {
+                        this.logger.debug(`Mobile ${mobile} does not belong to client ${clientId}`);
+                    }
+                }
+                else {
+                    this.logger.warn(`Client ${clientId} not found`);
+                }
+            }
+            return null;
+        }
+        catch (error) {
+            this.logger.error(`Error getting IP for mobile ${mobile}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to get IP for mobile ${mobile}`);
+        }
     }
     async getClientIpSummary(clientId) {
-        this.logger.debug(`Getting IP summary for client: ${clientId}`);
-        const client = await this.clientService.findOne(clientId);
-        if (!client) {
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
         }
-        const clientIpInfo = await this.clientService.getClientIpInfo(clientId);
-        const mainMobile = {
-            mobile: client.mobile,
-            ipAddress: clientIpInfo.mainMobile.ipAddress,
-            type: 'main',
-            status: clientIpInfo.mainMobile.hasIp ? 'assigned' : 'unassigned'
-        };
-        const promoteMobilesData = clientIpInfo.promoteMobiles.map(pm => ({
-            mobile: pm.mobile,
-            ipAddress: pm.ipAddress,
-            type: 'promote',
-            status: pm.hasIp ? 'assigned' : 'unassigned'
-        }));
-        const totalMobiles = clientIpInfo.summary.totalMobiles;
-        const assignedMobiles = clientIpInfo.summary.mobilesWithIp;
-        const unassignedMobiles = clientIpInfo.summary.mobilesWithoutIp;
-        return {
-            clientId,
-            clientName: client.name,
-            mainMobile,
-            promoteMobiles: promoteMobilesData,
-            dedicatedIps: clientIpInfo.dedicatedIps,
-            statistics: {
-                totalMobiles,
-                assignedMobiles,
-                unassignedMobiles,
-                totalDedicatedIps: clientIpInfo.dedicatedIps.length
+        this.logger.debug(`Getting IP summary for client: ${clientId}`);
+        try {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                throw new common_1.NotFoundException(`Client ${clientId} not found`);
             }
-        };
+            const clientIpInfo = await this.clientService.getClientIpInfo(clientId);
+            if (!clientIpInfo || !clientIpInfo.mainMobile) {
+                throw new common_1.BadRequestException(`Invalid client IP info structure for client ${clientId}`);
+            }
+            const mainMobile = {
+                mobile: client.mobile,
+                ipAddress: clientIpInfo.mainMobile.ipAddress,
+                type: 'main',
+                status: clientIpInfo.mainMobile.hasIp ? 'assigned' : 'unassigned'
+            };
+            const promoteMobilesData = (clientIpInfo.promoteMobiles || []).map(pm => {
+                if (!pm || typeof pm.mobile !== 'string') {
+                    this.logger.warn(`Invalid promote mobile data found for client ${clientId}`);
+                    return null;
+                }
+                return {
+                    mobile: pm.mobile,
+                    ipAddress: pm.ipAddress,
+                    type: 'promote',
+                    status: pm.hasIp ? 'assigned' : 'unassigned'
+                };
+            }).filter(pm => pm !== null);
+            const totalMobiles = clientIpInfo.summary?.totalMobiles || (1 + promoteMobilesData.length);
+            const assignedMobiles = clientIpInfo.summary?.mobilesWithIp || 0;
+            const unassignedMobiles = clientIpInfo.summary?.mobilesWithoutIp || (totalMobiles - assignedMobiles);
+            return {
+                clientId,
+                clientName: client.name || 'Unknown Client',
+                mainMobile,
+                promoteMobiles: promoteMobilesData,
+                dedicatedIps: clientIpInfo.dedicatedIps || [],
+                statistics: {
+                    totalMobiles,
+                    assignedMobiles,
+                    unassignedMobiles,
+                    totalDedicatedIps: (clientIpInfo.dedicatedIps || []).length
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to get IP summary for client ${clientId}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to get IP summary for client ${clientId}: ${error.message}`);
+        }
     }
     async assignIpToMainMobile(clientId, mobile, preferredCountry) {
         this.logger.debug(`Assigning IP to main mobile ${mobile} for client ${clientId}`);
@@ -16936,23 +17067,100 @@ let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIn
         };
     }
     async getMobileType(mobile, clientId) {
+        if (!mobile || mobile.trim() === '') {
+            return 'unknown';
+        }
         if (!clientId) {
-            const existingIp = await this.ipManagementService.getIpForMobile(mobile);
-            if (!existingIp) {
+            try {
+                const mappings = await this.ipManagementService.getClientMobileMappings(clientId);
+                const mapping = mappings.find(m => m.mobile === mobile);
+                if (mapping) {
+                    clientId = mapping.clientId;
+                }
+                else {
+                    return 'unknown';
+                }
+            }
+            catch (error) {
+                this.logger.debug(`Could not determine clientId for mobile ${mobile}: ${error.message}`);
                 return 'unknown';
             }
+        }
+        try {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                return 'unknown';
+            }
+            if (mobile === client.mobile) {
+                return 'main';
+            }
+            else {
+                const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+                return isPromote ? 'promote' : 'unknown';
+            }
+        }
+        catch (error) {
+            this.logger.error(`Error determining mobile type for ${mobile}: ${error.message}`);
             return 'unknown';
         }
-        const client = await this.clientService.findOne(clientId);
-        if (!client) {
-            return 'unknown';
+    }
+    async releaseIpFromMobile(mobile, clientId) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
         }
-        if (mobile === client.mobile) {
-            return 'main';
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            const currentIp = await this.ipManagementService.getIpForMobile(mobile);
+            if (!currentIp) {
+                return {
+                    mobile,
+                    releasedIp: null,
+                    status: 'no_ip_assigned',
+                    message: `No IP assigned to mobile ${mobile}`
+                };
+            }
+            await this.ipManagementService.releaseIpFromMobile({ mobile });
+            this.logger.log(`Successfully released IP ${currentIp} from mobile ${mobile}`);
+            return {
+                mobile,
+                releasedIp: currentIp,
+                status: 'released',
+                message: `Successfully released IP ${currentIp} from mobile ${mobile}`
+            };
         }
-        else {
-            const { isPromote } = await this.clientService.isPromoteMobile(mobile);
-            return isPromote ? 'promote' : 'unknown';
+        catch (error) {
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+        }
+    }
+    async checkMobileIpStatus(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            const hasIp = ipAddress !== null;
+            let mobileType = 'unknown';
+            let clientId;
+            if (hasIp) {
+                try {
+                    mobileType = await this.getMobileType(mobile);
+                }
+                catch (error) {
+                    this.logger.debug(`Could not determine mobile type for ${mobile}: ${error.message}`);
+                }
+            }
+            return {
+                mobile,
+                hasIp,
+                ipAddress,
+                mobileType,
+                clientId
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error checking IP status for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to check IP status for mobile ${mobile}: ${error.message}`);
         }
     }
 };
@@ -17243,6 +17451,39 @@ let IpManagementController = class IpManagementController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getHealthStatus() {
+        try {
+            return await this.ipManagementService.healthCheck();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getProxyIpById(ipAddress, port) {
+        try {
+            return await this.ipManagementService.findProxyIpById(ipAddress, parseInt(port));
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+        }
+    }
+    async getClientAssignedIps(clientId) {
+        try {
+            return await this.ipManagementService.getClientAssignedIps(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getAvailableIpCount() {
+        try {
+            const count = await this.ipManagementService.getAvailableIpCount();
+            return { count };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 };
 exports.IpManagementController = IpManagementController;
 __decorate([
@@ -17367,6 +17608,45 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getStatistics", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP management health status' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Health status retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getHealthStatus", null);
+__decorate([
+    (0, common_1.Get)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a specific proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP found', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getProxyIpById", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/assigned-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all IPs assigned to a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Client assigned IPs retrieved successfully', type: [proxy_ip_schema_1.ProxyIp] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getClientAssignedIps", null);
+__decorate([
+    (0, common_1.Get)('available-count'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get count of available IPs' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Available IP count retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getAvailableIpCount", null);
 exports.IpManagementController = IpManagementController = __decorate([
     (0, swagger_1.ApiTags)('IP Management'),
     (0, common_1.Controller)('ip-management'),
@@ -17457,32 +17737,59 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         this.logger = new common_1.Logger(IpManagementService_1.name);
     }
     async createProxyIp(createProxyIpDto) {
-        this.logger.debug(`Creating new proxy IP: ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}`);
-        const existingIp = await this.proxyIpModel.findOne({
-            ipAddress: createProxyIpDto.ipAddress,
-            port: createProxyIpDto.port
-        });
-        if (existingIp) {
-            throw new common_1.ConflictException(`Proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port} already exists`);
+        if (!createProxyIpDto.ipAddress || !createProxyIpDto.port) {
+            throw new common_1.BadRequestException('IP address and port are required');
         }
-        const createdIp = new this.proxyIpModel(createProxyIpDto);
-        const savedIp = await createdIp.save();
-        this.logger.log(`Created proxy IP: ${savedIp.ipAddress}:${savedIp.port}`);
-        return savedIp.toJSON();
+        if (createProxyIpDto.port < 1 || createProxyIpDto.port > 65535) {
+            throw new common_1.BadRequestException('Port must be between 1 and 65535');
+        }
+        this.logger.debug(`Creating new proxy IP: ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}`);
+        try {
+            const existingIp = await this.proxyIpModel.findOne({
+                ipAddress: createProxyIpDto.ipAddress,
+                port: createProxyIpDto.port
+            });
+            if (existingIp) {
+                throw new common_1.ConflictException(`Proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port} already exists`);
+            }
+            const createdIp = new this.proxyIpModel(createProxyIpDto);
+            const savedIp = await createdIp.save();
+            this.logger.log(`Created proxy IP: ${savedIp.ipAddress}:${savedIp.port}`);
+            return savedIp.toJSON();
+        }
+        catch (error) {
+            if (error instanceof common_1.ConflictException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Failed to create proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to create proxy IP: ${error.message}`);
+        }
     }
     async bulkCreateProxyIps(proxyIps) {
+        if (!proxyIps || proxyIps.length === 0) {
+            throw new common_1.BadRequestException('No proxy IPs provided for bulk creation');
+        }
         this.logger.debug(`Bulk creating ${proxyIps.length} proxy IPs`);
         let created = 0;
         let failed = 0;
         const errors = [];
-        for (const ipDto of proxyIps) {
-            try {
-                await this.createProxyIp(ipDto);
-                created++;
-            }
-            catch (error) {
-                failed++;
-                errors.push(`${ipDto.ipAddress}:${ipDto.port} - ${error.message}`);
+        const batchSize = 10;
+        for (let i = 0; i < proxyIps.length; i += batchSize) {
+            const batch = proxyIps.slice(i, i + batchSize);
+            for (const ipDto of batch) {
+                try {
+                    if (!ipDto.ipAddress || !ipDto.port) {
+                        failed++;
+                        errors.push(`Invalid IP data: missing address or port`);
+                        continue;
+                    }
+                    await this.createProxyIp(ipDto);
+                    created++;
+                }
+                catch (error) {
+                    failed++;
+                    errors.push(`${ipDto.ipAddress}:${ipDto.port} - ${error.message}`);
+                }
             }
         }
         this.logger.log(`Bulk creation completed: ${created} created, ${failed} failed`);
@@ -17522,113 +17829,352 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         this.logger.log(`Deleted proxy IP: ${ipAddress}:${port}`);
     }
     async getIpForMobile(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
         this.logger.debug(`Getting IP for mobile: ${mobile}`);
-        const mapping = await this.ipMobileMappingModel.findOne({
-            mobile,
-            status: 'active'
-        }).lean();
-        return mapping ? mapping.ipAddress : null;
+        try {
+            const mapping = await this.ipMobileMappingModel.findOne({
+                mobile: mobile.trim(),
+                status: 'active'
+            }).lean();
+            return mapping ? mapping.ipAddress : null;
+        }
+        catch (error) {
+            this.logger.error(`Error getting IP for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get IP for mobile: ${error.message}`);
+        }
     }
     async assignIpToMobile(assignDto) {
-        this.logger.debug(`Assigning IP to mobile: ${assignDto.mobile}`);
-        const existingMapping = await this.ipMobileMappingModel.findOne({
-            mobile: assignDto.mobile,
-            status: 'active'
-        });
-        if (existingMapping) {
-            this.logger.debug(`Mobile ${assignDto.mobile} already has IP: ${existingMapping.ipAddress}`);
-            return existingMapping;
+        if (!assignDto.mobile || assignDto.mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
         }
-        let selectedIp;
-        if (assignDto.preferredIp) {
-            const [ipAddress, portStr] = assignDto.preferredIp.split(':');
-            const port = parseInt(portStr);
-            selectedIp = await this.proxyIpModel.findOne({
-                ipAddress,
-                port,
-                status: 'active',
-                isAssigned: false
-            }).lean();
-            if (!selectedIp) {
-                throw new common_1.NotFoundException(`Preferred IP ${assignDto.preferredIp} not available`);
+        if (!assignDto.clientId || assignDto.clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        const mobile = assignDto.mobile.trim();
+        const clientId = assignDto.clientId.trim();
+        this.logger.debug(`Assigning IP to mobile: ${mobile}`);
+        try {
+            const existingMapping = await this.ipMobileMappingModel.findOne({
+                mobile,
+                status: 'active'
+            });
+            if (existingMapping) {
+                this.logger.debug(`Mobile ${mobile} already has IP: ${existingMapping.ipAddress}`);
+                return existingMapping;
             }
-        }
-        else {
-            selectedIp = await this.proxyIpModel.findOne({
-                status: 'active',
-                isAssigned: false
-            }).lean();
-            if (!selectedIp) {
-                throw new common_1.NotFoundException('No available proxy IPs');
+            let selectedIp;
+            if (assignDto.preferredIp) {
+                const [ipAddress, portStr] = assignDto.preferredIp.split(':');
+                const port = parseInt(portStr);
+                if (isNaN(port)) {
+                    throw new common_1.BadRequestException(`Invalid port in preferred IP: ${assignDto.preferredIp}`);
+                }
+                selectedIp = await this.proxyIpModel.findOne({
+                    ipAddress,
+                    port,
+                    status: 'active',
+                    isAssigned: false
+                }).lean();
+                if (!selectedIp) {
+                    throw new common_1.NotFoundException(`Preferred IP ${assignDto.preferredIp} not available`);
+                }
             }
+            else {
+                let retries = 3;
+                while (retries > 0 && !selectedIp) {
+                    selectedIp = await this.proxyIpModel.findOne({
+                        status: 'active',
+                        isAssigned: false
+                    }).lean();
+                    if (!selectedIp) {
+                        break;
+                    }
+                    const updateResult = await this.proxyIpModel.updateOne({
+                        ipAddress: selectedIp.ipAddress,
+                        port: selectedIp.port,
+                        isAssigned: false
+                    }, {
+                        $set: {
+                            isAssigned: true,
+                            assignedToClient: clientId
+                        }
+                    });
+                    if (updateResult.modifiedCount === 0) {
+                        selectedIp = null;
+                        retries--;
+                        continue;
+                    }
+                    break;
+                }
+                if (!selectedIp) {
+                    throw new common_1.NotFoundException('No available proxy IPs');
+                }
+            }
+            const mappingDto = {
+                mobile,
+                ipAddress: `${selectedIp.ipAddress}:${selectedIp.port}`,
+                clientId,
+                status: 'active'
+            };
+            let newMapping;
+            if (assignDto.preferredIp) {
+                const [mapping] = await Promise.all([
+                    this.ipMobileMappingModel.create(mappingDto),
+                    this.proxyIpModel.updateOne({ ipAddress: selectedIp.ipAddress, port: selectedIp.port }, { $set: { isAssigned: true, assignedToClient: clientId } })
+                ]);
+                newMapping = mapping;
+            }
+            else {
+                newMapping = await this.ipMobileMappingModel.create(mappingDto);
+            }
+            this.logger.log(`Assigned IP ${mappingDto.ipAddress} to mobile ${mobile}`);
+            return newMapping.toObject ? newMapping.toObject() : newMapping;
         }
-        const mappingDto = {
-            mobile: assignDto.mobile,
-            ipAddress: `${selectedIp.ipAddress}:${selectedIp.port}`,
-            clientId: assignDto.clientId,
-            status: 'active'
-        };
-        const [newMapping] = await Promise.all([
-            this.ipMobileMappingModel.create(mappingDto),
-            this.proxyIpModel.updateOne({ ipAddress: selectedIp.ipAddress, port: selectedIp.port }, { $set: { isAssigned: true, assignedToClient: assignDto.clientId } })
-        ]);
-        this.logger.log(`Assigned IP ${mappingDto.ipAddress} to mobile ${assignDto.mobile}`);
-        return newMapping.toJSON();
+        catch (error) {
+            this.logger.error(`Failed to assign IP to mobile ${mobile}: ${error.message}`);
+            if (error instanceof common_1.NotFoundException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to assign IP to mobile: ${error.message}`);
+        }
     }
     async bulkAssignIpsToMobiles(bulkDto) {
+        if (!bulkDto.mobiles || bulkDto.mobiles.length === 0) {
+            throw new common_1.BadRequestException('No mobiles provided for bulk assignment');
+        }
+        if (!bulkDto.clientId || bulkDto.clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required for bulk assignment');
+        }
         this.logger.debug(`Bulk assigning IPs to ${bulkDto.mobiles.length} mobiles`);
         let assigned = 0;
         let failed = 0;
         const results = [];
-        for (const mobile of bulkDto.mobiles) {
-            try {
-                const assignDto = {
-                    mobile,
-                    clientId: bulkDto.clientId
-                };
-                const mapping = await this.assignIpToMobile(assignDto);
-                assigned++;
-                results.push({ mobile, ipAddress: mapping.ipAddress });
-            }
-            catch (error) {
-                failed++;
-                results.push({ mobile, error: error.message });
+        const batchSize = 5;
+        for (let i = 0; i < bulkDto.mobiles.length; i += batchSize) {
+            const batch = bulkDto.mobiles.slice(i, i + batchSize);
+            for (const mobile of batch) {
+                if (!mobile || mobile.trim() === '') {
+                    failed++;
+                    results.push({ mobile: mobile || 'undefined', error: 'Invalid mobile number' });
+                    continue;
+                }
+                try {
+                    const assignDto = {
+                        mobile: mobile.trim(),
+                        clientId: bulkDto.clientId.trim()
+                    };
+                    const mapping = await this.assignIpToMobile(assignDto);
+                    assigned++;
+                    results.push({ mobile: mobile.trim(), ipAddress: mapping.ipAddress });
+                }
+                catch (error) {
+                    failed++;
+                    results.push({ mobile: mobile.trim(), error: error.message });
+                    this.logger.warn(`Failed to assign IP to mobile ${mobile}: ${error.message}`);
+                }
             }
         }
         this.logger.log(`Bulk assignment completed: ${assigned} assigned, ${failed} failed`);
         return { assigned, failed, results };
     }
     async releaseIpFromMobile(releaseDto) {
-        this.logger.debug(`Releasing IP from mobile: ${releaseDto.mobile}`);
-        const mapping = await this.ipMobileMappingModel.findOne({
-            mobile: releaseDto.mobile,
-            status: 'active'
-        });
-        if (!mapping) {
-            throw new common_1.NotFoundException(`No active IP mapping found for mobile: ${releaseDto.mobile}`);
+        if (!releaseDto.mobile || releaseDto.mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
         }
-        const [ipAddress, portStr] = mapping.ipAddress.split(':');
-        const port = parseInt(portStr);
-        await Promise.all([
-            this.ipMobileMappingModel.updateOne({ mobile: releaseDto.mobile }, { $set: { status: 'inactive' } }),
-            this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { isAssigned: false }, $unset: { assignedToClient: 1 } })
-        ]);
-        this.logger.log(`Released IP ${mapping.ipAddress} from mobile ${releaseDto.mobile}`);
+        const mobile = releaseDto.mobile.trim();
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            const mapping = await this.ipMobileMappingModel.findOne({
+                mobile,
+                status: 'active'
+            });
+            if (!mapping) {
+                throw new common_1.NotFoundException(`No active IP mapping found for mobile: ${mobile}`);
+            }
+            const [ipAddress, portStr] = mapping.ipAddress.split(':');
+            const port = parseInt(portStr);
+            if (isNaN(port)) {
+                this.logger.error(`Invalid port in IP address: ${mapping.ipAddress}`);
+                throw new common_1.BadRequestException(`Invalid IP address format: ${mapping.ipAddress}`);
+            }
+            await Promise.all([
+                this.ipMobileMappingModel.updateOne({ mobile, status: 'active' }, { $set: { status: 'inactive' } }),
+                this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { isAssigned: false }, $unset: { assignedToClient: 1 } })
+            ]);
+            this.logger.log(`Released IP ${mapping.ipAddress} from mobile ${mobile}`);
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to release IP from mobile: ${error.message}`);
+        }
     }
     async getClientMobileMappings(clientId) {
-        return this.ipMobileMappingModel.find({
-            clientId,
-            status: 'active'
-        }).lean();
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        try {
+            return this.ipMobileMappingModel.find({
+                clientId: clientId.trim(),
+                status: 'active'
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error getting client mappings for ${clientId}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get client mappings: ${error.message}`);
+        }
     }
     async getStats() {
-        const [total, available, assigned, inactive] = await Promise.all([
-            this.proxyIpModel.countDocuments(),
-            this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
-            this.proxyIpModel.countDocuments({ isAssigned: true }),
-            this.proxyIpModel.countDocuments({ status: 'inactive' })
-        ]);
-        return { total, available, assigned, inactive };
+        try {
+            const [total, available, assigned, inactive, totalMappings, activeMappings, inactiveMappings] = await Promise.all([
+                this.proxyIpModel.countDocuments(),
+                this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
+                this.proxyIpModel.countDocuments({ isAssigned: true }),
+                this.proxyIpModel.countDocuments({ status: 'inactive' }),
+                this.ipMobileMappingModel.countDocuments(),
+                this.ipMobileMappingModel.countDocuments({ status: 'active' }),
+                this.ipMobileMappingModel.countDocuments({ status: 'inactive' })
+            ]);
+            return {
+                total,
+                available,
+                assigned,
+                inactive,
+                mappings: {
+                    total: totalMappings,
+                    active: activeMappings,
+                    inactive: inactiveMappings
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error getting statistics: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get statistics: ${error.message}`);
+        }
+    }
+    async findProxyIpById(ipAddress, port) {
+        if (!ipAddress || !port) {
+            throw new common_1.BadRequestException('IP address and port are required');
+        }
+        try {
+            const proxyIp = await this.proxyIpModel.findOne({ ipAddress, port }).lean();
+            if (!proxyIp) {
+                throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+            }
+            return proxyIp;
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            this.logger.error(`Error finding proxy IP ${ipAddress}:${port}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to find proxy IP: ${error.message}`);
+        }
+    }
+    async getClientAssignedIps(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        try {
+            return this.proxyIpModel.find({
+                assignedToClient: clientId.trim(),
+                isAssigned: true
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error getting assigned IPs for client ${clientId}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get assigned IPs: ${error.message}`);
+        }
+    }
+    async findMappingByMobile(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        try {
+            return this.ipMobileMappingModel.findOne({
+                mobile: mobile.trim(),
+                status: 'active'
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error finding mapping for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to find mapping: ${error.message}`);
+        }
+    }
+    async isIpAvailable(ipAddress, port) {
+        if (!ipAddress || !port) {
+            throw new common_1.BadRequestException('IP address and port are required');
+        }
+        try {
+            const ip = await this.proxyIpModel.findOne({
+                ipAddress,
+                port,
+                status: 'active',
+                isAssigned: false
+            }).lean();
+            return ip !== null;
+        }
+        catch (error) {
+            this.logger.error(`Error checking IP availability ${ipAddress}:${port}: ${error.message}`);
+            return false;
+        }
+    }
+    async getAvailableIpCount() {
+        try {
+            return this.proxyIpModel.countDocuments({
+                status: 'active',
+                isAssigned: false
+            });
+        }
+        catch (error) {
+            this.logger.error(`Error getting available IP count: ${error.message}`);
+            return 0;
+        }
+    }
+    async healthCheck() {
+        try {
+            const stats = await this.getStats();
+            const issues = [];
+            const utilizationRate = stats.total > 0 ? (stats.assigned / stats.total) * 100 : 0;
+            let status = 'healthy';
+            if (stats.available === 0) {
+                status = 'critical';
+                issues.push('No available IPs in pool');
+            }
+            else if (stats.available < 5) {
+                status = 'warning';
+                issues.push('Low IP availability (less than 5 IPs available)');
+            }
+            if (utilizationRate > 90) {
+                status = utilizationRate > 95 ? 'critical' : 'warning';
+                issues.push(`High utilization rate: ${utilizationRate.toFixed(1)}%`);
+            }
+            if (stats.inactive > stats.total * 0.2) {
+                status = 'warning';
+                issues.push('High number of inactive IPs');
+            }
+            return {
+                status,
+                availableIps: stats.available,
+                totalActiveIps: stats.total - stats.inactive,
+                utilizationRate: parseFloat(utilizationRate.toFixed(1)),
+                issues
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error during health check: ${error.message}`);
+            return {
+                status: 'critical',
+                availableIps: 0,
+                totalActiveIps: 0,
+                utilizationRate: 0,
+                issues: ['Health check failed']
+            };
+        }
     }
 };
 exports.IpManagementService = IpManagementService;
