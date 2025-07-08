@@ -6,8 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(require("axios"));
 const parseError_1 = require("./parseError");
-const logbots_1 = require("./logbots");
-const utils_1 = require("../utils");
+const ChannelLogger_1 = require("./ChannelLogger");
+const common_1 = require("./common");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -35,13 +35,7 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `${prefix}\n\n${formattedMessage}`;
         try {
-            const channelUrl = (0, logbots_1.ppplbot)(process.env[config.channelEnvVar] || '');
-            if (!channelUrl) {
-                console.warn(`Notification channel URL not available. Environment variable ${config.channelEnvVar} might not be set.`);
-                return;
-            }
-            const notifUrl = `${channelUrl}&text=${encodeURIComponent(notificationText)}`;
-            await axios_1.default.get(notifUrl, { timeout: config.timeout });
+            await ChannelLogger_1.clog.sendHttpFailures(notificationText);
         }
         catch (error) {
             (0, parseError_1.parseError)(error, "Failed to send notification:", false);
@@ -134,6 +128,7 @@ function parseUrl(url) {
     }
 }
 async function fetchWithTimeout(url, options = {}, maxRetries) {
+    console.log(`Fetching URL: ${url} with options:`, options);
     if (!url) {
         console.error('URL is empty');
         return undefined;
@@ -212,7 +207,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                         console.error("Error extracting bypass error message:", extractBypassError);
                         errorDetails = String(bypassError);
                     }
-                    await notifyInternal(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}`}` }, notificationConfig);
+                    await notifyInternal(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}` }, notificationConfig);
                 }
             }
             else {
@@ -232,7 +227,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
             if (attempt < retryConfig.maxRetries && shouldRetry(error, parsedError)) {
                 const delay = calculateBackoff(attempt, retryConfig);
                 console.log(`Retrying request (${attempt + 1}/${retryConfig.maxRetries}) after ${delay}ms`);
-                await (0, utils_1.sleep)(delay);
+                await (0, common_1.sleep)(delay);
                 continue;
             }
             if (attempt >= retryConfig.maxRetries) {
