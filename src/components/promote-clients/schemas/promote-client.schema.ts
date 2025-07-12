@@ -26,6 +26,21 @@ export class PromoteClient {
 
   @Prop({ required: true, type: Number })
   channels: number;
+
+  @Prop({ required: true })
+  clientId: string;
+
+  @Prop({ required: false, default: 'active' })
+  status: string;
+
+  @Prop({ required: false, default: 'Account is functioning properly' })
+  message: string;
+
+  @Prop({ required: false, type: Date, default: null })
+  lastUsed: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);
+
+// Create index for better performance when querying by clientId
+PromoteClientSchema.index({ clientId: 1 });

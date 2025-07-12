@@ -73,19 +73,19 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
     try {
       console.log(`Initializing configuration module...`);
-      
+
       await this.validateConnection();
       this.setupConnectionEventHandlers();
       this.startHealthCheck();
-      
+
       InitModule.initializationStatus.isInitialized = true;
       InitModule.initializationStatus.isInitializing = false;
-      
+
       console.log(`Started :: ${process.env.clientId}`);
-      
+
       // Optional: Send notification on successful startup
       await this.sendNotification(`started :: ${process.env.clientId}`);
-      
+
     } catch (error) {
       InitModule.initializationStatus.isInitializing = false;
       console.error('Failed to initialize configuration module:', error);
@@ -111,11 +111,11 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       } catch (error) {
         retryCount++;
         console.warn(`Connection validation attempt ${retryCount}/${maxRetries} failed:`, error);
-        
+
         if (retryCount >= maxRetries) {
           throw new Error(`Failed to validate MongoDB connection after ${maxRetries} attempts: ${error.message}`);
         }
-        
+
         // Wait before retrying
         await this.delay(2000 * retryCount);
       }
@@ -124,23 +124,23 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
   private setupConnectionEventHandlers(): void {
     this.connection.on('connected', () => {
-      console.log('MongoDB connected');
+      console.log('MongoDB Connected');
     });
 
     this.connection.on('error', (error) => {
-      console.error('MongoDB connection error:', error);
+      console.error('MongoDB Connection Error:', error);
     });
 
     this.connection.on('disconnected', () => {
-      console.warn('MongoDB disconnected');
+      console.warn('MongoDB Disconnected');
     });
 
     this.connection.on('reconnected', () => {
-      console.log('MongoDB reconnected');
+      console.log('MongoDB Reconnected');
     });
 
     this.connection.on('close', () => {
-      console.log('MongoDB connection closed');
+      console.log('MongoDB Connection Closed');
     });
   }
 
@@ -186,10 +186,10 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
     try {
       console.log('Init Module destroying...');
-      
+
       this.stopHealthCheck();
       await this.sendNotification(`closed :: ${process.env.clientId}`);
-      
+
       if (this.connection && this.connection.readyState !== 0) {
         console.log('Closing MongoDB connection...');
         await this.connection.close(true);

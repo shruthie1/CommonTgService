@@ -6,7 +6,7 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { ChannelInfo } from './types/telegram-responses';
 import { DialogsQueryDto } from './dto/metadata-operations.dto';
-import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { ChatStatistics, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
@@ -165,7 +165,6 @@ export declare class TelegramService implements OnModuleDestroy {
         calls?: 'everybody' | 'contacts' | 'nobody';
         groups?: 'everybody' | 'contacts' | 'nobody';
     }): Promise<boolean>;
-    setContentFilters(mobile: string, filters: ContentFilter): Promise<void>;
     addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
     removeGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void>;
     promoteToAdmin(mobile: string, groupId: string, userId: string, permissions?: {
@@ -465,6 +464,4 @@ export declare class TelegramService implements OnModuleDestroy {
     getConnectionStats(): ConnectionStatsDto;
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
-    startCleanupInterval(intervalMs?: number): void;
-    stopCleanupInterval(): void;
 }

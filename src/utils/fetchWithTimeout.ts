@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import { extractMessage, parseError } from "./parseError";
-import { ppplbot } from "./logbots";
-import { sleep } from "../utils";
+import { clog } from "./ChannelLogger";
+import { sleep } from "./common";
 import { BotConfig, ChannelCategory } from "./TelegramBots.config";
 
 // Configuration types
@@ -220,6 +220,7 @@ export async function fetchWithTimeout(
     options: FetchWithTimeoutOptions = {},
     maxRetries?: number // Kept for backward compatibility
 ): Promise<AxiosResponse | undefined> {
+    console.log(`Fetching URL: ${url} with options:`, options);
     // Input validation
     if (!url) {
         console.error('URL is empty');
@@ -333,7 +334,7 @@ export async function fetchWithTimeout(
 
                     await notifyInternal(
                         `Bypass attempt failed`,
-                        { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}`}` },
+                        { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}` },
                         notificationConfig
                     );
                 }

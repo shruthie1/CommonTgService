@@ -591,14 +591,6 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings)
     }
-    // Content Filtering
-    async setContentFilters(
-        mobile: string,
-        filters: ContentFilter
-    ) {
-        const telegramClient = await connectionManager.getClient(mobile);
-        return await telegramClient.setContentFilters(filters)
-    }
 
     async addGroupMembers(mobile: string, groupId: string, members: string[]): Promise<void> {
         const telegramClient = await connectionManager.getClient(mobile);
@@ -1114,25 +1106,10 @@ export class TelegramService implements OnModuleDestroy {
 
     getClientState(mobile: string): ConnectionStatusDto | undefined {
         const state = connectionManager.getClientState(mobile);
-        const clientInfo = {
-            state: state,
-            autoDisconnect: false,
-            lastUsed: Date.now(),
-            connectionAttempts: 0
-        };
-        
-        return clientInfo as ConnectionStatusDto;
+        return state;
     }
 
     getActiveConnectionCount(): number {
         return connectionManager.getActiveConnectionCount();
-    }
-
-    startCleanupInterval(intervalMs: number = 300000): void {
-        connectionManager.startCleanupInterval(intervalMs);
-    }
-
-    stopCleanupInterval(): void {
-        connectionManager.stopCleanupInterval();
     }
 }

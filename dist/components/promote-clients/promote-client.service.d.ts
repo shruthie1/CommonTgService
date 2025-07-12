@@ -1,4 +1,5 @@
 import { ChannelsService } from '../channels/channels.service';
+import { OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { PromoteClient, PromoteClientDocument } from './schemas/promote-client.schema';
@@ -8,7 +9,8 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
-export declare class PromoteClientService {
+import { SessionService } from '../session-manager';
+export declare class PromoteClientService implements OnModuleDestroy {
     private promoteClientModel;
     private telegramService;
     private usersService;
@@ -16,6 +18,7 @@ export declare class PromoteClientService {
     private clientService;
     private channelsService;
     private bufferClientService;
+    private sessionService;
     private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
@@ -24,11 +27,19 @@ export declare class PromoteClientService {
     private isLeaveChannelProcessing;
     private isJoinChannelProcessing;
     private readonly JOIN_CHANNEL_INTERVAL;
-    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
+    private readonly LEAVE_CHANNEL_INTERVAL;
+    private readonly LEAVE_CHANNEL_BATCH_SIZE;
+    private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
+    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
-    findAll(): Promise<PromoteClient[]>;
+    findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;
     update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
+    updateStatus(mobile: string, status: string, message?: string): Promise<PromoteClient>;
+    updateLastUsed(mobile: string): Promise<PromoteClient>;
+    markAsUsed(mobile: string, message?: string): Promise<PromoteClient>;
+    markAsInactive(mobile: string, reason: string): Promise<PromoteClient>;
+    markAsActive(mobile: string, message?: string): Promise<PromoteClient>;
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient>;
     remove(mobile: string): Promise<void>;
     search(filter: any): Promise<PromoteClient[]>;
@@ -44,5 +55,47 @@ export declare class PromoteClientService {
     clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
-    addNewUserstoPromoteClients(badIds: string[], goodIds: string[]): Promise<void>;
+    addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
+    onModuleDestroy(): Promise<void>;
+    getPromoteClientDistribution(): Promise<{
+        totalPromoteClients: number;
+        unassignedPromoteClients: number;
+        activePromoteClients: number;
+        inactivePromoteClients: number;
+        distributionPerClient: Array<{
+            clientId: string;
+            assignedCount: number;
+            activeCount: number;
+            inactiveCount: number;
+            needed: number;
+            status: 'sufficient' | 'needs_more';
+            neverUsed: number;
+            usedInLast24Hours: number;
+        }>;
+        summary: {
+            clientsWithSufficientPromoteClients: number;
+            clientsNeedingPromoteClients: number;
+            totalPromoteClientsNeeded: number;
+            maxPromoteClientsPerTrigger: number;
+            triggersNeededToSatisfyAll: number;
+        };
+    }>;
+    getPromoteClientsByStatus(status: string): Promise<PromoteClient[]>;
+    getPromoteClientsWithMessages(): Promise<Array<{
+        mobile: string;
+        status: string;
+        message: string;
+        clientId?: string;
+        lastUsed?: Date;
+    }>>;
+    getLeastRecentlyUsedPromoteClients(clientId: string, limit?: number): Promise<PromoteClient[]>;
+    getNextAvailablePromoteClient(clientId: string): Promise<PromoteClient | null>;
+    getUnusedPromoteClients(hoursAgo?: number, clientId?: string): Promise<PromoteClient[]>;
+    getUsageStatistics(clientId?: string): Promise<{
+        totalClients: number;
+        neverUsed: number;
+        usedInLast24Hours: number;
+        usedInLastWeek: number;
+        averageUsageGap: number;
+    }>;
 }

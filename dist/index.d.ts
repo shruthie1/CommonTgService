@@ -1,5 +1,6 @@
 export { AppModule } from './app.module';
 export { AppController } from './app.controller';
+export { MemoryCleanerService } from './memory-cleanup.service';
 export * from './components';
 export * from './utils';
 export * from './middlewares';

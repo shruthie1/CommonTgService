@@ -72,7 +72,7 @@ function safeStringify(data: any, depth = 0, maxDepth = 3): string {
       const entries = Object.entries(data)
         .filter(([_, v]) => v !== undefined && v !== null)
         .map(([k, v]) => `${k}: ${safeStringify(v, depth + 1, maxDepth)}`);
-      
+
       if (entries.length === 0) return '{}';
       return `{${entries.join(', ')}}`;
     }
@@ -113,7 +113,7 @@ export function extractMessage(data: any, path = '', depth = 0, maxDepth = 5): s
         data.name ? `name=${data.name}` : '',
         data.stack ? `stack=${data.stack.split('\n')[0]}` : ''
       ].filter(Boolean).join('\n');
-      
+
       return path ? `${path}=(${errorInfo})` : errorInfo;
     }
 
@@ -136,7 +136,7 @@ export function extractMessage(data: any, path = '', depth = 0, maxDepth = 5): s
       for (const key of Object.keys(data)) {
         const value = data[key];
         const newPath = path ? `${path}.${key}` : key;
-        
+
         const extracted = extractMessage(value, newPath, depth + 1, maxDepth);
         if (extracted) {
           messages.push(extracted);
@@ -168,7 +168,7 @@ async function sendNotification(url: string, timeout = DEFAULT_ERROR_CONFIG.noti
       return undefined;
     }
 
-    return await axios.get(url, { 
+    return await axios.get(url, {
       timeout,
       validateStatus: status => status < 500 // Consider 4xx as "successful" notifications
     });
@@ -187,7 +187,7 @@ async function sendNotification(url: string, timeout = DEFAULT_ERROR_CONFIG.noti
  */
 function shouldIgnoreError(message: string, status: number, patterns: RegExp[]): boolean {
   if (status === 429) return true;  // Always ignore rate limiting errors
-  
+
   return patterns.some(pattern => pattern.test(message));
 }
 
@@ -203,14 +203,14 @@ function extractStatusCode(err: any, defaultStatus: number): number {
   // Try to extract from response
   if (err.response) {
     const response = err.response;
-    return response.data?.statusCode || 
-           response.data?.status || 
-           response.data?.ResponseCode || 
-           response.status || 
-           err.status || 
+    return response.data?.statusCode ||
+           response.data?.status ||
+           response.data?.ResponseCode ||
+           response.status ||
+           err.status ||
            defaultStatus;
   }
-  
+
   // Try direct properties
   return err.statusCode || err.status || defaultStatus;
 }
@@ -237,7 +237,7 @@ function extractErrorMessage(err: any, defaultMessage: string): string {
            err.message ||
            defaultMessage;
   }
-  
+
   // Error message from request
   if (err.request) {
     return err.data?.message ||
@@ -250,7 +250,7 @@ function extractErrorMessage(err: any, defaultMessage: string): string {
            err.statusText ||
            'The request was triggered but no response was received';
   }
-  
+
   // Direct error message
   return err.message || err.errorMessage || defaultMessage;
 }
@@ -267,7 +267,7 @@ function extractErrorType(err: any, defaultError: string): string {
   if (err.response?.data?.error) {
     return err.response.data.error;
   }
-  
+
   return err.error || err.name || err.code || defaultError;
 }
 
@@ -287,16 +287,16 @@ export function parseError(
 ): ErrorResponse {
   // Merge with default config
   const fullConfig = { ...DEFAULT_ERROR_CONFIG, ...config };
-  
+
   try {
     const clientId = process.env.clientId || 'UptimeChecker2';
     const prefixStr = `${clientId}${prefix ? ` - ${prefix}` : ''}`;
-    
+
     // Extract error components
     const status = extractStatusCode(err, fullConfig.defaultStatus);
     const rawMessage = extractErrorMessage(err, fullConfig.defaultMessage);
     const error = extractErrorType(err, fullConfig.defaultError);
-    
+
     // Process the raw message to get a clean version
     let extractedMessage;
     try {
@@ -304,28 +304,28 @@ export function parseError(
     } catch (e) {
       extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
     }
-    
+
     // Prepare the full message for logging
     const fullMessage = `${prefixStr} :: ${extractedMessage}`;
     console.log("parsedErr: ", fullMessage);
-    
+
     // Prepare response object
-    const response: ErrorResponse = { 
-      status, 
-      message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength), 
+    const response: ErrorResponse = {
+      status,
+      message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
       error,
       raw: err
     };
-    
+
     // Send notification if requested and applicable
     if (sendErr) {
       try {
         const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
-        
+
         if (!ignoreError) {
           const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
           const notifUrl = `${notifbot()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
-          
+
           // Use Promise but don't await to avoid delaying the response
           sendNotification(notifUrl, fullConfig.notificationTimeout)
             .catch(e => console.error("Failed to send error notification:", e));
@@ -334,13 +334,13 @@ export function parseError(
         console.error('Failed to prepare error notification:', notificationError);
       }
     }
-    
+
     return response;
   } catch (fatalError) {
     console.error("Fatal error in parseError:", fatalError);
-    return { 
-      status: fullConfig.defaultStatus, 
-      message: "Error in error handling", 
+    return {
+      status: fullConfig.defaultStatus,
+      message: "Error in error handling",
       error: "FatalError",
       raw: err
     };

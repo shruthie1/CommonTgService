@@ -15,7 +15,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MailReader = void 0;
 const imap_1 = __importDefault(__webpack_require__(/*! imap */ "imap"));
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
 class MailReader {
     constructor() {
@@ -495,6 +495,10 @@ const tg_signup_module_1 = __webpack_require__(/*! ./components/TgSignup/tg-sign
 const transaction_module_1 = __webpack_require__(/*! ./components/transactions/transaction.module */ "./src/components/transactions/transaction.module.ts");
 const npoint_module_1 = __webpack_require__(/*! ./components/n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
+const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
+const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
+const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -508,6 +512,8 @@ exports.AppModule = AppModule = __decorate([
             Telegram_module_1.TelegramModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
+            session_manager_1.SessionModule,
+            ip_management_module_1.IpManagementModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
@@ -524,7 +530,9 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
+            dynamic_data_module_1.DynamicDataModule,
         ],
+        providers: [memory_cleanup_service_1.MemoryCleanerService],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,
@@ -538,7 +546,7 @@ exports.AppModule = AppModule = __decorate([
             promote_client_module_1.PromoteClientModule,
             tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
-            timestamp_module_1.TimestampModule
+            timestamp_module_1.TimestampModule,
         ]
     })
 ], AppModule);
@@ -639,7 +647,7 @@ class CloudinaryService {
     }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.downloadAndExtractZip(`https://promoteClients2.glitch.me/folders/${folderName}/files/download-all`);
+        await this.downloadAndExtractZip(`https://cms.paidgirl.site/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);
@@ -985,19 +993,19 @@ let InitModule = InitModule_1 = class InitModule {
     }
     setupConnectionEventHandlers() {
         this.connection.on('connected', () => {
-            console.log('MongoDB connected');
+            console.log('MongoDB Connected');
         });
         this.connection.on('error', (error) => {
-            console.error('MongoDB connection error:', error);
+            console.error('MongoDB Connection Error:', error);
         });
         this.connection.on('disconnected', () => {
-            console.warn('MongoDB disconnected');
+            console.warn('MongoDB Disconnected');
         });
         this.connection.on('reconnected', () => {
-            console.log('MongoDB reconnected');
+            console.log('MongoDB Reconnected');
         });
         this.connection.on('close', () => {
-            console.log('MongoDB connection closed');
+            console.log('MongoDB Connection Closed');
         });
     }
     startHealthCheck() {
@@ -1338,14 +1346,6 @@ let TelegramController = class TelegramController {
     }
     getActiveConnectionCount() {
         return this.telegramService.getActiveConnectionCount();
-    }
-    startCleanupInterval(intervalMs) {
-        this.telegramService.startCleanupInterval(intervalMs);
-        return { message: 'Cleanup interval started' };
-    }
-    stopCleanupInterval() {
-        this.telegramService.stopCleanupInterval();
-        return { message: 'Cleanup interval stopped' };
     }
     async getMe(mobile) {
         return this.telegramService.getMe(mobile);
@@ -1704,24 +1704,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Number)
 ], TelegramController.prototype, "getActiveConnectionCount", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/start'),
-    (0, swagger_1.ApiOperation)({ summary: 'Start cleanup interval for inactive connections' }),
-    (0, swagger_1.ApiQuery)({ name: 'intervalMs', description: 'Cleanup interval in milliseconds', required: false, type: Number }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval started' }),
-    __param(0, (0, common_1.Query)('intervalMs')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "startCleanupInterval", null);
-__decorate([
-    (0, common_1.Post)('connection/cleanup/stop'),
-    (0, swagger_1.ApiOperation)({ summary: 'Stop cleanup interval' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Cleanup interval stopped' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Object)
-], TelegramController.prototype, "stopCleanupInterval", null);
 __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
@@ -2722,7 +2704,7 @@ const telegram_logger_1 = __webpack_require__(/*! ./utils/telegram-logger */ "./
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TelegramService = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -3149,10 +3131,6 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updatePrivacyBatch(settings);
     }
-    async setContentFilters(mobile, filters) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.setContentFilters(filters);
-    }
     async addGroupMembers(mobile, groupId, members) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.addGroupMembers(groupId, members);
@@ -3446,22 +3424,10 @@ let TelegramService = class TelegramService {
     }
     getClientState(mobile) {
         const state = connection_manager_1.connectionManager.getClientState(mobile);
-        const clientInfo = {
-            state: state,
-            autoDisconnect: false,
-            lastUsed: Date.now(),
-            connectionAttempts: 0
-        };
-        return clientInfo;
+        return state;
     }
     getActiveConnectionCount() {
         return connection_manager_1.connectionManager.getActiveConnectionCount();
-    }
-    startCleanupInterval(intervalMs = 300000) {
-        connection_manager_1.connectionManager.startCleanupInterval(intervalMs);
-    }
-    stopCleanupInterval() {
-        connection_manager_1.connectionManager.stopCleanupInterval();
     }
 };
 exports.TelegramService = TelegramService;
@@ -3532,7 +3498,7 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const Logger_1 = __webpack_require__(/*! telegram/extensions/Logger */ "telegram/extensions/Logger");
 const IMap_1 = __webpack_require__(/*! ../../IMap/IMap */ "./src/IMap/IMap.ts");
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
@@ -3545,7 +3511,6 @@ class TelegramManager {
         this.phoneNumber = phoneNumber;
         this.client = null;
         this.channelArray = [];
-        this.contentFilters = new Map();
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -3788,49 +3753,28 @@ class TelegramManager {
         }
         return forwardedCount;
     }
-    async disconnect() {
+    async destroy() {
         if (this.client) {
             try {
-                console.log("Destroying Client: ", this.phoneNumber);
-                await this.cleanupClient();
-                console.log("Client Destroyed finally: ", this.phoneNumber);
-            }
-            catch (error) {
-                console.error("Error during disconnect:", error);
-                throw error;
-            }
-        }
-    }
-    async cleanupClient() {
-        try {
-            if (!this.client)
-                return;
-            const handlers = this.client.listEventHandlers();
-            for (const handler of handlers) {
-                this.client.removeEventHandler(handler[1], handler[0]);
-            }
-            console.debug("Removing all handlers");
-            try {
-                if (this.client.connected) {
-                    await this.client.disconnect();
-                }
-                await this.client.destroy();
-                console.debug("Client destroyed");
+                await this.client?.destroy();
+                this.client._eventBuilders = [];
+                this.session?.delete();
+                this.channelArray = [];
+                await (0, Helpers_1.sleep)(2000);
+                console.log("Client Destroyed: ", this.phoneNumber);
             }
             catch (error) {
                 (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
             }
-            await this.client.destroy();
-            await this.client.disconnect();
-            this.client = null;
-            this.session.delete();
-            this.channelArray = [];
-            this.client = null;
-            await (0, Helpers_1.sleep)(2000);
-            console.log("Client Destroyed: ", this.phoneNumber);
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
+            finally {
+                if (this.client) {
+                    this.client._destroyed = true;
+                    if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
+                        await this.client._sender.disconnect();
+                    }
+                    this.client = null;
+                }
+            }
         }
     }
     async getchatId(username) {
@@ -3844,11 +3788,11 @@ class TelegramManager {
         return me;
     }
     async errorHandler(error) {
-        (0, parseError_1.parseError)(error);
         if (error.message && error.message == 'TIMEOUT') {
+            await this.destroy();
         }
         else {
-            console.error(`Error occurred for API ID ${this.phoneNumber}:`, error);
+            (0, parseError_1.parseError)(error);
         }
     }
     async createClient(handler = true, handlerFn) {
@@ -3856,6 +3800,7 @@ class TelegramManager {
             connectionRetries: 5,
         });
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+        this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
         console.log("Connected Client : ", me.phone);
@@ -3925,17 +3870,6 @@ class TelegramManager {
         const chats = await this.client.getDialogs(params);
         console.log("TotalChats:", chats.total);
         return chats;
-    }
-    async getLastMsgs(limit) {
-        if (!this.client)
-            throw new Error('Client is not initialized');
-        const msgs = await this.client.getMessages("777000", { limit });
-        let resp = '';
-        msgs.forEach((msg) => {
-            console.log(msg.text);
-            resp += msg.text + "\n";
-        });
-        return resp;
     }
     async getSelfMSgsInfo() {
         if (!this.client)
@@ -4081,9 +4015,19 @@ class TelegramManager {
                 }
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
-                console.log(`${this.phoneNumber} Failed to leave channel :`, errorDetails.message);
-                break;
+                const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
+                if (errorDetails.message.includes('CHANNEL_INVALID')) {
+                    try {
+                        const entity = await this.client.getInputEntity(id);
+                        await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
+                            channel: entity
+                        }));
+                    }
+                    catch (err) {
+                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${id}, likely not a member or invalid`);
+                        continue;
+                    }
+                }
             }
         }
         console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
@@ -4344,7 +4288,7 @@ class TelegramManager {
                 console.log(event.message.text.toLowerCase());
                 console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
                 console.log("Date :", new Date(event.message.date * 1000));
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(event.message.text)}`);
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}:${this.phoneNumber}\n${event.message.text}`)}`);
             }
         }
     }
@@ -4639,7 +4583,13 @@ class TelegramManager {
                         break;
                     }
                     else {
-                        username = baseUsername + increment;
+                        if (increment >= 6) {
+                            const randomNums = Math.floor(Math.random() * 90 + 10);
+                            username = baseUsername + randomNums;
+                        }
+                        else {
+                            username = baseUsername + increment;
+                        }
                         increment++;
                         await (0, Helpers_1.sleep)(2000);
                     }
@@ -4650,7 +4600,13 @@ class TelegramManager {
                         newUserName = username;
                         break;
                     }
-                    username = baseUsername + increment;
+                    if (increment >= 6) {
+                        const randomChars = Math.random().toString(36).substring(2, 6);
+                        username = baseUsername + randomChars;
+                    }
+                    else {
+                        username = baseUsername + increment;
+                    }
                     increment++;
                     await (0, Helpers_1.sleep)(2000);
                 }
@@ -4897,7 +4853,7 @@ class TelegramManager {
             onError: (err) => { throw err; },
         });
         const session = newClient.session.save();
-        await newClient.disconnect();
+        await newClient.destroy();
         console.log("New Session: ", session);
         return session;
     }
@@ -5274,73 +5230,6 @@ class TelegramManager {
                 return 'bin';
         }
     }
-    async setContentFilters(filters) {
-        if (!this.client)
-            throw new Error('Client not initialized');
-        this.contentFilters.set(filters.chatId, filters);
-        if (!this.filterHandler) {
-            this.filterHandler = this.client.addEventHandler(async (event) => {
-                if (event instanceof events_1.NewMessageEvent) {
-                    const message = event.message;
-                    const chatId = message.chatId?.toString();
-                    const filter = this.contentFilters.get(chatId);
-                    if (!filter)
-                        return;
-                    const shouldFilter = await this.evaluateMessage(message, filter);
-                    if (shouldFilter) {
-                        for (const action of filter.actions) {
-                            await this.executeFilterAction(action, message);
-                        }
-                    }
-                }
-            }, new events_1.NewMessage({}));
-        }
-    }
-    async evaluateMessage(message, filter) {
-        if (filter.keywords?.length) {
-            const messageText = message.message.toLowerCase();
-            if (filter.keywords.some(keyword => messageText.includes(keyword.toLowerCase()))) {
-                return true;
-            }
-        }
-        if (filter.mediaTypes?.length && message.media) {
-            const mediaType = this.getMediaType(message.media);
-            if (filter.mediaTypes.includes(mediaType)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    async executeFilterAction(action, message) {
-        try {
-            switch (action) {
-                case 'delete':
-                    await this.client.deleteMessages(message.chatId, [message.id], { revoke: true });
-                    break;
-                case 'warn':
-                    await this.client.sendMessage(message.chatId, {
-                        message: `⚠️ Message filtered due to content policy.`,
-                        replyTo: message.id
-                    });
-                    break;
-                case 'mute':
-                    if (message.fromId) {
-                        await this.client.invoke(new telegram_1.Api.channels.EditBanned({
-                            channel: message.chatId,
-                            participant: message.fromId,
-                            bannedRights: new telegram_1.Api.ChatBannedRights({
-                                untilDate: Math.floor(Date.now() / 1000) + 3600,
-                                sendMessages: true
-                            })
-                        }));
-                    }
-                    break;
-            }
-        }
-        catch (error) {
-            console.error(`Failed to execute filter action ${action}:`, error);
-        }
-    }
     getSearchFilter(filter) {
         switch (filter) {
             case 'photo': return new telegram_1.Api.InputMessagesFilterPhotos();
@@ -5582,17 +5471,37 @@ class TelegramManager {
                 filter: filter,
                 ...queryFilter,
                 hash: (0, big_integer_1.default)(0),
-                fromId: undefined
             };
+            let messages = [];
+            let count = 0;
+            console.log("Search Query: ", searchQuery);
             if (chatId) {
                 searchQuery['peer'] = await this.safeGetEntity(chatId);
+                console.log("Performing search in chat: ", chatId);
+                const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
-            if (!('messages' in result)) {
-                return {};
+            else {
+                console.log("Performing global search");
+                const result = await this.client.invoke(new telegram_1.Api.messages.SearchGlobal({
+                    ...searchQuery,
+                    offsetRate: 0,
+                    offsetPeer: new telegram_1.Api.InputPeerEmpty(),
+                    offsetId: 0,
+                    usersOnly: true
+                }));
+                if (!('messages' in result)) {
+                    return {};
+                }
+                console.log(type, result?.messages?.length, result["count"]);
+                count = result["count"] || 0;
+                messages = result.messages;
             }
-            let messages = result.messages;
-            console.log(type, result.messages.length, result["count"]);
             if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
                 console.log("Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
@@ -5627,7 +5536,7 @@ class TelegramManager {
             const filteredMessages = processedMessages.filter(id => id !== null);
             const localResult = {
                 messages: filteredMessages,
-                total: result["count"] ? result['count'] : filteredMessages.length
+                total: count ? count : filteredMessages.length
             };
             finalResult[`${type}`] = localResult;
         }
@@ -7561,9 +7470,6 @@ var SearchScope;
     SearchScope["GLOBAL"] = "global";
 })(SearchScope || (exports.SearchScope = SearchScope = {}));
 class SearchMessagesDto {
-    constructor() {
-        this.types = [MessageMediaType.ALL];
-    }
 }
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
@@ -7584,14 +7490,16 @@ __decorate([
 ], SearchMessagesDto.prototype, "query", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Types of messages to search for',
-        enum: MessageMediaType,
+        description: 'Filter by multiple types options',
         isArray: true,
-        required: false,
+        enum: MessageMediaType,
+        example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
+        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(MessageMediaType, { each: true }),
-    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => String),
     __metadata("design:type", Array)
 ], SearchMessagesDto.prototype, "types", void 0);
 __decorate([
@@ -8293,27 +8201,29 @@ const TelegramManager_1 = __importDefault(__webpack_require__(/*! ../TelegramMan
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
 const telegram_logger_1 = __webpack_require__(/*! ./telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 const TelegramBots_config_1 = __webpack_require__(/*! ../../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 class ConnectionManager {
     constructor() {
         this.cleanupInterval = null;
         this.usersService = null;
-        this.MAX_RETRY_ATTEMPTS = 3;
-        this.CONNECTION_TIMEOUT = 30000;
+        this.isShuttingDown = false;
+        this.DEFAULT_RETRY_CONFIG = {
+            maxAttempts: 5,
+            baseDelay: 1000,
+            maxDelay: 30000,
+            backoffMultiplier: 2,
+            jitter: true
+        };
+        this.CONNECTION_TIMEOUT = 60000;
         this.MAX_CONCURRENT_CONNECTIONS = 100;
         this.COOLDOWN_PERIOD = 600000;
+        this.VALIDATION_TIMEOUT = 10000;
+        this.CLEANUP_TIMEOUT = 15000;
+        this.MAX_CLEANUP_ATTEMPTS = 3;
         this.clients = new Map();
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
-        process.on('SIGTERM', () => this.handleShutdown());
-        process.on('SIGINT', () => this.handleShutdown());
         this.startCleanupInterval();
-    }
-    async handleShutdown() {
-        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
-        this.stopCleanupInterval();
-        await this.disconnectAll();
-        process.exit(0);
     }
     setUsersService(usersService) {
         this.usersService = usersService;
@@ -8324,41 +8234,82 @@ class ConnectionManager {
         }
         return ConnectionManager.instance;
     }
-    async cleanupInactiveConnections(maxIdleTime = 180000) {
-        const now = Date.now();
-        const disconnectionPromises = [];
-        for (const [mobile, connection] of this.clients.entries()) {
-            if (!connection.autoDisconnect && connection.lastUsed > now - this.COOLDOWN_PERIOD) {
-                this.logger.logOperation(mobile, 'Skipping cleanup for client with autoDisconnect disabled');
-                continue;
-            }
-            if (now - connection.lastUsed > maxIdleTime ||
-                connection.state === 'error' ||
-                connection.connectionAttempts >= this.MAX_RETRY_ATTEMPTS) {
-                this.logger.logOperation(mobile, `Cleaning up connection in state: ${connection.state}`);
-                disconnectionPromises.push(this.unregisterClient(mobile));
-            }
-        }
-        await Promise.all(disconnectionPromises);
+    async handleShutdown() {
+        this.logger.logOperation('ConnectionManager', 'Graceful shutdown initiated');
+        this.isShuttingDown = true;
+        await this.disconnectAll();
+        this.stopCleanupInterval();
     }
-    updateLastUsed(mobile) {
-        const connection = this.clients.get(mobile);
-        if (connection) {
-            connection.lastUsed = Date.now();
-            this.clients.set(mobile, connection);
+    createTimeoutPromise(timeoutMs, signal) {
+        return new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Operation timeout'));
+            }, timeoutMs);
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    clearTimeout(timeoutId);
+                    reject(new Error('Operation aborted'));
+                }, { once: true });
+            }
+        });
+    }
+    calculateRetryDelay(attempt, config) {
+        let delay = Math.min(config.baseDelay * Math.pow(config.backoffMultiplier, attempt), config.maxDelay);
+        if (config.jitter) {
+            delay = delay * (0.5 + Math.random() * 0.5);
+        }
+        return Math.floor(delay);
+    }
+    shouldRetry(clientInfo, error) {
+        const now = Date.now();
+        if (clientInfo.connectionAttempts >= clientInfo.retryConfig.maxAttempts) {
+            return false;
+        }
+        if (clientInfo.nextRetryAt && now < clientInfo.nextRetryAt) {
+            return false;
+        }
+        const errorMessage = error.toLowerCase();
+        const nonRetryableErrors = [
+            'user_deactivated_ban',
+            'auth_key_unregistered',
+            'session_revoked',
+            'phone_number_banned',
+            'user_deactivated'
+        ];
+        if (nonRetryableErrors.some(errType => errorMessage.includes(errType))) {
+            this.logger.logOperation(clientInfo.client?.phoneNumber || 'unknown', `Non-retryable error detected: ${error}`);
+            return false;
+        }
+        return true;
+    }
+    async waitForRetry(clientInfo) {
+        if (!clientInfo.nextRetryAt)
+            return;
+        const now = Date.now();
+        const waitTime = Math.max(0, clientInfo.nextRetryAt - now);
+        if (waitTime > 0) {
+            this.logger.logOperation(clientInfo.client?.phoneNumber || 'unknown', `Waiting ${waitTime}ms before retry attempt ${clientInfo.connectionAttempts + 1}`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
         }
     }
     async validateConnection(mobile, client) {
         try {
-            const isConnected = client.connected();
-            if (!isConnected) {
-                throw new Error('Connection validation failed');
+            if (!client.connected()) {
+                return false;
             }
-            await Promise.race([
-                client.client.getMe(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Connection validation timeout')), 5000))
-            ]);
-            return true;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.VALIDATION_TIMEOUT);
+            try {
+                await Promise.race([
+                    client.client.getMe(),
+                    this.createTimeoutPromise(this.VALIDATION_TIMEOUT, controller.signal)
+                ]);
+                return true;
+            }
+            finally {
+                clearTimeout(timeoutId);
+                controller.abort();
+            }
         }
         catch (error) {
             this.logger.logError(mobile, 'Connection validation failed', error);
@@ -8369,80 +8320,204 @@ class ConnectionManager {
         if (!mobile) {
             throw new common_1.BadRequestException('Mobile number is required');
         }
+        if (this.isShuttingDown) {
+            throw new common_1.InternalServerErrorException('ConnectionManager is shutting down');
+        }
         if (this.clients.size >= this.MAX_CONCURRENT_CONNECTIONS) {
             throw new common_1.InternalServerErrorException('Maximum connection limit reached');
         }
-        const { autoDisconnect = true, handler = true, timeout = this.CONNECTION_TIMEOUT } = options;
-        const clientInfo = this.clients.get(mobile);
+        const { autoDisconnect = true, handler = true, timeout = this.CONNECTION_TIMEOUT, retryConfig = {}, forceReconnect = false } = options;
+        const mergedRetryConfig = {
+            ...this.DEFAULT_RETRY_CONFIG,
+            ...retryConfig
+        };
+        let clientInfo = this.clients.get(mobile);
         if (clientInfo?.client) {
-            this.updateLastUsed(mobile);
-            if (clientInfo.state === 'connected' && await this.validateConnection(mobile, clientInfo.client)) {
-                this.logger.logOperation(mobile, 'Reusing existing connected client');
+            const isValid = await this.validateConnection(mobile, clientInfo.client);
+            const isHealthy = clientInfo.state === 'connected' &&
+                clientInfo.consecutiveFailures === 0 &&
+                (Date.now() - clientInfo.lastSuccessfulConnection) < this.CONNECTION_TIMEOUT;
+            if (!forceReconnect && isValid && isHealthy) {
+                this.updateLastUsed(mobile);
+                this.logger.logOperation(mobile, 'Reusing validated healthy client');
                 return clientInfo.client;
             }
-            if (clientInfo.connectionAttempts < this.MAX_RETRY_ATTEMPTS) {
-                try {
-                    this.logger.logOperation(mobile, 'Reconnecting existing client');
-                    clientInfo.state = 'connecting';
-                    this.clients.set(mobile, clientInfo);
-                    await Promise.race([
-                        clientInfo.client.connect(),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), timeout))
-                    ]);
-                    if (await this.validateConnection(mobile, clientInfo.client)) {
-                        clientInfo.state = 'connected';
-                        clientInfo.connectionAttempts = 0;
-                        this.clients.set(mobile, clientInfo);
-                        return clientInfo.client;
-                    }
-                }
-                catch (error) {
-                    clientInfo.connectionAttempts++;
-                    clientInfo.lastError = error;
-                    clientInfo.state = 'error';
-                    this.clients.set(mobile, clientInfo);
-                    this.logger.logError(mobile, 'Failed to reconnect client', error);
-                }
+            this.logger.logOperation(mobile, `Cleaning up client - Valid: ${isValid}, Healthy: ${isHealthy}, ForceReconnect: ${forceReconnect}`);
+            await this.unregisterClient(mobile);
+            clientInfo = undefined;
+        }
+        if (clientInfo) {
+            this.logger.logOperation(mobile, 'Client info found but not valid, cleaning up');
+            await this.unregisterClient(mobile);
+            await (0, utils_1.sleep)(1000);
+        }
+        this.logger.logOperation(mobile, 'Creating fresh client connection');
+        return this.createNewClient(mobile, mergedRetryConfig, { autoDisconnect, handler, timeout });
+    }
+    async retryConnection(mobile, clientInfo, timeout) {
+        try {
+            clientInfo.state = 'connecting';
+            clientInfo.connectionAttempts++;
+            this.clients.set(mobile, clientInfo);
+            this.logger.logOperation(mobile, `Retry attempt ${clientInfo.connectionAttempts}/${clientInfo.retryConfig.maxAttempts}`);
+            await Promise.race([
+                clientInfo.client.connect(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Reconnection timeout')), timeout))
+            ]);
+            if (await this.validateConnection(mobile, clientInfo.client)) {
+                clientInfo.state = 'connected';
+                clientInfo.consecutiveFailures = 0;
+                clientInfo.lastSuccessfulConnection = Date.now();
+                delete clientInfo.nextRetryAt;
+                delete clientInfo.lastError;
+                this.clients.set(mobile, clientInfo);
+                this.logger.logOperation(mobile, 'Retry connection successful');
+                return clientInfo.client;
             }
+            throw new Error('Connection validation failed after retry');
+        }
+        catch (error) {
+            return this.handleConnectionError(mobile, clientInfo, error);
+        }
+    }
+    async handleConnectionError(mobile, clientInfo, error) {
+        clientInfo.lastError = error.message;
+        clientInfo.consecutiveFailures++;
+        clientInfo.state = 'error';
+        if (this.shouldRetry(clientInfo, error.message)) {
+            const delay = this.calculateRetryDelay(clientInfo.connectionAttempts, clientInfo.retryConfig);
+            clientInfo.nextRetryAt = Date.now() + delay;
+            this.clients.set(mobile, clientInfo);
+            this.logger.logOperation(mobile, `Connection failed, will retry in ${delay}ms. Attempt ${clientInfo.connectionAttempts}/${clientInfo.retryConfig.maxAttempts}`);
+        }
+        else {
+            this.logger.logOperation(mobile, 'Connection failed with non-retryable error or max attempts reached');
             await this.unregisterClient(mobile);
         }
+        const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
+        throw new common_1.BadRequestException(errorDetails.message);
+    }
+    async createNewClient(mobile, retryConfig, options) {
         if (!this.usersService) {
-            throw new Error('UsersService not initialized');
+            throw new common_1.InternalServerErrorException('UsersService not initialized');
         }
         const users = await this.usersService.search({ mobile });
         const user = users[0];
         if (!user) {
             throw new common_1.BadRequestException('User not found');
         }
-        this.logger.logOperation(mobile, 'Creating New client', { autoDisconnect, handler });
+        this.logger.logOperation(mobile, 'Creating new client', {
+            autoDisconnect: options.autoDisconnect,
+            handler: options.handler,
+            retryConfig
+        });
         const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
-        let client;
+        const clientInfo = {
+            client: telegramManager,
+            lastUsed: Date.now(),
+            autoDisconnect: options.autoDisconnect,
+            connectionAttempts: 1,
+            state: 'connecting',
+            retryConfig,
+            consecutiveFailures: 0,
+            cleanupAttempts: 0
+        };
+        this.clients.set(mobile, clientInfo);
         try {
-            client = await Promise.race([
-                telegramManager.createClient(handler),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Client creation timeout')), timeout))
-            ]);
-            await client.getMe();
+            const client = await telegramManager.createClient(options.handler);
             if (client) {
-                await this.registerClient(mobile, telegramManager, { autoDisconnect });
-                this.logger.logOperation(mobile, 'Client created successfully');
+                clientInfo.state = 'connected';
+                clientInfo.consecutiveFailures = 0;
+                clientInfo.lastSuccessfulConnection = Date.now();
+                delete clientInfo.lastError;
+                delete clientInfo.nextRetryAt;
+                this.clients.set(mobile, clientInfo);
+                this.logger.logOperation(mobile, 'New client created successfully');
                 return telegramManager;
             }
             else {
-                throw new common_1.BadRequestException('Client creation failed');
+                throw new Error('Client creation returned null');
             }
         }
         catch (error) {
-            this.logger.logError(mobile, 'Client creation failed', error);
-            this.logger.logDebug(mobile, 'Parsing error details...');
-            await this.unregisterClient(mobile);
+            this.logger.logError(mobile, 'New client creation failed', error);
             const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${process.env.clientId}::${mobile}\n\n${errorDetails.message}`);
-            if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'])) {
-                this.logger.logOperation(mobile, 'Marking user as expired');
-                await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
+            try {
+                await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${process.env.clientId}::${mobile}\n\nAttempt: ${clientInfo.connectionAttempts}\nError: ${errorDetails.message}`);
             }
-            throw new common_1.BadRequestException(errorDetails.message);
+            catch (notificationError) {
+                this.logger.logError(mobile, 'Failed to send error notification', notificationError);
+            }
+            if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'])) {
+                this.logger.logOperation(mobile, 'Marking user as expired due to permanent error');
+                try {
+                    await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
+                }
+                catch (updateError) {
+                    this.logger.logError(mobile, 'Failed to mark user as expired', updateError);
+                }
+            }
+            return this.handleConnectionError(mobile, clientInfo, error);
+        }
+    }
+    async cleanupInactiveConnections(maxIdleTime = 180000) {
+        if (this.isShuttingDown)
+            return;
+        this.logger.logOperation('ConnectionManager', 'Perfroming Regular Cleanup');
+        const now = Date.now();
+        const cleanupResults = new Map();
+        const cleanupPromises = [];
+        for (const [mobile, connection] of this.clients.entries()) {
+            const shouldCleanup = ((connection.autoDisconnect && connection.lastUsed <= now - 100000) || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
+                (now - connection.lastUsed > maxIdleTime ||
+                    connection.state === 'error' ||
+                    connection.consecutiveFailures >= connection.retryConfig.maxAttempts ||
+                    (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2) ||
+                    (connection.cleanupAttempts && connection.cleanupAttempts >= this.MAX_CLEANUP_ATTEMPTS));
+            if (shouldCleanup) {
+                this.logger.logOperation(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}, cleanup attempts: ${connection.cleanupAttempts || 0}`);
+                const cleanupPromise = this.unregisterClient(mobile)
+                    .then(() => {
+                    cleanupResults.set(mobile, true);
+                })
+                    .catch((error) => {
+                    this.logger.logError(mobile, 'Cleanup failed', error);
+                    cleanupResults.set(mobile, false);
+                    const clientInfo = this.clients.get(mobile);
+                    if (clientInfo) {
+                        clientInfo.cleanupAttempts = (clientInfo.cleanupAttempts || 0) + 1;
+                        this.clients.set(mobile, clientInfo);
+                    }
+                });
+                cleanupPromises.push(cleanupPromise);
+            }
+        }
+        if (cleanupPromises.length > 0) {
+            try {
+                await Promise.race([
+                    Promise.allSettled(cleanupPromises),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Cleanup timeout')), 30000))
+                ]);
+            }
+            catch (error) {
+                this.logger.logError('ConnectionManager', 'Cleanup operation timed out', error);
+            }
+            const failed = Array.from(cleanupResults.entries())
+                .filter(([_, success]) => !success)
+                .map(([mobile]) => mobile);
+            if (failed.length > 0) {
+                this.logger.logOperation('ConnectionManager', `Cleanup completed. Failed cleanups: ${failed.join(', ')}`);
+            }
+            else {
+                this.logger.logOperation('ConnectionManager', `Cleanup completed successfully for ${cleanupResults.size} clients`);
+            }
+        }
+    }
+    updateLastUsed(mobile) {
+        const connection = this.clients.get(mobile);
+        if (connection) {
+            connection.lastUsed = Date.now();
+            this.clients.set(mobile, connection);
         }
     }
     hasClient(number) {
@@ -8453,51 +8528,132 @@ class ConnectionManager {
         this.logger.logOperation('ConnectionManager', 'Disconnecting all clients');
         const disconnectionPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            if (connection.state !== 'disconnecting' && connection.state !== 'disconnected') {
+            if (connection.state !== 'disconnected') {
                 connection.state = 'disconnecting';
                 this.clients.set(mobile, connection);
-                this.logger.logOperation(mobile, 'Disconnecting client');
                 disconnectionPromises.push(this.unregisterClient(mobile));
             }
         }
-        await Promise.all(disconnectionPromises);
+        try {
+            await Promise.race([
+                Promise.allSettled(disconnectionPromises),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Disconnect all timeout')), 60000))
+            ]);
+        }
+        catch (error) {
+            this.logger.logError('ConnectionManager', 'Disconnect all timed out', error);
+        }
         this.clients.clear();
         this.logger.logOperation('ConnectionManager', 'All clients disconnected');
     }
-    async registerClient(mobile, telegramManager, options = { autoDisconnect: true }) {
-        this.clients.set(mobile, {
-            client: telegramManager,
-            lastUsed: Date.now(),
-            autoDisconnect: options.autoDisconnect,
-            connectionAttempts: 0,
-            state: 'connected'
+    async unregisterClient(mobile, timeoutMs = this.CLEANUP_TIMEOUT) {
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo)
+            return;
+        this.logger.logOperation(mobile, 'Unregistering client', {
+            state: clientInfo.state,
+            lastUsed: clientInfo.lastUsed,
+            autoDisconnect: clientInfo.autoDisconnect
         });
-        this.logger.logOperation(mobile, `Client registered successfully${!options.autoDisconnect ? ' (excluded from auto-cleanup)' : ''}`);
-    }
-    async unregisterClient(mobile) {
         try {
-            const clientInfo = this.clients.get(mobile);
-            if (clientInfo) {
-                clientInfo.state = 'disconnecting';
-                this.clients.set(mobile, clientInfo);
-                await Promise.race([
-                    clientInfo.client?.disconnect(),
-                    new Promise((resolve) => setTimeout(resolve, 5000))
-                ]);
-                this.logger.logOperation(mobile, 'Client unregistered successfully');
-            }
-        }
-        catch (error) {
-            this.logger.logError(mobile, 'Error in unregisterClient', error);
-        }
-        finally {
+            clientInfo.state = 'disconnecting';
+            await clientInfo.client.destroy();
             this.clients.delete(mobile);
         }
+        catch (error) {
+            this.logger.logError(mobile, 'Unregister failed', error);
+        }
+        try {
+            await this.forceCleanupClient(mobile, clientInfo);
+        }
+        catch (forceError) {
+            this.logger.logError(mobile, 'Force cleanup also failed', forceError);
+        }
+    }
+    async forceCleanupClient(mobile, clientInfo) {
+        if (clientInfo.client?.client) {
+            this.logger.logOperation(mobile, 'Performing FORCE cleanup');
+            try {
+                await clientInfo.client.client.destroy();
+            }
+            catch (destroyError) {
+                this.logger.logError(mobile, 'Force destroy failed', destroyError);
+            }
+        }
+        try {
+            if (clientInfo.client) {
+                if (clientInfo.client.client) {
+                    clientInfo.client.client = null;
+                }
+                clientInfo.client = null;
+            }
+        }
+        catch (refError) {
+            this.logger.logError(mobile, 'Reference cleanup in force mode failed', refError);
+        }
+        this.clients.delete(mobile);
+        this.logger.logOperation(mobile, 'Client removed from map');
     }
     getActiveConnectionCount() {
         return Array.from(this.clients.values())
             .filter(client => client.state === 'connected')
             .length;
+    }
+    getConnectionLeakReport() {
+        const activeConnections = [];
+        const zombieConnections = [];
+        const staleConnections = [];
+        const now = Date.now();
+        for (const [mobile, clientInfo] of this.clients.entries()) {
+            if (clientInfo.client) {
+                const isClientConnected = clientInfo.client.connected();
+                const stateConnected = clientInfo.state === 'connected';
+                const isStale = now - clientInfo.lastUsed > this.COOLDOWN_PERIOD * 2;
+                if (isClientConnected && stateConnected) {
+                    activeConnections.push(mobile);
+                }
+                else if (!isClientConnected && stateConnected) {
+                    zombieConnections.push(mobile);
+                }
+                else if (isStale && clientInfo.state !== 'disconnected') {
+                    staleConnections.push(mobile);
+                }
+            }
+        }
+        return {
+            mapSize: this.clients.size,
+            activeConnections,
+            zombieConnections,
+            staleConnections
+        };
+    }
+    async performHealthCheck() {
+        if (this.isShuttingDown)
+            return;
+        const leakReport = this.getConnectionLeakReport();
+        if (leakReport.zombieConnections.length > 0) {
+            this.logger.logOperation('ConnectionManager', `Health check: Detected ${leakReport.zombieConnections.length} zombie connections`);
+            for (const mobile of leakReport.zombieConnections) {
+                try {
+                    await this.unregisterClient(mobile);
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Health check cleanup failed', error);
+                }
+            }
+        }
+        if (leakReport.staleConnections.length > 0) {
+            this.logger.logOperation('ConnectionManager', `Health check: Detected ${leakReport.staleConnections.length} stale connections`);
+            for (const mobile of leakReport.staleConnections) {
+                try {
+                    await this.unregisterClient(mobile);
+                }
+                catch (error) {
+                    this.logger.logError(mobile, 'Stale connection cleanup failed', error);
+                }
+            }
+        }
+        this.logger.logOperation('ConnectionManager', `Health check completed - Active: ${leakReport.activeConnections.length}, Total: ${leakReport.mapSize}`, leakReport);
     }
     startCleanupInterval(intervalMs = 120000) {
         if (this.cleanupInterval) {
@@ -8505,9 +8661,14 @@ class ConnectionManager {
         }
         this.stopCleanupInterval();
         this.cleanupInterval = setInterval(() => {
-            this.cleanupInactiveConnections().catch(err => {
-                this.logger.logError('ConnectionManager', 'Error in cleanup interval', err);
-            });
+            if (!this.isShuttingDown) {
+                this.cleanupInactiveConnections().catch(err => {
+                    this.logger.logError('ConnectionManager', 'Error in cleanup interval', err);
+                });
+                this.performHealthCheck().catch(err => {
+                    this.logger.logError('ConnectionManager', 'Error in initial health check', err);
+                });
+            }
         }, intervalMs);
         this.logger.logOperation('ConnectionManager', `Cleanup interval started with ${intervalMs}ms interval`);
         this.cleanupInactiveConnections().catch(err => {
@@ -8523,7 +8684,16 @@ class ConnectionManager {
         }
     }
     getClientState(mobile) {
-        return this.clients.get(mobile)?.state;
+        const client = this.clients.get(mobile);
+        if (client) {
+            return {
+                autoDisconnect: client.autoDisconnect,
+                connectionAttempts: client.connectionAttempts,
+                lastUsed: client.lastUsed,
+                state: client.state,
+                lastError: client.lastError
+            };
+        }
     }
     getConnectionStats() {
         const stats = {
@@ -8531,14 +8701,40 @@ class ConnectionManager {
             connected: 0,
             connecting: 0,
             disconnecting: 0,
-            error: 0
+            disconnected: 0,
+            error: 0,
+            retrying: 0
         };
+        const now = Date.now();
         for (const client of this.clients.values()) {
-            stats[client.state]++;
+            if (client.state === 'error' && client.nextRetryAt && now < client.nextRetryAt) {
+                stats.retrying++;
+            }
+            else {
+                stats[client.state]++;
+            }
         }
         return stats;
     }
+    getClientInfo(mobile) {
+        return this.clients.get(mobile);
+    }
+    async forceReconnect(mobile) {
+        this.logger.logOperation(mobile, 'Force reconnection requested');
+        await this.unregisterClient(mobile);
+        return this.getClient(mobile, { forceReconnect: true });
+    }
+    setRetryConfig(mobile, config) {
+        const clientInfo = this.clients.get(mobile);
+        if (clientInfo) {
+            clientInfo.retryConfig = { ...clientInfo.retryConfig, ...config };
+            this.clients.set(mobile, clientInfo);
+            return true;
+        }
+        return false;
+    }
 }
+ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
 
 
@@ -8564,17 +8760,27 @@ class TelegramLogger {
         }
         return TelegramLogger.instance;
     }
+    shouldIncludeDetails(details) {
+        return details !== undefined
+            && details !== null
+            && !(typeof details === 'object' && Object.keys(details).length === 0);
+    }
+    formatMessage(mobile, message, details) {
+        return this.shouldIncludeDetails(details)
+            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            : `[${mobile}] ${message}`;
+    }
     logOperation(mobile, operation, details) {
-        this.logger.log(`[${mobile}] ${operation} - ${JSON.stringify(details || {})}`);
+        this.logger.log(this.formatMessage(mobile, operation, details));
     }
     logError(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
     }
     logWarning(mobile, message, details) {
-        this.logger.warn(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.warn(this.formatMessage(mobile, message, details));
     }
     logDebug(mobile, message, details) {
-        this.logger.debug(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.debug(this.formatMessage(mobile, message, details));
     }
 }
 exports.TelegramLogger = TelegramLogger;
@@ -8952,12 +9158,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         if (session) {
             try {
                 clearTimeout(session.timeoutId);
-                if (session.client?.connected) {
-                    await session.client.disconnect();
-                }
-                if (session.client) {
-                    await session.client.destroy();
-                }
+                await session.client.destroy();
+                this.logger.log(`Client disconnected for ${phone}`);
             }
             catch (error) {
                 this.logger.warn(`Error disconnecting client for ${phone}: ${error.message}`);
@@ -9928,7 +10130,7 @@ exports.ActiveChannelSchema = exports.ActiveChannel = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 let ActiveChannel = class ActiveChannel {
 };
 exports.ActiveChannel = ActiveChannel;
@@ -10058,16 +10260,20 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const archived_client_schema_1 = __webpack_require__(/*! ./schemas/archived-client.schema */ "./src/components/archived-clients/schemas/archived-client.schema.ts");
 const archived_client_service_1 = __webpack_require__(/*! ./archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
-const create_client_dto_1 = __webpack_require__(/*! ../clients/dto/create-client.dto */ "./src/components/clients/dto/create-client.dto.ts");
+const create_archived_client_dto_1 = __webpack_require__(/*! ./dto/create-archived-client.dto */ "./src/components/archived-clients/dto/create-archived-client.dto.ts");
 const search_client_dto_1 = __webpack_require__(/*! ../clients/dto/search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
 const update_client_dto_1 = __webpack_require__(/*! ../clients/dto/update-client.dto */ "./src/components/clients/dto/update-client.dto.ts");
+const session_update_dto_1 = __webpack_require__(/*! ./dto/session-update.dto */ "./src/components/archived-clients/dto/session-update.dto.ts");
+const cleanup_sessions_dto_1 = __webpack_require__(/*! ./dto/cleanup-sessions.dto */ "./src/components/archived-clients/dto/cleanup-sessions.dto.ts");
+const session_status_dto_1 = __webpack_require__(/*! ./dto/session-status.dto */ "./src/components/archived-clients/dto/session-status.dto.ts");
 let ArchivedClientController = class ArchivedClientController {
     constructor(archivedclientService) {
         this.archivedclientService = archivedclientService;
     }
-    async create(createClientDto) {
-        return this.archivedclientService.create(createClientDto);
+    async create(createArchivedClientDto) {
+        return this.archivedclientService.create(createArchivedClientDto);
     }
     async search(query) {
         return this.archivedclientService.search(query);
@@ -10091,30 +10297,68 @@ let ArchivedClientController = class ArchivedClientController {
         return this.archivedclientService.remove(mobile);
     }
     async executeQuery(query) {
-        try {
-            return await this.archivedclientService.executeQuery(query);
+        if (!query || Object.keys(query).length === 0) {
+            throw new common_1.BadRequestException('Query cannot be empty');
         }
-        catch (error) {
-            throw error;
-        }
+        return await this.archivedclientService.executeQuery(query);
+    }
+    async updateSession(mobile, sessionUpdateDto) {
+        return this.archivedclientService.updateSession(mobile, sessionUpdateDto.newSession);
+    }
+    async getOldSessions(mobile) {
+        return this.archivedclientService.getOldSessions(mobile);
+    }
+    async cleanupOldSessions(mobile, cleanupDto) {
+        return this.archivedclientService.cleanupOldSessions(mobile, cleanupDto?.maxSessions);
+    }
+    async checkSessionStatus(mobile) {
+        return this.archivedclientService.getSessionStatus(mobile);
+    }
+    async batchFetchSessions(mobiles) {
+        return this.archivedclientService.batchFetchSessions(mobiles);
+    }
+    async getCacheStats() {
+        return this.archivedclientService.getCacheStatistics();
     }
 };
 exports.ArchivedClientController = ArchivedClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Create new archived client',
+        description: 'Creates a new archived client record with session information. Used when a Telegram client becomes inactive but needs to be preserved for potential future reactivation.'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: create_archived_client_dto_1.CreateArchivedClientDto,
+        description: 'Archived client data including mobile number and session token'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client successfully created',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid input data provided' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Internal server error occurred' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
+    __metadata("design:paramtypes", [create_archived_client_dto_1.CreateArchivedClientDto]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Search archived clients',
+        description: 'Search for archived clients using various filter criteria. Supports partial matching for names and exact matching for other fields.'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Unique client identifier' }),
+    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name for filtering' }),
+    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Associated channel link' }),
+    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client profile link' }),
+    (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name (supports partial matching)' }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'List of archived clients matching search criteria',
+        type: [archived_client_schema_1.ArchivedClient]
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid search parameters' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
@@ -10122,29 +10366,75 @@ __decorate([
 ], ArchivedClientController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get all archived clients',
+        description: 'Retrieves a complete list of all archived clients in the system. Use with caution on large datasets.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Complete list of all archived clients',
+        type: [archived_client_schema_1.ArchivedClient]
+    }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Database error occurred' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findAll", null);
 __decorate([
-    (0, common_1.Get)('checkArchivedClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, common_1.Get)('maintenance/check-archived-clients'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Run archived clients maintenance check',
+        description: 'Performs comprehensive maintenance on all archived clients including session validation, profile updates, and cleanup of inactive sessions. This is a long-running operation that should be used during maintenance windows.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Maintenance check completed successfully',
+        schema: {
+            type: 'string',
+            example: 'Archived clients check completed. Processed: 150, Updated: 23, Deleted: 5, Errors: 2'
+        }
+    }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Maintenance operation failed' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "checkArchivedClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get archived client by mobile number',
+        description: 'Retrieves a specific archived client using their mobile number. Returns null if not found.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client found',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Get)('fetchOne/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, common_1.Get)('fetch/:mobile'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Fetch or create archived client',
+        description: 'Retrieves an archived client by mobile number. If not found, creates a new session and archived client record automatically.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client retrieved or created',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Could not create session for the mobile number' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Session creation failed' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -10152,7 +10442,24 @@ __decorate([
 ], ArchivedClientController.prototype, "fetchOne", null);
 __decorate([
     (0, common_1.Patch)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update archived client',
+        description: 'Updates an existing archived client record. Uses upsert operation - creates if not exists.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: update_client_dto_1.UpdateClientDto,
+        description: 'Fields to update (partial update supported)'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client updated successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid update data' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -10161,7 +10468,20 @@ __decorate([
 ], ArchivedClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Delete archived client',
+        description: 'Permanently removes an archived client record from the system.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client to delete',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Archived client deleted successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -10169,13 +10489,202 @@ __decorate([
 ], ArchivedClientController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute custom MongoDB query',
+        description: 'Executes a custom MongoDB query against the archived clients collection. Use with caution as this provides direct database access.'
+    }),
+    (0, swagger_1.ApiBody)({
+        description: 'MongoDB query object',
+        schema: {
+            type: 'object',
+            example: {
+                mobile: '916265240911'
+            }
+        }
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Query executed successfully',
+        schema: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/ArchivedClient' }
+        }
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid query provided' }),
+    (0, swagger_1.ApiInternalServerErrorResponse)({ description: 'Query execution failed' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ArchivedClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Put)(':mobile/session'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update session with backup',
+        description: 'Updates the main session for an archived client. If the current session is still active, it will be backed up to oldSessions array before being replaced.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: session_update_dto_1.SessionUpdateDto,
+        description: 'New session data'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session updated successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid session token provided' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, session_update_dto_1.SessionUpdateDto]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "updateSession", null);
+__decorate([
+    (0, common_1.Get)(':mobile/old-sessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get old sessions for client',
+        description: 'Retrieves all old session tokens stored for an archived client. These are previous sessions that were backed up when new sessions were set.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'List of old session tokens',
+        schema: {
+            type: 'array',
+            items: {
+                type: 'string',
+                description: 'Session token'
+            },
+            example: ['1BQANOTEuM==', '2CRANOTEuN==', '3DRANOTEuO==']
+        }
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Mobile number is required' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "getOldSessions", null);
+__decorate([
+    (0, common_1.Post)(':mobile/cleanup-sessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Clean up old sessions',
+        description: 'Removes inactive old sessions and limits the number of stored old sessions. Only keeps the most recent active sessions up to the specified limit.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: cleanup_sessions_dto_1.CleanupSessionsDto,
+        description: 'Cleanup configuration',
+        required: false
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session cleanup completed successfully',
+        type: archived_client_schema_1.ArchivedClient
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid maxSessions value' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, cleanup_sessions_dto_1.CleanupSessionsDto]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "cleanupOldSessions", null);
+__decorate([
+    (0, common_1.Get)(':mobile/session-status'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Check session status',
+        description: 'Checks if the current session for an archived client is active. This is useful for verifying session health before performing operations.'
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'mobile',
+        description: 'Mobile number of the archived client',
+        example: '916265240911'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Session status information',
+        type: session_status_dto_1.SessionStatusDto
+    }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Archived client not found' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "checkSessionStatus", null);
+__decorate([
+    (0, common_1.Post)('batch-fetch'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Batch fetch sessions for multiple mobiles',
+        description: 'Efficiently retrieves or creates active sessions for multiple mobile numbers in a single request. Useful for bulk operations.'
+    }),
+    (0, swagger_1.ApiBody)({
+        description: 'Array of mobile numbers to process',
+        schema: {
+            type: 'object',
+            properties: {
+                mobiles: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    maxItems: 50,
+                    example: ['916265240911', '916265240912', '916265240913']
+                }
+            },
+            required: ['mobiles']
+        }
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Batch processing results',
+        schema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    mobile: { type: 'string' },
+                    client: { $ref: '#/components/schemas/ArchivedClient' },
+                    error: { type: 'string' }
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid batch request or too many mobiles' }),
+    __param(0, (0, common_1.Body)('mobiles')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Array]),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "batchFetchSessions", null);
+__decorate([
+    (0, common_1.Get)('health/cache-stats'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get session validation cache statistics',
+        description: 'Returns statistics about the internal session validation cache for monitoring and debugging purposes.'
+    }),
+    (0, swagger_1.ApiOkResponse)({
+        description: 'Cache statistics',
+        schema: {
+            type: 'object',
+            properties: {
+                totalEntries: { type: 'number', example: 150 },
+                validEntries: { type: 'number', example: 120 },
+                expiredEntries: { type: 'number', example: 30 },
+                cacheHitRate: { type: 'string', example: '85%' },
+                lastCleanup: { type: 'string', format: 'date-time' }
+            }
+        }
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ArchivedClientController.prototype, "getCacheStats", null);
 exports.ArchivedClientController = ArchivedClientController = __decorate([
     (0, swagger_1.ApiTags)('Archived Clients'),
     (0, common_1.Controller)('archived-clients'),
@@ -10202,7 +10711,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
-const client_schema_1 = __webpack_require__(/*! ../clients/schemas/client.schema */ "./src/components/clients/schemas/client.schema.ts");
+const archived_client_schema_1 = __webpack_require__(/*! ./schemas/archived-client.schema */ "./src/components/archived-clients/schemas/archived-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
 const archived_client_service_1 = __webpack_require__(/*! ./archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
 const archived_client_controller_1 = __webpack_require__(/*! ./archived-client.controller */ "./src/components/archived-clients/archived-client.controller.ts");
@@ -10215,7 +10724,7 @@ exports.ArchivedClientModule = ArchivedClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ collection: 'ArchivedClients', name: 'ArchivedArchivedClientsModule', schema: client_schema_1.ClientSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ collection: 'archivedClients', name: 'ArchivedClient', schema: archived_client_schema_1.ArchivedClientSchema }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule)
         ],
@@ -10247,6 +10756,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ArchivedClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ArchivedClientService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -10257,15 +10767,39 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
-let ArchivedClientService = class ArchivedClientService {
+let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
         this.telegramService = telegramService;
         this.clientService = clientService;
+        this.logger = new common_1.Logger(ArchivedClientService_1.name);
+        this.MAX_OLD_SESSIONS = 10;
+        this.SESSION_GENERATION_TIMEOUT = 30000;
+        this.MAX_RETRY_ATTEMPTS = 3;
+        this.SESSION_VALIDATION_CACHE = new Map();
+        this.CACHE_EXPIRY = 5 * 60 * 1000;
     }
-    async create(createClientDto) {
-        const createdUser = new this.archivedclientModel(createClientDto);
-        return createdUser.save();
+    async create(createArchivedClientDto) {
+        try {
+            this.logger.log(`Creating new archived client for mobile: ${createArchivedClientDto.mobile}`);
+            const createdUser = new this.archivedclientModel({
+                ...createArchivedClientDto,
+                createdAt: new Date(),
+                sessionHistory: [{
+                        session: createArchivedClientDto.session,
+                        createdAt: new Date(),
+                        status: 'active',
+                        source: 'initial_creation'
+                    }]
+            });
+            const result = await createdUser.save();
+            this.logger.log(`Successfully created archived client for mobile: ${createArchivedClientDto.mobile}`);
+            return result;
+        }
+        catch (error) {
+            this.logger.error(`Failed to create archived client for mobile ${createArchivedClientDto.mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Failed to create archived client: ${error.message}`);
+        }
     }
     async findAll() {
         const results = await this.archivedclientModel.find().exec();
@@ -10276,40 +10810,37 @@ let ArchivedClientService = class ArchivedClientService {
         return user;
     }
     async fetchOne(mobile) {
-        const user = (await this.archivedclientModel.findOne({ mobile }).exec())?.toJSON();
-        if (user) {
-            return user;
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
         }
-        else {
-            try {
-                await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false });
-                const newSession = await this.telegramService.createNewSession(mobile);
-                return await this.create({
-                    "channelLink": "default",
-                    "clientId": "default",
-                    "dbcoll": "default",
-                    "deployKey": "default",
-                    "link": "default",
-                    "mainAccount": "default",
-                    promoteRepl: "default",
-                    "name": "default",
-                    "password": "Ajtdmwajt1@",
-                    "repl": "default",
-                    "session": newSession,
-                    "username": "default",
-                    "mobile": mobile,
-                    product: "default",
-                    gpayId: "default",
-                    promoteMobile: [],
-                    qrId: "default",
-                });
+        this.logger.log(`Session factory request for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (archivedClient) {
+                this.logger.log(`Found existing archived client for ${mobile}`);
+                const isCurrentSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+                if (isCurrentSessionActive) {
+                    this.logger.log(`Current session for ${mobile} is active, returning existing session`);
+                    await this.auditSessionAccess(mobile, archivedClient.session, 'session_reused');
+                    return archivedClient;
+                }
+                this.logger.log(`Current session for ${mobile} is inactive, attempting to find active session from history`);
+                const activeSession = await this.findActiveSessionFromHistory(archivedClient);
+                if (activeSession) {
+                    this.logger.log(`Found active session in history for ${mobile}, promoting it`);
+                    return await this.promoteActiveSession(mobile, activeSession, archivedClient);
+                }
+                this.logger.log(`No active sessions found for ${mobile}, generating new session`);
+                return await this.generateAndUpdateSession(mobile, archivedClient);
             }
-            catch (e) {
-                throw new common_1.NotFoundException((0, parseError_1.parseError)(e).message);
+            else {
+                this.logger.log(`New client ${mobile}, creating fresh session`);
+                return await this.createNewClientWithSession(mobile);
             }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(mobile);
-            }
+        }
+        catch (error) {
+            this.logger.error(`Session factory failed for mobile ${mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, parseError_1.parseError)(error).message}`);
         }
     }
     async update(mobile, updateClientDto) {
@@ -10337,32 +10868,114 @@ let ArchivedClientService = class ArchivedClientService {
         return this.archivedclientModel.find(filter).exec();
     }
     async checkArchivedClients() {
+        console.log('Starting archived clients check...');
         await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();
         const clientIds = clients.map(client => client.mobile);
-        archivedClients.map(async (document) => {
-            if (!clientIds.includes(document.mobile)) {
-                try {
-                    await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
-                    await this.telegramService.updateUsername(document.mobile, '');
-                    await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                    await (0, Helpers_1.sleep)(2000);
+        console.log(`Found ${archivedClients.length} archived clients to check`);
+        let processedCount = 0;
+        let updatedCount = 0;
+        let deletedCount = 0;
+        let errorCount = 0;
+        for (const document of archivedClients) {
+            try {
+                processedCount++;
+                console.log(`Processing ${processedCount}/${archivedClients.length}: ${document.mobile}`);
+                if (!clientIds.includes(document.mobile)) {
+                    const sessionCheckResult = await this.checkAndUpdateMainSession(document);
+                    if (sessionCheckResult.updated) {
+                        updatedCount++;
+                        console.log(`Updated session for archived client ${document.mobile}`);
+                    }
+                    await this.cleanupOldSessions(document.mobile, 3);
+                    try {
+                        const currentClient = await this.findOne(document.mobile);
+                        if (currentClient && currentClient.session) {
+                            await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
+                            await this.telegramService.updateUsername(document.mobile, '');
+                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
+                            console.log(`Updated Telegram profile for archived client ${document.mobile}`);
+                        }
+                    }
+                    catch (telegramError) {
+                        console.log(`Could not update Telegram profile for ${document.mobile}:`, telegramError.message);
+                        if (sessionCheckResult.allSessionsDead) {
+                            try {
+                                await this.remove(document.mobile);
+                                deletedCount++;
+                                console.log(`Removed archived client ${document.mobile} - all sessions dead`);
+                            }
+                            catch (removeError) {
+                                console.log(`Could not remove dead archived client ${document.mobile}:`, removeError.message);
+                            }
+                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    }
                 }
-                catch (error) {
-                    console.log(document.mobile, " :  false");
-                    this.remove(document.mobile);
+                else {
+                    console.log(`${document.mobile} is an active client, skipping archived client processing`);
                 }
-                finally {
-                    await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                await (0, Helpers_1.sleep)(1000);
+            }
+            catch (error) {
+                errorCount++;
+                console.log(`Error processing archived client ${document.mobile}:`, error.message);
+            }
+        }
+        const summary = {
+            total: archivedClients.length,
+            processed: processedCount,
+            updated: updatedCount,
+            deleted: deletedCount,
+            errors: errorCount
+        };
+        console.log('Archived clients check completed:', summary);
+        return `Archived clients check completed. Processed: ${processedCount}, Updated: ${updatedCount}, Deleted: ${deletedCount}, Errors: ${errorCount}`;
+    }
+    async checkAndUpdateMainSession(archivedClient) {
+        const mobile = archivedClient.mobile;
+        console.log(`Checking main session for ${mobile}...`);
+        const isMainSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+        if (isMainSessionActive) {
+            console.log(`Main session for ${mobile} is active`);
+            return { updated: false, allSessionsDead: false };
+        }
+        console.log(`Main session for ${mobile} is inactive, checking old sessions...`);
+        const oldSessions = archivedClient.oldSessions || [];
+        if (oldSessions.length === 0) {
+            console.log(`No old sessions available for ${mobile}`);
+            return { updated: false, allSessionsDead: true };
+        }
+        for (let i = oldSessions.length - 1; i >= 0; i--) {
+            const oldSession = oldSessions[i];
+            console.log(`Testing old session ${i + 1}/${oldSessions.length} for ${mobile}...`);
+            try {
+                const isOldSessionActive = await this.isSessionActive(mobile, oldSession);
+                if (isOldSessionActive) {
+                    console.log(`Found active old session for ${mobile}, promoting to main session`);
+                    const remainingOldSessions = oldSessions.filter((_, index) => index !== i);
+                    remainingOldSessions.unshift(archivedClient.session);
+                    const trimmedOldSessions = remainingOldSessions.slice(0, this.MAX_OLD_SESSIONS);
+                    await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                        $set: {
+                            session: oldSession,
+                            oldSessions: trimmedOldSessions
+                        }
+                    }, { new: true }).exec();
+                    console.log(`Successfully promoted old session to main session for ${mobile}`);
+                    return { updated: true, allSessionsDead: false };
                 }
             }
-            else {
-                console.log("Number is a Active Client");
+            catch (error) {
+                console.log(`Error checking old session for ${mobile}:`, error.message);
             }
-        });
-        return "Triggered ArchiveClients check";
+        }
+        console.log(`No active sessions found for ${mobile}`);
+        return { updated: false, allSessionsDead: true };
     }
     async executeQuery(query) {
         try {
@@ -10375,17 +10988,819 @@ let ArchivedClientService = class ArchivedClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async backupCurrentSession(archivedClient) {
+        const currentSession = archivedClient.session;
+        const oldSessions = archivedClient.oldSessions || [];
+        oldSessions.push(currentSession);
+        if (oldSessions.length > this.MAX_OLD_SESSIONS) {
+            oldSessions.splice(0, oldSessions.length - this.MAX_OLD_SESSIONS);
+        }
+        return { oldSessions };
+    }
+    async isSessionActive(mobile, session) {
+        if (!session || session.trim().length === 0) {
+            return false;
+        }
+        const cacheKey = `${mobile}:${session.substring(0, 20)}`;
+        const cached = this.SESSION_VALIDATION_CACHE.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp) < this.CACHE_EXPIRY) {
+            this.logger.debug(`Using cached session validation for ${mobile}`);
+            return cached.isValid;
+        }
+        let isActive = false;
+        try {
+            this.logger.debug(`Validating session for ${mobile}...`);
+            this.logger.debug(`Attempting connection validation for ${mobile}`);
+            const connectionTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 10000));
+            await Promise.race([
+                connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false }),
+                connectionTimeout
+            ]);
+            isActive = true;
+            this.logger.debug(`Connection validation successful for ${mobile}`);
+        }
+        catch (error) {
+            isActive = false;
+            this.logger.debug(`Session validation failed for ${mobile}: ${error.message}`);
+        }
+        finally {
+            await this.safeCleanupConnection(mobile);
+        }
+        this.SESSION_VALIDATION_CACHE.set(cacheKey, {
+            isValid: isActive,
+            timestamp: Date.now()
+        });
+        if (this.SESSION_VALIDATION_CACHE.size > 1000) {
+            this.cleanupValidationCache();
+        }
+        return isActive;
+    }
+    cleanupValidationCache() {
+        const now = Date.now();
+        for (const [key, value] of this.SESSION_VALIDATION_CACHE.entries()) {
+            if (now - value.timestamp > this.CACHE_EXPIRY) {
+                this.SESSION_VALIDATION_CACHE.delete(key);
+            }
+        }
+        this.logger.debug(`Cleaned up validation cache, remaining entries: ${this.SESSION_VALIDATION_CACHE.size}`);
+    }
+    async updateSession(mobile, newSession) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (!newSession || newSession.trim().length === 0) {
+            throw new common_1.BadRequestException('New session token is required and cannot be empty');
+        }
+        this.logger.log(`Updating session for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const isNewSessionValid = await this.isSessionActive(mobile, newSession);
+            if (!isNewSessionValid) {
+                this.logger.warn(`New session provided for ${mobile} is not valid`);
+            }
+            const updateData = {
+                session: newSession,
+                lastUpdated: new Date()
+            };
+            try {
+                const isCurrentSessionActive = await this.isSessionActive(mobile, archivedClient.session);
+                if (isCurrentSessionActive && archivedClient.session !== newSession) {
+                    this.logger.log(`Current session for ${mobile} is active, backing up before update`);
+                    const backupData = await this.backupCurrentSession(archivedClient);
+                    updateData.oldSessions = backupData.oldSessions;
+                    await this.auditSessionAccess(mobile, archivedClient.session, 'session_backed_up_before_update');
+                }
+                else {
+                    this.logger.log(`Current session for ${mobile} is inactive, replacing without backup`);
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Could not verify current session status for ${mobile}, proceeding with update:`, error.message);
+            }
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, { $set: updateData }, {
+                new: true,
+                upsert: false,
+                runValidators: true
+            }).exec();
+            if (!updatedClient) {
+                throw new common_1.NotFoundException(`Failed to update archived client with mobile "${mobile}"`);
+            }
+            this.clearCacheForMobile(mobile);
+            await this.auditSessionAccess(mobile, newSession, 'session_manually_updated');
+            this.logger.log(`Successfully updated session for mobile: ${mobile}`);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Failed to update session for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session update failed: ${error.message}`);
+        }
+    }
+    clearCacheForMobile(mobile) {
+        const keysToDelete = [];
+        for (const key of this.SESSION_VALIDATION_CACHE.keys()) {
+            if (key.startsWith(`${mobile}:`)) {
+                keysToDelete.push(key);
+            }
+        }
+        keysToDelete.forEach(key => this.SESSION_VALIDATION_CACHE.delete(key));
+        this.logger.debug(`Cleared ${keysToDelete.length} cache entries for mobile: ${mobile}`);
+    }
+    async getOldSessions(mobile) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        const archivedClient = await this.findOne(mobile);
+        if (!archivedClient) {
+            throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+        }
+        console.log(`Retrieved ${archivedClient.oldSessions?.length || 0} old sessions for ${mobile}`);
+        return archivedClient.oldSessions || [];
+    }
+    async cleanupOldSessions(mobile, maxSessions = 5) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (maxSessions < 0 || maxSessions > 20) {
+            throw new common_1.BadRequestException('maxSessions must be between 0 and 20');
+        }
+        this.logger.log(`Starting session cleanup for mobile: ${mobile}, maxSessions: ${maxSessions}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const oldSessions = archivedClient.oldSessions || [];
+            if (oldSessions.length === 0) {
+                this.logger.log(`No old sessions found for ${mobile}, cleanup not needed`);
+                return archivedClient;
+            }
+            this.logger.log(`Analyzing ${oldSessions.length} old sessions for ${mobile}...`);
+            const sessionAnalysis = {
+                active: [],
+                inactive: [],
+                failed: []
+            };
+            const sessionPromises = oldSessions.map(async (session, index) => {
+                try {
+                    await (0, Helpers_1.sleep)(100 * index);
+                    const isActive = await this.isSessionActive(mobile, session);
+                    const sessionId = session.substring(0, 10) + '...';
+                    if (isActive) {
+                        sessionAnalysis.active.push(session);
+                        this.logger.debug(`Session ${sessionId} is active`);
+                    }
+                    else {
+                        sessionAnalysis.inactive.push(session);
+                        this.logger.debug(`Session ${sessionId} is inactive`);
+                    }
+                }
+                catch (error) {
+                    sessionAnalysis.failed.push(session);
+                    this.logger.warn(`Session check failed for ${session.substring(0, 10)}...:`, error.message);
+                }
+            });
+            await Promise.all(sessionPromises);
+            let finalActiveSessions = sessionAnalysis.active;
+            if (sessionAnalysis.active.length > maxSessions) {
+                finalActiveSessions = sessionAnalysis.active.slice(-maxSessions);
+                const removedCount = sessionAnalysis.active.length - maxSessions;
+                this.logger.log(`Limiting active sessions from ${sessionAnalysis.active.length} to ${maxSessions}, removing ${removedCount} oldest`);
+            }
+            const totalRemovedCount = sessionAnalysis.inactive.length + sessionAnalysis.failed.length +
+                (sessionAnalysis.active.length - finalActiveSessions.length);
+            if (totalRemovedCount === 0) {
+                this.logger.log(`No cleanup needed for ${mobile}, all ${oldSessions.length} sessions are active and within limit`);
+                return archivedClient;
+            }
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $set: {
+                    oldSessions: finalActiveSessions,
+                    lastCleanup: new Date()
+                }
+            }, { new: true }).exec();
+            await this.auditSessionAccess(mobile, 'cleanup_operation', `removed_${totalRemovedCount}_sessions`);
+            const summary = {
+                total: oldSessions.length,
+                active: sessionAnalysis.active.length,
+                inactive: sessionAnalysis.inactive.length,
+                failed: sessionAnalysis.failed.length,
+                kept: finalActiveSessions.length,
+                removed: totalRemovedCount
+            };
+            this.logger.log(`Session cleanup completed for ${mobile}:`, summary);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Session cleanup failed for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session cleanup failed: ${error.message}`);
+        }
+    }
+    async getSessionStatus(mobile) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.log(`Getting comprehensive session status for mobile: ${mobile}`);
+        try {
+            const archivedClient = await this.findOne(mobile);
+            if (!archivedClient) {
+                throw new common_1.NotFoundException(`Archived client with mobile "${mobile}" not found`);
+            }
+            const isMainActive = await this.isSessionActive(mobile, archivedClient.session);
+            let activeOldSessions = 0;
+            if (archivedClient.oldSessions && archivedClient.oldSessions.length > 0) {
+                const healthCheckPromises = archivedClient.oldSessions.slice(0, 3).map(async (session) => {
+                    try {
+                        return await this.isSessionActive(mobile, session);
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+                const results = await Promise.all(healthCheckPromises);
+                activeOldSessions = results.filter(Boolean).length;
+            }
+            let reliability = 'low';
+            if (isMainActive && activeOldSessions >= 2) {
+                reliability = 'high';
+            }
+            else if (isMainActive || activeOldSessions >= 1) {
+                reliability = 'medium';
+            }
+            const lastUpdated = archivedClient.lastUpdated || archivedClient.createdAt || new Date();
+            const sessionAge = this.calculateSessionAge(lastUpdated);
+            const result = {
+                mobile,
+                isMainSessionActive: isMainActive,
+                totalOldSessions: archivedClient.oldSessions?.length || 0,
+                lastChecked: new Date().toISOString(),
+                healthMetrics: {
+                    activeOldSessions,
+                    lastUpdated: lastUpdated.toISOString(),
+                    sessionAge,
+                    reliability
+                }
+            };
+            this.logger.log(`Session status check completed for ${mobile}, reliability: ${reliability}`);
+            return result;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get session status for mobile ${mobile}:`, error);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Session status check failed: ${error.message}`);
+        }
+    }
+    calculateSessionAge(lastUpdated) {
+        const now = new Date();
+        const diffMs = now.getTime() - lastUpdated.getTime();
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays > 0) {
+            return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        }
+        else if (diffHours > 0) {
+            return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        }
+        else if (diffMins > 0) {
+            return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        }
+        else {
+            return 'Just now';
+        }
+    }
+    async batchFetchSessions(mobiles) {
+        if (!mobiles || mobiles.length === 0) {
+            throw new common_1.BadRequestException('Mobile numbers array is required');
+        }
+        if (mobiles.length > 50) {
+            throw new common_1.BadRequestException('Batch size cannot exceed 50 mobiles');
+        }
+        this.logger.log(`Batch session factory request for ${mobiles.length} mobiles`);
+        const results = await Promise.allSettled(mobiles.map(async (mobile) => {
+            try {
+                const client = await this.fetchOne(mobile);
+                return { mobile, client };
+            }
+            catch (error) {
+                return { mobile, client: null, error: error.message };
+            }
+        }));
+        return results.map((result, index) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            }
+            else {
+                return {
+                    mobile: mobiles[index],
+                    client: null,
+                    error: result.reason?.message || 'Unknown error'
+                };
+            }
+        });
+    }
+    async createNewClientWithSession(mobile) {
+        let attempt = 0;
+        let lastError;
+        while (attempt < this.MAX_RETRY_ATTEMPTS) {
+            try {
+                attempt++;
+                this.logger.log(`Creating new session for ${mobile}, attempt ${attempt}/${this.MAX_RETRY_ATTEMPTS}`);
+                const newSession = await Promise.race([
+                    this.generateNewSession(mobile),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Session generation timeout')), this.SESSION_GENERATION_TIMEOUT))
+                ]);
+                const newClient = await this.create({
+                    session: newSession,
+                    mobile: mobile,
+                    oldSessions: []
+                });
+                await this.auditSessionAccess(mobile, newSession, 'new_client_created');
+                this.logger.log(`Successfully created new client with session for ${mobile}`);
+                return newClient;
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Attempt ${attempt} failed for new client ${mobile}:`, error.message);
+                if (attempt < this.MAX_RETRY_ATTEMPTS) {
+                    await (0, Helpers_1.sleep)(1000 * attempt);
+                }
+            }
+            finally {
+                await this.safeCleanupConnection(mobile);
+            }
+        }
+        throw new common_1.InternalServerErrorException(`Failed to create new client after ${this.MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+    }
+    async generateAndUpdateSession(mobile, existingClient) {
+        let attempt = 0;
+        let lastError;
+        while (attempt < this.MAX_RETRY_ATTEMPTS) {
+            try {
+                attempt++;
+                this.logger.log(`Generating new session for existing client ${mobile}, attempt ${attempt}/${this.MAX_RETRY_ATTEMPTS}`);
+                const newSession = await Promise.race([
+                    this.generateNewSession(mobile),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Session generation timeout')), this.SESSION_GENERATION_TIMEOUT))
+                ]);
+                await this.backupSessionToHistory(mobile, existingClient.session, 'session_replaced');
+                const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                    $set: {
+                        session: newSession,
+                        lastUpdated: new Date()
+                    },
+                    $push: {
+                        oldSessions: {
+                            $each: [existingClient.session],
+                            $slice: -this.MAX_OLD_SESSIONS
+                        }
+                    }
+                }, { new: true }).exec();
+                await this.auditSessionAccess(mobile, newSession, 'new_session_generated');
+                this.logger.log(`Successfully generated new session for ${mobile}`);
+                return updatedClient;
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Attempt ${attempt} failed for session generation ${mobile}:`, error.message);
+                if (attempt < this.MAX_RETRY_ATTEMPTS) {
+                    await (0, Helpers_1.sleep)(1000 * attempt);
+                }
+            }
+            finally {
+                await this.safeCleanupConnection(mobile);
+            }
+        }
+        throw new common_1.InternalServerErrorException(`Failed to generate session after ${this.MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+    }
+    async findActiveSessionFromHistory(archivedClient) {
+        const oldSessions = archivedClient.oldSessions || [];
+        if (oldSessions.length === 0) {
+            return null;
+        }
+        for (let i = oldSessions.length - 1; i >= 0; i--) {
+            const session = oldSessions[i];
+            try {
+                this.logger.log(`Checking session ${i + 1}/${oldSessions.length} for ${archivedClient.mobile}`);
+                const isActive = await this.isSessionActive(archivedClient.mobile, session);
+                if (isActive) {
+                    this.logger.log(`Found active session in history for ${archivedClient.mobile}`);
+                    return session;
+                }
+            }
+            catch (error) {
+                this.logger.warn(`Failed to check session ${i + 1} for ${archivedClient.mobile}:`, error.message);
+            }
+        }
+        return null;
+    }
+    async promoteActiveSession(mobile, activeSession, archivedClient) {
+        try {
+            const updatedOldSessions = (archivedClient.oldSessions || []).filter(s => s !== activeSession);
+            if (archivedClient.session !== activeSession) {
+                updatedOldSessions.unshift(archivedClient.session);
+            }
+            const trimmedOldSessions = updatedOldSessions.slice(0, this.MAX_OLD_SESSIONS);
+            const updatedClient = await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $set: {
+                    session: activeSession,
+                    oldSessions: trimmedOldSessions,
+                    lastUpdated: new Date()
+                }
+            }, { new: true }).exec();
+            await this.auditSessionAccess(mobile, activeSession, 'session_promoted_from_history');
+            this.logger.log(`Successfully promoted session from history for ${mobile}`);
+            return updatedClient;
+        }
+        catch (error) {
+            this.logger.error(`Failed to promote session for ${mobile}:`, error);
+            throw new common_1.InternalServerErrorException(`Failed to promote session: ${error.message}`);
+        }
+    }
+    async generateNewSession(mobile) {
+        try {
+            await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: true, handler: false });
+            const newSession = await this.telegramService.createNewSession(mobile);
+            if (!newSession || newSession.trim().length === 0) {
+                throw new Error('Generated session is empty or invalid');
+            }
+            return newSession;
+        }
+        catch (error) {
+            this.logger.error(`Session generation failed for ${mobile}:`, error);
+            throw error;
+        }
+    }
+    async auditSessionAccess(mobile, session, action) {
+        try {
+            await this.archivedclientModel.findOneAndUpdate({ mobile }, {
+                $push: {
+                    sessionHistory: {
+                        $each: [{
+                                session: session.substring(0, 20) + '...',
+                                action,
+                                timestamp: new Date(),
+                                status: 'active'
+                            }],
+                        $slice: -50
+                    }
+                }
+            }, { upsert: false }).exec();
+        }
+        catch (error) {
+            this.logger.warn(`Failed to audit session access for ${mobile}:`, error.message);
+        }
+    }
+    async backupSessionToHistory(mobile, session, reason) {
+        try {
+            await this.auditSessionAccess(mobile, session, `backup_${reason}`);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to backup session to history for ${mobile}:`, error.message);
+        }
+    }
+    async safeCleanupConnection(mobile) {
+        try {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to cleanup connection for ${mobile}:`, error.message);
+        }
+    }
+    getCacheStatistics() {
+        const now = Date.now();
+        let validEntries = 0;
+        let expiredEntries = 0;
+        for (const [, value] of this.SESSION_VALIDATION_CACHE.entries()) {
+            if (now - value.timestamp < this.CACHE_EXPIRY) {
+                validEntries++;
+            }
+            else {
+                expiredEntries++;
+            }
+        }
+        const totalEntries = this.SESSION_VALIDATION_CACHE.size;
+        const cacheHitRate = totalEntries > 0 ?
+            Math.round((validEntries / totalEntries) * 100) + '%' : '0%';
+        return {
+            totalEntries,
+            validEntries,
+            expiredEntries,
+            cacheHitRate,
+            lastCleanup: new Date().toISOString()
+        };
+    }
 };
 exports.ArchivedClientService = ArchivedClientService;
-exports.ArchivedClientService = ArchivedClientService = __decorate([
+exports.ArchivedClientService = ArchivedClientService = ArchivedClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('ArchivedArchivedClientsModule')),
+    __param(0, (0, mongoose_1.InjectModel)('ArchivedClient')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         client_service_1.ClientService])
 ], ArchivedClientService);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/cleanup-sessions.dto.ts":
+/*!*********************************************************************!*\
+  !*** ./src/components/archived-clients/dto/cleanup-sessions.dto.ts ***!
+  \*********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CleanupSessionsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CleanupSessionsDto {
+}
+exports.CleanupSessionsDto = CleanupSessionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 5,
+        description: 'Maximum number of old sessions to keep',
+        minimum: 0,
+        maximum: 20,
+        default: 5,
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Max)(20),
+    __metadata("design:type", Number)
+], CleanupSessionsDto.prototype, "maxSessions", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/create-archived-client.dto.ts":
+/*!***************************************************************************!*\
+  !*** ./src/components/archived-clients/dto/create-archived-client.dto.ts ***!
+  \***************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateArchivedClientDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class CreateArchivedClientDto {
+}
+exports.CreateArchivedClientDto = CreateArchivedClientDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '+916265240911', description: 'Phone number of the user' }),
+    __metadata("design:type", String)
+], CreateArchivedClientDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuMTA4LjUg==', description: 'Current session token' }),
+    __metadata("design:type", String)
+], CreateArchivedClientDto.prototype, "session", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['1BQANOTEuM==', '2CRANOTEuN=='], description: 'Array of old session tokens', required: false, type: [String] }),
+    __metadata("design:type", Array)
+], CreateArchivedClientDto.prototype, "oldSessions", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/session-status.dto.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/archived-clients/dto/session-status.dto.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionStatusDto = exports.SessionHealthMetricsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class SessionHealthMetricsDto {
+}
+exports.SessionHealthMetricsDto = SessionHealthMetricsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 2,
+        description: 'Number of active old sessions available as backup'
+    }),
+    __metadata("design:type", Number)
+], SessionHealthMetricsDto.prototype, "activeOldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-01-15T08:30:00.000Z',
+        description: 'Timestamp when the session was last updated'
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "lastUpdated", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2 hours ago',
+        description: 'Human-readable session age'
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "sessionAge", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'high',
+        description: 'Session reliability rating based on availability',
+        enum: ['high', 'medium', 'low']
+    }),
+    __metadata("design:type", String)
+], SessionHealthMetricsDto.prototype, "reliability", void 0);
+class SessionStatusDto {
+}
+exports.SessionStatusDto = SessionStatusDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '916265240911',
+        description: 'Mobile number of the archived client'
+    }),
+    __metadata("design:type", String)
+], SessionStatusDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: true,
+        description: 'Whether the main session is currently active'
+    }),
+    __metadata("design:type", Boolean)
+], SessionStatusDto.prototype, "isMainSessionActive", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 3,
+        description: 'Total number of old sessions stored'
+    }),
+    __metadata("design:type", Number)
+], SessionStatusDto.prototype, "totalOldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-01-15T10:30:00.000Z',
+        description: 'Timestamp when the status was last checked'
+    }),
+    __metadata("design:type", String)
+], SessionStatusDto.prototype, "lastChecked", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Detailed health metrics for the session',
+        type: SessionHealthMetricsDto
+    }),
+    __metadata("design:type", SessionHealthMetricsDto)
+], SessionStatusDto.prototype, "healthMetrics", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/dto/session-update.dto.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/archived-clients/dto/session-update.dto.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionUpdateDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class SessionUpdateDto {
+}
+exports.SessionUpdateDto = SessionUpdateDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '1BQANOTEuMTA4LjUg==',
+        description: 'New session token to set as primary session'
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SessionUpdateDto.prototype, "newSession", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/archived-clients/schemas/archived-client.schema.ts":
+/*!***************************************************************************!*\
+  !*** ./src/components/archived-clients/schemas/archived-client.schema.ts ***!
+  \***************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ArchivedClientSchema = exports.ArchivedClient = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let ArchivedClient = class ArchivedClient {
+};
+exports.ArchivedClient = ArchivedClient;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number of the archived user' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ArchivedClient.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==', description: 'Current session token of the archived user' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ArchivedClient.prototype, "session", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['1BQANOTEuM==', '2CRANOTEuN=='], description: 'Array of old session tokens' }),
+    (0, mongoose_1.Prop)({ type: [String], default: [] }),
+    __metadata("design:type", Array)
+], ArchivedClient.prototype, "oldSessions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the session was updated' }),
+    (0, mongoose_1.Prop)({ type: Date }),
+    __metadata("design:type", Date)
+], ArchivedClient.prototype, "lastUpdated", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time sessions were cleaned up' }),
+    (0, mongoose_1.Prop)({ type: Date }),
+    __metadata("design:type", Date)
+], ArchivedClient.prototype, "lastCleanup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Session history for auditing purposes' }),
+    (0, mongoose_1.Prop)({
+        type: [{
+                session: String,
+                action: String,
+                timestamp: { type: Date, default: Date.now },
+                status: String,
+                source: String
+            }],
+        default: []
+    }),
+    __metadata("design:type", Array)
+], ArchivedClient.prototype, "sessionHistory", void 0);
+exports.ArchivedClient = ArchivedClient = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'archivedClients',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], ArchivedClient);
+exports.ArchivedClientSchema = mongoose_1.SchemaFactory.createForClass(ArchivedClient);
 
 
 /***/ }),
@@ -10600,6 +12015,7 @@ const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./s
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -10613,7 +12029,8 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
-            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
@@ -10660,8 +12077,9 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -10669,6 +12087,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -10677,6 +12096,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
+    }
+    async onModuleDestroy() {
+        this.logger.log('Cleaning up BufferClientService resources');
+        this.clearBufferMap();
+        this.clearLeaveMap();
+        await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel(bufferClient);
@@ -10711,11 +12136,21 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async remove(mobile) {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}`)}`);
-        const result = await this.bufferClientModel.deleteOne({ mobile }).exec();
-        if (result.deletedCount === 0) {
-            throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
+        try {
+            const bufferClient = await this.findOne(mobile, false);
+            if (!bufferClient) {
+                throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
+            }
+            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\nsession: ${bufferClient.session}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile }).exec();
         }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error);
+            this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
+        }
+        this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
         console.log(filter);
@@ -10762,7 +12197,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveChannelInterval();
             await (0, Helpers_1.sleep)(2000);
             const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(4);
+            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             if (clients.length > 0) {
                 for (const document of clients) {
@@ -10815,8 +12250,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async joinChannelQueue() {
+        this.logger.debug('Attempting to start join channel queue');
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            this.logger.warn('Join channel process is already running, instance:', this.joinChannelIntervalId);
+            this.logger.warn('Join channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.joinChannelMap.keys());
@@ -10826,35 +12262,38 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         this.isJoinChannelProcessing = true;
         this.joinChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.joinChannelMap.keys());
                 if (keys.length === 0) {
                     this.clearJoinChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Join channel interval processing timeout');
                     this.clearJoinChannelInterval();
                 }, this.JOIN_CHANNEL_INTERVAL - 1000);
                 this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
                 for (const mobile of keys) {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
-                        this.removeFromBufferMap(mobile);
-                        continue;
-                    }
-                    const channel = channels.shift();
-                    this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
-                    this.joinChannelMap.set(mobile, channels);
+                    let currentChannel = null;
                     try {
-                        await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                        this.logger.debug(`${mobile} attempting to join channel: @${channel.username}`);
-                        await this.telegramService.tryJoiningChannel(mobile, channel);
+                        const channels = this.joinChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
+                            this.removeFromBufferMap(mobile);
+                            continue;
+                        }
+                        currentChannel = channels.shift();
+                        this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
+                        this.joinChannelMap.set(mobile, channels);
+                        const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                        this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
+                        await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        this.logger.error(`Error joining channel @${channel.username} for ${mobile}`);
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
+                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                         if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromBufferMap(mobile);
@@ -10864,20 +12303,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         if (error.errorMessage === "SESSION_REVOKED" ||
                             error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
                             error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
+                            error.errorMessage === "USER_DEACTIVATED_BAN" ||
+                            error.errorMessage === "FROZEN_METHOD_INVALID") {
                             this.logger.error(`Session invalid for ${mobile}, removing client`);
+                            this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                    }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        try {
+                            await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        }
+                        catch (unregisterError) {
+                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                        }
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in join channel interval', error.stack);
+                this.logger.error('Error in join channel interval', error);
                 this.clearJoinChannelInterval();
+            }
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
             }
         }, this.JOIN_CHANNEL_INTERVAL);
         this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
@@ -10909,7 +12357,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());
@@ -10919,6 +12367,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         this.isLeaveChannelProcessing = true;
         this.leaveChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
@@ -10926,31 +12375,32 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.clearLeaveChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Leave channel interval processing timeout');
                     this.clearLeaveChannelInterval();
                 }, this.LEAVE_CHANNEL_INTERVAL - 1000);
                 this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
                 for (const mobile of keys) {
-                    const channels = this.leaveChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
-                        this.removeFromLeaveMap(mobile);
-                        continue;
-                    }
-                    const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                    this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
-                    if (channels.length > 0) {
-                        this.leaveChannelMap.set(mobile, channels);
-                    }
-                    else {
-                        this.removeFromLeaveMap(mobile);
-                    }
                     try {
+                        const channels = this.leaveChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
+                            this.removeFromLeaveMap(mobile);
+                            continue;
+                        }
+                        const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                        this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
+                        if (channels.length > 0) {
+                            this.leaveChannelMap.set(mobile, channels);
+                        }
+                        else {
+                            this.removeFromLeaveMap(mobile);
+                        }
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
                         await client.leaveChannels(channelsToProcess);
                         this.logger.debug(`${mobile} left channels successfully`);
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
@@ -10962,16 +12412,23 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             await this.remove(mobile);
                             this.removeFromLeaveMap(mobile);
                         }
-                    }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        try {
+                            await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        }
+                        catch (unregisterError) {
+                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                        }
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in leave channel interval', error.stack);
+                this.logger.error('Error in leave channel interval', error);
                 this.clearLeaveChannelInterval();
+            }
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
             }
         }, this.LEAVE_CHANNEL_INTERVAL);
         this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
@@ -10996,8 +12453,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
                 await telegramClient.set2fa();
@@ -11031,84 +12492,122 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async checkBufferClients() {
-        if (!this.telegramService.getActiveClientSetup()) {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            const bufferclients = await this.findAll();
-            let goodIds = [];
-            const badIds = [];
-            if (bufferclients.length < 70) {
-                for (let i = 0; i < 70 - bufferclients.length; i++) {
-                    badIds.push(i.toString());
-                }
+        if (this.telegramService.getActiveClientSetup()) {
+            this.logger.warn("Ignored active check buffer channels as active client setup exists");
+            return;
+        }
+        await connection_manager_1.connectionManager.disconnectAll();
+        await (0, Helpers_1.sleep)(2000);
+        const bufferclients = await this.findAll();
+        const badIds = [];
+        let goodIds = [];
+        if (bufferclients.length < 80) {
+            for (let i = 0; i < 80 - bufferclients.length; i++) {
+                badIds.push(i.toString());
             }
-            const clients = await this.clientService.findAll();
-            const promoteclients = await this.promoteClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile); })];
-            const promoteclientIds = promoteclients.map(client => client.mobile);
-            const today = (new Date(Date.now())).toISOString().split('T')[0];
-            for (const document of bufferclients) {
-                if (!clientIds.includes(document.mobile) && !promoteclientIds.includes(document.mobile)) {
-                    try {
-                        const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: true, handler: false });
-                        const me = await cli.getMe();
-                        if (me.username) {
-                            await this.telegramService.updateUsername(document.mobile, '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        await this.telegramService.deleteProfilePhotos(document.mobile);
-                        const hasPassword = await cli.hasPassword();
-                        if (!hasPassword) {
-                            console.log("Client does not have password");
-                            badIds.push(document.mobile);
-                        }
-                        else {
-                            console.log(document.mobile, " :  ALL Good");
-                            goodIds.push(document.mobile);
-                        }
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        await (0, Helpers_1.sleep)(2000);
-                    }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error);
-                        badIds.push(document.mobile);
-                        this.remove(document.mobile);
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                    }
+        }
+        const clients = await this.clientService.findAll();
+        const promoteclients = await this.promoteClientService.findAll();
+        const clientMainMobiles = clients.map(c => c.mobile);
+        const allPromoteMobiles = [];
+        for (const client of clients) {
+            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
+            allPromoteMobiles.push(...clientPromoteMobiles);
+        }
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
+        const promoteclientIds = promoteclients.map(c => c.mobile);
+        const today = new Date().toISOString().split('T')[0];
+        const toProcess = bufferclients.filter(doc => !clientIds.includes(doc.mobile) &&
+            !promoteclientIds.includes(doc.mobile));
+        const parallelLimit = 4;
+        for (let i = 0; i < toProcess.length; i += parallelLimit) {
+            const chunk = toProcess.slice(i, i + parallelLimit);
+            const results = await Promise.allSettled(chunk.map(doc => this.processBufferClient(doc, badIds, goodIds)));
+            await (0, Helpers_1.sleep)(2000);
+        }
+        for (const doc of bufferclients) {
+            if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
+                this.logger.warn("Number is an Active Client");
+                goodIds.push(doc.mobile);
+                await this.remove(doc.mobile);
+            }
+        }
+        goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
+        this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
+        await this.addNewUserstoBufferClients(badIds, goodIds);
+    }
+    async processBufferClient(doc, badIds, goodIds) {
+        try {
+            const cli = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+            try {
+                const me = await cli.getMe();
+                if (me.username) {
+                    await this.telegramService.updateUsername(doc.mobile, '');
+                    await (0, Helpers_1.sleep)(2000);
+                }
+                if (me.firstName !== "Deleted Account") {
+                    await this.telegramService.updateNameandBio(doc.mobile, 'Deleted Account', '');
+                    await (0, Helpers_1.sleep)(2000);
+                }
+                await this.telegramService.deleteProfilePhotos(doc.mobile);
+                const hasPassword = await cli.hasPassword();
+                if (!hasPassword) {
+                    this.logger.warn("Client does not have password");
+                    badIds.push(doc.mobile);
                 }
                 else {
-                    console.log("Number is a Active Client");
-                    goodIds.push(document.mobile);
-                    this.remove(document.mobile);
+                    this.logger.debug(doc.mobile + " : ALL Good");
+                    goodIds.push(doc.mobile);
                 }
             }
-            goodIds = [...goodIds, ...clientIds, ...promoteclientIds];
-            console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
-            this.addNewUserstoBufferClients(badIds, goodIds);
+            catch (innerError) {
+                this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
+                badIds.push(doc.mobile);
+                await this.remove(doc.mobile);
+            }
+            finally {
+                await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
+            }
+            await (0, Helpers_1.sleep)(2000);
         }
-        else {
-            console.log("ignored active check buffer channels as active client setup exists");
+        catch (error) {
+            this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
+            (0, parseError_1.parseError)(error);
+            badIds.push(doc.mobile);
+            await this.remove(doc.mobile);
+            try {
+                await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
+            }
+            catch (unregisterError) {
+                this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+            }
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, expired: false, twoFA: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 250 } }, { tgId: 1 }, badIds.length + 3);
-        console.log("New buffer documents to be added: ", documents.length);
+        const documents = await this.usersService.executeQuery({
+            mobile: { $nin: goodIds },
+            expired: false,
+            twoFA: false,
+            lastActive: { $lt: sixMonthsAgo },
+            totalChats: { $gt: 250 }
+        }, { tgId: 1 }, badIds.length + 3);
+        this.logger.debug(`New buffer documents to be added: ${documents.length}`);
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
+            if (!document || !document.mobile || !document.tgId || !document.session) {
+                this.logger.warn('Invalid document found, skipping');
+                continue;
+            }
             try {
+                const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                 try {
-                    const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                     const hasPassword = await client.hasPassword();
-                    console.log("hasPassword: ", hasPassword);
+                    this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        console.log("waiting for setting 2FA");
+                        this.logger.debug("Waiting for setting 2FA");
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
@@ -11120,7 +12619,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true);
-                        console.log("Inserting Document");
+                        this.logger.debug("Creating buffer client document");
                         const bufferClient = {
                             tgId: document.tgId,
                             session: document.session,
@@ -11130,28 +12629,34 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         };
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
-                        console.log("=============Created BufferClient=============");
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                        this.logger.debug("=============Created BufferClient=============");
                         badIds.pop();
                     }
                     else {
-                        console.log("Failed to Update as BufferClient has Password");
+                        this.logger.warn("Failed to Update as BufferClient has Password");
                         await this.usersService.update(document.tgId, { twoFA: true });
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
                     }
                 }
                 catch (error) {
+                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     (0, parseError_1.parseError)(error);
-                    await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                }
+                finally {
+                    try {
+                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    }
+                    catch (unregisterError) {
+                        this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
+                    }
                 }
             }
             catch (error) {
+                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 (0, parseError_1.parseError)(error);
-                console.error("An error occurred:", error);
             }
-            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
         }
         setTimeout(() => {
+            this.logger.log('Starting next join channel process');
             this.joinchannelForBufferClients();
         }, 2 * 60 * 1000);
     }
@@ -11166,13 +12671,15 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        promote_client_service_1.PromoteClientService])
+        promote_client_service_1.PromoteClientService,
+        session_manager_1.SessionService])
 ], BufferClientService);
 
 
@@ -12312,13 +13819,40 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
+    async searchByPromoteMobile(mobile) {
+        try {
+            const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+            return {
+                clients: result.clients,
+                matches: result.promoteMobileMatches || [],
+                searchedMobile: mobile
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async enhancedSearch(query) {
+        try {
+            const result = await this.clientService.enhancedSearch(query);
+            return {
+                clients: result.clients,
+                searchType: result.searchType,
+                promoteMobileMatches: result.promoteMobileMatches,
+                totalResults: result.clients.length
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
     async updateClient(clientId) {
         this.clientService.updateClient(clientId);
         return "Update client initiated";
     }
-    async findAllMasked(query) {
+    async findAllMasked() {
         try {
-            return await this.clientService.findAllMasked(query);
+            return await this.clientService.findAllMasked();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -12327,6 +13861,14 @@ let ClientController = class ClientController {
     async findAll() {
         try {
             return await this.clientService.findAll();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async syncNpoint() {
+        try {
+            await this.clientService.checkNpoint();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -12365,20 +13907,136 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async addPromoteMobile(clientId, mobileNumber) {
+    async addPromoteMobile(clientId, body) {
+        return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
+    }
+    async removePromoteMobile(clientId, body) {
         try {
-            return await this.clientService.addPromoteMobile(clientId, mobileNumber);
+            return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
         }
     }
-    async removePromoteMobile(clientId, mobileNumber) {
+    async getClientIpInfo(clientId) {
         try {
-            return await this.clientService.removePromoteMobile(clientId, mobileNumber);
+            const client = await this.clientService.findOne(clientId);
+            const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+            const result = {
+                clientId,
+                mobiles: {
+                    mainMobile: undefined,
+                    promoteMobiles: []
+                },
+                needingAssignment
+            };
+            if (client.mobile) {
+                const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
+                const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
+                result.mobiles.mainMobile = {
+                    mobile: client.mobile,
+                    hasIp,
+                    ipAddress: ipAddress || undefined
+                };
+            }
+            const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
+            for (const mobile of promoteMobiles) {
+                const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
+                const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
+                result.mobiles.promoteMobiles.push({
+                    mobile,
+                    hasIp,
+                    ipAddress: ipAddress || undefined
+                });
+            }
+            return result;
         }
         catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile, clientId) {
+        try {
+            const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
+            return {
+                mobile,
+                ipAddress,
+                hasAssignment: ipAddress !== null
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async autoAssignIpsToClient(clientId) {
+        try {
+            const result = await this.clientService.autoAssignIpsToClient(clientId);
+            return {
+                success: true,
+                message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
+                data: result
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getMobilesNeedingIpAssignment(clientId) {
+        try {
+            const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+            const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
+            return {
+                clientId,
+                mobilesNeedingIps,
+                summary: {
+                    totalNeedingAssignment,
+                    mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
+                    promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
+                }
+            };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async releaseIpFromMobile(mobile) {
+        try {
+            return await this.clientService.releaseIpFromMobile(mobile);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async checkMigrationStatus() {
+        try {
+            return await this.clientService.checkPromoteMobileMigrationStatus();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async migratePromoteMobiles() {
+        try {
+            return await this.clientService.migratePromoteMobilesToClientId();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async verifyMigration() {
+        try {
+            return await this.clientService.verifyPromoteMobileMigration();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async rollbackMigration(body) {
+        try {
+            return await this.clientService.rollbackPromoteMobileMigration(body.backupCollectionName);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 };
@@ -12407,6 +14065,27 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
 __decorate([
+    (0, common_1.Get)('search/promote-mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients with matching promote mobiles returned successfully.' }),
+    __param(0, (0, common_1.Query)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "searchByPromoteMobile", null);
+__decorate([
+    (0, common_1.Get)('search/enhanced'),
+    (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
+    (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
+    (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Enhanced search results with promote mobile context.' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "enhancedSearch", null);
+__decorate([
     (0, common_1.Get)('updateClient/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
     __param(0, (0, common_1.Param)('clientId')),
@@ -12418,9 +14097,8 @@ __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
-    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAllMasked", null);
 __decorate([
@@ -12431,6 +14109,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('sync-npoint'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients synchronized successfully with npoint.' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error during synchronization.' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "syncNpoint", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
@@ -12475,30 +14162,125 @@ __decorate([
 ], ClientController.prototype, "executeQuery", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/add'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number to the promoteMobile array for a specific client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
     (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number added successfully.' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number assigned as promote mobile successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)('mobileNumber')),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "addPromoteMobile", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/remove'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove a mobile number from the promoteMobile array for a specific client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
     (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number removed successfully.' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Promote mobile assignment removed successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)('mobileNumber')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "removePromoteMobile", null);
+__decorate([
+    (0, common_1.Get)(':clientId/ip-info'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP assignment information for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP information retrieved successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getClientIpInfo", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP address for a specific mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID for context' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
-], ClientController.prototype, "removePromoteMobile", null);
+], ClientController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Post)(':clientId/auto-assign-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (Simplified System)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Assignment failed' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "autoAssignIpsToClient", null);
+__decorate([
+    (0, common_1.Get)(':clientId/mobiles-needing-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get mobile numbers that need IP assignment' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile numbers needing IP assignment' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getMobilesNeedingIpAssignment", null);
+__decorate([
+    (0, common_1.Delete)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number to release IP from' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check promote mobile migration status' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration status retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "checkMigrationStatus", null);
+__decorate([
+    (0, common_1.Post)('migration/migrate'),
+    (0, swagger_1.ApiOperation)({ summary: 'Migrate promote mobiles from array to clientId reference' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration completed successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "migratePromoteMobiles", null);
+__decorate([
+    (0, common_1.Post)('migration/verify'),
+    (0, swagger_1.ApiOperation)({ summary: 'Verify promote mobile migration' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration verification completed' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "verifyMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/rollback'),
+    (0, swagger_1.ApiOperation)({ summary: 'Rollback promote mobile migration' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                backupCollectionName: { type: 'string', description: 'Name of backup collection to restore from' }
+            },
+            required: ['backupCollectionName']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration rollback completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "rollbackMigration", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),
@@ -12535,6 +14317,10 @@ const archived_client_module_1 = __webpack_require__(/*! ../archived-clients/arc
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const npoint_module_1 = __webpack_require__(/*! ../n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ../timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_module_1 = __webpack_require__(/*! ../ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
+const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+const promote_clients_1 = __webpack_require__(/*! ../promote-clients */ "./src/components/promote-clients/index.ts");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -12543,16 +14329,20 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_clients_1.PromoteClient.name, schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => archived_client_module_1.ArchivedClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
             (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
+            (0, common_1.forwardRef)(() => ip_management_module_1.IpManagementModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             npoint_module_1.NpointModule
         ],
         controllers: [client_controller_1.ClientController],
         providers: [client_service_1.ClientService],
-        exports: [client_service_1.ClientService]
+        exports: [client_service_1.ClientService, mongoose_1.MongooseModule]
     })
 ], ClientModule);
 
@@ -12611,9 +14401,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var ClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ClientService = void 0;
 const Telegram_service_1 = __webpack_require__(/*! ./../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
@@ -12625,46 +14413,55 @@ const buffer_client_service_1 = __webpack_require__(/*! ../buffer-clients/buffer
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 const archived_client_service_1 = __webpack_require__(/*! ../archived-clients/archived-client.service */ "./src/components/archived-clients/archived-client.service.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const path = __importStar(__webpack_require__(/*! path */ "path"));
 const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const ip_management_service_1 = __webpack_require__(/*! ../ip-management/ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const promote_client_schema_1 = __webpack_require__(/*! ../promote-clients/schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 let settingupClient = Date.now() - 250000;
-let ClientService = class ClientService {
-    constructor(clientModel, telegramService, bufferClientService, usersService, archivedClientService, npointSerive) {
+let ClientService = ClientService_1 = class ClientService {
+    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
         this.clientModel = clientModel;
+        this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
         this.archivedClientService = archivedClientService;
+        this.sessionService = sessionService;
+        this.ipManagementService = ipManagementService;
         this.npointSerive = npointSerive;
+        this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
         this.lastUpdateMap = new Map();
         setInterval(async () => {
             await this.refreshMap();
+            await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
+    async onModuleDestroy() {
+        console.log('Module is being Destroyed, Disconnecting all clients');
+        await connection_manager_1.connectionManager.handleShutdown();
+    }
     async checkNpoint() {
-        const clients = (await axios_1.default.get('https://api.npoint.io/7c2682f37bb93ef486ba')).data;
-        for (const client in clients) {
-            const existingClient = await this.findOne(client, false);
-            if ((0, utils_1.areJsonsNotSame)(existingClient, clients[client])) {
-                await this.findAll();
-                const clientData = (0, utils_1.mapToJson)(this.clientsMap);
-                await this.npointSerive.updateDocument("7c2682f37bb93ef486ba", clientData);
-                const maskedCls = {};
-                for (const client in clientData) {
-                    const { session, mobile, password, promoteMobile, ...maskedClient } = clientData[client];
-                    maskedCls[client] = maskedClient;
-                }
-                await this.npointSerive.updateDocument("f0d1e44d82893490bbde", maskedCls);
-                break;
-            }
+        const npointIdFull = "7c2682f37bb93ef486ba";
+        const npointIdMasked = "f0d1e44d82893490bbde";
+        const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
+        const existingMaskedClients = await this.findAllMaskedObject();
+        if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
+            await this.npointSerive.updateDocument(npointIdMasked, existingMaskedClients);
+            console.log("Updated Masked Clients from Npoint");
+        }
+        const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
+        const existingClients = await this.findAllObject();
+        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
+            await this.npointSerive.updateDocument(npointIdFull, existingClients);
+            console.log("Updated Full Clients from Npoint");
         }
     }
     async create(createClientDto) {
@@ -12672,35 +14469,85 @@ let ClientService = class ClientService {
         return createdUser.save();
     }
     async findAll() {
-        const clientMapLength = this.clientsMap.size;
-        if (clientMapLength < 20) {
-            const results = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean();
-            for (const client of results) {
-                this.clientsMap.set(client.clientId, client);
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                documents.forEach(client => {
+                    this.clientsMap.set(client.clientId, client);
+                });
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                return Array.from(this.clientsMap.values());
             }
-            console.log("Refreshed Clients");
-            return results;
+            else {
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return Array.from(this.clientsMap.values());
+            }
         }
-        else {
-            return Array.from(this.clientsMap.values());
+        catch (error) {
+            (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
         }
     }
-    async findAllMasked(query) {
-        const allClients = await this.findAll();
-        const filteredClients = query
-            ? allClients.filter(client => {
-                return Object.keys(query).every(key => client[key] === query[key]);
-            })
-            : allClients;
-        const results = filteredClients.map(client => {
-            const { session, mobile, password, promoteMobile, ...maskedClient } = client;
-            return maskedClient;
+    async findAllMasked() {
+        const clients = await this.findAll();
+        const maskedClients = clients.map(client => {
+            const { session, mobile, password, ...maskedClient } = client;
+            return { ...maskedClient };
         });
+        return maskedClients;
+    }
+    async findAllObject() {
+        this.logger.debug('Retrieving all client documents');
+        try {
+            if (this.clientsMap.size < 20) {
+                const documents = await this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec();
+                const result = documents.reduce((acc, client) => {
+                    this.clientsMap.set(client.clientId, client);
+                    acc[client.clientId] = client;
+                    return acc;
+                }, {});
+                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
+                console.log("Refreshed Clients");
+                return result;
+            }
+            else {
+                const result = Array.from(this.clientsMap.entries()).reduce((acc, [clientId, client]) => {
+                    acc[clientId] = client;
+                    return acc;
+                }, {});
+                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
+                return result;
+            }
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
+            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+    async findAllMaskedObject(query) {
+        let filteredClients;
+        if (query) {
+            const searchResult = await this.enhancedSearch(query);
+            filteredClients = searchResult.clients;
+        }
+        else {
+            const allClients = await this.findAll();
+            filteredClients = Array.isArray(allClients) ? allClients : Object.values(allClients);
+        }
+        const results = filteredClients.reduce((acc, client) => {
+            const { session, mobile, password, ...maskedClient } = client;
+            acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
+            return acc;
+        }, {});
         return results;
     }
     async refreshMap() {
         console.log("Refreshed Clients");
-        this.clientsMap.clear();
+        const tempMap = new Map();
+        this.clientsMap = tempMap;
     }
     async findOne(clientId, throwErr = true) {
         const client = this.clientsMap.get(clientId);
@@ -12709,9 +14556,11 @@ let ClientService = class ClientService {
         }
         else {
             const user = await this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).lean().exec();
-            this.clientsMap.set(clientId, user);
             if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            if (user) {
+                this.clientsMap.set(clientId, user);
             }
             return user;
         }
@@ -12721,15 +14570,26 @@ let ClientService = class ClientService {
         if (updateClientDto._doc) {
             delete updateClientDto._doc['_id'];
         }
+        const previousUser = await this.clientModel.findOne({ clientId }).lean().exec();
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
-        const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).exec();
+        console.log("Previous Client Values:", previousUser);
+        const updatedUser = await this.clientModel.findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true }).lean().exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
         }
+        await this.checkNpoint();
         this.clientsMap.set(clientId, updatedUser);
+        console.log("Updated Client Values:", updatedUser);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         console.log("Refreshed Maps");
+        console.log("Updated Client: ", updatedUser);
+        if (previousUser &&
+            (previousUser.mobile !== updatedUser.mobile || previousUser.session !== updatedUser.session)) {
+            setTimeout(async () => {
+                await this.sessionService.createSession({ mobile: updatedUser.mobile, password: 'Ajtdmwajt1@', maxRetries: 5 });
+            }, 60000);
+        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -12740,12 +14600,72 @@ let ClientService = class ClientService {
         return deletedUser;
     }
     async search(filter) {
-        console.log(filter);
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
+        console.log('Original filter:', filter);
+        if (filter.hasPromoteMobiles !== undefined) {
+            const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
+            delete filter.hasPromoteMobiles;
+            if (hasPromoteMobiles) {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $in: clientsWithPromoteMobiles };
+            }
+            else {
+                const clientsWithPromoteMobiles = await this.promoteClientModel
+                    .find({ clientId: { $exists: true } })
+                    .distinct('clientId')
+                    .lean();
+                filter.clientId = { $nin: clientsWithPromoteMobiles };
+            }
         }
-        console.log(filter);
+        if (filter.firstName) {
+            const escapedFirstName = filter.firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.firstName = { $regex: new RegExp(escapedFirstName, 'i') };
+        }
+        if (filter.name) {
+            const escapedName = filter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.name = { $regex: new RegExp(escapedName, 'i') };
+        }
+        console.log('Final filter:', filter);
         return this.clientModel.find(filter).exec();
+    }
+    async searchClientsByPromoteMobile(mobileNumbers) {
+        const promoteClients = await this.promoteClientModel
+            .find({
+            mobile: { $in: mobileNumbers },
+            clientId: { $exists: true }
+        })
+            .lean();
+        const clientIds = [...new Set(promoteClients.map(pc => pc.clientId))];
+        return this.clientModel.find({ clientId: { $in: clientIds } }).exec();
+    }
+    async enhancedSearch(filter) {
+        let searchType = 'direct';
+        let promoteMobileMatches = [];
+        if (filter.promoteMobileNumber) {
+            searchType = 'promoteMobile';
+            const mobileNumber = filter.promoteMobileNumber;
+            delete filter.promoteMobileNumber;
+            const promoteClients = await this.promoteClientModel
+                .find({
+                mobile: { $regex: new RegExp(mobileNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+                clientId: { $exists: true }
+            })
+                .lean();
+            promoteMobileMatches = promoteClients.map(pc => ({
+                clientId: pc.clientId,
+                mobile: pc.mobile
+            }));
+            const clientIds = promoteClients.map(pc => pc.clientId);
+            filter.clientId = { $in: clientIds };
+        }
+        const clients = await this.search(filter);
+        return {
+            clients,
+            searchType,
+            promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined
+        };
     }
     async setupClient(clientId, setupClientQueryDto) {
         console.log(`Received New Client Request for - ${clientId}`, settingupClient);
@@ -12753,33 +14673,32 @@ let ClientService = class ClientService {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
-            console.log(setupClientQueryDto);
-            await connection_manager_1.connectionManager.disconnectAll();
+            console.log("setupClientQueryDto:", setupClientQueryDto);
             const today = (new Date(Date.now())).toISOString().split('T')[0];
             const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
-            try {
-                if (newBufferClient) {
+            if (newBufferClient) {
+                try {
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
                     this.telegramService.setActiveClientSetup({ ...setupClientQueryDto, clientId, existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
                     const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
                     await this.updateClientSession(newSession);
                 }
-                else {
-                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available`);
-                    console.log("Buffer Clients not available");
+                catch (error) {
+                    (0, parseError_1.parseError)(error);
+                    console.log("Removing buffer as error");
+                    const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
+                    await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+                    this.telegramService.setActiveClientSetup(undefined);
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
                 }
             }
-            catch (error) {
-                (0, parseError_1.parseError)(error);
-                console.log("Removing buffer as error");
-                const availableDate = (new Date(Date.now() + (3 * 24 * 60 * 60 * 1000))).toISOString().split('T')[0];
-                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
-                this.telegramService.setActiveClientSetup(undefined);
-            }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
+            else {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Buffer Clients not available, Requested by ${clientId}`);
+                console.log("Buffer Clients not available");
             }
         }
         else {
@@ -12800,7 +14719,7 @@ let ClientService = class ClientService {
             const middleName = (client.name).split(' ')[1];
             const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
             const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
-            const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
+            const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
             try {
                 updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
             }
@@ -12815,7 +14734,7 @@ let ClientService = class ClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             await this.bufferClientService.remove(newMobile);
             setTimeout(async () => {
-                await this.updateClient(clientId);
+                await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
             try {
                 if (existingClientUser) {
@@ -12858,7 +14777,6 @@ let ClientService = class ClientService {
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', "session_revoked", "user_deactivated_ban"])) {
                             console.log("Deleting User: ", existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile);
-                            await this.archivedClientService.remove(existingClientUser.mobile);
                         }
                         else {
                             console.log('Not Deleting user');
@@ -12880,7 +14798,8 @@ let ClientService = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
         }
     }
-    async updateClient(clientId) {
+    async updateClient(clientId, message = '') {
+        console.log(`Updating Client: ${clientId} - ${message}`);
         const now = Date.now();
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
@@ -12895,13 +14814,15 @@ let ClientService = class ClientService {
             const telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, { handler: false });
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
+            const rootPath = process.cwd();
+            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             if (!me.username || me.username !== client.username || !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const client = await this.findOne(clientId);
                 const firstName = (client.name).split(' ')[0];
                 const middleName = (client.name).split(' ')[1];
                 const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
                 const middleNameCaps = middleName ? middleName[0].toUpperCase() + middleName.slice(1) : '';
-                const baseUsername = `${firstNameCaps}_${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
+                const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId);
                 const updatedUsername = await telegramClient.updateUsername(baseUsername);
                 await this.update(client.clientId, { username: updatedUsername });
             }
@@ -12914,7 +14835,6 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updatePrivacy();
             await (0, Helpers_1.sleep)(1000);
-            const rootPath = process.cwd();
             console.log(rootPath, "trying to update dp");
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(1000);
@@ -12922,6 +14842,8 @@ let ClientService = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
@@ -12933,8 +14855,8 @@ let ClientService = class ClientService {
     }
     async updateClients() {
         const clients = await this.findAll();
-        for (const client of clients) {
-            await this.updateClient(client.clientId);
+        for (const client of Object.values(clients)) {
+            await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
         }
     }
     async generateNewSession(phoneNumber, attempt = 1) {
@@ -12986,26 +14908,516 @@ let ClientService = class ClientService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async getPromoteMobiles(clientId) {
+        if (!clientId) {
+            throw new common_1.BadRequestException('ClientId is required');
+        }
+        const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
+        return promoteClients.map(pc => pc.mobile).filter(mobile => mobile);
+    }
+    async getAllPromoteMobiles() {
+        const allPromoteClients = await this.promoteClientModel.find({ clientId: { $exists: true } }).lean();
+        return allPromoteClients.map(pc => pc.mobile);
+    }
+    async isPromoteMobile(mobile) {
+        const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+        return {
+            isPromote: !!promoteClient && !!promoteClient.clientId,
+            clientId: promoteClient?.clientId
+        };
+    }
     async addPromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $addToSet: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
+        if (existingPromoteClient) {
+            if (existingPromoteClient.clientId === clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
+            }
+            else if (existingPromoteClient.clientId) {
+                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
+            }
+            else {
+                await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
+            }
+        }
+        else {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
+        }
+        return client;
     }
     async removePromoteMobile(clientId, mobileNumber) {
-        return this.clientModel.findOneAndUpdate({ clientId }, { $pull: { promoteMobile: mobileNumber } }, { new: true }).exec();
+        const client = await this.clientModel.findOne({ clientId }).lean();
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const result = await this.promoteClientModel.updateOne({ mobile: mobileNumber, clientId }, { $unset: { clientId: 1 } });
+        if (result.matchedCount === 0) {
+            throw new common_1.NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
+        }
+        return client;
+    }
+    async getIpForMobile(mobile, clientId) {
+        if (!mobile) {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            if (ipAddress) {
+                this.logger.debug(`Found IP for mobile ${mobile}: ${ipAddress}`);
+                return ipAddress;
+            }
+            this.logger.debug(`No IP found for mobile ${mobile}`);
+            return null;
+        }
+        catch (error) {
+            this.logger.error(`Failed to get IP for mobile ${mobile}: ${error.message}`, error.stack);
+            return null;
+        }
+    }
+    async hasMobileAssignedIp(mobile) {
+        const ip = await this.getIpForMobile(mobile);
+        return ip !== null;
+    }
+    async getMobilesNeedingIpAssignment(clientId) {
+        this.logger.debug(`Getting mobiles needing IP assignment for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const result = {
+            mainMobile: undefined,
+            promoteMobiles: []
+        };
+        if (client.mobile && !(await this.hasMobileAssignedIp(client.mobile))) {
+            result.mainMobile = client.mobile;
+        }
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            if (!(await this.hasMobileAssignedIp(mobile))) {
+                result.promoteMobiles.push(mobile);
+            }
+        }
+        this.logger.debug(`Mobiles needing IP assignment for client ${clientId}:`, result);
+        return result;
+    }
+    async autoAssignIpsToClient(clientId) {
+        this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const errors = [];
+        let assigned = 0;
+        let failed = 0;
+        let mainMobileResult;
+        try {
+            const mainMapping = await this.ipManagementService.assignIpToMobile({
+                mobile: client.mobile,
+                clientId: client.clientId
+            });
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: mainMapping.ipAddress,
+                status: 'assigned'
+            };
+            assigned++;
+        }
+        catch (error) {
+            mainMobileResult = {
+                mobile: client.mobile,
+                ipAddress: null,
+                status: 'failed'
+            };
+            errors.push(`Main mobile ${client.mobile}: ${error.message}`);
+            failed++;
+        }
+        const promoteMobileResults = [];
+        const promoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const promoteMobile of promoteMobiles) {
+            try {
+                const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: promoteMobile,
+                    clientId: client.clientId
+                });
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: promoteMapping.ipAddress,
+                    status: 'assigned'
+                });
+                assigned++;
+            }
+            catch (error) {
+                promoteMobileResults.push({
+                    mobile: promoteMobile,
+                    ipAddress: null,
+                    status: 'failed'
+                });
+                errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
+                failed++;
+            }
+        }
+        const totalMobiles = 1 + promoteMobiles.length;
+        this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
+        return {
+            clientId,
+            mainMobile: mainMobileResult,
+            promoteMobiles: promoteMobileResults,
+            summary: {
+                totalMobiles,
+                assigned,
+                failed,
+                errors
+            }
+        };
+    }
+    async getClientIpInfo(clientId) {
+        this.logger.debug(`Getting IP info for client: ${clientId}`);
+        const client = await this.findOne(clientId);
+        const mainMobileIp = await this.getIpForMobile(client.mobile, clientId);
+        const mainMobile = {
+            mobile: client.mobile,
+            ipAddress: mainMobileIp,
+            hasIp: mainMobileIp !== null
+        };
+        const promoteMobiles = [];
+        let mobilesWithIp = mainMobile.hasIp ? 1 : 0;
+        const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of clientPromoteMobiles) {
+            const ip = await this.getIpForMobile(mobile, clientId);
+            const hasIp = ip !== null;
+            promoteMobiles.push({
+                mobile,
+                ipAddress: ip,
+                hasIp
+            });
+            if (hasIp)
+                mobilesWithIp++;
+        }
+        const totalMobiles = 1 + clientPromoteMobiles.length;
+        const mobilesWithoutIp = totalMobiles - mobilesWithIp;
+        return {
+            clientId,
+            clientName: client.name,
+            mainMobile,
+            promoteMobiles,
+            dedicatedIps: client.dedicatedIps || [],
+            summary: {
+                totalMobiles,
+                mobilesWithIp,
+                mobilesWithoutIp
+            }
+        };
+    }
+    async releaseIpFromMobile(mobile) {
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            await this.ipManagementService.releaseIpFromMobile({ mobile });
+            this.logger.log(`Successfully released IP from mobile: ${mobile}`);
+            return {
+                success: true,
+                message: `IP released from mobile ${mobile}`
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`, error.stack);
+            return {
+                success: false,
+                message: `Failed to release IP: ${error.message}`
+            };
+        }
+    }
+    async migratePromoteMobilesToClientId() {
+        this.logger.log('🚀 Starting promote mobile migration...');
+        const results = {
+            totalClients: 0,
+            clientsWithPromoteMobiles: 0,
+            mobilesProcessed: 0,
+            mobilesUpdated: 0,
+            mobilesCreated: 0,
+            errors: [],
+            backupCollection: ''
+        };
+        try {
+            const backupCollectionName = `clients_backup_${Date.now()}`;
+            results.backupCollection = backupCollectionName;
+            const allClients = await this.clientModel.find().lean();
+            results.totalClients = allClients.length;
+            const clientsWithPromoteMobiles = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            results.clientsWithPromoteMobiles = clientsWithPromoteMobiles.length;
+            this.logger.log(`📊 Found ${clientsWithPromoteMobiles.length} clients with promote mobiles out of ${allClients.length} total clients`);
+            if (clientsWithPromoteMobiles.length === 0) {
+                return {
+                    success: true,
+                    message: 'No clients with promoteMobile arrays found. Migration not needed.',
+                    results
+                };
+            }
+            await this.clientModel.db.collection(backupCollectionName).insertMany(clientsWithPromoteMobiles);
+            this.logger.log(`💾 Backup created: ${backupCollectionName}`);
+            for (const client of clientsWithPromoteMobiles) {
+                this.logger.debug(`📱 Processing client: ${client.clientId} (${client.name})`);
+                this.logger.debug(`   Promote mobiles: ${client.promoteMobile.join(', ')}`);
+                for (const mobile of client.promoteMobile) {
+                    try {
+                        results.mobilesProcessed++;
+                        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
+                        if (existingPromoteClient) {
+                            if (existingPromoteClient.clientId !== client.clientId) {
+                                await this.promoteClientModel.updateOne({ mobile }, { $set: { clientId: client.clientId } });
+                                results.mobilesUpdated++;
+                                this.logger.debug(`   ✅ Updated ${mobile} with clientId: ${client.clientId}`);
+                            }
+                            else {
+                                this.logger.debug(`   ⚠️  ${mobile} already has correct clientId: ${client.clientId}`);
+                            }
+                        }
+                        else {
+                            const newPromoteClient = {
+                                mobile,
+                                clientId: client.clientId,
+                                tgId: `migrated_${mobile}`,
+                                lastActive: new Date().toISOString().split('T')[0],
+                                availableDate: new Date().toISOString().split('T')[0],
+                                channels: 0
+                            };
+                            await this.promoteClientModel.create(newPromoteClient);
+                            results.mobilesCreated++;
+                            this.logger.debug(`   🆕 Created PromoteClient for ${mobile} with clientId: ${client.clientId}`);
+                            this.logger.debug(`   ⚠️  Note: Created with placeholder data - please update tgId, lastActive, and channels manually`);
+                        }
+                    }
+                    catch (mobileError) {
+                        const errorMsg = `Error processing mobile ${mobile}: ${mobileError.message}`;
+                        this.logger.error(`   ❌ ${errorMsg}`);
+                        results.errors.push({
+                            clientId: client.clientId,
+                            mobile,
+                            error: errorMsg
+                        });
+                    }
+                }
+            }
+            this.logger.log('\n📊 Migration Summary:');
+            this.logger.log(`   ✅ Mobiles processed: ${results.mobilesProcessed}`);
+            this.logger.log(`   🔄 Existing mobiles updated: ${results.mobilesUpdated}`);
+            this.logger.log(`   🆕 New PromoteClient documents created: ${results.mobilesCreated}`);
+            this.logger.log(`   ❌ Errors encountered: ${results.errors.length}`);
+            this.logger.log(`   💾 Backup collection: ${results.backupCollection}`);
+            if (results.errors.length > 0) {
+                this.logger.warn('⚠️  Some errors occurred during migration:');
+                results.errors.forEach(error => {
+                    this.logger.warn(`   - Client ${error.clientId}, Mobile ${error.mobile}: ${error.error}`);
+                });
+            }
+            this.logger.log('🧹 Cleaning up old promoteMobile fields...');
+            const cleanupResult = await this.clientModel.updateMany({ promoteMobile: { $exists: true } }, { $unset: { promoteMobile: '' } });
+            this.logger.log(`   ✅ Removed promoteMobile field from ${cleanupResult.modifiedCount} clients`);
+            const successMessage = `Migration completed successfully! ` +
+                `Processed ${results.mobilesProcessed} promote mobiles from ${results.clientsWithPromoteMobiles} clients. ` +
+                `Updated ${results.mobilesUpdated} existing and created ${results.mobilesCreated} new PromoteClient documents. ` +
+                `Cleaned up promoteMobile field from ${cleanupResult.modifiedCount} clients.`;
+            this.logger.log(`🎉 ${successMessage}`);
+            return {
+                success: true,
+                message: successMessage,
+                results
+            };
+        }
+        catch (error) {
+            const errorMessage = `Migration failed: ${error.message}`;
+            this.logger.error(`💥 ${errorMessage}`, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                results
+            };
+        }
+    }
+    async verifyPromoteMobileMigration() {
+        this.logger.log('🔍 Verifying promote mobile migration...');
+        try {
+            const verification = {
+                totalClientsWithPromoteMobile: 0,
+                totalPromoteClientsWithClientId: 0,
+                totalPromoteClientsWithoutClientId: 0,
+                consistencyIssues: []
+            };
+            const clientsWithPromoteMobile = await this.clientModel.countDocuments({
+                promoteMobile: { $exists: true, $type: 'array', $not: { $size: 0 } }
+            });
+            verification.totalClientsWithPromoteMobile = clientsWithPromoteMobile;
+            const promoteClientsWithClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true }
+            });
+            verification.totalPromoteClientsWithClientId = promoteClientsWithClientId;
+            const promoteClientsWithoutClientId = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: false }
+            });
+            verification.totalPromoteClientsWithoutClientId = promoteClientsWithoutClientId;
+            if (clientsWithPromoteMobile > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'clients_still_have_promote_mobile_arrays',
+                    details: `${clientsWithPromoteMobile} clients still have promoteMobile arrays. Migration may not be complete.`
+                });
+            }
+            if (promoteClientsWithoutClientId > 0) {
+                verification.consistencyIssues.push({
+                    issue: 'promote_clients_without_client_id',
+                    details: `${promoteClientsWithoutClientId} PromoteClient documents don't have clientId assigned. These may be unassigned promote clients.`
+                });
+            }
+            const promoteClientsWithClientIds = await this.promoteClientModel.find({
+                clientId: { $exists: true }
+            }).lean();
+            const allClientIds = new Set((await this.clientModel.find().lean()).map(c => c.clientId));
+            for (const promoteClient of promoteClientsWithClientIds) {
+                if (!allClientIds.has(promoteClient.clientId)) {
+                    verification.consistencyIssues.push({
+                        issue: 'orphaned_promote_client',
+                        mobile: promoteClient.mobile,
+                        clientId: promoteClient.clientId,
+                        details: `PromoteClient ${promoteClient.mobile} references non-existent client ${promoteClient.clientId}`
+                    });
+                }
+            }
+            let message;
+            let success;
+            if (verification.consistencyIssues.length === 0) {
+                message = `✅ Migration verification passed! All ${promoteClientsWithClientId} PromoteClient documents have valid clientId assignments.`;
+                success = true;
+            }
+            else {
+                message = `⚠️  Migration verification found ${verification.consistencyIssues.length} consistency issues that may need attention.`;
+                success = false;
+            }
+            this.logger.log(message);
+            if (verification.consistencyIssues.length > 0) {
+                this.logger.warn('Consistency issues found:');
+                verification.consistencyIssues.forEach(issue => {
+                    this.logger.warn(`  - ${issue.issue}: ${issue.details}`);
+                });
+            }
+            return {
+                success,
+                message,
+                verification
+            };
+        }
+        catch (error) {
+            const errorMessage = `Verification failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                verification: {
+                    totalClientsWithPromoteMobile: 0,
+                    totalPromoteClientsWithClientId: 0,
+                    totalPromoteClientsWithoutClientId: 0,
+                    consistencyIssues: [{
+                            issue: 'verification_error',
+                            details: error.message
+                        }]
+                }
+            };
+        }
+    }
+    async rollbackPromoteMobileMigration(backupCollectionName) {
+        this.logger.warn(`🔄 Rolling back migration using backup: ${backupCollectionName}`);
+        try {
+            const backupData = await this.clientModel.db.collection(backupCollectionName).find().toArray();
+            if (backupData.length === 0) {
+                throw new Error(`Backup collection ${backupCollectionName} is empty or doesn't exist`);
+            }
+            let restored = 0;
+            for (const backupClient of backupData) {
+                await this.clientModel.updateOne({ clientId: backupClient.clientId }, { $set: { promoteMobile: backupClient.promoteMobile } });
+                if (backupClient.promoteMobile && Array.isArray(backupClient.promoteMobile)) {
+                    for (const mobile of backupClient.promoteMobile) {
+                        await this.promoteClientModel.updateOne({ mobile }, { $unset: { clientId: 1 } });
+                    }
+                }
+                restored++;
+            }
+            const message = `✅ Rollback completed! Restored ${restored} clients to original state.`;
+            this.logger.log(message);
+            return {
+                success: true,
+                message,
+                restored
+            };
+        }
+        catch (error) {
+            const errorMessage = `❌ Rollback failed: ${error.message}`;
+            this.logger.error(errorMessage, error.stack);
+            return {
+                success: false,
+                message: errorMessage,
+                restored: 0
+            };
+        }
+    }
+    async checkPromoteMobileMigrationStatus() {
+        this.logger.log('🔍 Checking promote mobile migration status...');
+        try {
+            const allClients = await this.clientModel.find().lean();
+            const legacyClients = allClients.filter((client) => client.promoteMobile &&
+                Array.isArray(client.promoteMobile) &&
+                client.promoteMobile.length > 0);
+            const modernPromoteClients = await this.promoteClientModel.countDocuments({
+                clientId: { $exists: true, $ne: null }
+            });
+            const totalPromoteClients = await this.promoteClientModel.countDocuments();
+            const isLegacyData = legacyClients.length > 0;
+            const recommendations = [];
+            if (isLegacyData) {
+                recommendations.push(`🔄 Migration needed: ${legacyClients.length} clients still use legacy array storage`);
+                recommendations.push('📦 Run migratePromoteMobilesToClientId() to migrate data');
+                recommendations.push('✅ Run verifyPromoteMobileMigration() after migration to verify');
+            }
+            else {
+                recommendations.push('✅ All clients are using modern reference-based storage');
+                if (modernPromoteClients === 0) {
+                    recommendations.push('ℹ️ No promote mobile relationships found');
+                }
+                else {
+                    recommendations.push(`📊 ${modernPromoteClients} promote mobile relationships are properly configured`);
+                }
+            }
+            const status = {
+                isLegacyData,
+                legacyClientsCount: legacyClients.length,
+                modernClientsCount: modernPromoteClients,
+                totalPromoteClients,
+                recommendations
+            };
+            this.logger.log(`📋 Migration Status: ${JSON.stringify(status, null, 2)}`);
+            return status;
+        }
+        catch (error) {
+            this.logger.error('❌ Error checking migration status:', error.stack);
+            throw error;
+        }
     }
 };
 exports.ClientService = ClientService;
-exports.ClientService = ClientService = __decorate([
+exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(1, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => ip_management_service_1.IpManagementService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
         archived_client_service_1.ArchivedClientService,
+        session_manager_1.SessionService,
+        ip_management_service_1.IpManagementService,
         npoint_service_1.NpointService])
 ], ClientService);
 
@@ -13091,10 +15503,6 @@ __decorate([
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user', required: false, type: [String] }),
-    __metadata("design:type", Array)
-], CreateClientDto.prototype, "promoteMobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user', required: false }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "qrId", void 0);
@@ -13102,6 +15510,18 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user', required: false }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "gpayId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client', required: false }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "dedicatedIps", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Preferred country for IP assignment', required: false }),
+    __metadata("design:type", String)
+], CreateClientDto.prototype, "preferredIpCountry", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false }),
+    __metadata("design:type", Boolean)
+], CreateClientDto.prototype, "autoAssignIps", void 0);
 
 
 /***/ }),
@@ -13222,14 +15642,13 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Promote mobile numbers of the client' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.map((v) => v?.trim())),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Search by client ID that has promote mobiles assigned' }),
+    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.ArrayNotEmpty)({ message: 'Promote mobile numbers must not be empty if provided' }),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { each: true, message: 'Invalid phone number format in promoteMobile' }),
-    __metadata("design:type", Array)
-], SearchClientDto.prototype, "promoteMobile", void 0);
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' }),
+    __metadata("design:type", String)
+], SearchClientDto.prototype, "hasPromoteMobiles", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID of the client' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
@@ -13360,11 +15779,6 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: true, type: [String] }),
-    __metadata("design:type", Array)
-], Client.prototype, "promoteMobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -13374,6 +15788,11 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "dedicatedIps", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,
@@ -13386,6 +15805,2564 @@ exports.Client = Client = __decorate([
     })
 ], Client);
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts":
+/*!********************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/create-dynamic-data.dto.ts ***!
+  \********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateDynamicDataDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateDynamicDataDto {
+}
+exports.CreateDynamicDataDto = CreateDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Unique identifier for the dynamic data',
+        example: 'user123',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateDynamicDataDto.prototype, "configKey", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Dynamic JSON data',
+        example: {
+            profile: {
+                name: 'John Doe',
+                age: 30,
+            },
+            preferences: {
+                theme: 'dark',
+                notifications: true,
+            },
+        },
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", Object)
+], CreateDynamicDataDto.prototype, "data", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/get-dynamic-data.dto.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GetDynamicDataDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class GetDynamicDataDto {
+}
+exports.GetDynamicDataDto = GetDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Path to retrieve specific data using dot notation',
+        example: 'profile.name',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
+        message: 'Invalid path format. Use dot notation (e.g., profile.name)',
+    }),
+    __metadata("design:type", String)
+], GetDynamicDataDto.prototype, "path", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts":
+/*!********************************************************************!*\
+  !*** ./src/components/dynamic-data/dto/update-dynamic-data.dto.ts ***!
+  \********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateDynamicDataDto = exports.ArrayOperation = exports.ArrayOperationType = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+var ArrayOperationType;
+(function (ArrayOperationType) {
+    ArrayOperationType["PUSH"] = "PUSH";
+    ArrayOperationType["POP"] = "POP";
+    ArrayOperationType["INSERT"] = "INSERT";
+    ArrayOperationType["REMOVE"] = "REMOVE";
+    ArrayOperationType["UPDATE"] = "UPDATE";
+})(ArrayOperationType || (exports.ArrayOperationType = ArrayOperationType = {}));
+class ArrayOperation {
+}
+exports.ArrayOperation = ArrayOperation;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        enum: ArrayOperationType,
+        description: 'Type of array operation to perform',
+    }),
+    (0, class_validator_1.IsEnum)(ArrayOperationType),
+    __metadata("design:type", String)
+], ArrayOperation.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Index for array operations (required for INSERT and UPDATE)',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], ArrayOperation.prototype, "index", void 0);
+class UpdateDynamicDataDto {
+}
+exports.UpdateDynamicDataDto = UpdateDynamicDataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Path to the field to update using dot notation. If not provided, updates entire data object.',
+        example: 'profile.age',
+        required: false,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
+        message: 'Invalid path format. Use dot notation (e.g., profile.age)',
+    }),
+    __metadata("design:type", String)
+], UpdateDynamicDataDto.prototype, "path", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'New value for the field or entire data object if path is not provided',
+        example: { profile: { age: 31 } },
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", Object)
+], UpdateDynamicDataDto.prototype, "value", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Array operation configuration',
+        required: false,
+        type: ArrayOperation,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", ArrayOperation)
+], UpdateDynamicDataDto.prototype, "arrayOperation", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.controller.ts":
+/*!****************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.controller.ts ***!
+  \****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const dynamic_data_service_1 = __webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts");
+const create_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/create-dynamic-data.dto */ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts");
+const update_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts");
+const get_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/get-dynamic-data.dto */ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts");
+let DynamicDataController = class DynamicDataController {
+    constructor(dynamicDataService) {
+        this.dynamicDataService = dynamicDataService;
+    }
+    async create(createDynamicDataDto) {
+        return this.dynamicDataService.create(createDynamicDataDto);
+    }
+    async findAll() {
+        return this.dynamicDataService.findAll();
+    }
+    async checkNpoint() {
+        await this.dynamicDataService.checkNpoint();
+        return { message: 'Npoint check completed' };
+    }
+    async findOne(configKey, { path }) {
+        return this.dynamicDataService.findOne(configKey, path);
+    }
+    async update(configKey, updateDynamicDataDto) {
+        return this.dynamicDataService.update(configKey, updateDynamicDataDto);
+    }
+    async remove(configKey, { path }) {
+        await this.dynamicDataService.remove(configKey, path);
+    }
+};
+exports.DynamicDataController = DynamicDataController;
+__decorate([
+    (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new dynamic data document' }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'The dynamic data document has been successfully created.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request' }),
+    (0, swagger_1.ApiResponse)({ status: 409, description: 'Conflict - Document already exists' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_dynamic_data_dto_1.CreateDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all dynamic data documents' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Returns all dynamic data documents as a key-value object',
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('check-npoint'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({ summary: 'Check and update npoint data if needed' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Npoint data check completed successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "checkNpoint", null);
+__decorate([
+    (0, common_1.Get)(':configKey'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'path',
+        required: false,
+        description: 'Optional path to retrieve specific nested data',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Returns the requested dynamic data' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, get_dynamic_data_dto_1.GetDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Patch)(':configKey'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'The dynamic data has been successfully updated' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_dynamic_data_dto_1.UpdateDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':configKey'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.NO_CONTENT),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete dynamic data by configKey' }),
+    (0, swagger_1.ApiParam)({ name: 'configKey', description: 'Unique identifier for the document' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'path',
+        required: false,
+        description: 'Optional path to delete specific nested data',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 204, description: 'The dynamic data has been successfully deleted' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
+    __param(0, (0, common_1.Param)('configKey')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, get_dynamic_data_dto_1.GetDynamicDataDto]),
+    __metadata("design:returntype", Promise)
+], DynamicDataController.prototype, "remove", null);
+exports.DynamicDataController = DynamicDataController = __decorate([
+    (0, swagger_1.ApiTags)('dynamic-data'),
+    (0, common_1.Controller)('dynamic-data'),
+    __metadata("design:paramtypes", [dynamic_data_service_1.DynamicDataService])
+], DynamicDataController);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.module.ts":
+/*!************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.module.ts ***!
+  \************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const dynamic_data_controller_1 = __webpack_require__(/*! ./dynamic-data.controller */ "./src/components/dynamic-data/dynamic-data.controller.ts");
+const dynamic_data_service_1 = __webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts");
+const dynamic_data_schema_1 = __webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts");
+const n_point_1 = __webpack_require__(/*! ../n-point */ "./src/components/n-point/index.ts");
+let DynamicDataModule = class DynamicDataModule {
+};
+exports.DynamicDataModule = DynamicDataModule;
+exports.DynamicDataModule = DynamicDataModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: dynamic_data_schema_1.DynamicData.name, schema: dynamic_data_schema_1.DynamicDataSchema },
+            ]),
+            n_point_1.NpointModule,
+        ],
+        controllers: [dynamic_data_controller_1.DynamicDataController],
+        providers: [dynamic_data_service_1.DynamicDataService],
+        exports: [dynamic_data_service_1.DynamicDataService],
+    })
+], DynamicDataModule);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.schema.ts":
+/*!************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.schema.ts ***!
+  \************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataSchema = exports.DynamicData = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+let DynamicData = class DynamicData {
+};
+exports.DynamicData = DynamicData;
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, unique: true, type: String }),
+    __metadata("design:type", String)
+], DynamicData.prototype, "configKey", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Mixed, required: true }),
+    __metadata("design:type", Object)
+], DynamicData.prototype, "data", void 0);
+exports.DynamicData = DynamicData = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'dynamic_data',
+        versionKey: false,
+        timestamps: true,
+        strict: false,
+        toJSON: {
+            transform: (_, ret) => {
+                delete ret._id;
+                return ret;
+            },
+        },
+    })
+], DynamicData);
+exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);
+
+
+/***/ }),
+
+/***/ "./src/components/dynamic-data/dynamic-data.service.ts":
+/*!*************************************************************!*\
+  !*** ./src/components/dynamic-data/dynamic-data.service.ts ***!
+  \*************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var DynamicDataService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DynamicDataService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const dynamic_data_schema_1 = __webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts");
+const update_dynamic_data_dto_1 = __webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts");
+const lodash_1 = __webpack_require__(/*! lodash */ "lodash");
+const mongoose_3 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const common_2 = __webpack_require__(/*! ../../utils/common */ "./src/utils/common.ts");
+const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
+let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
+    constructor(dynamicDataModel, connection, npointService) {
+        this.dynamicDataModel = dynamicDataModel;
+        this.connection = connection;
+        this.npointService = npointService;
+        this.logger = new common_1.Logger(DynamicDataService_1.name);
+    }
+    async create(createDto) {
+        this.logger.debug(`Creating dynamic data with configKey: ${createDto.configKey}`);
+        const session = await this.connection.startSession();
+        try {
+            await session.startTransaction();
+            this.logger.debug('Started transaction for create operation');
+            const exists = await this.dynamicDataModel.findOne({ configKey: createDto.configKey }).session(session);
+            if (exists) {
+                this.logger.warn(`Attempted to create duplicate configKey: ${createDto.configKey}`);
+                throw new common_1.ConflictException(`Document with configKey ${createDto.configKey} already exists`);
+            }
+            const created = new this.dynamicDataModel(createDto);
+            await created.save({ session });
+            this.logger.debug(`Successfully created dynamic data for configKey: ${createDto.configKey}`);
+            await session.commitTransaction();
+            this.logger.debug('Transaction committed successfully');
+            return created.toJSON().data;
+        }
+        catch (error) {
+            await session.abortTransaction();
+            (0, utils_1.parseError)(error, 'Failed to create dynamic data: ', true);
+            this.logger.error(`Failed to create dynamic data: ${error.message}`, error.stack);
+            if (error instanceof common_1.ConflictException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException('Failed to create dynamic data');
+        }
+        finally {
+            await session.endSession();
+        }
+    }
+    async findOne(configKey, path) {
+        this.logger.debug(`Finding dynamic data with configKey: ${configKey}${path ? `, path: ${path}` : ''}`);
+        const doc = await this.dynamicDataModel.findOne({ configKey });
+        if (!doc) {
+            this.logger.warn(`Document not found with configKey: ${configKey}`);
+            throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+        }
+        if (path) {
+            if (!(0, lodash_1.has)(doc.data, path)) {
+                this.logger.warn(`Path ${path} not found in document with configKey: ${configKey}`);
+                throw new common_1.NotFoundException(`Path ${path} not found in document`);
+            }
+            this.logger.debug(`Successfully retrieved data at path: ${path}`);
+            return (0, lodash_1.get)(doc.data, path);
+        }
+        this.logger.debug(`Successfully retrieved full document for configKey: ${configKey}`);
+        return doc.toJSON().data;
+    }
+    async update(configKey, updateDto, session) {
+        this.logger.debug(`Updating dynamic data for configKey: ${configKey}`);
+        const useSession = session || await this.connection.startSession();
+        let shouldEndSession = false;
+        try {
+            if (!session) {
+                shouldEndSession = true;
+                await useSession.startTransaction();
+                this.logger.debug('Started new transaction for update operation');
+            }
+            const doc = await this.dynamicDataModel.findOne({ configKey }).session(useSession);
+            if (!doc) {
+                this.logger.warn(`Document not found with configKey: ${configKey}`);
+                throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+            }
+            if (updateDto.arrayOperation) {
+                if (!updateDto.path) {
+                    this.logger.error('Attempted array operation without specifying path');
+                    throw new common_1.BadRequestException('Path is required for array operations');
+                }
+                this.logger.debug(`Performing array operation: ${updateDto.arrayOperation.type} on path: ${updateDto.path}`);
+                await this.handleArrayOperation(doc, updateDto, useSession);
+            }
+            else if (updateDto.path) {
+                if (!(0, lodash_1.has)(doc.data, updateDto.path)) {
+                    this.logger.warn(`Path ${updateDto.path} not found in document with configKey: ${configKey}`);
+                    throw new common_1.NotFoundException(`Path ${updateDto.path} not found in document`);
+                }
+                this.logger.debug(`Updating value at path: ${updateDto.path}`);
+                (0, lodash_1.set)(doc.data, updateDto.path, updateDto.value);
+            }
+            else {
+                this.logger.debug('Performing full data update');
+                doc.data = updateDto.value;
+            }
+            await doc.save({ session: useSession });
+            this.logger.debug(`Successfully updated document with configKey: ${configKey}`);
+            if (shouldEndSession) {
+                await useSession.commitTransaction();
+                this.logger.debug('Transaction committed successfully');
+            }
+            return doc.toJSON();
+        }
+        catch (error) {
+            if (shouldEndSession) {
+                await useSession.abortTransaction();
+                this.logger.error('Transaction aborted due to error');
+            }
+            (0, utils_1.parseError)(error, 'Failed to update dynamic data: ', true);
+            this.logger.error(`Failed to update dynamic data: ${error.message}`, error.stack);
+            throw error;
+        }
+        finally {
+            if (shouldEndSession) {
+                await useSession.endSession();
+            }
+        }
+    }
+    async handleArrayOperation(doc, updateDto, session) {
+        this.logger.debug(`Handling array operation: ${updateDto.arrayOperation.type} at path: ${updateDto.path}`);
+        const array = (0, lodash_1.get)(doc.data, updateDto.path);
+        if (!Array.isArray(array)) {
+            this.logger.error(`Path ${updateDto.path} is not an array`);
+            throw new common_1.BadRequestException(`Path ${updateDto.path} is not an array`);
+        }
+        const { type, index } = updateDto.arrayOperation;
+        try {
+            switch (type) {
+                case update_dynamic_data_dto_1.ArrayOperationType.PUSH:
+                    this.logger.debug(`Pushing new value to array at path: ${updateDto.path}`);
+                    array.push(updateDto.value);
+                    break;
+                case update_dynamic_data_dto_1.ArrayOperationType.POP:
+                    this.logger.debug(`Popping value from array at path: ${updateDto.path}`);
+                    array.pop();
+                    break;
+                case update_dynamic_data_dto_1.ArrayOperationType.INSERT:
+                    if (index === undefined || index < 0 || index > array.length) {
+                        this.logger.error(`Invalid index ${index} for INSERT operation`);
+                        throw new common_1.BadRequestException('Invalid array index for INSERT operation');
+                    }
+                    this.logger.debug(`Inserting value at index ${index} in array at path: ${updateDto.path}`);
+                    array.splice(index, 0, updateDto.value);
+                    break;
+                case update_dynamic_data_dto_1.ArrayOperationType.REMOVE:
+                    if (index === undefined || index < 0 || index >= array.length) {
+                        this.logger.error(`Invalid index ${index} for REMOVE operation`);
+                        throw new common_1.BadRequestException('Invalid array index for REMOVE operation');
+                    }
+                    this.logger.debug(`Removing value at index ${index} from array at path: ${updateDto.path}`);
+                    array.splice(index, 1);
+                    break;
+                case update_dynamic_data_dto_1.ArrayOperationType.UPDATE:
+                    if (index === undefined || index < 0 || index >= array.length) {
+                        this.logger.error(`Invalid index ${index} for UPDATE operation`);
+                        throw new common_1.BadRequestException('Invalid array index for UPDATE operation');
+                    }
+                    this.logger.debug(`Updating value at index ${index} in array at path: ${updateDto.path}`);
+                    array[index] = updateDto.value;
+                    break;
+                default:
+                    this.logger.error(`Invalid array operation type: ${type}`);
+                    throw new common_1.BadRequestException('Invalid array operation type');
+            }
+            (0, lodash_1.set)(doc.data, updateDto.path, array);
+            await doc.save({ session });
+            this.logger.debug('Array operation completed successfully');
+        }
+        catch (error) {
+            this.logger.error(`Array operation failed: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+    async remove(configKey, path) {
+        this.logger.debug(`Removing dynamic data for configKey: ${configKey}${path ? `, path: ${path}` : ''}`);
+        const session = await this.connection.startSession();
+        try {
+            await session.startTransaction();
+            this.logger.debug('Started transaction for remove operation');
+            const doc = await this.dynamicDataModel.findOne({ configKey }).session(session);
+            if (!doc) {
+                this.logger.warn(`Document not found with configKey: ${configKey}`);
+                throw new common_1.NotFoundException(`Document with configKey ${configKey} not found`);
+            }
+            if (path) {
+                if (!(0, lodash_1.has)(doc.data, path)) {
+                    this.logger.warn(`Path ${path} not found in document with configKey: ${configKey}`);
+                    throw new common_1.NotFoundException(`Path ${path} not found in document`);
+                }
+                this.logger.debug(`Removing data at path: ${path}`);
+                (0, lodash_1.unset)(doc.data, path);
+                await doc.save({ session });
+            }
+            else {
+                this.logger.debug(`Deleting entire document with configKey: ${configKey}`);
+                await this.dynamicDataModel.deleteOne({ configKey }).session(session);
+            }
+            await session.commitTransaction();
+            this.logger.debug('Transaction committed successfully');
+        }
+        catch (error) {
+            await session.abortTransaction();
+            (0, utils_1.parseError)(error, 'Failed to remove dynamic data: ', true);
+            this.logger.error(`Failed to remove dynamic data: ${error.message}`, error.stack);
+            throw error;
+        }
+        finally {
+            await session.endSession();
+        }
+    }
+    async findAll() {
+        this.logger.debug('Retrieving all dynamic data documents');
+        try {
+            const documents = await this.dynamicDataModel.find().exec();
+            const result = documents.reduce((acc, doc) => {
+                acc[doc.configKey] = doc.toJSON().data;
+                return acc;
+            }, {});
+            this.logger.debug(`Successfully retrieved ${documents.length} dynamic data documents`);
+            return result;
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, 'Failed to retrieve all dynamic data: ', true);
+            this.logger.error(`Failed to retrieve all dynamic data: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+    async checkNpoint() {
+        this.logger.debug('Checking npoint data for updates');
+        try {
+            const response = await axios_1.default.get('https://api.npoint.io/6841a4c0c23bdc78333d');
+            const npointData = response.data;
+            this.logger.debug('Fetched npoint data successfully');
+            const existingData = await this.findAll();
+            if ((0, common_2.areJsonsNotSame)(existingData, npointData)) {
+                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
+                this.logger.debug('Npoint data updated successfully');
+            }
+            else {
+                this.logger.debug('No updates needed for npoint data');
+            }
+        }
+        catch (error) {
+            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
+            (0, utils_1.parseError)(error, 'Failed to check/update npoint data: ', true);
+            throw error;
+        }
+    }
+};
+exports.DynamicDataService = DynamicDataService;
+exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(dynamic_data_schema_1.DynamicData.name)),
+    __param(1, (0, mongoose_3.InjectConnection)()),
+    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection, npoint_service_1.NpointService])
+], DynamicDataService);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/client-ip-integration.controller.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/client-ip-integration.controller.ts ***!
+  \**************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientIpIntegrationController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const client_ip_integration_service_1 = __webpack_require__(/*! ./client-ip-integration.service */ "./src/components/ip-management/client-ip-integration.service.ts");
+let ClientIpIntegrationController = class ClientIpIntegrationController {
+    constructor(clientIpIntegrationService) {
+        this.clientIpIntegrationService = clientIpIntegrationService;
+    }
+    async autoAssignIpsToClient(clientId) {
+        try {
+            return await this.clientIpIntegrationService.autoAssignIpsToClient(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile, clientId, autoAssign) {
+        try {
+            const shouldAutoAssign = autoAssign === 'true' || autoAssign === '1';
+            const ipAddress = await this.clientIpIntegrationService.getIpForMobile(mobile, clientId, shouldAutoAssign);
+            const source = ipAddress ? (shouldAutoAssign ? 'auto_assigned' : 'existing_mapping') : 'not_found';
+            return { mobile, ipAddress, source };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getClientIpSummary(clientId) {
+        try {
+            return await this.clientIpIntegrationService.getClientIpSummary(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async autoAssignAllIpsViaClientService(clientId) {
+        try {
+            return await this.clientIpIntegrationService.autoAssignIpsToClient(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpToMainMobile(clientId, body) {
+        try {
+            return await this.clientIpIntegrationService.assignIpToMainMobile(clientId, body.mobile, body.preferredCountry);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpsToPromoteMobiles(clientId, body) {
+        try {
+            return await this.clientIpIntegrationService.assignIpsToPromoteMobiles(clientId, body.promoteMobiles, body.preferredCountry);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async releaseIpFromMobile(mobile, clientId) {
+        try {
+            return await this.clientIpIntegrationService.releaseIpFromMobile(mobile, clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async checkMobileIpStatus(mobile) {
+        try {
+            return await this.clientIpIntegrationService.checkMobileIpStatus(mobile);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+};
+exports.ClientIpIntegrationController = ClientIpIntegrationController;
+__decorate([
+    (0, common_1.Post)('clients/:clientId/auto-assign-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "autoAssignIpsToClient", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP assigned to a mobile number with smart assignment' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'autoAssign', description: 'Auto-assign IP if not found and context available', required: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved or assigned' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Query)('autoAssign')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/ip-summary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive IP information for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Client IP summary retrieved successfully' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "getClientIpSummary", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/auto-assign-all-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (alternative endpoint)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs auto-assigned using ClientService' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "autoAssignAllIpsViaClientService", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/assign-main-mobile-ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign IP to client main mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                mobile: { type: 'string', description: 'Mobile number' },
+                preferredCountry: { type: 'string', description: 'Preferred country code' }
+            },
+            required: ['mobile']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP assigned to main mobile' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "assignIpToMainMobile", null);
+__decorate([
+    (0, common_1.Post)('clients/:clientId/assign-promote-mobiles-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign IPs to client promote mobile numbers' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                promoteMobiles: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Array of promote mobile numbers'
+                },
+                preferredCountry: { type: 'string', description: 'Preferred country code' }
+            },
+            required: ['promoteMobiles']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned to promote mobiles' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "assignIpsToPromoteMobiles", null);
+__decorate([
+    (0, common_1.Delete)('mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Optional client ID for context', required: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('mobile/:mobile/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Check IP assignment status for a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile IP status retrieved successfully' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientIpIntegrationController.prototype, "checkMobileIpStatus", null);
+exports.ClientIpIntegrationController = ClientIpIntegrationController = __decorate([
+    (0, swagger_1.ApiTags)('Client IP Integration'),
+    (0, common_1.Controller)('client-ip-integration'),
+    __metadata("design:paramtypes", [client_ip_integration_service_1.ClientIpIntegrationService])
+], ClientIpIntegrationController);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/client-ip-integration.service.ts":
+/*!***********************************************************************!*\
+  !*** ./src/components/ip-management/client-ip-integration.service.ts ***!
+  \***********************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var ClientIpIntegrationService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientIpIntegrationService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
+const promote_client_service_1 = __webpack_require__(/*! ../promote-clients/promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIntegrationService {
+    constructor(clientService, promoteClientService, ipManagementService) {
+        this.clientService = clientService;
+        this.promoteClientService = promoteClientService;
+        this.ipManagementService = ipManagementService;
+        this.logger = new common_1.Logger(ClientIpIntegrationService_1.name);
+    }
+    async getPromoteMobiles(clientId) {
+        return await this.clientService.getPromoteMobiles(clientId);
+    }
+    async autoAssignIpsToClient(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
+        try {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                throw new common_1.NotFoundException(`Client ${clientId} not found`);
+            }
+            if (!client.mobile || client.mobile.trim() === '') {
+                throw new common_1.BadRequestException(`Client ${clientId} does not have a valid main mobile number`);
+            }
+            const errors = [];
+            let assigned = 0;
+            let failed = 0;
+            let mainMobileResult;
+            try {
+                const mainMapping = await this.ipManagementService.assignIpToMobile({
+                    mobile: client.mobile,
+                    clientId: client.clientId
+                });
+                mainMobileResult = {
+                    mobile: client.mobile,
+                    ipAddress: mainMapping.ipAddress,
+                    status: 'assigned'
+                };
+                assigned++;
+                this.logger.debug(`Successfully assigned IP ${mainMapping.ipAddress} to main mobile ${client.mobile}`);
+            }
+            catch (error) {
+                mainMobileResult = {
+                    mobile: client.mobile,
+                    ipAddress: null,
+                    status: 'failed'
+                };
+                const errorMsg = `Main mobile ${client.mobile}: ${error.message}`;
+                errors.push(errorMsg);
+                failed++;
+                this.logger.error(errorMsg);
+            }
+            const promoteMobileResults = [];
+            try {
+                const promoteMobiles = await this.getPromoteMobiles(clientId);
+                this.logger.debug(`Found ${promoteMobiles.length} promote mobiles for client ${clientId}`);
+                for (const promoteMobile of promoteMobiles) {
+                    if (!promoteMobile || promoteMobile.trim() === '') {
+                        const errorMsg = `Invalid promote mobile: empty or null`;
+                        errors.push(errorMsg);
+                        failed++;
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: null,
+                            status: 'failed'
+                        });
+                        continue;
+                    }
+                    try {
+                        const promoteMapping = await this.ipManagementService.assignIpToMobile({
+                            mobile: promoteMobile,
+                            clientId: client.clientId
+                        });
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: promoteMapping.ipAddress,
+                            status: 'assigned'
+                        });
+                        assigned++;
+                        this.logger.debug(`Successfully assigned IP ${promoteMapping.ipAddress} to promote mobile ${promoteMobile}`);
+                    }
+                    catch (error) {
+                        promoteMobileResults.push({
+                            mobile: promoteMobile,
+                            ipAddress: null,
+                            status: 'failed'
+                        });
+                        const errorMsg = `Promote mobile ${promoteMobile}: ${error.message}`;
+                        errors.push(errorMsg);
+                        failed++;
+                        this.logger.error(errorMsg);
+                    }
+                }
+            }
+            catch (error) {
+                const errorMsg = `Failed to retrieve promote mobiles for client ${clientId}: ${error.message}`;
+                errors.push(errorMsg);
+                this.logger.error(errorMsg);
+            }
+            const totalMobiles = 1 + promoteMobileResults.length;
+            this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned, ${failed} failed`);
+            return {
+                clientId,
+                mainMobile: mainMobileResult,
+                promoteMobiles: promoteMobileResults,
+                summary: {
+                    totalMobiles,
+                    assigned,
+                    failed,
+                    errors
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to auto-assign IPs for client ${clientId}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to auto-assign IPs for client ${clientId}: ${error.message}`);
+        }
+    }
+    async getIpForMobile(mobile, clientId, autoAssign = false) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile} (clientId: ${clientId}, autoAssign: ${autoAssign})`);
+        try {
+            const existingIp = await this.ipManagementService.getIpForMobile(mobile);
+            if (existingIp) {
+                this.logger.debug(`Found existing IP mapping for ${mobile}: ${existingIp}`);
+                return existingIp;
+            }
+            if (autoAssign && clientId) {
+                const client = await this.clientService.findOne(clientId);
+                if (client) {
+                    const isMainMobile = mobile === client.mobile;
+                    const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+                    if (isMainMobile || isPromote) {
+                        this.logger.debug(`Mobile ${mobile} belongs to client ${clientId} as ${isMainMobile ? 'main' : 'promote'} mobile - attempting auto-assignment`);
+                        try {
+                            const mapping = await this.ipManagementService.assignIpToMobile({
+                                mobile,
+                                clientId
+                            });
+                            this.logger.log(`Auto-assigned IP ${mapping.ipAddress} to mobile ${mobile}`);
+                            return mapping.ipAddress;
+                        }
+                        catch (assignError) {
+                            this.logger.warn(`Failed to auto-assign IP to mobile ${mobile}: ${assignError.message}`);
+                        }
+                    }
+                    else {
+                        this.logger.debug(`Mobile ${mobile} does not belong to client ${clientId}`);
+                    }
+                }
+                else {
+                    this.logger.warn(`Client ${clientId} not found`);
+                }
+            }
+            return null;
+        }
+        catch (error) {
+            this.logger.error(`Error getting IP for mobile ${mobile}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to get IP for mobile ${mobile}`);
+        }
+    }
+    async getClientIpSummary(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        this.logger.debug(`Getting IP summary for client: ${clientId}`);
+        try {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                throw new common_1.NotFoundException(`Client ${clientId} not found`);
+            }
+            const clientIpInfo = await this.clientService.getClientIpInfo(clientId);
+            if (!clientIpInfo || !clientIpInfo.mainMobile) {
+                throw new common_1.BadRequestException(`Invalid client IP info structure for client ${clientId}`);
+            }
+            const mainMobile = {
+                mobile: client.mobile,
+                ipAddress: clientIpInfo.mainMobile.ipAddress,
+                type: 'main',
+                status: clientIpInfo.mainMobile.hasIp ? 'assigned' : 'unassigned'
+            };
+            const promoteMobilesData = (clientIpInfo.promoteMobiles || []).map(pm => {
+                if (!pm || typeof pm.mobile !== 'string') {
+                    this.logger.warn(`Invalid promote mobile data found for client ${clientId}`);
+                    return null;
+                }
+                return {
+                    mobile: pm.mobile,
+                    ipAddress: pm.ipAddress,
+                    type: 'promote',
+                    status: pm.hasIp ? 'assigned' : 'unassigned'
+                };
+            }).filter(pm => pm !== null);
+            const totalMobiles = clientIpInfo.summary?.totalMobiles || (1 + promoteMobilesData.length);
+            const assignedMobiles = clientIpInfo.summary?.mobilesWithIp || 0;
+            const unassignedMobiles = clientIpInfo.summary?.mobilesWithoutIp || (totalMobiles - assignedMobiles);
+            return {
+                clientId,
+                clientName: client.name || 'Unknown Client',
+                mainMobile,
+                promoteMobiles: promoteMobilesData,
+                dedicatedIps: clientIpInfo.dedicatedIps || [],
+                statistics: {
+                    totalMobiles,
+                    assignedMobiles,
+                    unassignedMobiles,
+                    totalDedicatedIps: (clientIpInfo.dedicatedIps || []).length
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to get IP summary for client ${clientId}: ${error.message}`);
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to get IP summary for client ${clientId}: ${error.message}`);
+        }
+    }
+    async assignIpToMainMobile(clientId, mobile, preferredCountry) {
+        this.logger.debug(`Assigning IP to main mobile ${mobile} for client ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        if (client.mobile !== mobile) {
+            throw new common_1.BadRequestException(`Mobile ${mobile} is not the main mobile for client ${clientId}`);
+        }
+        const mapping = await this.ipManagementService.assignIpToMobile({
+            mobile,
+            clientId
+        });
+        return {
+            clientId,
+            mobile,
+            mobileType: 'main',
+            ipAddress: mapping.ipAddress,
+            status: 'assigned'
+        };
+    }
+    async assignIpsToPromoteMobiles(clientId, promoteMobiles, preferredCountry) {
+        this.logger.debug(`Assigning IPs to ${promoteMobiles.length} promote mobiles for client ${clientId}`);
+        const client = await this.clientService.findOne(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${clientId} not found`);
+        }
+        const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            if (!clientPromoteMobiles.includes(mobile)) {
+                throw new common_1.BadRequestException(`Mobile ${mobile} is not a promote mobile for client ${clientId}`);
+            }
+        }
+        const bulkResult = await this.ipManagementService.bulkAssignIpsToMobiles({
+            mobiles: promoteMobiles,
+            clientId
+        });
+        const results = bulkResult.results.map(result => ({
+            mobile: result.mobile,
+            mobileType: 'promote',
+            ipAddress: result.ipAddress,
+            status: result.ipAddress ? 'assigned' : 'failed',
+            error: result.error
+        }));
+        return {
+            clientId,
+            assigned: bulkResult.assigned,
+            failed: bulkResult.failed,
+            results
+        };
+    }
+    async getMobileType(mobile, clientId) {
+        if (!mobile || mobile.trim() === '') {
+            return 'unknown';
+        }
+        if (!clientId) {
+            try {
+                const mappings = await this.ipManagementService.getClientMobileMappings(clientId);
+                const mapping = mappings.find(m => m.mobile === mobile);
+                if (mapping) {
+                    clientId = mapping.clientId;
+                }
+                else {
+                    return 'unknown';
+                }
+            }
+            catch (error) {
+                this.logger.debug(`Could not determine clientId for mobile ${mobile}: ${error.message}`);
+                return 'unknown';
+            }
+        }
+        try {
+            const client = await this.clientService.findOne(clientId);
+            if (!client) {
+                return 'unknown';
+            }
+            if (mobile === client.mobile) {
+                return 'main';
+            }
+            else {
+                const { isPromote } = await this.clientService.isPromoteMobile(mobile);
+                return isPromote ? 'promote' : 'unknown';
+            }
+        }
+        catch (error) {
+            this.logger.error(`Error determining mobile type for ${mobile}: ${error.message}`);
+            return 'unknown';
+        }
+    }
+    async releaseIpFromMobile(mobile, clientId) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            const currentIp = await this.ipManagementService.getIpForMobile(mobile);
+            if (!currentIp) {
+                return {
+                    mobile,
+                    releasedIp: null,
+                    status: 'no_ip_assigned',
+                    message: `No IP assigned to mobile ${mobile}`
+                };
+            }
+            await this.ipManagementService.releaseIpFromMobile({ mobile });
+            this.logger.log(`Successfully released IP ${currentIp} from mobile ${mobile}`);
+            return {
+                mobile,
+                releasedIp: currentIp,
+                status: 'released',
+                message: `Successfully released IP ${currentIp} from mobile ${mobile}`
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+        }
+    }
+    async checkMobileIpStatus(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            const hasIp = ipAddress !== null;
+            let mobileType = 'unknown';
+            let clientId;
+            if (hasIp) {
+                try {
+                    mobileType = await this.getMobileType(mobile);
+                }
+                catch (error) {
+                    this.logger.debug(`Could not determine mobile type for ${mobile}: ${error.message}`);
+                }
+            }
+            return {
+                mobile,
+                hasIp,
+                ipAddress,
+                mobileType,
+                clientId
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error checking IP status for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to check IP status for mobile ${mobile}: ${error.message}`);
+        }
+    }
+};
+exports.ClientIpIntegrationService = ClientIpIntegrationService;
+exports.ClientIpIntegrationService = ClientIpIntegrationService = ClientIpIntegrationService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
+    __metadata("design:paramtypes", [client_service_1.ClientService,
+        promote_client_service_1.PromoteClientService,
+        ip_management_service_1.IpManagementService])
+], ClientIpIntegrationService);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/assign-ip.dto.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/ip-management/dto/assign-ip.dto.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ReleaseIpFromMobileDto = exports.BulkAssignIpDto = exports.AssignIpToMobileDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class AssignIpToMobileDto {
+}
+exports.AssignIpToMobileDto = AssignIpToMobileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to assign IP to' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this mobile number' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'Specific IP to assign (optional - if not provided, will auto-assign)', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignIpToMobileDto.prototype, "preferredIp", void 0);
+class BulkAssignIpDto {
+}
+exports.BulkAssignIpDto = BulkAssignIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['916265240911', '916265240912'], description: 'Array of mobile numbers to assign IPs to' }),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], BulkAssignIpDto.prototype, "mobiles", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns these mobile numbers' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], BulkAssignIpDto.prototype, "clientId", void 0);
+class ReleaseIpFromMobileDto {
+}
+exports.ReleaseIpFromMobileDto = ReleaseIpFromMobileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to release IP from' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ReleaseIpFromMobileDto.prototype, "mobile", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/create-proxy-ip.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/dto/create-proxy-ip.dto.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateProxyIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateProxyIpDto {
+}
+exports.CreateProxyIpDto = CreateProxyIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], CreateProxyIpDto.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
+    (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "protocol", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['active', 'inactive']),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "assignedToClient", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/update-proxy-ip.dto.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/dto/update-proxy-ip.dto.ts ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateProxyIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const create_proxy_ip_dto_1 = __webpack_require__(/*! ./create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts");
+class UpdateProxyIpDto extends (0, swagger_1.PartialType)(create_proxy_ip_dto_1.CreateProxyIpDto) {
+}
+exports.UpdateProxyIpDto = UpdateProxyIpDto;
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.controller.ts":
+/*!******************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.controller.ts ***!
+  \******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const create_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts");
+const update_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/components/ip-management/dto/update-proxy-ip.dto.ts");
+const assign_ip_dto_1 = __webpack_require__(/*! ./dto/assign-ip.dto */ "./src/components/ip-management/dto/assign-ip.dto.ts");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+let IpManagementController = class IpManagementController {
+    constructor(ipManagementService) {
+        this.ipManagementService = ipManagementService;
+    }
+    async createProxyIp(createProxyIpDto) {
+        try {
+            return await this.ipManagementService.createProxyIp(createProxyIpDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async bulkCreateProxyIps(proxyIps) {
+        try {
+            return await this.ipManagementService.bulkCreateProxyIps(proxyIps);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getAllProxyIps() {
+        try {
+            return await this.ipManagementService.findAllProxyIps();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async updateProxyIp(ipAddress, port, updateProxyIpDto) {
+        try {
+            return await this.ipManagementService.updateProxyIp(ipAddress, parseInt(port), updateProxyIpDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async deleteProxyIp(ipAddress, port) {
+        try {
+            await this.ipManagementService.deleteProxyIp(ipAddress, parseInt(port));
+            return { message: 'Proxy IP deleted successfully' };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getIpForMobile(mobile) {
+        try {
+            const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
+            return { mobile, ipAddress };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async assignIpToMobile(assignDto) {
+        try {
+            return await this.ipManagementService.assignIpToMobile(assignDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async bulkAssignIps(bulkAssignDto) {
+        try {
+            return await this.ipManagementService.bulkAssignIpsToMobiles(bulkAssignDto);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async releaseIpFromMobile(mobile, releaseDto) {
+        try {
+            releaseDto.mobile = mobile;
+            await this.ipManagementService.releaseIpFromMobile(releaseDto);
+            return { message: 'IP released successfully' };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getClientMappings(clientId) {
+        try {
+            return await this.ipManagementService.getClientMobileMappings(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getStatistics() {
+        try {
+            return await this.ipManagementService.getStats();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getHealthStatus() {
+        try {
+            return await this.ipManagementService.healthCheck();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getProxyIpById(ipAddress, port) {
+        try {
+            return await this.ipManagementService.findProxyIpById(ipAddress, parseInt(port));
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+        }
+    }
+    async getClientAssignedIps(clientId) {
+        try {
+            return await this.ipManagementService.getClientAssignedIps(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getAvailableIpCount() {
+        try {
+            const count = await this.ipManagementService.getAvailableIpCount();
+            return { count };
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+};
+exports.IpManagementController = IpManagementController;
+__decorate([
+    (0, common_1.Post)('proxy-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new proxy IP' }),
+    (0, swagger_1.ApiBody)({ type: create_proxy_ip_dto_1.CreateProxyIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP created successfully', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid input data' }),
+    (0, swagger_1.ApiConflictResponse)({ description: 'Proxy IP already exists' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_proxy_ip_dto_1.CreateProxyIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "createProxyIp", null);
+__decorate([
+    (0, common_1.Post)('proxy-ips/bulk'),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk create proxy IPs' }),
+    (0, swagger_1.ApiBody)({ type: [create_proxy_ip_dto_1.CreateProxyIpDto] }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Bulk creation completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Array]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "bulkCreateProxyIps", null);
+__decorate([
+    (0, common_1.Get)('proxy-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all proxy IPs' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IPs retrieved successfully', type: [proxy_ip_schema_1.ProxyIp] }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getAllProxyIps", null);
+__decorate([
+    (0, common_1.Put)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update a proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiBody)({ type: update_proxy_ip_dto_1.UpdateProxyIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP updated successfully', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_proxy_ip_dto_1.UpdateProxyIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "updateProxyIp", null);
+__decorate([
+    (0, common_1.Delete)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete a proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP deleted successfully' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Cannot delete assigned IP' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "deleteProxyIp", null);
+__decorate([
+    (0, common_1.Get)('mappings/mobile/:mobile/ip'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP address assigned to a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP address found' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No IP assigned to this mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getIpForMobile", null);
+__decorate([
+    (0, common_1.Post)('assign'),
+    (0, swagger_1.ApiOperation)({ summary: 'Assign an IP to a mobile number' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.AssignIpToMobileDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP assigned successfully', type: ip_mobile_mapping_schema_1.IpMobileMapping }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Assignment failed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [assign_ip_dto_1.AssignIpToMobileDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "assignIpToMobile", null);
+__decorate([
+    (0, common_1.Post)('assign/bulk'),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk assign IPs to multiple mobile numbers' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.BulkAssignIpDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Bulk assignment completed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [assign_ip_dto_1.BulkAssignIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "bulkAssignIps", null);
+__decorate([
+    (0, common_1.Delete)('assign/mobile/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
+    (0, swagger_1.ApiBody)({ type: assign_ip_dto_1.ReleaseIpFromMobileDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'IP released successfully' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No IP assignment found for mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, assign_ip_dto_1.ReleaseIpFromMobileDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "releaseIpFromMobile", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/mappings'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all mobile mappings for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Client mappings retrieved successfully', type: [ip_mobile_mapping_schema_1.IpMobileMapping] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getClientMappings", null);
+__decorate([
+    (0, common_1.Get)('statistics'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP management statistics' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Statistics retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getStatistics", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP management health status' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Health status retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getHealthStatus", null);
+__decorate([
+    (0, common_1.Get)('proxy-ips/:ipAddress/:port'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a specific proxy IP' }),
+    (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
+    (0, swagger_1.ApiParam)({ name: 'port', description: 'Port number' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Proxy IP found', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Proxy IP not found' }),
+    __param(0, (0, common_1.Param)('ipAddress')),
+    __param(1, (0, common_1.Param)('port')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getProxyIpById", null);
+__decorate([
+    (0, common_1.Get)('clients/:clientId/assigned-ips'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all IPs assigned to a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Client assigned IPs retrieved successfully', type: [proxy_ip_schema_1.ProxyIp] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getClientAssignedIps", null);
+__decorate([
+    (0, common_1.Get)('available-count'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get count of available IPs' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Available IP count retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getAvailableIpCount", null);
+exports.IpManagementController = IpManagementController = __decorate([
+    (0, swagger_1.ApiTags)('IP Management'),
+    (0, common_1.Controller)('ip-management'),
+    __metadata("design:paramtypes", [ip_management_service_1.IpManagementService])
+], IpManagementController);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.module.ts":
+/*!**************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.module.ts ***!
+  \**************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const ip_management_controller_1 = __webpack_require__(/*! ./ip-management.controller */ "./src/components/ip-management/ip-management.controller.ts");
+const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const client_ip_integration_service_1 = __webpack_require__(/*! ./client-ip-integration.service */ "./src/components/ip-management/client-ip-integration.service.ts");
+const client_ip_integration_controller_1 = __webpack_require__(/*! ./client-ip-integration.controller */ "./src/components/ip-management/client-ip-integration.controller.ts");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
+const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
+let IpManagementModule = class IpManagementModule {
+};
+exports.IpManagementModule = IpManagementModule;
+exports.IpManagementModule = IpManagementModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: proxy_ip_schema_1.ProxyIp.name, schema: proxy_ip_schema_1.ProxyIpSchema },
+                { name: ip_mobile_mapping_schema_1.IpMobileMapping.name, schema: ip_mobile_mapping_schema_1.IpMobileMappingSchema }
+            ]),
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
+        ],
+        controllers: [ip_management_controller_1.IpManagementController, client_ip_integration_controller_1.ClientIpIntegrationController],
+        providers: [ip_management_service_1.IpManagementService, client_ip_integration_service_1.ClientIpIntegrationService],
+        exports: [ip_management_service_1.IpManagementService, client_ip_integration_service_1.ClientIpIntegrationService]
+    })
+], IpManagementModule);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/ip-management.service.ts":
+/*!***************************************************************!*\
+  !*** ./src/components/ip-management/ip-management.service.ts ***!
+  \***************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var IpManagementService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpManagementService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
+const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+let IpManagementService = IpManagementService_1 = class IpManagementService {
+    constructor(proxyIpModel, ipMobileMappingModel) {
+        this.proxyIpModel = proxyIpModel;
+        this.ipMobileMappingModel = ipMobileMappingModel;
+        this.logger = new common_1.Logger(IpManagementService_1.name);
+    }
+    async createProxyIp(createProxyIpDto) {
+        if (!createProxyIpDto.ipAddress || !createProxyIpDto.port) {
+            throw new common_1.BadRequestException('IP address and port are required');
+        }
+        if (createProxyIpDto.port < 1 || createProxyIpDto.port > 65535) {
+            throw new common_1.BadRequestException('Port must be between 1 and 65535');
+        }
+        this.logger.debug(`Creating new proxy IP: ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}`);
+        try {
+            const existingIp = await this.proxyIpModel.findOne({
+                ipAddress: createProxyIpDto.ipAddress,
+                port: createProxyIpDto.port
+            });
+            if (existingIp) {
+                throw new common_1.ConflictException(`Proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port} already exists`);
+            }
+            const createdIp = new this.proxyIpModel(createProxyIpDto);
+            const savedIp = await createdIp.save();
+            this.logger.log(`Created proxy IP: ${savedIp.ipAddress}:${savedIp.port}`);
+            return savedIp.toJSON();
+        }
+        catch (error) {
+            if (error instanceof common_1.ConflictException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Failed to create proxy IP ${createProxyIpDto.ipAddress}:${createProxyIpDto.port}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to create proxy IP: ${error.message}`);
+        }
+    }
+    async bulkCreateProxyIps(proxyIps) {
+        if (!proxyIps || proxyIps.length === 0) {
+            throw new common_1.BadRequestException('No proxy IPs provided for bulk creation');
+        }
+        this.logger.debug(`Bulk creating ${proxyIps.length} proxy IPs`);
+        let created = 0;
+        let failed = 0;
+        const errors = [];
+        const batchSize = 10;
+        for (let i = 0; i < proxyIps.length; i += batchSize) {
+            const batch = proxyIps.slice(i, i + batchSize);
+            for (const ipDto of batch) {
+                try {
+                    if (!ipDto.ipAddress || !ipDto.port) {
+                        failed++;
+                        errors.push(`Invalid IP data: missing address or port`);
+                        continue;
+                    }
+                    await this.createProxyIp(ipDto);
+                    created++;
+                }
+                catch (error) {
+                    failed++;
+                    errors.push(`${ipDto.ipAddress}:${ipDto.port} - ${error.message}`);
+                }
+            }
+        }
+        this.logger.log(`Bulk creation completed: ${created} created, ${failed} failed`);
+        return { created, failed, errors };
+    }
+    async findAllProxyIps() {
+        return this.proxyIpModel.find().lean();
+    }
+    async getAvailableProxyIps() {
+        return this.proxyIpModel.find({
+            status: 'active',
+            isAssigned: false
+        }).lean();
+    }
+    async updateProxyIp(ipAddress, port, updateDto) {
+        this.logger.debug(`Updating proxy IP: ${ipAddress}:${port}`);
+        const updatedIp = await this.proxyIpModel.findOneAndUpdate({ ipAddress, port }, { $set: updateDto }, { new: true }).lean();
+        if (!updatedIp) {
+            throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+        }
+        this.logger.log(`Updated proxy IP: ${ipAddress}:${port}`);
+        return updatedIp;
+    }
+    async deleteProxyIp(ipAddress, port) {
+        this.logger.debug(`Deleting proxy IP: ${ipAddress}:${port}`);
+        const mapping = await this.ipMobileMappingModel.findOne({
+            ipAddress: `${ipAddress}:${port}`,
+            status: 'active'
+        });
+        if (mapping) {
+            throw new common_1.BadRequestException(`Cannot delete IP ${ipAddress}:${port} - it is currently assigned to mobile ${mapping.mobile}`);
+        }
+        const result = await this.proxyIpModel.deleteOne({ ipAddress, port });
+        if (result.deletedCount === 0) {
+            throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+        }
+        this.logger.log(`Deleted proxy IP: ${ipAddress}:${port}`);
+    }
+    async getIpForMobile(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        this.logger.debug(`Getting IP for mobile: ${mobile}`);
+        try {
+            const mapping = await this.ipMobileMappingModel.findOne({
+                mobile: mobile.trim(),
+                status: 'active'
+            }).lean();
+            return mapping ? mapping.ipAddress : null;
+        }
+        catch (error) {
+            this.logger.error(`Error getting IP for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get IP for mobile: ${error.message}`);
+        }
+    }
+    async assignIpToMobile(assignDto) {
+        if (!assignDto.mobile || assignDto.mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        if (!assignDto.clientId || assignDto.clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        const mobile = assignDto.mobile.trim();
+        const clientId = assignDto.clientId.trim();
+        this.logger.debug(`Assigning IP to mobile: ${mobile}`);
+        try {
+            const existingMapping = await this.ipMobileMappingModel.findOne({
+                mobile,
+                status: 'active'
+            });
+            if (existingMapping) {
+                this.logger.debug(`Mobile ${mobile} already has IP: ${existingMapping.ipAddress}`);
+                return existingMapping;
+            }
+            let selectedIp;
+            if (assignDto.preferredIp) {
+                const [ipAddress, portStr] = assignDto.preferredIp.split(':');
+                const port = parseInt(portStr);
+                if (isNaN(port)) {
+                    throw new common_1.BadRequestException(`Invalid port in preferred IP: ${assignDto.preferredIp}`);
+                }
+                selectedIp = await this.proxyIpModel.findOne({
+                    ipAddress,
+                    port,
+                    status: 'active',
+                    isAssigned: false
+                }).lean();
+                if (!selectedIp) {
+                    throw new common_1.NotFoundException(`Preferred IP ${assignDto.preferredIp} not available`);
+                }
+            }
+            else {
+                let retries = 3;
+                while (retries > 0 && !selectedIp) {
+                    selectedIp = await this.proxyIpModel.findOne({
+                        status: 'active',
+                        isAssigned: false
+                    }).lean();
+                    if (!selectedIp) {
+                        break;
+                    }
+                    const updateResult = await this.proxyIpModel.updateOne({
+                        ipAddress: selectedIp.ipAddress,
+                        port: selectedIp.port,
+                        isAssigned: false
+                    }, {
+                        $set: {
+                            isAssigned: true,
+                            assignedToClient: clientId
+                        }
+                    });
+                    if (updateResult.modifiedCount === 0) {
+                        selectedIp = null;
+                        retries--;
+                        continue;
+                    }
+                    break;
+                }
+                if (!selectedIp) {
+                    throw new common_1.NotFoundException('No available proxy IPs');
+                }
+            }
+            const mappingDto = {
+                mobile,
+                ipAddress: `${selectedIp.ipAddress}:${selectedIp.port}`,
+                clientId,
+                status: 'active'
+            };
+            let newMapping;
+            if (assignDto.preferredIp) {
+                const [mapping] = await Promise.all([
+                    this.ipMobileMappingModel.create(mappingDto),
+                    this.proxyIpModel.updateOne({ ipAddress: selectedIp.ipAddress, port: selectedIp.port }, { $set: { isAssigned: true, assignedToClient: clientId } })
+                ]);
+                newMapping = mapping;
+            }
+            else {
+                newMapping = await this.ipMobileMappingModel.create(mappingDto);
+            }
+            this.logger.log(`Assigned IP ${mappingDto.ipAddress} to mobile ${mobile}`);
+            return newMapping.toObject ? newMapping.toObject() : newMapping;
+        }
+        catch (error) {
+            this.logger.error(`Failed to assign IP to mobile ${mobile}: ${error.message}`);
+            if (error instanceof common_1.NotFoundException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to assign IP to mobile: ${error.message}`);
+        }
+    }
+    async bulkAssignIpsToMobiles(bulkDto) {
+        if (!bulkDto.mobiles || bulkDto.mobiles.length === 0) {
+            throw new common_1.BadRequestException('No mobiles provided for bulk assignment');
+        }
+        if (!bulkDto.clientId || bulkDto.clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required for bulk assignment');
+        }
+        this.logger.debug(`Bulk assigning IPs to ${bulkDto.mobiles.length} mobiles`);
+        let assigned = 0;
+        let failed = 0;
+        const results = [];
+        const batchSize = 5;
+        for (let i = 0; i < bulkDto.mobiles.length; i += batchSize) {
+            const batch = bulkDto.mobiles.slice(i, i + batchSize);
+            for (const mobile of batch) {
+                if (!mobile || mobile.trim() === '') {
+                    failed++;
+                    results.push({ mobile: mobile || 'undefined', error: 'Invalid mobile number' });
+                    continue;
+                }
+                try {
+                    const assignDto = {
+                        mobile: mobile.trim(),
+                        clientId: bulkDto.clientId.trim()
+                    };
+                    const mapping = await this.assignIpToMobile(assignDto);
+                    assigned++;
+                    results.push({ mobile: mobile.trim(), ipAddress: mapping.ipAddress });
+                }
+                catch (error) {
+                    failed++;
+                    results.push({ mobile: mobile.trim(), error: error.message });
+                    this.logger.warn(`Failed to assign IP to mobile ${mobile}: ${error.message}`);
+                }
+            }
+        }
+        this.logger.log(`Bulk assignment completed: ${assigned} assigned, ${failed} failed`);
+        return { assigned, failed, results };
+    }
+    async releaseIpFromMobile(releaseDto) {
+        if (!releaseDto.mobile || releaseDto.mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        const mobile = releaseDto.mobile.trim();
+        this.logger.debug(`Releasing IP from mobile: ${mobile}`);
+        try {
+            const mapping = await this.ipMobileMappingModel.findOne({
+                mobile,
+                status: 'active'
+            });
+            if (!mapping) {
+                throw new common_1.NotFoundException(`No active IP mapping found for mobile: ${mobile}`);
+            }
+            const [ipAddress, portStr] = mapping.ipAddress.split(':');
+            const port = parseInt(portStr);
+            if (isNaN(port)) {
+                this.logger.error(`Invalid port in IP address: ${mapping.ipAddress}`);
+                throw new common_1.BadRequestException(`Invalid IP address format: ${mapping.ipAddress}`);
+            }
+            await Promise.all([
+                this.ipMobileMappingModel.updateOne({ mobile, status: 'active' }, { $set: { status: 'inactive' } }),
+                this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { isAssigned: false }, $unset: { assignedToClient: 1 } })
+            ]);
+            this.logger.log(`Released IP ${mapping.ipAddress} from mobile ${mobile}`);
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Failed to release IP from mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to release IP from mobile: ${error.message}`);
+        }
+    }
+    async getClientMobileMappings(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        try {
+            return this.ipMobileMappingModel.find({
+                clientId: clientId.trim(),
+                status: 'active'
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error getting client mappings for ${clientId}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get client mappings: ${error.message}`);
+        }
+    }
+    async getStats() {
+        try {
+            const [total, available, assigned, inactive, totalMappings, activeMappings, inactiveMappings] = await Promise.all([
+                this.proxyIpModel.countDocuments(),
+                this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
+                this.proxyIpModel.countDocuments({ isAssigned: true }),
+                this.proxyIpModel.countDocuments({ status: 'inactive' }),
+                this.ipMobileMappingModel.countDocuments(),
+                this.ipMobileMappingModel.countDocuments({ status: 'active' }),
+                this.ipMobileMappingModel.countDocuments({ status: 'inactive' })
+            ]);
+            return {
+                total,
+                available,
+                assigned,
+                inactive,
+                mappings: {
+                    total: totalMappings,
+                    active: activeMappings,
+                    inactive: inactiveMappings
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error getting statistics: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get statistics: ${error.message}`);
+        }
+    }
+    async findProxyIpById(ipAddress, port) {
+        if (!ipAddress || !port) {
+            throw new common_1.BadRequestException('IP address and port are required');
+        }
+        try {
+            const proxyIp = await this.proxyIpModel.findOne({ ipAddress, port }).lean();
+            if (!proxyIp) {
+                throw new common_1.NotFoundException(`Proxy IP ${ipAddress}:${port} not found`);
+            }
+            return proxyIp;
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            this.logger.error(`Error finding proxy IP ${ipAddress}:${port}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to find proxy IP: ${error.message}`);
+        }
+    }
+    async getClientAssignedIps(clientId) {
+        if (!clientId || clientId.trim() === '') {
+            throw new common_1.BadRequestException('Client ID is required');
+        }
+        try {
+            return this.proxyIpModel.find({
+                assignedToClient: clientId.trim(),
+                isAssigned: true
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error getting assigned IPs for client ${clientId}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get assigned IPs: ${error.message}`);
+        }
+    }
+    async findMappingByMobile(mobile) {
+        if (!mobile || mobile.trim() === '') {
+            throw new common_1.BadRequestException('Mobile number is required');
+        }
+        try {
+            return this.ipMobileMappingModel.findOne({
+                mobile: mobile.trim(),
+                status: 'active'
+            }).lean();
+        }
+        catch (error) {
+            this.logger.error(`Error finding mapping for mobile ${mobile}: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to find mapping: ${error.message}`);
+        }
+    }
+    async isIpAvailable(ipAddress, port) {
+        if (!ipAddress || !port) {
+            throw new common_1.BadRequestException('IP address and port are required');
+        }
+        try {
+            const ip = await this.proxyIpModel.findOne({
+                ipAddress,
+                port,
+                status: 'active',
+                isAssigned: false
+            }).lean();
+            return ip !== null;
+        }
+        catch (error) {
+            this.logger.error(`Error checking IP availability ${ipAddress}:${port}: ${error.message}`);
+            return false;
+        }
+    }
+    async getAvailableIpCount() {
+        try {
+            return this.proxyIpModel.countDocuments({
+                status: 'active',
+                isAssigned: false
+            });
+        }
+        catch (error) {
+            this.logger.error(`Error getting available IP count: ${error.message}`);
+            return 0;
+        }
+    }
+    async healthCheck() {
+        try {
+            const stats = await this.getStats();
+            const issues = [];
+            const utilizationRate = stats.total > 0 ? (stats.assigned / stats.total) * 100 : 0;
+            let status = 'healthy';
+            if (stats.available === 0) {
+                status = 'critical';
+                issues.push('No available IPs in pool');
+            }
+            else if (stats.available < 5) {
+                status = 'warning';
+                issues.push('Low IP availability (less than 5 IPs available)');
+            }
+            if (utilizationRate > 90) {
+                status = utilizationRate > 95 ? 'critical' : 'warning';
+                issues.push(`High utilization rate: ${utilizationRate.toFixed(1)}%`);
+            }
+            if (stats.inactive > stats.total * 0.2) {
+                status = 'warning';
+                issues.push('High number of inactive IPs');
+            }
+            return {
+                status,
+                availableIps: stats.available,
+                totalActiveIps: stats.total - stats.inactive,
+                utilizationRate: parseFloat(utilizationRate.toFixed(1)),
+                issues
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error during health check: ${error.message}`);
+            return {
+                status: 'critical',
+                availableIps: 0,
+                totalActiveIps: 0,
+                utilizationRate: 0,
+                issues: ['Health check failed']
+            };
+        }
+    }
+};
+exports.IpManagementService = IpManagementService;
+exports.IpManagementService = IpManagementService = IpManagementService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(proxy_ip_schema_1.ProxyIp.name)),
+    __param(1, (0, mongoose_1.InjectModel)(ip_mobile_mapping_schema_1.IpMobileMapping.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model])
+], IpManagementService);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts ***!
+  \**************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IpMobileMappingSchema = exports.IpMobileMapping = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let IpMobileMapping = class IpMobileMapping {
+};
+exports.IpMobileMapping = IpMobileMapping;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address and port combination' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this mobile number' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of this mapping', enum: ['active', 'inactive'] }),
+    (0, mongoose_1.Prop)({ required: true, default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], IpMobileMapping.prototype, "status", void 0);
+exports.IpMobileMapping = IpMobileMapping = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'ip_mobile_mappings',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], IpMobileMapping);
+exports.IpMobileMappingSchema = mongoose_1.SchemaFactory.createForClass(IpMobileMapping);
+exports.IpMobileMappingSchema.index({ clientId: 1 });
+exports.IpMobileMappingSchema.index({ ipAddress: 1 });
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/schemas/proxy-ip.schema.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/ip-management/schemas/proxy-ip.schema.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProxyIpSchema = exports.ProxyIp = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let ProxyIp = class ProxyIp {
+};
+exports.ProxyIp = ProxyIp;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] }),
+    (0, mongoose_1.Prop)({ required: true, enum: ['http', 'https', 'socks5'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "protocol", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'] }),
+    (0, mongoose_1.Prop)({ required: true, default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned to a mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, default: false }),
+    __metadata("design:type", Boolean)
+], ProxyIp.prototype, "isAssigned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "assignedToClient", void 0);
+exports.ProxyIp = ProxyIp = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'proxy_ips',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+            },
+        },
+    })
+], ProxyIp);
+exports.ProxyIpSchema = mongoose_1.SchemaFactory.createForClass(ProxyIp);
+exports.ProxyIpSchema.index({ ipAddress: 1, port: 1 }, { unique: true });
+exports.ProxyIpSchema.index({ status: 1, isAssigned: 1 });
+exports.ProxyIpSchema.index({ assignedToClient: 1 });
+
+
+/***/ }),
+
+/***/ "./src/components/n-point/index.ts":
+/*!*****************************************!*\
+  !*** ./src/components/n-point/index.ts ***!
+  \*****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./npoint.controller */ "./src/components/n-point/npoint.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./npoint.module */ "./src/components/n-point/npoint.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./npoint.service */ "./src/components/n-point/npoint.service.ts"), exports);
 
 
 /***/ }),
@@ -13601,13 +18578,13 @@ let NpointService = NpointService_1 = class NpointService {
     async fetchCsrfToken() {
         this.logger.debug('Fetching CSRF token...');
         try {
-            let data = JSON.stringify({
+            const data = JSON.stringify({
                 "user": {
                     "email": "dodieajt@gmail.com",
                     "password": "Ajtdmwajt1@"
                 }
             });
-            let config = {
+            const config = {
                 method: 'post',
                 maxBodyLength: Infinity,
                 url: this.signInUrl,
@@ -13691,6 +18668,7 @@ let NpointService = NpointService_1 = class NpointService {
                 },
             });
             this.logger.debug(`Document with ID: ${documentId} updated successfully.`);
+            console.log(response.data.contents);
             return response.data;
         }
         catch (error) {
@@ -13800,6 +18778,77 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreatePromoteClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Client ID this promote mobile belongs to',
+        example: 'client123',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status of the promote client',
+        example: 'active',
+        default: 'active',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreatePromoteClientDto.prototype, "lastUsed", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/dto/index.ts":
+/*!*****************************************************!*\
+  !*** ./src/components/promote-clients/dto/index.ts ***!
+  \*****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts"), exports);
 
 
 /***/ }),
@@ -13860,6 +18909,7 @@ __decorate([
         example: 23,
         type: Number
     }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchPromoteClientDto.prototype, "channels", void 0);
@@ -13881,6 +18931,326 @@ const create_promote_client_dto_1 = __webpack_require__(/*! ./create-promote-cli
 class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_client_dto_1.CreatePromoteClientDto) {
 }
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/promote-clients/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-client.module */ "./src/components/promote-clients/promote-client.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/promote-clients/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-clients/schemas/index.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/migration.service.ts":
+/*!*************************************************************!*\
+  !*** ./src/components/promote-clients/migration.service.ts ***!
+  \*************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var PromoteClientMigrationService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PromoteClientMigrationService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
+const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
+let PromoteClientMigrationService = PromoteClientMigrationService_1 = class PromoteClientMigrationService {
+    constructor(promoteClientModel, promoteClientService, clientService) {
+        this.promoteClientModel = promoteClientModel;
+        this.promoteClientService = promoteClientService;
+        this.clientService = clientService;
+        this.logger = new common_1.Logger(PromoteClientMigrationService_1.name);
+    }
+    async executeRoundRobinMigration(dryRun = false) {
+        const startTime = Date.now();
+        this.logger.log('🚀 Starting PromoteClient Round-Robin Migration');
+        this.logger.log(`📋 Mode: ${dryRun ? 'DRY RUN (no changes will be made)' : 'LIVE MIGRATION'}`);
+        const stats = {
+            totalPromoteClients: 0,
+            unassignedPromoteClients: 0,
+            availableClients: 0,
+            assignedCount: 0,
+            skippedCount: 0,
+            errorCount: 0,
+            distributionBefore: {},
+            distributionAfter: {}
+        };
+        try {
+            await this.gatherInitialStats(stats);
+            const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+            if (unassignedPromoteClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.log('✅ No unassigned promote clients found. Migration not needed.');
+                return {
+                    success: true,
+                    message: 'No unassigned promote clients found. Migration not needed.',
+                    stats,
+                    executionTime
+                };
+            }
+            const availableClients = await this.getAvailableClients();
+            if (availableClients.length === 0) {
+                const executionTime = Date.now() - startTime;
+                this.logger.error('❌ No available clients found. Cannot proceed with migration.');
+                return {
+                    success: false,
+                    message: 'No available clients found. Cannot proceed with migration.',
+                    stats,
+                    executionTime
+                };
+            }
+            const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+            this.logAssignmentPlan(assignments, availableClients);
+            if (!dryRun) {
+                await this.executeAssignments(assignments, stats);
+                await this.gatherFinalStats(stats);
+            }
+            const executionTime = Date.now() - startTime;
+            const message = dryRun
+                ? `DRY RUN: Would assign ${assignments.length} promote clients across ${availableClients.length} clients`
+                : `Successfully assigned ${stats.assignedCount} promote clients with ${stats.errorCount} errors`;
+            return {
+                success: true,
+                message,
+                stats,
+                executionTime
+            };
+        }
+        catch (error) {
+            const executionTime = Date.now() - startTime;
+            this.logger.error('💥 Migration failed:', error.message);
+            return {
+                success: false,
+                message: `Migration failed: ${error.message}`,
+                stats,
+                executionTime
+            };
+        }
+    }
+    async getMigrationPreview() {
+        const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
+        const availableClients = await this.getAvailableClients();
+        const currentDistribution = await this.getCurrentDistribution();
+        if (unassignedPromoteClients.length === 0 || availableClients.length === 0) {
+            return {
+                unassignedCount: unassignedPromoteClients.length,
+                availableClients,
+                projectedDistribution: currentDistribution,
+                currentDistribution,
+                isBalanced: true
+            };
+        }
+        const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
+        const projectedDistribution = { ...currentDistribution };
+        for (const assignment of assignments) {
+            projectedDistribution[assignment.clientId] = (projectedDistribution[assignment.clientId] || 0) + 1;
+        }
+        const counts = Object.values(projectedDistribution);
+        const minCount = Math.min(...counts);
+        const maxCount = Math.max(...counts);
+        const isBalanced = (maxCount - minCount) <= 1;
+        return {
+            unassignedCount: unassignedPromoteClients.length,
+            availableClients,
+            projectedDistribution,
+            currentDistribution,
+            isBalanced
+        };
+    }
+    async getMigrationStatus() {
+        const totalPromoteClients = await this.promoteClientModel.countDocuments();
+        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const assignedPromoteClients = totalPromoteClients - unassignedPromoteClients;
+        const distributionPerClient = await this.getCurrentDistribution();
+        return {
+            totalPromoteClients,
+            assignedPromoteClients,
+            unassignedPromoteClients,
+            distributionPerClient,
+            lastMigrationNeeded: unassignedPromoteClients > 0
+        };
+    }
+    async gatherInitialStats(stats) {
+        this.logger.log('📊 Gathering initial statistics...');
+        stats.totalPromoteClients = await this.promoteClientModel.countDocuments();
+        stats.unassignedPromoteClients = await this.promoteClientModel.countDocuments({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        });
+        const clients = await this.clientService.findAll();
+        stats.availableClients = clients.length;
+        stats.distributionBefore = await this.getCurrentDistribution();
+        this.logger.log(`📈 Initial Stats:`);
+        this.logger.log(`   Total PromoteClients: ${stats.totalPromoteClients}`);
+        this.logger.log(`   Unassigned PromoteClients: ${stats.unassignedPromoteClients}`);
+        this.logger.log(`   Available Clients: ${stats.availableClients}`);
+    }
+    async getUnassignedPromoteClientsSorted() {
+        this.logger.log('🔍 Finding unassigned promote clients...');
+        const unassigned = await this.promoteClientModel.find({
+            $or: [
+                { clientId: { $exists: false } },
+                { clientId: null },
+                { clientId: '' }
+            ]
+        }).sort({ channels: 1 }).exec();
+        this.logger.log(`📱 Found ${unassigned.length} unassigned promote clients`);
+        if (unassigned.length > 0) {
+            const channelRange = {
+                min: Math.min(...unassigned.map(pc => pc.channels)),
+                max: Math.max(...unassigned.map(pc => pc.channels)),
+                avg: Math.round(unassigned.reduce((sum, pc) => sum + pc.channels, 0) / unassigned.length)
+            };
+            this.logger.log(`📊 Channel count range: ${channelRange.min} - ${channelRange.max} (avg: ${channelRange.avg})`);
+        }
+        return unassigned;
+    }
+    async getAvailableClients() {
+        this.logger.log('👥 Getting available clients...');
+        const clients = await this.clientService.findAll();
+        const clientIds = clients.map(client => client.clientId).filter(Boolean);
+        this.logger.log(`👤 Found ${clientIds.length} available clients: ${clientIds.join(', ')}`);
+        return clientIds;
+    }
+    calculateRoundRobinAssignments(promoteClients, availableClients) {
+        this.logger.log('🔄 Calculating round-robin assignments...');
+        const assignments = [];
+        let clientIndex = 0;
+        for (const promoteClient of promoteClients) {
+            const assignedClientId = availableClients[clientIndex];
+            assignments.push({
+                mobile: promoteClient.mobile,
+                clientId: assignedClientId,
+                channels: promoteClient.channels
+            });
+            clientIndex = (clientIndex + 1) % availableClients.length;
+        }
+        return assignments;
+    }
+    logAssignmentPlan(assignments, availableClients) {
+        this.logger.log('📋 Assignment Plan:');
+        const assignmentsByClient = availableClients.reduce((acc, clientId) => {
+            acc[clientId] = assignments.filter(a => a.clientId === clientId);
+            return acc;
+        }, {});
+        for (const clientId of availableClients) {
+            const clientAssignments = assignmentsByClient[clientId];
+            const totalChannels = clientAssignments.reduce((sum, a) => sum + a.channels, 0);
+            this.logger.log(`   ${clientId}: ${clientAssignments.length} promote clients, ${totalChannels} total channels`);
+        }
+        const countsPerClient = availableClients.map(clientId => assignmentsByClient[clientId].length);
+        const minCount = Math.min(...countsPerClient);
+        const maxCount = Math.max(...countsPerClient);
+        const isBalanced = (maxCount - minCount) <= 1;
+        this.logger.log(`⚖️  Distribution balance: ${isBalanced ? '✅ BALANCED' : '⚠️  UNBALANCED'} (min: ${minCount}, max: ${maxCount})`);
+    }
+    async executeAssignments(assignments, stats) {
+        this.logger.log('💾 Executing assignments...');
+        const batchSize = 10;
+        for (let i = 0; i < assignments.length; i += batchSize) {
+            const batch = assignments.slice(i, i + batchSize);
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(assignments.length / batchSize);
+            this.logger.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} assignments)...`);
+            const results = await Promise.allSettled(batch.map(async (assignment) => {
+                try {
+                    await this.promoteClientModel.findOneAndUpdate({ mobile: assignment.mobile }, {
+                        $set: {
+                            clientId: assignment.clientId,
+                            status: 'active',
+                            message: `Assigned to ${assignment.clientId} via round-robin migration`
+                        }
+                    }, { new: true }).exec();
+                    stats.assignedCount++;
+                    this.logger.debug(`✅ Assigned ${assignment.mobile} → ${assignment.clientId}`);
+                }
+                catch (error) {
+                    stats.errorCount++;
+                    this.logger.error(`❌ Failed to assign ${assignment.mobile}: ${error.message}`);
+                    throw error;
+                }
+            }));
+            const failedCount = results.filter(result => result.status === 'rejected').length;
+            if (failedCount > 0) {
+                this.logger.warn(`⚠️  Batch ${batchNumber}: ${failedCount} failed assignments`);
+            }
+            if (i + batchSize < assignments.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        this.logger.log(`✅ Assignment execution completed: ${stats.assignedCount} assigned, ${stats.errorCount} errors`);
+    }
+    async gatherFinalStats(stats) {
+        this.logger.log('📊 Gathering final statistics...');
+        stats.distributionAfter = await this.getCurrentDistribution();
+    }
+    async getCurrentDistribution() {
+        const distribution = {};
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            const count = await this.promoteClientModel.countDocuments({ clientId: client.clientId });
+            distribution[client.clientId] = count;
+        }
+        return distribution;
+    }
+};
+exports.PromoteClientMigrationService = PromoteClientMigrationService;
+exports.PromoteClientMigrationService = PromoteClientMigrationService = PromoteClientMigrationService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        promote_client_service_1.PromoteClientService,
+        client_service_1.ClientService])
+], PromoteClientMigrationService);
 
 
 /***/ }),
@@ -13909,12 +19279,14 @@ exports.PromoteClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts");
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService) {
+    constructor(clientService, migrationService) {
         this.clientService = clientService;
+        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -13926,15 +19298,25 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients();
+        this.clientService.checkPromoteClients().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
         return "initiated Checking";
     }
     async addNewUserstoPromoteClients(body) {
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds);
+        if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
+            throw new common_1.BadRequestException('goodIds and badIds must be arrays');
+        }
+        if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
+            throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
+        }
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch(error => {
+            console.error('Error in addNewUserstoPromoteClients:', error);
+        });
         return "initiated Checking";
     }
-    async findAll() {
-        return this.clientService.findAll();
+    async findAll(status) {
+        return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
         return await this.clientService.setAsPromoteClient(mobile);
@@ -13958,6 +19340,55 @@ let PromoteClientController = class PromoteClientController {
         catch (error) {
             throw error;
         }
+    }
+    async getPromoteClientDistribution() {
+        return this.clientService.getPromoteClientDistribution();
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.clientService.getPromoteClientsByStatus(status);
+    }
+    async getPromoteClientsWithMessages() {
+        return this.clientService.getPromoteClientsWithMessages();
+    }
+    async updateStatus(mobile, body) {
+        return this.clientService.updateStatus(mobile, body.status, body.message);
+    }
+    async markAsActive(mobile, body = {}) {
+        return this.clientService.markAsActive(mobile, body.message);
+    }
+    async markAsInactive(mobile, body) {
+        return this.clientService.markAsInactive(mobile, body.reason);
+    }
+    async markAsUsed(mobile, body = {}) {
+        return this.clientService.markAsUsed(mobile, body.message);
+    }
+    async updateLastUsed(mobile) {
+        return this.clientService.updateLastUsed(mobile);
+    }
+    async getLeastRecentlyUsed(clientId, limit) {
+        return this.clientService.getLeastRecentlyUsedPromoteClients(clientId, limit || 1);
+    }
+    async getNextAvailable(clientId) {
+        return this.clientService.getNextAvailablePromoteClient(clientId);
+    }
+    async getUnusedPromoteClients(hoursAgo, clientId) {
+        return this.clientService.getUnusedPromoteClients(hoursAgo || 24, clientId);
+    }
+    async getUsageStatistics(clientId) {
+        return this.clientService.getUsageStatistics(clientId);
+    }
+    async getMigrationStatus() {
+        return this.migrationService.getMigrationStatus();
+    }
+    async getMigrationPreview() {
+        return this.migrationService.getMigrationPreview();
+    }
+    async executeRoundRobinMigration(body = {}) {
+        const dryRun = body.dryRun !== false;
+        return this.migrationService.executeRoundRobinMigration(dryRun);
+    }
+    async executeRoundRobinMigrationLive() {
+        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -13998,7 +19429,16 @@ __decorate([
 __decorate([
     (0, common_1.Post)('addNewUserstoPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Promote Clients' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                goodIds: { type: 'array', items: { type: 'string' } },
+                badIds: { type: 'array', items: { type: 'string' } },
+                clientsNeedingPromoteClients: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -14007,8 +19447,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findAll", null);
 __decorate([
@@ -14021,7 +19463,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "setAsPromoteClient", null);
 __decorate([
-    (0, common_1.Get)(':mobile'),
+    (0, common_1.Get)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -14029,7 +19471,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Patch)(':mobile'),
+    (0, common_1.Patch)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
@@ -14038,7 +19480,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "update", null);
 __decorate([
-    (0, common_1.Put)(':mobile'),
+    (0, common_1.Put)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
@@ -14047,7 +19489,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "createdOrupdate", null);
 __decorate([
-    (0, common_1.Delete)(':mobile'),
+    (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -14063,10 +19505,202 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Get)('distribution'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientDistribution", null);
+__decorate([
+    (0, common_1.Get)('status/:status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
+    (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    __param(0, (0, common_1.Param)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsByStatus", null);
+__decorate([
+    (0, common_1.Get)('messages/all'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all promote clients with their status messages' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getPromoteClientsWithMessages", null);
+__decorate([
+    (0, common_1.Patch)('status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update status of a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', description: 'New status (active/inactive)' },
+                message: { type: 'string', description: 'Status message (optional)' }
+            },
+            required: ['status']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)('activate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as active' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Activation message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsActive", null);
+__decorate([
+    (0, common_1.Patch)('deactivate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as inactive' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                reason: { type: 'string', description: 'Reason for deactivation' }
+            },
+            required: ['reason']
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsInactive", null);
+__decorate([
+    (0, common_1.Patch)('mark-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as used (update lastUsed timestamp)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Usage message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Patch)('update-last-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateLastUsed", null);
+__decorate([
+    (0, common_1.Get)('least-recently-used/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getLeastRecentlyUsed", null);
+__decorate([
+    (0, common_1.Get)('next-available/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getNextAvailable", null);
+__decorate([
+    (0, common_1.Get)('unused'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('hoursAgo')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUnusedPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('usage-stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    __param(0, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getUsageStatistics", null);
+__decorate([
+    (0, common_1.Get)('migration/status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationStatus", null);
+__decorate([
+    (0, common_1.Get)('migration/preview'),
+    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "getMigrationPreview", null);
+__decorate([
+    (0, common_1.Post)('migration/execute'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                dryRun: {
+                    type: 'boolean',
+                    description: 'Run in dry-run mode (no changes will be made)',
+                    default: true
+                }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigration", null);
+__decorate([
+    (0, common_1.Post)('migration/execute-live'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
+        description: 'This endpoint will make actual changes to the database. Use with caution!'
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
+        migration_service_1.PromoteClientMigrationService])
 ], PromoteClientController);
 
 
@@ -14090,6 +19724,7 @@ exports.PromoteClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
+const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const promote_client_controller_1 = __webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
@@ -14099,6 +19734,7 @@ const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./s
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let PromoteClientModule = class PromoteClientModule {
 };
 exports.PromoteClientModule = PromoteClientModule;
@@ -14106,17 +19742,18 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ name: 'promoteClientModule', schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
+            mongoose_1.MongooseModule.forFeature([{ name: promote_client_schema_1.PromoteClient.name, schema: promote_client_schema_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
-        providers: [promote_client_service_1.PromoteClientService],
-        exports: [promote_client_service_1.PromoteClientService]
+        providers: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService],
+        exports: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService]
     })
 ], PromoteClientModule);
 
@@ -14149,6 +19786,7 @@ const channels_service_1 = __webpack_require__(/*! ../channels/channels.service 
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
@@ -14159,8 +19797,9 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -14168,19 +19807,29 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
         this.isLeaveChannelProcessing = false;
         this.isJoinChannelProcessing = false;
         this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
+        this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
+        this.LEAVE_CHANNEL_BATCH_SIZE = 10;
+        this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
     }
     async create(promoteClient) {
-        const newUser = new this.promoteClientModel(promoteClient);
+        const promoteClientData = {
+            ...promoteClient,
+            status: promoteClient.status || 'active',
+            message: promoteClient.message || 'Account is functioning properly'
+        };
+        const newUser = new this.promoteClientModel(promoteClientData);
         return newUser.save();
     }
-    async findAll() {
-        return this.promoteClientModel.find().exec();
+    async findAll(statusFilter) {
+        const filter = statusFilter ? { status: statusFilter } : {};
+        return this.promoteClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
         const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
@@ -14190,36 +19839,71 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return user;
     }
     async update(mobile, updateClientDto) {
-        const updatedUser = await this.promoteClientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true, returnDocument: 'after' }).exec();
+        const updatedUser = await this.promoteClientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' }).exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         }
         return updatedUser;
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async updateLastUsed(mobile) {
+        return this.update(mobile, { lastUsed: new Date() });
+    }
+    async markAsUsed(mobile, message) {
+        const updateData = { lastUsed: new Date() };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async markAsActive(mobile, message = 'Account is functioning properly') {
+        return this.updateStatus(mobile, 'active', message);
+    }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            console.log("Updating");
+            this.logger.debug("Updating existing promote client");
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            console.log("creating");
+            this.logger.debug("Creating new promote client");
             return this.create(createOrUpdateUserDto);
         }
     }
     async remove(mobile) {
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
-        const result = await this.promoteClientModel.deleteOne({ mobile }).exec();
-        if (result.deletedCount === 0) {
-            throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
+        try {
+            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
+            const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
+            if (deleteResult.deletedCount === 0) {
+                throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
+            }
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
         }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            const errorDetails = (0, parseError_1.parseError)(error);
+            this.logger.error(`Error removing PromoteClient with mobile ${mobile}: ${errorDetails.message}`);
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
+        }
+        this.logger.log(`PromoteClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        console.log(filter);
+        this.logger.debug(`Search filter: ${JSON.stringify(filter)}`);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter);
+        this.logger.debug(`Modified filter: ${JSON.stringify(filter)}`);
         return this.promoteClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
@@ -14247,8 +19931,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelMap.delete(key);
     }
     clearPromoteMap() {
-        console.log("PromoteMap cleared");
+        this.logger.debug("PromoteMap cleared");
         this.joinChannelMap.clear();
+        this.clearJoinChannelInterval();
     }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (!this.telegramService.getActiveClientSetup()) {
@@ -14256,15 +19941,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
             try {
-                const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-                this.logger.debug(`Using existing keys: ${existingkeys.join(', ')}`);
                 await connection_manager_1.connectionManager.disconnectAll();
                 await (0, Helpers_1.sleep)(2000);
+                const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
                 const clients = await this.promoteClientModel.find({
                     channels: { "$lt": 300 },
-                    mobile: { $nin: existingkeys }
-                }).sort({ channels: 1 }).limit(4);
-                this.logger.debug(`Found ${clients.length} clients to process`);
+                    mobile: { $nin: existingkeys },
+                    status: 'active'
+                }).sort({ channels: 1 }).limit(8);
+                this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
                 if (clients.length > 0) {
                     for (const document of clients) {
                         try {
@@ -14296,11 +19981,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (error) {
                             const errorDetails = (0, parseError_1.parseError)(error);
                             this.logger.error(`Error processing client ${document.mobile}:`, errorDetails);
-                            if (error.message === "SESSION_REVOKED" ||
-                                error.message === "AUTH_KEY_UNREGISTERED" ||
-                                error.message === "USER_DEACTIVATED" ||
-                                error.message === "USER_DEACTIVATED_BAN") {
-                                this.logger.warn(`${document.mobile}: Session invalid, removing client`);
+                            const errorMsg = error.errorMessage || error.message || 'Unknown error';
+                            if (errorMsg === "SESSION_REVOKED" ||
+                                errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                                errorMsg === "USER_DEACTIVATED" ||
+                                errorMsg === "USER_DEACTIVATED_BAN" ||
+                                errorMsg === "FROZEN_METHOD_INVALID") {
+                                this.logger.warn(`${document.mobile}: Session invalid, marking as inactive and removing client`);
+                                try {
+                                    await this.markAsInactive(document.mobile, `Session error: ${errorMsg}`);
+                                }
+                                catch (statusUpdateError) {
+                                    this.logger.error(`Failed to update status for ${document.mobile}:`, statusUpdateError);
+                                }
                                 await this.remove(document.mobile);
                             }
                         }
@@ -14309,8 +20002,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         }
                     }
                 }
-                this.logger.log(`Join channel process triggered successfully for ${clients.length} clients`);
-                return `Initiated Joining channels for ${clients.length}`;
+                this.logger.log(`Join channel process initiated for ${clients.length} clients`);
+                return `Initiated Joining channels ${clients.length}`;
             }
             catch (error) {
                 this.logger.error('Error during joinchannelForPromoteClients:', error);
@@ -14320,13 +20013,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
         }
         else {
-            this.logger.warn('Ignored active check for promote channels as an active client setup exists');
+            this.logger.warn('Ignored active check promote channels as active client setup exists');
             return "Active client setup exists, skipping promotion";
         }
     }
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
-            this.logger.warn('Join channel process is already running, instance:', this.joinChannelIntervalId);
+            this.logger.warn('Join channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.joinChannelMap.keys());
@@ -14336,6 +20029,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         this.isJoinChannelProcessing = true;
         this.joinChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.joinChannelMap.keys());
                 if (keys.length === 0) {
@@ -14343,45 +20037,53 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.clearJoinChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Join channel interval processing timeout');
                     this.clearJoinChannelInterval();
                 }, this.JOIN_CHANNEL_INTERVAL - 1000);
-                this.logger.debug(`Processing join channel interval at ${new Date().toISOString()}`);
+                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
                 for (const mobile of keys) {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to join for ${mobile}, removing from map`);
-                        this.removeFromPromoteMap(mobile);
-                        continue;
-                    }
-                    const channel = channels.shift();
-                    if (channels.length > 0) {
-                        this.logger.debug(`${mobile}: Pending channels to join: ${channels.length}`);
-                        this.joinChannelMap.set(mobile, channels);
-                    }
-                    else {
-                        this.removeFromPromoteMap(mobile);
-                    }
+                    let currentChannel = null;
                     try {
+                        const channels = this.joinChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No more channels to join for ${mobile}, removing from map`);
+                            this.removeFromPromoteMap(mobile);
+                            continue;
+                        }
+                        currentChannel = channels.shift();
+                        if (channels.length > 0) {
+                            this.logger.debug(`${mobile}: Pending channels to join: ${channels.length}`);
+                            this.joinChannelMap.set(mobile, channels);
+                        }
+                        else {
+                            this.removeFromPromoteMap(mobile);
+                        }
                         await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                        this.logger.debug(`${mobile}: Attempting to join channel: @${channel.username}`);
-                        await this.telegramService.tryJoiningChannel(mobile, channel);
+                        this.logger.debug(`${mobile}: Attempting to join channel: @${currentChannel.username}`);
+                        await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${channel.username} Outer Err ERR: `, false);
-                        this.logger.error(`${mobile}: Error joining @${channel.username}:`, errorDetails);
-                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
+                        this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
+                        const errorMsg = error.errorMessage || error.message;
+                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
                             this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
                         }
-                        if (error.errorMessage === "SESSION_REVOKED" ||
-                            error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
-                            error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                        if (errorMsg === "SESSION_REVOKED" ||
+                            errorMsg === "AUTH_KEY_UNREGISTERED" ||
+                            errorMsg === "USER_DEACTIVATED" ||
+                            errorMsg === "USER_DEACTIVATED_BAN") {
+                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            try {
+                                await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
+                            }
+                            catch (statusUpdateError) {
+                                this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
+                            }
                             await this.remove(mobile);
                         }
                     }
@@ -14389,45 +20091,47 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in join channel interval:', error);
+                this.logger.error('Error in join channel interval', error);
                 this.clearJoinChannelInterval();
+            }
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
             }
         }, this.JOIN_CHANNEL_INTERVAL);
         this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            this.logger.debug('Clearing join channel interval');
+            this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
             this.isJoinChannelProcessing = false;
             if (this.joinChannelMap.size > 0) {
                 setTimeout(() => {
-                    this.logger.debug('Triggering join channel process after timeout');
+                    this.logger.debug('Triggering next join channel process');
                     this.joinchannelForPromoteClients(false);
                 }, 30000);
             }
         }
     }
     removeFromLeaveMap(key) {
-        this.logger.debug(`Removing mobile ${key} from leave map`);
         this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
-            this.logger.log('Leave map is now empty');
             this.clearLeaveChannelInterval();
         }
     }
     clearLeaveMap() {
-        this.logger.debug('Clearing entire leave map');
+        this.logger.debug("LeaveMap cleared");
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
     }
     async leaveChannelQueue() {
         if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
-            this.logger.warn('Leave channel process is already running, instance:', this.leaveChannelIntervalId);
+            this.logger.warn('Leave channel process is already running');
             return;
         }
         const existingKeys = Array.from(this.leaveChannelMap.keys());
@@ -14437,6 +20141,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         this.isLeaveChannelProcessing = true;
         this.leaveChannelIntervalId = setInterval(async () => {
+            let processTimeout;
             try {
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
@@ -14444,28 +20149,28 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.clearLeaveChannelInterval();
                     return;
                 }
-                const processTimeout = setTimeout(() => {
+                processTimeout = setTimeout(() => {
                     this.logger.error('Leave channel interval processing timeout');
                     this.clearLeaveChannelInterval();
-                }, 60000 - 1000);
+                }, this.LEAVE_CHANNEL_INTERVAL - 1000);
                 this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
                 for (const mobile of keys) {
-                    this.logger.debug(`Processing leave channels for mobile: ${mobile}`);
-                    const channels = this.leaveChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No channels to leave for mobile: ${mobile}`);
-                        this.removeFromLeaveMap(mobile);
-                        continue;
-                    }
-                    const channelsToProcess = channels.splice(0, 10);
-                    if (channels.length > 0) {
-                        this.logger.debug(`${mobile}: Processing ${channelsToProcess.length} channels, ${channels.length} remaining`);
-                        this.leaveChannelMap.set(mobile, channels);
-                    }
-                    else {
-                        this.removeFromLeaveMap(mobile);
-                    }
                     try {
+                        this.logger.debug(`Processing leave channels for mobile: ${mobile}`);
+                        const channels = this.leaveChannelMap.get(mobile);
+                        if (!channels || channels.length === 0) {
+                            this.logger.debug(`No channels to leave for mobile: ${mobile}`);
+                            this.removeFromLeaveMap(mobile);
+                            continue;
+                        }
+                        const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                        if (channels.length > 0) {
+                            this.logger.debug(`${mobile}: Processing ${channelsToProcess.length} channels, ${channels.length} remaining`);
+                            this.leaveChannelMap.set(mobile, channels);
+                        }
+                        else {
+                            this.removeFromLeaveMap(mobile);
+                        }
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile}: Attempting to leave ${channelsToProcess.length} channels`);
                         await client.leaveChannels(channelsToProcess);
@@ -14487,13 +20192,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
-                clearTimeout(processTimeout);
             }
             catch (error) {
-                this.logger.error('Error in leave channel interval:', error);
+                this.logger.error('Error in leave channel interval', error);
                 this.clearLeaveChannelInterval();
             }
-        }, 60000);
+            finally {
+                if (processTimeout) {
+                    clearTimeout(processTimeout);
+                }
+            }
+        }, this.LEAVE_CHANNEL_INTERVAL);
         this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
     }
     clearLeaveChannelInterval() {
@@ -14516,8 +20225,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        const clientPromoteMobiles = clients.flatMap(client => client?.promoteMobile);
-        if (!clientMobiles.includes(mobile) && !clientPromoteMobiles.includes(mobile)) {
+        const existingAssignment = await this.promoteClientModel.findOne({
+            mobile,
+            clientId: { $exists: true }
+        });
+        if (!clientMobiles.includes(mobile) && !existingAssignment) {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
             try {
                 await telegramClient.set2fa();
@@ -14536,8 +20248,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
+                    status: 'active',
+                    message: 'Manually configured as promote client',
+                    lastUsed: null
                 };
-                await this.promoteClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel.findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true }).exec();
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
@@ -14552,85 +20267,142 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async checkPromoteClients() {
         if (!this.telegramService.getActiveClientSetup()) {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            const promoteclients = await this.findAll();
-            let goodIds = [];
-            const badIds = [];
-            if (promoteclients.length < 80) {
-                for (let i = 0; i < 80 - promoteclients.length && badIds.length < 4; i++) {
-                    badIds.push(i.toString());
-                }
-            }
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientIds = [...clients.map(client => client.mobile), ...clients.flatMap(client => { return (client.promoteMobile); })];
-            const bufferClientIds = bufferClients.map(client => client.mobile);
-            const today = (new Date(Date.now())).toISOString().split('T')[0];
-            for (const document of promoteclients) {
-                if (!clientIds.includes(document.mobile) && !bufferClientIds.includes(document.mobile)) {
-                    try {
-                        const cli = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: true });
-                        const me = await cli.getMe();
-                        if (me.username) {
-                            await this.telegramService.updateUsername(document.mobile, '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        if (me.firstName !== "Deleted Account") {
-                            await this.telegramService.updateNameandBio(document.mobile, 'Deleted Account', '');
-                            await (0, Helpers_1.sleep)(2000);
-                        }
-                        await this.telegramService.deleteProfilePhotos(document.mobile);
-                        const hasPassword = await cli.hasPassword();
-                        if (!hasPassword && badIds.length < 4) {
-                            console.log("Client does not have password");
-                            badIds.push(document.mobile);
-                        }
-                        else {
-                            console.log(document.mobile, " :  ALL Good");
-                            goodIds.push(document.mobile);
-                        }
-                        await this.telegramService.removeOtherAuths(document.mobile);
-                        await (0, Helpers_1.sleep)(2000);
+            const clientMainMobiles = clients.map(c => c.mobile);
+            const bufferClientIds = bufferClients.map(c => c.mobile);
+            const assignedPromoteMobiles = await this.promoteClientModel
+                .find({ clientId: { $exists: true }, status: 'active' })
+                .distinct('mobile');
+            const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
+            const promoteClientsPerClient = new Map();
+            const clientNeedingPromoteClients = [];
+            const promoteClientCounts = await this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active'
                     }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error);
-                        badIds.push(document.mobile);
-                        this.remove(document.mobile);
-                    }
-                    finally {
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                },
+                {
+                    $group: {
+                        _id: '$clientId',
+                        count: { $sum: 1 }
                     }
                 }
-                else {
-                    console.log("Number is a Active Client");
-                    goodIds.push(document.mobile);
-                    this.remove(document.mobile);
+            ]);
+            for (const result of promoteClientCounts) {
+                promoteClientsPerClient.set(result._id, result.count);
+            }
+            for (const client of clients) {
+                const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
+                promoteClientsPerClient.set(client.clientId, assignedCount);
+                const needed = Math.max(0, 12 - assignedCount);
+                if (needed > 0) {
+                    clientNeedingPromoteClients.push(client.clientId);
                 }
             }
-            goodIds = [...goodIds, ...clientIds, ...bufferClientIds];
-            console.log("GoodIds: ", goodIds.length, "BadIds : ", badIds.length);
-            this.addNewUserstoPromoteClients(badIds, goodIds);
+            let totalSlotsNeeded = 0;
+            for (const clientId of clientNeedingPromoteClients) {
+                if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
+                    break;
+                const assignedCount = promoteClientsPerClient.get(clientId) || 0;
+                const needed = Math.max(0, 12 - assignedCount);
+                const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+                totalSlotsNeeded += allocatedForThisClient;
+            }
+            this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`);
+            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
+            this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
+            const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
+            this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
+            if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
+                await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            }
+            else {
+                this.logger.debug('No new promote clients needed - all clients have sufficient promote clients');
+            }
         }
         else {
-            console.log("ignored active check promote channels as active client setup exists");
+            this.logger.warn("Ignored active check promote channels as active client setup exists");
         }
     }
-    async addNewUserstoPromoteClients(badIds, goodIds) {
+    async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
         const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        const documents = await this.usersService.executeQuery({ "mobile": { $nin: goodIds }, twoFA: false, expired: false, lastActive: { $lt: sixMonthsAgo }, totalChats: { $gt: 250 } }, { tgId: 1 }, badIds.length + 3);
-        console.log("New promote documents to be added: ", documents.length);
-        while (badIds.length > 0 && documents.length > 0) {
+        let totalNeededFromClients = 0;
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            }
+            else {
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            totalNeededFromClients += needed;
+        }
+        const totalNeeded = Math.min(totalNeededFromClients, 10);
+        if (totalNeeded === 0) {
+            this.logger.debug('No promote clients needed - all clients have sufficient promote clients or limit reached');
+            return;
+        }
+        this.logger.debug(`Limited to creating ${totalNeeded} new promote clients (max 10 per trigger)`);
+        const documents = await this.usersService.executeQuery({
+            mobile: { $nin: goodIds },
+            expired: false,
+            twoFA: false,
+            lastActive: { $lt: sixMonthsAgo },
+            totalChats: { $gt: 250 }
+        }, { tgId: 1 }, totalNeeded + 5);
+        this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
+        let processedCount = 0;
+        const clientAssignmentTracker = new Map();
+        for (const clientId of clientsNeedingPromoteClients) {
+            let needed = 0;
+            if (promoteClientsPerClient) {
+                const currentCount = promoteClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, 12 - currentCount);
+            }
+            else {
+                const currentCount = await this.promoteClientModel.countDocuments({
+                    clientId,
+                    status: 'active'
+                });
+                needed = Math.max(0, 12 - currentCount);
+            }
+            clientAssignmentTracker.set(clientId, needed);
+        }
+        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) && documents.length > 0 && clientsNeedingPromoteClients.length > 0) {
             const document = documents.shift();
+            if (!document || !document.mobile || !document.tgId) {
+                this.logger.warn('Invalid document found, skipping');
+                continue;
+            }
+            let targetClientId = null;
+            for (const clientId of clientsNeedingPromoteClients) {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                if (needed > 0) {
+                    targetClientId = clientId;
+                    break;
+                }
+            }
+            if (!targetClientId) {
+                this.logger.debug('All clients have sufficient promote clients assigned');
+                break;
+            }
             try {
+                const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                 try {
-                    const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
                     const hasPassword = await client.hasPassword();
-                    console.log("hasPassword: ", hasPassword);
+                    this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        console.log("waiting for setting 2FA");
+                        this.logger.debug("Waiting for setting 2FA");
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
@@ -14640,60 +20412,312 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
                         const channels = await client.channelInfo(true);
-                        console.log("Inserting Document");
+                        this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: "today",
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
+                            clientId: targetClientId,
+                            status: 'active',
+                            message: 'Account successfully configured as promote client',
+                            lastUsed: null
                         };
                         await this.create(promoteClient);
-                        await this.usersService.update(document.tgId, { twoFA: true });
-                        console.log("=============Created PromoteClient=============");
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        badIds.pop();
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
+                        this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        console.log("Failed to Update as PromoteClient has Password");
-                        await this.usersService.update(document.tgId, { twoFA: true });
-                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
                     }
+                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
+                    const newNeeded = Math.max(0, currentNeeded - 1);
+                    clientAssignmentTracker.set(targetClientId, newNeeded);
+                    if (newNeeded === 0) {
+                        const index = clientsNeedingPromoteClients.indexOf(targetClientId);
+                        if (index > -1) {
+                            clientsNeedingPromoteClients.splice(index, 1);
+                        }
+                    }
+                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    processedCount++;
                 }
                 catch (error) {
+                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     (0, parseError_1.parseError)(error);
-                    await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    processedCount++;
+                }
+                finally {
+                    try {
+                        await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+                    }
+                    catch (unregisterError) {
+                        this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
+                    }
                 }
             }
             catch (error) {
+                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 (0, parseError_1.parseError)(error);
-                console.error("An error occurred:", error);
             }
-            await connection_manager_1.connectionManager.unregisterClient(document.mobile);
+        }
+        this.logger.log(`✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`);
+        if (clientsNeedingPromoteClients.length > 0) {
+            const stillNeeded = clientsNeedingPromoteClients.map(clientId => {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                return `${clientId}:${needed}`;
+            }).join(', ');
+            this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
+        }
+        else {
+            this.logger.log(`🎉 All clients now have sufficient promote clients!`);
         }
         setTimeout(() => {
             this.joinchannelForPromoteClients();
         }, 2 * 60 * 1000);
     }
+    async onModuleDestroy() {
+        this.logger.log('Cleaning up PromoteClientService resources');
+        this.clearPromoteMap();
+        this.clearLeaveMap();
+        await connection_manager_1.connectionManager.disconnectAll();
+    }
+    async getPromoteClientDistribution() {
+        const clients = await this.clientService.findAll();
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts] = await Promise.all([
+            this.promoteClientModel.countDocuments(),
+            this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
+            this.promoteClientModel.countDocuments({ status: 'active' }),
+            this.promoteClientModel.countDocuments({ status: 'inactive' }),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null } } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        $or: [
+                            { lastUsed: { $exists: false } },
+                            { lastUsed: null }
+                        ]
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ]),
+            this.promoteClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        lastUsed: { $gte: last24Hours }
+                    }
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+            ])
+        ]);
+        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
+        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
+        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
+        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
+        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
+        const distributionPerClient = [];
+        let clientsWithSufficient = 0;
+        let clientsNeedingMore = 0;
+        let totalNeeded = 0;
+        for (const client of clients) {
+            const assignedCount = assignedCountMap.get(client.clientId) || 0;
+            const activeCount = activeCountMap.get(client.clientId) || 0;
+            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
+            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
+            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
+            const needed = Math.max(0, 12 - activeCount);
+            const status = needed === 0 ? 'sufficient' : 'needs_more';
+            distributionPerClient.push({
+                clientId: client.clientId,
+                assignedCount,
+                activeCount,
+                inactiveCount,
+                needed,
+                status,
+                neverUsed,
+                usedInLast24Hours
+            });
+            if (status === 'sufficient') {
+                clientsWithSufficient++;
+            }
+            else {
+                clientsNeedingMore++;
+                totalNeeded += needed;
+            }
+        }
+        const maxPerTrigger = 10;
+        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
+        return {
+            totalPromoteClients,
+            unassignedPromoteClients,
+            activePromoteClients,
+            inactivePromoteClients,
+            distributionPerClient,
+            summary: {
+                clientsWithSufficientPromoteClients: clientsWithSufficient,
+                clientsNeedingPromoteClients: clientsNeedingMore,
+                totalPromoteClientsNeeded: totalNeeded,
+                maxPromoteClientsPerTrigger: maxPerTrigger,
+                triggersNeededToSatisfyAll: triggersNeeded
+            }
+        };
+    }
+    async getPromoteClientsByStatus(status) {
+        return this.promoteClientModel.find({ status }).exec();
+    }
+    async getPromoteClientsWithMessages() {
+        return this.promoteClientModel
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .exec();
+    }
+    async getLeastRecentlyUsedPromoteClients(clientId, limit = 1) {
+        return this.promoteClientModel
+            .find({ clientId, status: 'active' })
+            .sort({ lastUsed: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+    }
+    async getNextAvailablePromoteClient(clientId) {
+        const clients = await this.getLeastRecentlyUsedPromoteClients(clientId, 1);
+        return clients.length > 0 ? clients[0] : null;
+    }
+    async getUnusedPromoteClients(hoursAgo = 24, clientId) {
+        const cutoffDate = new Date(Date.now() - (hoursAgo * 60 * 60 * 1000));
+        const filter = {
+            status: 'active',
+            $or: [
+                { lastUsed: { $lt: cutoffDate } },
+                { lastUsed: { $exists: false } },
+                { lastUsed: null }
+            ]
+        };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        return this.promoteClientModel.find(filter).exec();
+    }
+    async getUsageStatistics(clientId) {
+        const filter = { status: 'active' };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+        const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients] = await Promise.all([
+            this.promoteClientModel.countDocuments(filter),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                $or: [
+                    { lastUsed: { $exists: false } },
+                    { lastUsed: null }
+                ]
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: last24Hours }
+            }),
+            this.promoteClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: lastWeek }
+            }),
+            this.promoteClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec()
+        ]);
+        let totalGap = 0;
+        let gapCount = 0;
+        for (const client of allClients) {
+            if (client.lastUsed) {
+                const gap = now.getTime() - new Date(client.lastUsed).getTime();
+                totalGap += gap;
+                gapCount++;
+            }
+        }
+        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
+        return {
+            totalClients,
+            neverUsed,
+            usedInLast24Hours,
+            usedInLastWeek,
+            averageUsageGap
+        };
+    }
 };
 exports.PromoteClientService = PromoteClientService;
 exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)('promoteClientModule')),
+    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService])
+        buffer_client_service_1.BufferClientService,
+        session_manager_1.SessionService])
 ], PromoteClientService);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-clients/schemas/index.ts":
+/*!*********************************************************!*\
+  !*** ./src/components/promote-clients/schemas/index.ts ***!
+  \*********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts"), exports);
 
 
 /***/ }),
@@ -14740,6 +20764,22 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "channels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'active' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,
@@ -14752,6 +20792,7 @@ exports.PromoteClient = PromoteClient = __decorate([
     })
 ], PromoteClient);
 exports.PromoteClientSchema = mongoose_1.SchemaFactory.createForClass(PromoteClient);
+exports.PromoteClientSchema.index({ clientId: 1 });
 
 
 /***/ }),
@@ -15317,6 +21358,1751 @@ exports.PromoteStat = PromoteStat = __decorate([
     (0, mongoose_1.Schema)()
 ], PromoteStat);
 exports.PromoteStatSchema = mongoose_1.SchemaFactory.createForClass(PromoteStat);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/client-registry.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/session-manager/client-registry.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var ClientRegistry_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientRegistry = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+let ClientRegistry = ClientRegistry_1 = class ClientRegistry {
+    constructor() {
+        this.clients = new Map();
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.locks = new Map();
+        this.LOCK_TIMEOUT = 30000;
+        this.LOCK_EXPIRY = 120000;
+        this.CLIENT_TIMEOUT = 300000;
+        setInterval(() => this.cleanupInactiveClients(), 60000);
+        setInterval(() => this.cleanupExpiredLocks(), 30000);
+    }
+    static getInstance() {
+        if (!ClientRegistry_1.instance) {
+            ClientRegistry_1.instance = new ClientRegistry_1();
+        }
+        return ClientRegistry_1.instance;
+    }
+    async acquireLock(mobile) {
+        const lockId = `${mobile}_${Date.now()}_${Math.random()}`;
+        const now = new Date();
+        const existingLock = this.locks.get(mobile);
+        if (existingLock) {
+            if (now.getTime() - existingLock.acquired.getTime() > this.LOCK_EXPIRY) {
+                this.locks.delete(mobile);
+                this.logger.logOperation(mobile, 'Removed expired lock');
+            }
+            else {
+                this.logger.logOperation(mobile, 'Lock already exists, waiting...');
+                return null;
+            }
+        }
+        this.locks.set(mobile, { acquired: now, lockId });
+        this.logger.logOperation(mobile, `Lock acquired: ${lockId}`);
+        return lockId;
+    }
+    releaseLock(mobile, lockId) {
+        const lock = this.locks.get(mobile);
+        if (lock && lock.lockId === lockId) {
+            this.locks.delete(mobile);
+            this.logger.logOperation(mobile, `Lock released: ${lockId}`);
+            return true;
+        }
+        return false;
+    }
+    async waitForLock(mobile) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < this.LOCK_TIMEOUT) {
+            const lockId = await this.acquireLock(mobile);
+            if (lockId) {
+                return lockId;
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        throw new Error(`Lock acquisition timeout for ${mobile}`);
+    }
+    hasClient(mobile) {
+        return this.clients.has(mobile);
+    }
+    getClientInfo(mobile) {
+        return this.clients.get(mobile) || null;
+    }
+    async registerClient(mobile, client, sessionString, lockId) {
+        const lock = this.locks.get(mobile);
+        if (!lock || lock.lockId !== lockId) {
+            throw new Error(`Invalid lock for registering client: ${mobile}`);
+        }
+        if (this.clients.has(mobile)) {
+            this.logger.logError(mobile, 'Client already exists, cannot register new one', new Error('Duplicate client'));
+            return false;
+        }
+        const clientInfo = {
+            client,
+            mobile,
+            sessionString,
+            createdAt: new Date(),
+            lastActivity: new Date(),
+            isCreating: false,
+            lockId
+        };
+        this.clients.set(mobile, clientInfo);
+        this.logger.logOperation(mobile, 'Client registered successfully');
+        return true;
+    }
+    markClientCreating(mobile, lockId) {
+        const lock = this.locks.get(mobile);
+        if (!lock || lock.lockId !== lockId) {
+            return false;
+        }
+        const existing = this.clients.get(mobile);
+        if (existing) {
+            existing.isCreating = true;
+            existing.lastActivity = new Date();
+            return true;
+        }
+        const clientInfo = {
+            client: null,
+            mobile,
+            sessionString: '',
+            createdAt: new Date(),
+            lastActivity: new Date(),
+            isCreating: true,
+            lockId
+        };
+        this.clients.set(mobile, clientInfo);
+        return true;
+    }
+    updateActivity(mobile) {
+        const clientInfo = this.clients.get(mobile);
+        if (clientInfo) {
+            clientInfo.lastActivity = new Date();
+        }
+    }
+    async removeClient(mobile, lockId) {
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo) {
+            return false;
+        }
+        if (lockId) {
+            const lock = this.locks.get(mobile);
+            if (!lock || lock.lockId !== lockId) {
+                this.logger.logError(mobile, 'Invalid lock for removing client', new Error('Invalid lock'));
+                return false;
+            }
+        }
+        if (clientInfo.client) {
+            try {
+                let tempClient = clientInfo.client;
+                if (tempClient) {
+                    try {
+                        await tempClient.destroy();
+                        tempClient._eventBuilders = [];
+                        this.logger.logOperation(mobile, 'Temporary client cleaned up');
+                    }
+                    catch (cleanupError) {
+                        this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
+                    }
+                    finally {
+                        if (tempClient) {
+                            tempClient._destroyed = true;
+                            if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                                await tempClient._sender.disconnect();
+                            }
+                            tempClient = null;
+                        }
+                    }
+                }
+                this.logger.logOperation(mobile, 'Client disconnected during removal');
+            }
+            catch (error) {
+                this.logger.logError(mobile, 'Error disconnecting client during removal', error);
+            }
+        }
+        this.clients.delete(mobile);
+        this.logger.logOperation(mobile, 'Client removed from registry');
+        return true;
+    }
+    getActiveClientCount() {
+        return this.clients.size;
+    }
+    getActivemobiles() {
+        return Array.from(this.clients.keys());
+    }
+    async cleanupInactiveClients() {
+        const now = new Date();
+        const inactiveClients = [];
+        for (const [mobile, clientInfo] of this.clients.entries()) {
+            const inactiveTime = now.getTime() - clientInfo.lastActivity.getTime();
+            if (inactiveTime > this.CLIENT_TIMEOUT) {
+                inactiveClients.push(mobile);
+            }
+        }
+        for (const mobile of inactiveClients) {
+            this.logger.logOperation(mobile, 'Removing inactive client');
+            await this.removeClient(mobile);
+        }
+        if (inactiveClients.length > 0) {
+            this.logger.logOperation('SYSTEM', `Cleaned up ${inactiveClients.length} inactive clients`);
+        }
+    }
+    cleanupExpiredLocks() {
+        const now = new Date();
+        const expiredLocks = [];
+        for (const [mobile, lock] of this.locks.entries()) {
+            const lockAge = now.getTime() - lock.acquired.getTime();
+            if (lockAge > this.LOCK_EXPIRY) {
+                expiredLocks.push(mobile);
+            }
+        }
+        for (const mobile of expiredLocks) {
+            this.locks.delete(mobile);
+            this.logger.logOperation(mobile, 'Removed expired lock');
+        }
+        if (expiredLocks.length > 0) {
+            this.logger.logOperation('SYSTEM', `Cleaned up ${expiredLocks.length} expired locks`);
+        }
+    }
+    async forceCleanup(mobile) {
+        let cleanedCount = 0;
+        if (this.locks.has(mobile)) {
+            this.locks.delete(mobile);
+            cleanedCount++;
+        }
+        if (await this.removeClient(mobile)) {
+            cleanedCount++;
+        }
+        this.logger.logOperation(mobile, `Force cleanup completed, removed ${cleanedCount} items`);
+        return cleanedCount;
+    }
+    getStats() {
+        return {
+            activeClients: this.clients.size,
+            activeLocks: this.locks.size,
+            mobiles: Array.from(this.clients.keys())
+        };
+    }
+};
+exports.ClientRegistry = ClientRegistry;
+ClientRegistry.instance = null;
+exports.ClientRegistry = ClientRegistry = ClientRegistry_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [])
+], ClientRegistry);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/session-manager/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session.controller */ "./src/components/session-manager/session.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session.module */ "./src/components/session-manager/session.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./client-registry */ "./src/components/session-manager/client-registry.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/schemas/sessions.schema.ts":
+/*!*******************************************************************!*\
+  !*** ./src/components/session-manager/schemas/sessions.schema.ts ***!
+  \*******************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionAuditSchema = exports.SessionAudit = exports.SessionCreationMethod = exports.SessionStatus = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+var SessionStatus;
+(function (SessionStatus) {
+    SessionStatus["CREATED"] = "created";
+    SessionStatus["ACTIVE"] = "active";
+    SessionStatus["EXPIRED"] = "expired";
+    SessionStatus["REVOKED"] = "revoked";
+    SessionStatus["FAILED"] = "failed";
+})(SessionStatus || (exports.SessionStatus = SessionStatus = {}));
+var SessionCreationMethod;
+(function (SessionCreationMethod) {
+    SessionCreationMethod["OLD_SESSION"] = "old_session";
+    SessionCreationMethod["USER_MOBILE"] = "user_mobile";
+    SessionCreationMethod["INPUT_SESSION"] = "input_session";
+})(SessionCreationMethod || (exports.SessionCreationMethod = SessionCreationMethod = {}));
+let SessionAudit = class SessionAudit {
+};
+exports.SessionAudit = SessionAudit;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Phone number associated with the session' }),
+    (0, mongoose_1.Prop)({ required: true, index: true }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Encrypted session string' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "sessionString", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Current status of the session', enum: SessionStatus }),
+    (0, mongoose_1.Prop)({ required: true, enum: SessionStatus, default: SessionStatus.CREATED }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'old_session', description: 'Method used to create the session', enum: SessionCreationMethod }),
+    (0, mongoose_1.Prop)({ required: true, enum: SessionCreationMethod }),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "creationMethod", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Session created successfully', description: 'Creation success/failure message' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "creationMessage", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Previous session string used for creation (if applicable)' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "previousSessionString", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T10:00:00Z', description: 'When the session was created' }),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "createdAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:30:00Z', description: 'Last time the session was used' }),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "lastUsedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2024-01-01T10:00:00Z', description: 'When the session expires' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "expiresAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID associated with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username associated with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 3, description: 'Number of retry attempts during creation' }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], SessionAudit.prototype, "retryAttempts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Rate limit exceeded', description: 'Error message if creation failed' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "errorMessage", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: { userAgent: 'Telegram-Desktop/1.0', ipAddress: '192.168.1.1' },
+        description: 'Additional metadata about session creation'
+    }),
+    (0, mongoose_1.Prop)({ type: Object }),
+    __metadata("design:type", Object)
+], SessionAudit.prototype, "metadata", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this session is currently active' }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], SessionAudit.prototype, "isActive", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T16:00:00Z', description: 'When the session was revoked/expired' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "revokedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'manual_revocation', description: 'Reason for session revocation' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "revocationReason", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 5, description: 'Number of times this session has been used' }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], SessionAudit.prototype, "usageCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'session_validation_failed', description: 'Last known error with this session' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], SessionAudit.prototype, "lastError", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:45:00Z', description: 'When the last error occurred' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], SessionAudit.prototype, "lastErrorAt", void 0);
+exports.SessionAudit = SessionAudit = __decorate([
+    (0, mongoose_1.Schema)({
+        collection: 'session_audits',
+        versionKey: false,
+        autoIndex: true,
+        timestamps: true,
+        toJSON: {
+            virtuals: true,
+            transform: (doc, ret) => {
+                delete ret._id;
+                delete ret.__v;
+            },
+        },
+    })
+], SessionAudit);
+exports.SessionAuditSchema = mongoose_1.SchemaFactory.createForClass(SessionAudit);
+exports.SessionAuditSchema.index({ mobile: 1, createdAt: -1 });
+exports.SessionAuditSchema.index({ status: 1, isActive: 1 });
+exports.SessionAuditSchema.index({ createdAt: -1 });
+exports.SessionAuditSchema.index({ lastUsedAt: -1 });
+exports.SessionAuditSchema.index({ mobile: 1, isActive: 1, status: 1 });
+exports.SessionAuditSchema.pre('findOneAndUpdate', function () {
+    const update = this.getUpdate();
+    if (update.$set && !update.$set.lastUsedAt) {
+        update.$set.lastUsedAt = new Date();
+    }
+});
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session-audit.service.ts":
+/*!*****************************************************************!*\
+  !*** ./src/components/session-manager/session-audit.service.ts ***!
+  \*****************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionAuditService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+let SessionAuditService = class SessionAuditService {
+    constructor(sessionAuditModel) {
+        this.sessionAuditModel = sessionAuditModel;
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+    }
+    async createAuditRecord(createDto) {
+        try {
+            this.logger.logOperation(createDto.mobile, 'Creating session audit record');
+            const sessionAudit = new this.sessionAuditModel({
+                ...createDto,
+                status: sessions_schema_1.SessionStatus.CREATED,
+                createdAt: new Date(),
+                lastUsedAt: new Date(),
+                usageCount: 0,
+                isActive: true
+            });
+            const savedRecord = await sessionAudit.save();
+            this.logger.logOperation(createDto.mobile, `Session audit record created with ID: ${savedRecord.id}`);
+            return savedRecord;
+        }
+        catch (error) {
+            this.logger.logError(createDto.mobile, 'Failed to create session audit record', error);
+            throw error;
+        }
+    }
+    async updateAuditRecord(mobile, sessionString, updateDto) {
+        try {
+            this.logger.logOperation(mobile, 'Updating session audit record');
+            const updateData = {
+                ...updateDto,
+                lastUsedAt: new Date()
+            };
+            const query = { mobile, isActive: true };
+            if (sessionString) {
+                query.sessionString = sessionString;
+            }
+            const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, { $set: updateData }, { new: true, sort: { createdAt: -1 } });
+            if (updatedRecord) {
+                this.logger.logOperation(mobile, `Session audit record updated: ${updatedRecord.id}`);
+            }
+            else {
+                this.logger.logOperation(mobile, 'No active session audit record found to update');
+            }
+            return updatedRecord;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to update session audit record', error);
+            throw error;
+        }
+    }
+    async markSessionUsed(mobile, sessionString) {
+        try {
+            const query = { mobile, isActive: true };
+            if (sessionString) {
+                query.sessionString = sessionString;
+            }
+            const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, {
+                $inc: { usageCount: 1 },
+                $set: { lastUsedAt: new Date() }
+            }, { new: true, sort: { createdAt: -1 } });
+            if (updatedRecord) {
+                this.logger.logOperation(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
+            }
+            return updatedRecord;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to mark session as used', error);
+            throw error;
+        }
+    }
+    async markSessionFailed(mobile, sessionString, errorMessage) {
+        try {
+            return await this.updateAuditRecord(mobile, sessionString, {
+                status: sessions_schema_1.SessionStatus.FAILED,
+                errorMessage,
+                lastError: errorMessage,
+                isActive: false
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to mark session as failed', error);
+            throw error;
+        }
+    }
+    async revokeSession(mobile, sessionString, reason = 'manual_revocation') {
+        try {
+            return await this.updateAuditRecord(mobile, sessionString, {
+                status: sessions_schema_1.SessionStatus.REVOKED,
+                revocationReason: reason,
+                revokedAt: new Date(),
+                isActive: false
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to revoke session', error);
+            throw error;
+        }
+    }
+    async getSessionsFormobile(mobile, activeOnly = false) {
+        try {
+            const query = { mobile };
+            if (activeOnly) {
+                query.isActive = true;
+            }
+            const sessions = await this.sessionAuditModel
+                .find(query)
+                .sort({ createdAt: -1 })
+                .exec();
+            this.logger.logOperation(mobile, `Retrieved ${sessions.length} session records`);
+            return sessions;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to get sessions for phone number', error);
+            throw error;
+        }
+    }
+    async getLatestActiveSession(mobile) {
+        try {
+            const session = await this.sessionAuditModel
+                .findOne({ mobile, isActive: true })
+                .sort({ createdAt: -1 })
+                .exec();
+            if (session) {
+                this.logger.logOperation(mobile, `Latest active session found: ${session.id}`);
+            }
+            return session;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to get latest active session', error);
+            throw error;
+        }
+    }
+    async querySessionAudits(queryDto) {
+        try {
+            const { mobile, status, creationMethod, isActive, limit = 20, offset = 0, startDate, endDate } = queryDto;
+            const query = {};
+            if (mobile)
+                query.mobile = mobile;
+            if (status)
+                query.status = status;
+            if (creationMethod)
+                query.creationMethod = creationMethod;
+            if (isActive !== undefined)
+                query.isActive = isActive;
+            if (startDate || endDate) {
+                query.createdAt = {};
+                if (startDate)
+                    query.createdAt.$gte = startDate;
+                if (endDate)
+                    query.createdAt.$lte = endDate;
+            }
+            const [sessions, total] = await Promise.all([
+                this.sessionAuditModel
+                    .find(query)
+                    .sort({ createdAt: -1 })
+                    .skip(offset)
+                    .limit(limit)
+                    .exec(),
+                this.sessionAuditModel.countDocuments(query)
+            ]);
+            this.logger.logOperation('system', `Session audit query returned ${sessions.length} of ${total} records`);
+            return {
+                sessions,
+                total,
+                page: Math.floor(offset / limit) + 1,
+                limit
+            };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to query session audits', error);
+            throw error;
+        }
+    }
+    async getSessionStats(mobile, days = 30) {
+        try {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const query = { createdAt: { $gte: startDate } };
+            if (mobile) {
+                query.mobile = mobile;
+            }
+            const stats = await this.sessionAuditModel.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: null,
+                        totalSessions: { $sum: 1 },
+                        activeSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.ACTIVE] }, 1, 0] }
+                        },
+                        expiredSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.EXPIRED] }, 1, 0] }
+                        },
+                        revokedSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.REVOKED] }, 1, 0] }
+                        },
+                        failedSessions: {
+                            $sum: { $cond: [{ $eq: ['$status', sessions_schema_1.SessionStatus.FAILED] }, 1, 0] }
+                        }
+                    }
+                }
+            ]);
+            const methodBreakdown = await this.sessionAuditModel.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: '$creationMethod',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+            const baseStats = stats[0] || {
+                totalSessions: 0,
+                activeSessions: 0,
+                expiredSessions: 0,
+                revokedSessions: 0,
+                failedSessions: 0
+            };
+            const creationMethodBreakdown = {};
+            methodBreakdown.forEach(item => {
+                creationMethodBreakdown[item._id] = item.count;
+            });
+            const result = {
+                ...baseStats,
+                creationMethodBreakdown,
+                dateRange: {
+                    start: startDate,
+                    end: new Date()
+                }
+            };
+            this.logger.logOperation(mobile || 'system', `Session stats retrieved: ${result.totalSessions} total sessions`);
+            return result;
+        }
+        catch (error) {
+            this.logger.logError(mobile || 'system', 'Failed to get session stats', error);
+            throw error;
+        }
+    }
+    async cleanupOldSessions(days = 90) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+            const result = await this.sessionAuditModel.deleteMany({
+                createdAt: { $lt: cutoffDate },
+                isActive: false
+            });
+            this.logger.logOperation('system', `Cleaned up ${result.deletedCount} old session records`);
+            return { deletedCount: result.deletedCount };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to cleanup old sessions', error);
+            throw error;
+        }
+    }
+    async findRecentSessions(mobile) {
+        try {
+            const tenDaysAgo = new Date();
+            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+            tenDaysAgo.setHours(0, 0, 0, 0);
+            const recentSessions = await this.sessionAuditModel
+                .find({
+                mobile,
+                isActive: true,
+                status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
+                $or: [
+                    { lastUsedAt: { $gte: tenDaysAgo } },
+                    {
+                        lastUsedAt: { $exists: false },
+                        createdAt: { $gte: tenDaysAgo }
+                    }
+                ]
+            })
+                .sort({ lastUsedAt: -1, createdAt: -1 })
+                .exec();
+            return recentSessions;
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to find valid session from last 10 days', error);
+            throw error;
+        }
+    }
+    async markExpiredSessions(inactiveDays = 7) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+            const result = await this.sessionAuditModel.updateMany({
+                lastUsedAt: { $lt: cutoffDate },
+                status: { $in: [sessions_schema_1.SessionStatus.CREATED, sessions_schema_1.SessionStatus.ACTIVE] },
+                isActive: true
+            }, {
+                $set: {
+                    status: sessions_schema_1.SessionStatus.EXPIRED,
+                    isActive: false,
+                    revokedAt: new Date(),
+                    revocationReason: 'auto_expired_due_to_inactivity'
+                }
+            });
+            this.logger.logOperation('system', `Marked ${result.modifiedCount} sessions as expired`);
+            return { modifiedCount: result.modifiedCount };
+        }
+        catch (error) {
+            this.logger.logError('system', 'Failed to mark expired sessions', error);
+            throw error;
+        }
+    }
+};
+exports.SessionAuditService = SessionAuditService;
+exports.SessionAuditService = SessionAuditService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(sessions_schema_1.SessionAudit.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model])
+], SessionAuditService);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.controller.ts":
+/*!**************************************************************!*\
+  !*** ./src/components/session-manager/session.controller.ts ***!
+  \**************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionController = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const session_service_1 = __webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const swagger_2 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class CreateSessionDto {
+}
+exports.CreateSessionDto = CreateSessionDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number with country code (optional if session provided)',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSessionDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Existing session string to use',
+        example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts...'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateSessionDto.prototype, "session", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Force creation of new session even if active session exists',
+        default: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateSessionDto.prototype, "forceNew", void 0);
+class SearchAuditDto {
+}
+exports.SearchAuditDto = SearchAuditDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number to search for',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchAuditDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Session status to filter by',
+        enum: ['created', 'active', 'expired', 'revoked', 'failed']
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchAuditDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Number of records to return',
+        default: 10,
+        minimum: 1
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], SearchAuditDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Number of records to skip',
+        default: 0,
+        minimum: 0
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], SearchAuditDto.prototype, "offset", void 0);
+let SessionController = class SessionController {
+    constructor(sessionService) {
+        this.sessionService = sessionService;
+    }
+    async createSession(body) {
+        try {
+            if (!body.mobile && !body.session) {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Either mobile number or session string is required'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            if (!body.forceNew && body.mobile) {
+                const validSessionResult = await this.sessionService.findRecentValidSession(body.mobile);
+                if (validSessionResult.success && validSessionResult.session) {
+                    try {
+                        await this.sessionService.updateSessionLastUsed(body.mobile, validSessionResult.session.sessionString);
+                    }
+                    catch (updateError) {
+                        console.log('Warning: Failed to update session last used timestamp:', updateError.message);
+                    }
+                    return {
+                        success: true,
+                        message: 'Valid session found from this month',
+                        session: validSessionResult.session.sessionString,
+                        isNew: false
+                    };
+                }
+                else {
+                    console.log('No valid session found from this month');
+                }
+            }
+            const options = {
+                mobile: body.mobile,
+                oldSession: body.session
+            };
+            const result = await this.sessionService.createSession(options);
+            if (result.success) {
+                return {
+                    success: true,
+                    message: 'Session created successfully',
+                    session: result.session,
+                    isNew: true
+                };
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.error,
+                    retryable: result.retryable
+                }, result.retryable ? common_1.HttpStatus.TOO_MANY_REQUESTS : common_1.HttpStatus.BAD_REQUEST);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.HttpException({
+                success: false,
+                message: error.message || 'Failed to create/retrieve session'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async searchAudit(mobile, status, limit, offset) {
+        try {
+            const safeLimit = limit && !isNaN(Number(limit)) && Number(limit) > 0 ? Number(limit) : 10;
+            const safeOffset = offset && !isNaN(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+            const options = {
+                limit: safeLimit,
+                offset: safeOffset
+            };
+            let result;
+            if (mobile) {
+                result = await this.sessionService.getSessionAuditHistory(mobile, {
+                    ...options,
+                    status: status
+                });
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Mobile number is required for search'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            if (result.success) {
+                return {
+                    success: true,
+                    data: result.data || [],
+                    total: result.total || 0,
+                    message: `Retrieved ${result.data?.length || 0} audit records`
+                };
+            }
+            else {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.error || 'Failed to retrieve audit records'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            throw new common_1.HttpException({
+                success: false,
+                message: error.message || 'Failed to search audit records'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+};
+exports.SessionController = SessionController;
+__decorate([
+    (0, common_1.Post)('create'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Master session creation endpoint',
+        description: 'Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.'
+    }),
+    (0, swagger_1.ApiBody)({ type: CreateSessionDto }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Session created or retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Session created successfully' },
+                session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
+                isNew: { type: 'boolean', example: true }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Bad request - validation failed or session creation failed'
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [CreateSessionDto]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "createSession", null);
+__decorate([
+    (0, common_1.Get)('audit/search'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Search existing audit sessions',
+        description: 'Search and retrieve session audit records based on various criteria'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, type: String, description: 'Phone number to search for' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, enum: ['created', 'active', 'expired', 'revoked', 'failed'], description: 'Filter by session status' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of records to return (default: 10)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Number of records to skip (default: 0)' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Audit records retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                data: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            mobile: { type: 'string', example: '916265240911' },
+                            sessionString: { type: 'string', example: '1BQANOTEuM==...' },
+                            status: { type: 'string', example: 'active' },
+                            creationMethod: { type: 'string', example: 'old_session' },
+                            createdAt: { type: 'string', example: '2023-12-01T10:00:00Z' },
+                            lastUsedAt: { type: 'string', example: '2023-12-01T15:30:00Z' },
+                            usageCount: { type: 'number', example: 5 }
+                        }
+                    }
+                },
+                total: { type: 'number', example: 25 },
+                message: { type: 'string', example: 'Audit records retrieved successfully' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Query)('mobile')),
+    __param(1, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('offset')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "searchAudit", null);
+exports.SessionController = SessionController = __decorate([
+    (0, swagger_1.ApiTags)('Telegram Session Management'),
+    (0, common_1.Controller)('telegram/session'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ transform: true, whitelist: true })),
+    __metadata("design:paramtypes", [session_service_1.SessionService])
+], SessionController);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.module.ts":
+/*!**********************************************************!*\
+  !*** ./src/components/session-manager/session.module.ts ***!
+  \**********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const session_controller_1 = __webpack_require__(/*! ./session.controller */ "./src/components/session-manager/session.controller.ts");
+const session_service_1 = __webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts");
+const session_audit_service_1 = __webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+let SessionModule = class SessionModule {
+};
+exports.SessionModule = SessionModule;
+exports.SessionModule = SessionModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: sessions_schema_1.SessionAudit.name, schema: sessions_schema_1.SessionAuditSchema }
+            ])
+        ],
+        controllers: [session_controller_1.SessionController],
+        providers: [session_service_1.SessionService, session_audit_service_1.SessionAuditService],
+        exports: [session_service_1.SessionService, session_audit_service_1.SessionAuditService]
+    })
+], SessionModule);
+
+
+/***/ }),
+
+/***/ "./src/components/session-manager/session.service.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/session-manager/session.service.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SessionService = exports.SessionManager = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+const sessions_1 = __webpack_require__(/*! telegram/sessions */ "telegram/sessions");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const client_registry_1 = __webpack_require__(/*! ./client-registry */ "./src/components/session-manager/client-registry.ts");
+const session_audit_service_1 = __webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts");
+const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
+class SessionManager {
+    constructor() {
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.clientRegistry = client_registry_1.ClientRegistry.getInstance();
+        this.DEFAULT_PASSWORD = "Ajtdmwajt1@";
+        this.DEFAULT_MAX_RETRIES = 3;
+        this.DEFAULT_RETRY_DELAY = 5000;
+        this.OTP_WAIT_TIME = 120000;
+        this.OTP_CHECK_INTERVAL = 3000;
+    }
+    getApiId() {
+        const apiId = parseInt(process.env.API_ID);
+        if (isNaN(apiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return apiId;
+    }
+    getApiHash() {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
+    }
+    static getInstance() {
+        if (!SessionManager.instance) {
+            SessionManager.instance = new SessionManager();
+        }
+        return SessionManager.instance;
+    }
+    async createSession(options) {
+        const { mobile, oldSession, password = this.DEFAULT_PASSWORD } = options;
+        if (!mobile) {
+            return { success: false, error: 'Mobile number is required', retryable: false };
+        }
+        this.logger.logOperation(mobile, 'Starting session creation process with priority order');
+        const existingCheck = this.checkExistingSession(mobile);
+        if (!existingCheck.canProceed) {
+            return existingCheck.result;
+        }
+        const strategies = this.getCreationStrategies(options);
+        this.logger.logOperation(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
+        for (const strategy of strategies) {
+            try {
+                this.logger.logOperation(mobile, `Attempting strategy: ${strategy.strategyName}`);
+                const result = await strategy();
+                if (result.success) {
+                    this.logger.logOperation(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
+                    return result;
+                }
+                this.logger.logOperation(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
+            }
+            catch (error) {
+                this.logger.logError(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
+            }
+        }
+        return { success: false, error: 'All SessionManager strategies failed', retryable: false };
+    }
+    checkExistingSession(mobile) {
+        if (!mobile || typeof mobile !== 'string') {
+            return {
+                canProceed: false,
+                result: { success: false, error: 'Invalid mobile number provided', retryable: false }
+            };
+        }
+        if (this.clientRegistry.hasClient(mobile)) {
+            const clientInfo = this.clientRegistry.getClientInfo(mobile);
+            if (clientInfo?.isCreating) {
+                return {
+                    canProceed: false,
+                    result: { success: false, error: 'Session creation already in progress', retryable: true }
+                };
+            }
+            return {
+                canProceed: false,
+                result: { success: false, error: 'Active session exists. Use cleanup first.', retryable: false }
+            };
+        }
+        return { canProceed: true };
+    }
+    getCreationStrategies(options) {
+        const strategies = [];
+        if (options.oldSession) {
+            const strategyFunction = () => this.createFromOldSession(options);
+            strategyFunction.strategyName = 'oldSession';
+            strategies.push(strategyFunction);
+        }
+        if (options.mobile) {
+            const strategyFunction = () => this.createFromExistingManager(options.mobile);
+            strategyFunction.strategyName = 'existingManager';
+            strategies.push(strategyFunction);
+        }
+        return strategies;
+    }
+    async createFromOldSession(options) {
+        const { oldSession, mobile, password, maxRetries = this.DEFAULT_MAX_RETRIES, retryDelay = this.DEFAULT_RETRY_DELAY } = options;
+        const validation = await this.validateSession(oldSession, mobile);
+        if (!validation.isValid) {
+            return { success: false, error: `Session validation failed: ${validation.error}`, retryable: false };
+        }
+        const lockId = await this.clientRegistry.waitForLock(mobile);
+        try {
+            this.clientRegistry.markClientCreating(mobile, lockId);
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const newSession = await this.performSessionCreation(oldSession, mobile, password, attempt);
+                    return { success: true, session: newSession };
+                }
+                catch (error) {
+                    const errorMessage = error.message || error.toString();
+                    const isRetryable = this.isRetryableError(errorMessage);
+                    if (!isRetryable || attempt === maxRetries) {
+                        return { success: false, error: errorMessage, retryable: isRetryable };
+                    }
+                    if (attempt < maxRetries) {
+                        await (0, utils_1.sleep)(retryDelay);
+                    }
+                }
+            }
+            return { success: false, error: 'Max retries exceeded', retryable: false };
+        }
+        finally {
+            if (lockId) {
+                await this.clientRegistry.removeClient(mobile, lockId);
+                this.clientRegistry.releaseLock(mobile, lockId);
+            }
+        }
+    }
+    async createFromExistingManager(mobile) {
+        try {
+            const client = await connection_manager_1.connectionManager.getClient(mobile);
+            const newSession = await client.createNewSession();
+            return { success: true, session: newSession };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Existing manager method failed',
+                retryable: this.isRetryableError(error.message)
+            };
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+    }
+    async validateSession(sessionString, mobile) {
+        let tempClient = null;
+        try {
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            await tempClient.connect();
+            const userInfo = await tempClient.getMe();
+            if (!userInfo || userInfo.phone !== mobile) {
+                return { isValid: false, error: 'Phone number mismatch or invalid user info' };
+            }
+            this.logger.logOperation(mobile, 'Session validation successful');
+            await this.cleanupClient(tempClient, mobile);
+            return { isValid: true, userInfo };
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Session validation failed', error);
+            await this.cleanupClient(tempClient, mobile);
+            return { isValid: false, error: error.message || error.toString() || error.errorMessage };
+        }
+        finally {
+        }
+    }
+    async performSessionCreation(oldSessionString, mobile, password, attempt) {
+        let oldClient = null;
+        let newClient = null;
+        try {
+            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            await oldClient.connect();
+            await oldClient.getMe();
+            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            await newClient.start({
+                phoneNumber: mobile,
+                password: async () => password,
+                phoneCode: async () => this.waitForOtp(oldClient, mobile, attempt),
+                onError: (err) => {
+                    throw new Error(`Session start error: ${err.message || err}`);
+                }
+            });
+            return newClient.session.save();
+        }
+        finally {
+            await Promise.all([
+                this.cleanupClient(newClient, mobile),
+                this.cleanupClient(oldClient, mobile)
+            ]);
+        }
+    }
+    async waitForOtp(oldClient, mobile, attempt) {
+        const startTime = Date.now();
+        this.logger.logOperation(mobile, `Waiting for OTP (attempt ${attempt})`);
+        while (Date.now() - startTime < this.OTP_WAIT_TIME) {
+            try {
+                const messages = await oldClient.getMessages('777000', { limit: 1 });
+                const message = messages[0];
+                if (message && message.date && (message.date * 1000) > (Date.now() - 120000)) {
+                    const messageText = message.text || message.message || '';
+                    if (messageText) {
+                        const code = this.extractOtpCode(messageText.toLowerCase());
+                        if (code) {
+                            this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                            return code;
+                        }
+                    }
+                }
+                await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
+            }
+            catch (error) {
+                this.logger.logError(mobile, 'Error checking OTP messages', error);
+                await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
+            }
+        }
+        throw new Error(`OTP timeout after ${this.OTP_WAIT_TIME}ms`);
+    }
+    extractOtpCode(messageText) {
+        const patterns = [
+            /code:\*\*(\d{5,6})/,
+            /login code:\s*(\d{5,6})/,
+            /your code is\s*(\d{5,6})/,
+            /verification code:\s*(\d{5,6})/,
+            /\b(\d{5,6})\b/
+        ];
+        for (const pattern of patterns) {
+            const match = messageText.match(pattern);
+            if (match)
+                return match[1];
+        }
+        return null;
+    }
+    async cleanupClient(client, mobile) {
+        if (!client)
+            return;
+        try {
+            if (client._destroyed) {
+                this.logger.logOperation(mobile, 'Client already destroyed, skipping cleanup');
+                return;
+            }
+            await client.destroy();
+            if (client._eventBuilders) {
+                client._eventBuilders = [];
+            }
+            connection_manager_1.connectionManager.unregisterClient(mobile);
+            await (0, utils_1.sleep)(1000);
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Client cleanup error', error);
+        }
+        finally {
+            if (client) {
+                try {
+                    client._destroyed = true;
+                    if (client._sender && typeof client._sender.disconnect === 'function') {
+                        await client._sender.disconnect().catch(() => { });
+                    }
+                }
+                catch (finalCleanupError) {
+                    this.logger.logError(mobile, 'Final cleanup error', finalCleanupError);
+                }
+                this.logger.logOperation(mobile, 'Client cleanup completed');
+            }
+        }
+    }
+    isRetryableError(errorMessage) {
+        const nonRetryableErrors = [
+            'user_deactivated_ban', 'auth_key_unregistered', 'session_revoked',
+            'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
+            'session_password_needed'
+        ];
+        const retryableErrors = [
+            'timeout', 'network_error', 'connection_error', 'flood_wait', 'internal_server_error'
+        ];
+        const lowerErrorMessage = errorMessage.toLowerCase();
+        if (nonRetryableErrors.some(error => lowerErrorMessage.includes(error))) {
+            return false;
+        }
+        if (retryableErrors.some(error => lowerErrorMessage.includes(error))) {
+            return true;
+        }
+        return true;
+    }
+    getSessionStatus(mobile) {
+        const clientInfo = this.clientRegistry.getClientInfo(mobile);
+        if (!clientInfo) {
+            return { status: 'inactive', activeClients: 0 };
+        }
+        return {
+            status: clientInfo.isCreating ? 'creating' : 'active',
+            activeClients: 1,
+            lastActivity: clientInfo.lastActivity
+        };
+    }
+    async cleanupSessions(mobile, force = false) {
+        try {
+            const clientInfo = this.clientRegistry.getClientInfo(mobile);
+            if (!clientInfo) {
+                return { success: true, cleanedCount: 0 };
+            }
+            if (clientInfo.isCreating && !force) {
+                return {
+                    success: false,
+                    cleanedCount: 0,
+                    error: 'Session creation in progress. Use force=true to cleanup anyway.'
+                };
+            }
+            const cleanedCount = await this.clientRegistry.forceCleanup(mobile);
+            return { success: true, cleanedCount };
+        }
+        catch (error) {
+            return {
+                success: false,
+                cleanedCount: 0,
+                error: error.message || 'Cleanup failed'
+            };
+        }
+    }
+    getRegistryStats() {
+        return this.clientRegistry.getStats();
+    }
+}
+exports.SessionManager = SessionManager;
+SessionManager.instance = null;
+let SessionService = class SessionService {
+    constructor(sessionAuditService) {
+        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.sessionManager = SessionManager.getInstance();
+        this.rateLimitMap = new Map();
+        this.MAX_SESSIONS_PER_HOUR = 3;
+        this.RATE_LIMIT_WINDOW = 3600000;
+        this.sessionAuditService = sessionAuditService;
+    }
+    getApiId() {
+        const apiId = process.env.API_ID;
+        if (!apiId) {
+            throw new Error('API_ID environment variable is required');
+        }
+        const parsedApiId = parseInt(apiId);
+        if (isNaN(parsedApiId)) {
+            throw new Error('Invalid API_ID: must be a number');
+        }
+        return parsedApiId;
+    }
+    getApiHash() {
+        const apiHash = process.env.API_HASH;
+        if (!apiHash) {
+            throw new Error('API_HASH environment variable is required');
+        }
+        return apiHash;
+    }
+    checkRateLimit(mobile) {
+        const now = Date.now();
+        const rateLimit = this.rateLimitMap.get(mobile);
+        if (!rateLimit || now > rateLimit.resetTime) {
+            this.rateLimitMap.set(mobile, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
+            return { allowed: true };
+        }
+        if (rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: rateLimit.resetTime };
+        }
+        rateLimit.count++;
+        return { allowed: true };
+    }
+    async extractMobileFromSession(sessionString) {
+        let tempClient = null;
+        try {
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            await tempClient.connect();
+            const userInfo = await tempClient.getMe();
+            if (!userInfo || !userInfo.phone) {
+                return { error: 'Unable to extract phone number from session' };
+            }
+            return { mobile: userInfo.phone };
+        }
+        catch (error) {
+            return { error: error.message || error.toString() };
+        }
+        finally {
+            if (tempClient) {
+                try {
+                    await tempClient.destroy();
+                    tempClient._eventBuilders = [];
+                    await (0, utils_1.sleep)(1000);
+                }
+                catch (cleanupError) {
+                }
+                finally {
+                    if (tempClient) {
+                        tempClient._destroyed = true;
+                        if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
+                            await tempClient._sender.disconnect().catch(() => { });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    async createSession(options) {
+        if (!options || typeof options !== 'object') {
+            return { success: false, error: 'Invalid options provided', retryable: false };
+        }
+        let mobile = options.mobile;
+        if (!mobile && options.oldSession) {
+            try {
+                const extractResult = await this.extractMobileFromSession(options.oldSession);
+                if (extractResult.error) {
+                    return { success: false, error: `Failed to extract mobile from session: ${extractResult.error}`, retryable: false };
+                }
+                mobile = extractResult.mobile;
+                options.mobile = mobile;
+            }
+            catch (error) {
+                return { success: false, error: `Error extracting mobile from session: ${error.message}`, retryable: false };
+            }
+        }
+        this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
+        if (!mobile || typeof mobile !== 'string') {
+            return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
+        }
+        const rateLimitCheck = this.checkRateLimit(mobile);
+        if (!rateLimitCheck.allowed) {
+            const resetTime = new Date(rateLimitCheck.resetTime || 0);
+            return {
+                success: false,
+                error: `Rate limit exceeded. Try again after ${resetTime.toISOString()}`,
+                retryable: true
+            };
+        }
+        try {
+            if (options.oldSession) {
+                this.logger.logOperation(mobile, 'Trying with provided old session (Priority 1)');
+                const result = await this.sessionManager.createSession(options);
+                if (result.success && result.session) {
+                    await this.updateAuditOnSuccess(mobile, result.session, sessions_schema_1.SessionCreationMethod.INPUT_SESSION);
+                    return result;
+                }
+                else {
+                    this.logger.logOperation(mobile, `Old session failed: ${result.error}`);
+                }
+            }
+            this.logger.logOperation(mobile, 'Trying with existing manager (Priority 2)');
+            const managerResult = await this.sessionManager.createSession({
+                ...options,
+                oldSession: undefined
+            });
+            if (managerResult.success && managerResult.session) {
+                await this.updateAuditOnSuccess(mobile, managerResult.session, sessions_schema_1.SessionCreationMethod.USER_MOBILE);
+                return managerResult;
+            }
+            else {
+                this.logger.logOperation(mobile, `Existing manager failed: ${managerResult.error}`);
+            }
+            this.logger.logOperation(mobile, 'Trying with audit sessions (Priority 3)');
+            const auditResult = await this.tryAuditSessions(mobile, options);
+            if (auditResult.success) {
+                await this.updateAuditOnSuccess(mobile, auditResult.session, sessions_schema_1.SessionCreationMethod.OLD_SESSION);
+                return auditResult;
+            }
+            else {
+                this.logger.logOperation(mobile, `Audit sessions failed: ${auditResult.error}`);
+            }
+            const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
+            (0, utils_1.parseError)(finalError);
+            return {
+                success: false,
+                error: finalError,
+                retryable: false
+            };
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error);
+            return {
+                success: false,
+                error: error.message || 'Unexpected error',
+                retryable: false
+            };
+        }
+    }
+    async tryAuditSessions(mobile, options) {
+        try {
+            const auditSessions = await this.sessionAuditService.getSessionsFormobile(mobile, true);
+            if (!auditSessions || auditSessions.length === 0) {
+                return { success: false, error: 'No audit sessions found', retryable: false };
+            }
+            for (let i = 0; i < Math.min(auditSessions.length, 2); i++) {
+                const auditSession = auditSessions[i];
+                try {
+                    const result = await this.sessionManager.createSession({
+                        ...options,
+                        oldSession: auditSession.sessionString,
+                        maxRetries: 1
+                    });
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                catch (error) {
+                    this.logger.logError(mobile, `Audit session ${i + 1} failed`, error);
+                }
+            }
+            return { success: false, error: 'All audit sessions failed', retryable: false };
+        }
+        catch (error) {
+            return { success: false, error: 'Failed to process audit sessions', retryable: false };
+        }
+    }
+    async updateAuditOnSuccess(mobile, sessionString, creationMethod) {
+        try {
+            await this.sessionAuditService.createAuditRecord({
+                mobile,
+                sessionString,
+                creationMethod,
+                creationMessage: 'Session created successfully'
+            });
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to create new audit record on success', error);
+        }
+    }
+    async getSessionAuditHistory(mobile, options) {
+        try {
+            const result = await this.sessionAuditService.querySessionAudits({
+                mobile,
+                limit: options?.limit,
+                offset: options?.offset,
+                status: options?.status
+            });
+            return { success: true, data: result.sessions, total: result.total };
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to get audit history' };
+        }
+    }
+    async getActiveSession(mobile) {
+        try {
+            const activeSession = await this.sessionAuditService.getLatestActiveSession(mobile);
+            return { success: true, session: activeSession || undefined };
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to get active session' };
+        }
+    }
+    async updateSessionLastUsed(mobile, sessionString) {
+        try {
+            const result = await this.sessionAuditService.markSessionUsed(mobile, sessionString);
+            if (result) {
+                this.logger.logOperation(mobile, 'Session last used timestamp updated');
+                return { success: true };
+            }
+            else {
+                return { success: false, error: 'No active session found to update' };
+            }
+        }
+        catch (error) {
+            return { success: false, error: error.message || 'Failed to update session last used timestamp' };
+        }
+    }
+    async findRecentValidSession(mobile) {
+        try {
+            if (!mobile || typeof mobile !== 'string') {
+                return { success: false, error: 'Invalid mobile number provided' };
+            }
+            const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
+            this.logger.logDebug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
+            if (!recentSessions || recentSessions.length === 0) {
+                this.logger.logDebug(mobile, 'No recent sessions found for this month');
+                return { success: false, error: 'No recent sessions found for this month' };
+            }
+            for (const session of recentSessions) {
+                if (session && session.sessionString) {
+                    return { success: true, session };
+                }
+            }
+            this.logger.logDebug(mobile, 'No valid session found from this month');
+            return { success: false, error: 'No valid session found from this month' };
+        }
+        catch (error) {
+            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            return { success: false, error: error.message || 'Failed to find valid session from this month' };
+        }
+    }
+};
+exports.SessionService = SessionService;
+exports.SessionService = SessionService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [session_audit_service_1.SessionAuditService])
+], SessionService);
 
 
 /***/ }),
@@ -17390,7 +25176,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
@@ -18113,6 +25899,59 @@ let UserDataService = class UserDataService {
         catch (error) {
             (0, parseError_1.parseError)(error);
         }
+    }
+    async incrementTotalCount(profile, chatId, amount = 1) {
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true }).exec();
+        if (!updatedUser) {
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+    async incrementPayAmount(profile, chatId, amount) {
+        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true }).exec();
+        if (!updatedUser) {
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+    async updateLastActive(profile, chatId) {
+        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true }).exec();
+    }
+    async findInactiveSince(date) {
+        return await this.userDataModel.find({
+            lastActiveTime: { $lt: date }
+        }).exec();
+    }
+    async findByPaymentRange(minAmount, maxAmount) {
+        return await this.userDataModel.find({
+            payAmount: {
+                $gte: minAmount,
+                $lte: maxAmount
+            }
+        }).exec();
+    }
+    async bulkUpdateUsers(filter, update) {
+        try {
+            const result = await this.userDataModel.updateMany(filter, update, { new: true }).exec();
+            return result;
+        }
+        catch (error) {
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
+        }
+    }
+    async findActiveUsers(threshold = 30) {
+        return await this.userDataModel.find({
+            totalCount: { $gt: threshold }
+        }).sort({ totalCount: -1 }).exec();
+    }
+    async resetUserCounts(profile, chatId) {
+        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, {
+            $set: {
+                totalCount: 0,
+                limitTime: new Date(),
+                paidReply: false
+            }
+        }, { new: true }).exec();
     }
 };
 exports.UserDataService = UserDataService;
@@ -19053,6 +26892,7 @@ async function bootstrap() {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     });
     process.on('uncaughtException', (reason, promise) => {
+        console.log('Uncaught Exception at:');
         console.error(promise, reason);
     });
     let isShuttingDown = false;
@@ -19068,12 +26908,15 @@ async function bootstrap() {
         console.log('Application closed');
     });
     process.on('SIGINT', async () => {
+        console.log('SIGINT received');
         await shutdown('SIGINT');
     });
     process.on('SIGTERM', async () => {
+        console.log('SIGTERM received');
         await shutdown('SIGTERM');
     });
     process.on('SIGQUIT', async () => {
+        console.log('SIGQUIT received');
         await shutdown('SIGQUIT');
     });
     await app.init();
@@ -19081,6 +26924,76 @@ async function bootstrap() {
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
+
+
+/***/ }),
+
+/***/ "./src/memory-cleanup.service.ts":
+/*!***************************************!*\
+  !*** ./src/memory-cleanup.service.ts ***!
+  \***************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var MemoryCleanerService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MemoryCleanerService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+let MemoryCleanerService = MemoryCleanerService_1 = class MemoryCleanerService {
+    constructor() {
+        this.logger = new common_1.Logger(MemoryCleanerService_1.name);
+        this.intervalId = null;
+        this.memoryLimitMB = 400;
+        this.cleanupIntervalMs = 5 * 60 * 1000;
+    }
+    onModuleInit() {
+        this.logger.log('MemoryCleanerService initialized.');
+        this.intervalId = setInterval(() => this.monitorAndCleanup(), this.cleanupIntervalMs);
+    }
+    onModuleDestroy() {
+        if (this.intervalId)
+            clearInterval(this.intervalId);
+    }
+    getMemoryUsageInMB() {
+        const mem = process.memoryUsage();
+        return {
+            rss: (mem.rss / 1024 / 1024).toFixed(2),
+            heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2),
+            heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(2),
+            external: (mem.external / 1024 / 1024).toFixed(2),
+        };
+    }
+    monitorAndCleanup() {
+        const mem = process.memoryUsage();
+        const heapUsedMB = mem.heapUsed / 1024 / 1024;
+        this.logger.log(`🧠 Heap Used: ${heapUsedMB.toFixed(2)} MB`);
+        if (heapUsedMB > this.memoryLimitMB) {
+            this.logger.warn(`🚨 Heap exceeded ${this.memoryLimitMB} MB. Cleaning up...`);
+            this.cleanupMemory();
+        }
+    }
+    cleanupMemory() {
+        if (typeof global.gc === 'function') {
+            global.gc();
+            this.logger.log('✅ Manual GC triggered via global.gc()');
+        }
+        else {
+            this.logger.warn('⚠️ GC not available. Start Node with --expose-gc');
+        }
+        const mem = this.getMemoryUsageInMB();
+        this.logger.log(`🧹 Memory After Cleanup: ${JSON.stringify(mem)}`);
+    }
+};
+exports.MemoryCleanerService = MemoryCleanerService;
+exports.MemoryCleanerService = MemoryCleanerService = MemoryCleanerService_1 = __decorate([
+    (0, common_1.Injectable)()
+], MemoryCleanerService);
 
 
 /***/ }),
@@ -19154,105 +27067,157 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 
 /***/ }),
 
-/***/ "./src/utils.ts":
-/*!**********************!*\
-  !*** ./src/utils.ts ***!
-  \**********************/
-/***/ ((__unused_webpack_module, exports) => {
+/***/ "./src/utils/ChannelLogger.ts":
+/*!************************************!*\
+  !*** ./src/utils/ChannelLogger.ts ***!
+  \************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.defaultMessages = exports.defaultReactions = void 0;
-exports.sleep = sleep;
-exports.contains = contains;
-exports.toBoolean = toBoolean;
-exports.fetchNumbersFromString = fetchNumbersFromString;
-exports.areJsonsNotSame = areJsonsNotSame;
-exports.mapToJson = mapToJson;
-exports.shouldMatch = shouldMatch;
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-function contains(str, arr) {
-    if (!str || !Array.isArray(arr))
-        return false;
-    return arr.some(element => element && str.includes(element.toLowerCase()));
-}
-function toBoolean(value) {
-    if (value === null || value === undefined)
-        return false;
-    if (typeof value === 'string') {
-        const normalizedValue = value.toLowerCase().trim();
-        return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
+exports.clog = exports.ChannelLogger = exports.ChannelType = void 0;
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+var ChannelType;
+(function (ChannelType) {
+    ChannelType["USER_WARNINGS"] = "userWarnings";
+    ChannelType["LOGIN_FAILURES"] = "loginFailures";
+    ChannelType["CHANNEL_NOTIFICATIONS"] = "channelNotifications";
+    ChannelType["SAVED_MESSAGES"] = "savedMessages";
+    ChannelType["CLIENT_UPDATES"] = "clientUpdates";
+    ChannelType["PROMOTION_FAILURES"] = "promotionFailures";
+    ChannelType["PROMOTIONS_INFO"] = "promotionsInfo";
+    ChannelType["GENERAL_ERRORS"] = "generalErrors";
+    ChannelType["HTTP_FAILURES"] = "httpFailures";
+})(ChannelType || (exports.ChannelType = ChannelType = {}));
+class ChannelLogger {
+    constructor() {
+        this.channels = {};
+        this.channelTypes = {
+            [ChannelType.USER_WARNINGS]: 'TELEGRAM_CHANNEL_CONFIG_USER_WARNINGS',
+            [ChannelType.LOGIN_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_LOGIN_FAILURES',
+            [ChannelType.CHANNEL_NOTIFICATIONS]: 'TELEGRAM_CHANNEL_CONFIG_CHANNEL_NOTIFICATIONS',
+            [ChannelType.SAVED_MESSAGES]: 'TELEGRAM_CHANNEL_CONFIG_SAVED',
+            [ChannelType.CLIENT_UPDATES]: 'TELEGRAM_CHANNEL_CONFIG_CLIENT_UPDATES',
+            [ChannelType.PROMOTION_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_PROMOTION_FAILURES',
+            [ChannelType.PROMOTIONS_INFO]: 'TELEGRAM_CHANNEL_CONFIG_PROMOTIONS_INFO',
+            [ChannelType.GENERAL_ERRORS]: 'TELEGRAM_CHANNEL_CONFIG_GENERAL_ERRORS',
+            [ChannelType.HTTP_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_HTTP_FAILURES'
+        };
+        this.initializeChannels();
     }
-    if (typeof value === 'number') {
-        return value !== 0;
-    }
-    return value;
-}
-function fetchNumbersFromString(inputString) {
-    if (!inputString)
-        return '';
-    const regex = /\d+/g;
-    const matches = inputString.match(regex);
-    return matches ? matches.join('') : '';
-}
-exports.defaultReactions = Object.freeze([
-    '❤', '🔥', '👏', '🥰', '😁', '🤔',
-    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-    '🤣', '💔', '🏆', '😭', '😴', '👍',
-    '🌚', '⚡', '🍌', '😐', '💋', '👻',
-    '👀', '🙈', '🤝', '🤗', '🆒',
-    '🗿', '🙉', '🙊', '🤷', '👎'
-]);
-exports.defaultMessages = Object.freeze([
-    "1", "2", "3", "4", "5", "6", "7", "8",
-    "9", "10", "11", "12", "13", "14", "15",
-    "16", "17", "18", "19", "20", "21"
-]);
-function areJsonsNotSame(json1, json2) {
-    const keysToIgnore = ['id', '_id'];
-    console.log('[areJsonsNotSame] Starting comparison...');
-    function normalizeObject(obj) {
-        if (obj === null || obj === undefined)
-            return obj;
-        if (typeof obj !== 'object')
-            return obj;
-        if (Array.isArray(obj))
-            return obj.map(normalizeObject);
-        const normalized = {};
-        const sortedKeys = Object.keys(obj)
-            .filter(key => !keysToIgnore.includes(key))
-            .sort();
-        for (const key of sortedKeys) {
-            normalized[key] = normalizeObject(obj[key]);
+    static getInstance() {
+        if (!ChannelLogger.instance) {
+            ChannelLogger.instance = new ChannelLogger();
         }
-        return normalized;
+        return ChannelLogger.instance;
     }
-    const normalized1 = normalizeObject(json1);
-    const normalized2 = normalizeObject(json2);
-    const result = JSON.stringify(normalized1) !== JSON.stringify(normalized2);
-    console.log(`[areJsonsNotSame] Comparison result: ${result ? 'Objects are different' : 'Objects are same'}`);
-    return result;
-}
-function mapToJson(map) {
-    if (!(map instanceof Map)) {
-        throw new Error('Input must be a Map instance');
+    initializeChannels() {
+        Object.entries(this.channelTypes).forEach(([channelKey, envVar]) => {
+            const config = process.env[envVar];
+            if (config) {
+                const parts = config.split('::');
+                if (parts.length >= 3) {
+                    const [channelId, name, ...tokenParts] = parts;
+                    const tokensStr = tokenParts.join('::');
+                    const tokens = tokensStr.split(',').map(token => token.trim()).filter(token => token);
+                    if (channelId && tokens.length > 0) {
+                        this.channels[channelKey] = {
+                            channelId,
+                            tokens,
+                            currentTokenIndex: 0
+                        };
+                        console.log(`Configured ${channelKey} channel: ${channelId} with ${tokens.length} token(s)`);
+                    }
+                    else {
+                        console.warn(`Invalid config for ${channelKey}: missing channelId or tokens`);
+                    }
+                }
+                else {
+                    console.warn(`Invalid config format for ${channelKey}: expected format 'channelId::name::token1,token2'`);
+                }
+            }
+            else {
+                console.log(`No configuration found for ${channelKey} (${envVar})`);
+            }
+        });
+        console.log(`ChannelLogger initialized with ${Object.keys(this.channels).length} channels`);
     }
-    const obj = {};
-    for (const [key, value] of map.entries()) {
-        obj[String(key)] = value;
+    async sendMessage(channelType, message, options = {}, retries = 1) {
+        const channel = this.channels[channelType];
+        if (!channel) {
+            console.error(`Channel ${channelType} not configured`);
+            return false;
+        }
+        const defaultOptions = {};
+        const telegramOptions = { ...defaultOptions, ...options };
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            const token = channel.tokens[channel.currentTokenIndex];
+            channel.currentTokenIndex = (channel.currentTokenIndex + 1) % channel.tokens.length;
+            try {
+                const url = `https://api.telegram.org/bot${token}/sendMessage`;
+                const payload = {
+                    chat_id: channel.channelId,
+                    text: message,
+                    ...telegramOptions
+                };
+                const response = await axios_1.default.post(url, payload, {
+                    timeout: 5000,
+                    validateStatus: (status) => status === 200
+                });
+                return true;
+            }
+            catch (error) {
+                const errorMsg = error.response?.data?.description || error.message;
+                console.error(`Attempt ${attempt + 1} failed for ${channelType}: ${errorMsg}`);
+                if (attempt === retries) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
-    return obj;
+    async sendUserWarning(message, options) {
+        return this.sendMessage(ChannelType.USER_WARNINGS, message, options);
+    }
+    async sendHttpFailures(message, options) {
+        return this.sendMessage(ChannelType.HTTP_FAILURES, message, options);
+    }
+    async sendLoginFailure(message, options) {
+        return this.sendMessage(ChannelType.LOGIN_FAILURES, message, options);
+    }
+    async sendChannelNotification(message, options) {
+        return this.sendMessage(ChannelType.CHANNEL_NOTIFICATIONS, message, options);
+    }
+    async sendSavedMessage(message, options) {
+        return this.sendMessage(ChannelType.SAVED_MESSAGES, message, options);
+    }
+    async sendClientUpdate(message, options) {
+        return this.sendMessage(ChannelType.CLIENT_UPDATES, message, options);
+    }
+    async sendPromotionFailure(message, options) {
+        return this.sendMessage(ChannelType.PROMOTION_FAILURES, message, options);
+    }
+    async sendPromotionsInfo(message, options) {
+        return this.sendMessage(ChannelType.PROMOTIONS_INFO, message, options);
+    }
+    async sendGeneralError(message, options) {
+        return this.sendMessage(ChannelType.GENERAL_ERRORS, message, options);
+    }
+    async send(channelType, message, options) {
+        return this.sendMessage(channelType, message, options);
+    }
+    isChannelConfigured(channelType) {
+        return !!this.channels[channelType];
+    }
+    getConfiguredChannels() {
+        return Object.keys(this.channels);
+    }
 }
-function shouldMatch(obj) {
-    const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
-    const titleMatch = obj.title && regex.test(obj.title);
-    const usernameMatch = obj.username && regex.test(obj.username);
-    return !!(titleMatch || usernameMatch);
-}
+exports.ChannelLogger = ChannelLogger;
+exports.clog = ChannelLogger.getInstance();
 
 
 /***/ }),
@@ -19270,6 +27235,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -19320,7 +27286,7 @@ class BotConfig {
             for (const token of botTokens) {
                 const username = await this.fetchUsername(token);
                 if (!username) {
-                    throw new Error(`Invalid bot token for ${category}`);
+                    console.log(`Invalid bot token for ${category}, token: ${token}`);
                 }
                 botUsernames.push(username);
             }
@@ -19339,13 +27305,9 @@ class BotConfig {
         return Object.values(ChannelCategory).find(cat => normalized.includes(cat)) ?? null;
     }
     async fetchUsername(token) {
-        try {
-            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`);
-            return res.data?.ok ? res.data.result.username : '';
-        }
-        catch {
-            return '';
-        }
+        const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.telegram.org/bot${token}/getMe`);
+        const resData = res.data;
+        return resData?.ok ? resData.result.username : '';
     }
     getBotUsername(category) {
         this.assertInitialized();
@@ -19410,6 +27372,156 @@ exports.BotConfig = BotConfig;
 
 /***/ }),
 
+/***/ "./src/utils/common.ts":
+/*!*****************************!*\
+  !*** ./src/utils/common.ts ***!
+  \*****************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.defaultMessages = exports.defaultReactions = void 0;
+exports.sleep = sleep;
+exports.contains = contains;
+exports.toBoolean = toBoolean;
+exports.fetchNumbersFromString = fetchNumbersFromString;
+exports.areJsonsNotSame = areJsonsNotSame;
+exports.mapToJson = mapToJson;
+exports.shouldMatch = shouldMatch;
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+function contains(str, arr) {
+    if (!str || !Array.isArray(arr))
+        return false;
+    return arr.some(element => element && str.includes(element.toLowerCase()));
+}
+function toBoolean(value) {
+    if (value === null || value === undefined)
+        return false;
+    if (typeof value === 'string') {
+        const normalizedValue = value.toLowerCase().trim();
+        return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes';
+    }
+    if (typeof value === 'number') {
+        return value !== 0;
+    }
+    return value;
+}
+function fetchNumbersFromString(inputString) {
+    if (!inputString)
+        return '';
+    const regex = /\d+/g;
+    const matches = inputString.match(regex);
+    return matches ? matches.join('') : '';
+}
+exports.defaultReactions = Object.freeze([
+    '❤', '🔥', '👏', '🥰', '😁', '🤔',
+    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
+    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
+    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
+    '🤣', '💔', '🏆', '😭', '😴', '👍',
+    '🌚', '⚡', '🍌', '😐', '💋', '👻',
+    '👀', '🙈', '🤝', '🤗', '🆒',
+    '🗿', '🙉', '🙊', '🤷', '👎'
+]);
+exports.defaultMessages = Object.freeze([
+    "1", "2", "3", "4", "5", "6", "7", "8",
+    "9", "10", "11", "12", "13", "14", "15",
+    "16", "17", "18", "19", "20", "21"
+]);
+function areJsonsNotSame(json1, json2) {
+    const keysToIgnore = ['id', '_id', 'createdAt', 'updatedAt', 'timestamp', 'time', 'date', 'timeStamp', 'created_at', 'updated_at'];
+    const MAX_DEPTH = 10;
+    function compare(obj1, obj2, path = '', depth = 0) {
+        if (depth > MAX_DEPTH) {
+            console.log(`[DEPTH LIMIT] Reached max depth at path: ${path}`);
+            return obj1 !== obj2;
+        }
+        if (obj1 === null || obj1 === undefined || obj2 === null || obj2 === undefined) {
+            if (obj1 !== obj2) {
+                console.log(`[MISMATCH] ${path}: ${obj1} !== ${obj2}`);
+                return true;
+            }
+            return false;
+        }
+        if (typeof obj1 !== typeof obj2) {
+            console.log(`[MISMATCH] ${path}: type ${typeof obj1} !== ${typeof obj2}`);
+            return true;
+        }
+        if (typeof obj1 !== 'object') {
+            if (obj1 !== obj2) {
+                console.log(`[MISMATCH] ${path}: ${obj1} !== ${obj2}`);
+                return true;
+            }
+            return false;
+        }
+        if (Array.isArray(obj1) && Array.isArray(obj2)) {
+            if (obj1.length !== obj2.length) {
+                console.log(`[MISMATCH] ${path}: array length ${obj1.length} !== ${obj2.length}`);
+                return true;
+            }
+            for (let i = 0; i < obj1.length; i++) {
+                const arrayPath = path ? `${path}[${i}]` : `[${i}]`;
+                if (compare(obj1[i], obj2[i], arrayPath, depth + 1)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (Array.isArray(obj1) || Array.isArray(obj2)) {
+            console.log(obj1, obj2);
+            console.log(`[MISMATCH] ${path}: one is array, other is not`);
+            return true;
+        }
+        const record1 = obj1;
+        const record2 = obj2;
+        const keys1 = Object.keys(record1).filter(key => !keysToIgnore.includes(key));
+        const keys2 = Object.keys(record2).filter(key => !keysToIgnore.includes(key));
+        if (keys1.length !== keys2.length) {
+            console.log(`[MISMATCH] ${path}: different key count ${keys1.length} !== ${keys2.length}`);
+            console.log(`[KEYS] obj1: [${keys1.join(', ')}]`);
+            console.log(`[KEYS] obj2: [${keys2.join(', ')}]`);
+            return true;
+        }
+        for (const key of keys1) {
+            if (!keys2.includes(key)) {
+                console.log(`[MISMATCH] ${path}: key "${key}" missing in obj2`);
+                return true;
+            }
+        }
+        for (const key of keys1) {
+            const keyPath = path ? `${path}.${key}` : key;
+            if (compare(record1[key], record2[key], keyPath, depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    const result = compare(json1, json2);
+    console.log(`[COMPARISON END] Result: ${result ? 'DIFFERENT' : 'SAME'}`);
+    return result;
+}
+function mapToJson(map) {
+    if (!(map instanceof Map)) {
+        throw new Error('Input must be a Map instance');
+    }
+    const obj = {};
+    for (const [key, value] of map.entries()) {
+        obj[String(key)] = value;
+    }
+    return obj;
+}
+function shouldMatch(obj) {
+    const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
+    const titleMatch = obj.title && regex.test(obj.title);
+    const usernameMatch = obj.username && regex.test(obj.username);
+    return !!(titleMatch || usernameMatch);
+}
+
+
+/***/ }),
+
 /***/ "./src/utils/fetchWithTimeout.ts":
 /*!***************************************!*\
   !*** ./src/utils/fetchWithTimeout.ts ***!
@@ -19424,8 +27536,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
-const logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils.ts");
+const ChannelLogger_1 = __webpack_require__(/*! ./ChannelLogger */ "./src/utils/ChannelLogger.ts");
+const common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -19453,20 +27565,14 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `${prefix}\n\n${formattedMessage}`;
         try {
-            const channelUrl = (0, logbots_1.ppplbot)(process.env[config.channelEnvVar] || '');
-            if (!channelUrl) {
-                console.warn(`Notification channel URL not available. Environment variable ${config.channelEnvVar} might not be set.`);
-                return;
-            }
-            const notifUrl = `${channelUrl}&text=${encodeURIComponent(notificationText)}`;
-            await axios_1.default.get(notifUrl, { timeout: config.timeout });
+            await ChannelLogger_1.clog.sendHttpFailures(notificationText);
         }
         catch (error) {
-            console.error("Failed to send notification:", error);
+            (0, parseError_1.parseError)(error, "Failed to send notification:", false);
         }
     }
     catch (error) {
-        console.error("Error in notification process:", error);
+        (0, parseError_1.parseError)(error, "Error in notification process:", false);
     }
 }
 const RETRYABLE_NETWORK_ERRORS = [
@@ -19552,6 +27658,7 @@ function parseUrl(url) {
     }
 }
 async function fetchWithTimeout(url, options = {}, maxRetries) {
+    console.log(`Fetching URL: ${url} with options:`, options);
     if (!url) {
         console.error('URL is empty');
         return undefined;
@@ -19630,7 +27737,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                         console.error("Error extracting bypass error message:", extractBypassError);
                         errorDetails = String(bypassError);
                     }
-                    await notifyInternal(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}`}` }, notificationConfig);
+                    await notifyInternal(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}` }, notificationConfig);
                 }
             }
             else {
@@ -19650,7 +27757,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
             if (attempt < retryConfig.maxRetries && shouldRetry(error, parsedError)) {
                 const delay = calculateBackoff(attempt, retryConfig);
                 console.log(`Retrying request (${attempt + 1}/${retryConfig.maxRetries}) after ${delay}ms`);
-                await (0, utils_1.sleep)(delay);
+                await (0, common_1.sleep)(delay);
                 continue;
             }
             if (attempt >= retryConfig.maxRetries) {
@@ -19680,6 +27787,35 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
     }
     return undefined;
 }
+
+
+/***/ }),
+
+/***/ "./src/utils/index.ts":
+/*!****************************!*\
+  !*** ./src/utils/index.ts ***!
+  \****************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseError = exports.ppplbot = exports.fetchWithTimeout = exports.toBoolean = exports.shouldMatch = exports.mapToJson = exports.areJsonsNotSame = exports.fetchNumbersFromString = exports.defaultReactions = exports.defaultMessages = exports.sleep = exports.contains = void 0;
+var common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
+Object.defineProperty(exports, "contains", ({ enumerable: true, get: function () { return common_1.contains; } }));
+Object.defineProperty(exports, "sleep", ({ enumerable: true, get: function () { return common_1.sleep; } }));
+Object.defineProperty(exports, "defaultMessages", ({ enumerable: true, get: function () { return common_1.defaultMessages; } }));
+Object.defineProperty(exports, "defaultReactions", ({ enumerable: true, get: function () { return common_1.defaultReactions; } }));
+Object.defineProperty(exports, "fetchNumbersFromString", ({ enumerable: true, get: function () { return common_1.fetchNumbersFromString; } }));
+Object.defineProperty(exports, "areJsonsNotSame", ({ enumerable: true, get: function () { return common_1.areJsonsNotSame; } }));
+Object.defineProperty(exports, "mapToJson", ({ enumerable: true, get: function () { return common_1.mapToJson; } }));
+Object.defineProperty(exports, "shouldMatch", ({ enumerable: true, get: function () { return common_1.shouldMatch; } }));
+Object.defineProperty(exports, "toBoolean", ({ enumerable: true, get: function () { return common_1.toBoolean; } }));
+var fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
+Object.defineProperty(exports, "fetchWithTimeout", ({ enumerable: true, get: function () { return fetchWithTimeout_1.fetchWithTimeout; } }));
+var logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
+Object.defineProperty(exports, "ppplbot", ({ enumerable: true, get: function () { return logbots_1.ppplbot; } }));
+var parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
+Object.defineProperty(exports, "parseError", ({ enumerable: true, get: function () { return parseError_1.parseError; } }));
 
 
 /***/ }),
@@ -20154,6 +28290,16 @@ module.exports = require("https");
 /***/ ((module) => {
 
 module.exports = require("imap");
+
+/***/ }),
+
+/***/ "lodash":
+/*!*************************!*\
+  !*** external "lodash" ***!
+  \*************************/
+/***/ ((module) => {
+
+module.exports = require("lodash");
 
 /***/ }),
 

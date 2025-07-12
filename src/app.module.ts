@@ -21,6 +21,10 @@ import { TgSignupModule } from './components/TgSignup/tg-signup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
 import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
+import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
+import { MemoryCleanerService } from './memory-cleanup.service';
+import { SessionModule } from './components/session-manager';
+import { IpManagementModule } from './components/ip-management/ip-management.module';
 
 @Module({
   imports: [
@@ -28,6 +32,8 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     TelegramModule,
     ActiveChannelsModule,
     ClientModule,
+    SessionModule,
+    IpManagementModule,
     UserDataModule,
     UsersModule,
     BufferClientModule,
@@ -44,7 +50,9 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     TransactionModule,
     NpointModule,
     TimestampModule,
+    DynamicDataModule,
   ],
+  providers: [MemoryCleanerService],
   controllers: [AppController],
   exports: [
     TelegramModule,
@@ -58,7 +66,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
     PromoteClientModule,
     TgSignupModule,
     TransactionModule,
-    TimestampModule
+    TimestampModule,
   ]
 })
 export class AppModule implements NestModule {

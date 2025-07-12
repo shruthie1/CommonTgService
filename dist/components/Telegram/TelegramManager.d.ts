@@ -4,7 +4,6 @@ import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { ContentFilter } from '../../interfaces/telegram';
 import { GroupOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
@@ -25,8 +24,6 @@ declare class TelegramManager {
     client: TelegramClient | null;
     private channelArray;
     private static activeClientSetup;
-    private contentFilters;
-    private filterHandler;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
         days?: number;
@@ -54,8 +51,7 @@ declare class TelegramManager {
     forwardMediaToBot(fromChatId: string): Promise<void>;
     forwardSecretMsgs(fromChatId: string, toChatId: string): Promise<void>;
     forwardMessages(fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
-    disconnect(): Promise<void>;
-    private cleanupClient;
+    destroy(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
     errorHandler(error: any): Promise<void>;
@@ -63,7 +59,6 @@ declare class TelegramManager {
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
     getDialogs(params: IterDialogsParams): Promise<TotalList<import("telegram/tl/custom/dialog").Dialog>>;
-    getLastMsgs(limit: number): Promise<string>;
     getSelfMSgsInfo(): Promise<{
         photoCount: number;
         videoCount: number;
@@ -244,9 +239,6 @@ declare class TelegramManager {
         }[];
     }>;
     private getMediaExtension;
-    setContentFilters(filters: ContentFilter): Promise<void>;
-    private evaluateMessage;
-    private executeFilterAction;
     private getSearchFilter;
     private getMediaType;
     private getEntityId;

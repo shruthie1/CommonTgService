@@ -86,11 +86,6 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['916265240911'], description: 'Promote mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: true, type: [String] }),
-    __metadata("design:type", Array)
-], Client.prototype, "promoteMobile", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -100,6 +95,11 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "dedicatedIps", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,

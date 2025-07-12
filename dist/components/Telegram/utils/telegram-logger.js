@@ -12,17 +12,27 @@ class TelegramLogger {
         }
         return TelegramLogger.instance;
     }
+    shouldIncludeDetails(details) {
+        return details !== undefined
+            && details !== null
+            && !(typeof details === 'object' && Object.keys(details).length === 0);
+    }
+    formatMessage(mobile, message, details) {
+        return this.shouldIncludeDetails(details)
+            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            : `[${mobile}] ${message}`;
+    }
     logOperation(mobile, operation, details) {
-        this.logger.log(`[${mobile}] ${operation} - ${JSON.stringify(details || {})}`);
+        this.logger.log(this.formatMessage(mobile, operation, details));
     }
     logError(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
     }
     logWarning(mobile, message, details) {
-        this.logger.warn(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.warn(this.formatMessage(mobile, message, details));
     }
     logDebug(mobile, message, details) {
-        this.logger.debug(`[${mobile}] ${message} - ${JSON.stringify(details || {})}`);
+        this.logger.debug(this.formatMessage(mobile, message, details));
     }
 }
 exports.TelegramLogger = TelegramLogger;

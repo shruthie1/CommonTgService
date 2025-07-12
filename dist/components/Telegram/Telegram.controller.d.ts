@@ -24,12 +24,6 @@ export declare class TelegramController {
     getConnectionStats(): ConnectionStatsDto;
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
-    startCleanupInterval(intervalMs?: number): {
-        message: string;
-    };
-    stopCleanupInterval(): {
-        message: string;
-    };
     getMe(mobile: string): Promise<import("telegram").Api.User>;
     getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;

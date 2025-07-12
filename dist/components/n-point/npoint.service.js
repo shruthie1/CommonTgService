@@ -24,13 +24,13 @@ let NpointService = NpointService_1 = class NpointService {
     async fetchCsrfToken() {
         this.logger.debug('Fetching CSRF token...');
         try {
-            let data = JSON.stringify({
+            const data = JSON.stringify({
                 "user": {
                     "email": "dodieajt@gmail.com",
                     "password": "Ajtdmwajt1@"
                 }
             });
-            let config = {
+            const config = {
                 method: 'post',
                 maxBodyLength: Infinity,
                 url: this.signInUrl,
@@ -114,6 +114,7 @@ let NpointService = NpointService_1 = class NpointService {
                 },
             });
             this.logger.debug(`Document with ID: ${documentId} updated successfully.`);
+            console.log(response.data.contents);
             return response.data;
         }
         catch (error) {

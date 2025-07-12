@@ -1,5 +1,6 @@
 import TelegramManager from '../TelegramManager';
 import { UsersService } from '../../../components/users/users.service';
+import { ConnectionStatusDto } from '../dto/connection-management.dto';
 interface RetryConfig {
     maxAttempts: number;
     baseDelay: number;
@@ -12,12 +13,13 @@ interface ClientInfo {
     lastUsed: number;
     autoDisconnect: boolean;
     connectionAttempts: number;
-    lastError?: Error;
+    lastError?: string;
     state: 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
     retryConfig: RetryConfig;
     nextRetryAt?: number;
     consecutiveFailures: number;
     lastSuccessfulConnection?: number;
+    cleanupAttempts?: number;
 }
 interface GetClientOptions {
     autoDisconnect?: boolean;
@@ -26,26 +28,35 @@ interface GetClientOptions {
     retryConfig?: Partial<RetryConfig>;
     forceReconnect?: boolean;
 }
+interface ConnectionLeakReport {
+    mapSize: number;
+    activeConnections: string[];
+    zombieConnections: string[];
+    staleConnections: string[];
+}
 declare class ConnectionManager {
     private static instance;
     private clients;
     private readonly logger;
     private cleanupInterval;
     private usersService;
+    private isShuttingDown;
     private readonly DEFAULT_RETRY_CONFIG;
     private readonly CONNECTION_TIMEOUT;
     private readonly MAX_CONCURRENT_CONNECTIONS;
     private readonly COOLDOWN_PERIOD;
     private readonly VALIDATION_TIMEOUT;
+    private readonly CLEANUP_TIMEOUT;
+    private readonly MAX_CLEANUP_ATTEMPTS;
     private constructor();
-    private handleShutdown;
     setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
+    handleShutdown(): Promise<void>;
+    private createTimeoutPromise;
     private calculateRetryDelay;
     private shouldRetry;
     private waitForRetry;
     private validateConnection;
-    private attemptConnection;
     getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager>;
     private retryConnection;
     private handleConnectionError;
@@ -54,16 +65,20 @@ declare class ConnectionManager {
     private updateLastUsed;
     hasClient(number: string): boolean;
     disconnectAll(): Promise<void>;
-    unregisterClient(mobile: string): Promise<void>;
+    unregisterClient(mobile: string, timeoutMs?: number): Promise<void>;
+    private forceCleanupClient;
     getActiveConnectionCount(): number;
+    getConnectionLeakReport(): ConnectionLeakReport;
+    private performHealthCheck;
     startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
     stopCleanupInterval(): void;
-    getClientState(mobile: string): string | undefined;
+    getClientState(mobile: string): ConnectionStatusDto | undefined;
     getConnectionStats(): {
         total: number;
         connected: number;
         connecting: number;
         disconnecting: number;
+        disconnected: number;
         error: number;
         retrying: number;
     };
