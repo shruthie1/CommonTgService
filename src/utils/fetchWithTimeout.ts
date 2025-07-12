@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import { extractMessage, parseError } from "./parseError";
 import { ppplbot } from "./logbots";
 import { sleep } from "../utils";
+import { BotConfig, ChannelCategory } from "./TelegramBots.config";
 
 // Configuration types
 interface RetryConfig {
@@ -39,43 +40,33 @@ const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
  * @returns Promise that resolves when notification is sent
  */
 async function notifyInternal(
-    prefix: string,
-    errorDetails: { message: any; status?: number },
-    config: NotificationConfig = DEFAULT_NOTIFICATION_CONFIG
+  prefix: string,
+  errorDetails: { message: any; status?: number },
+  config: NotificationConfig = DEFAULT_NOTIFICATION_CONFIG
 ): Promise<void> {
-    if (!config.enabled) return;
-    prefix = `${prefix} ${process.env.clientId || 'uptimeChecker2'}`;
+  if (!config.enabled) return;
+  prefix = `${prefix} ${process.env.clientId}`;
+  try {
+    const errorMessage = typeof errorDetails.message === 'string'
+      ? errorDetails.message
+      : JSON.stringify(errorDetails.message);
+
+    const formattedMessage = errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
+      errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
+        extractMessage(errorDetails?.message);
+
+    console.error(`${prefix}\n${formattedMessage}`);
+    if (errorDetails.status === 429) return;
+    const notificationText = `${prefix}\n\n${formattedMessage}`;
+
     try {
-        const errorMessage = typeof errorDetails.message === 'string'
-            ? errorDetails.message
-            : JSON.stringify(errorDetails.message);
-
-        const formattedMessage = errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
-            errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
-                extractMessage(errorDetails?.message);
-
-        console.error(`${prefix}\n${formattedMessage}`);
-
-        // Skip notification for rate limiting errors
-        if (errorDetails.status === 429) return;
-
-        const notificationText = `${prefix}\n\n${formattedMessage}`;
-
-        try {
-            const channelUrl = ppplbot(process.env[config.channelEnvVar] || '');
-            if (!channelUrl) {
-                console.warn(`Notification channel URL not available. Environment variable ${config.channelEnvVar} might not be set.`);
-                return;
-            }
-
-            const notifUrl = `${channelUrl}&text=${encodeURIComponent(notificationText)}`;
-            await axios.get(notifUrl, { timeout: config.timeout });
-        } catch (error) {
-            console.error("Failed to send notification:", error);
-        }
+      await BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES, notificationText);
     } catch (error) {
-        console.error("Error in notification process:", error);
+      console.error("Failed to send notification:", error.response?.data || error.message || error.code);
     }
+  } catch (error) {
+    console.error("Error in notification process:", error.response?.data || error.message || error.code);
+  }
 }
 
 /**

