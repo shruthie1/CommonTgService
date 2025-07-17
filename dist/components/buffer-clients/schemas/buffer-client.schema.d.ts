@@ -6,6 +6,7 @@ export declare class BufferClient {
     session: string;
     availableDate: string;
     channels: number;
+    status: 'active' | 'inactive';
 }
 export declare const BufferClientSchema: import("mongoose").Schema<BufferClient, import("mongoose").Model<BufferClient, any, any, any, Document<unknown, any, BufferClient, any> & BufferClient & {
     _id: import("mongoose").Types.ObjectId;

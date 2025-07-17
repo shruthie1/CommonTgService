@@ -12031,11 +12031,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
-        const newUser = new this.bufferClientModel(bufferClient);
+        const newUser = new this.bufferClientModel({
+            ...bufferClient,
+            status: bufferClient.status || 'active',
+        });
         return newUser.save();
     }
-    async findAll() {
-        return this.bufferClientModel.find().exec();
+    async findAll(status) {
+        const filter = status ? { status } : {};
+        return this.bufferClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
         const user = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
@@ -12059,7 +12063,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         else {
             console.log("creating");
-            return this.create(createOrUpdateUserDto);
+            return this.create({ ...createOrUpdateUserDto, status: createOrUpdateUserDto.status || 'active' });
         }
     }
     async remove(mobile) {
@@ -12080,11 +12084,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        console.log(filter);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter);
+        if (filter.status) {
+            filter.status = filter.status;
+        }
         return this.bufferClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
@@ -12404,6 +12409,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
+                    status: 'active',
                 };
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
             }
@@ -12425,7 +12431,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
-        const bufferclients = await this.findAll();
+        const bufferclients = await this.findAll('active');
         const badIds = [];
         let goodIds = [];
         if (bufferclients.length < 80) {
@@ -12553,6 +12559,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
+                            status: 'active',
                         };
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
@@ -12676,6 +12683,17 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateBufferClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status of the buffer client',
+        example: 'active',
+        enum: ['active', 'inactive'],
+        default: 'active',
+        required: false,
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBufferClientDto.prototype, "status", void 0);
 
 
 /***/ }),
@@ -12812,6 +12830,16 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        required: true,
+        enum: ['active', 'inactive'],
+        default: 'active',
+        type: String,
+        description: 'Status of the buffer client',
+    }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "status", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
         timestamps: true,
