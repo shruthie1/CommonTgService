@@ -446,7 +446,8 @@ export class ClientService implements OnModuleDestroy {
                                 availableDate,
                                 session: existingClientUser.session,
                                 tgId: existingClientUser.tgId,
-                                channels: 170
+                                channels: 170,
+                                status: days > 25 ? 'inactive' : 'active'
                             }
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             // await this.archivedClientService.update(existingMobile, existingClient);
@@ -686,7 +687,7 @@ export class ClientService implements OnModuleDestroy {
         if (!mobile) {
             throw new BadRequestException('Mobile number is required');
         }
-        
+
         this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
 
         try {
