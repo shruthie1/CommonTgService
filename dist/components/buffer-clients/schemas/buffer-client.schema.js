@@ -34,6 +34,16 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({
+        required: true,
+        enum: ['active', 'inactive'],
+        default: 'active',
+        type: String,
+        description: 'Status of the buffer client',
+    }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "status", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
         timestamps: true,
