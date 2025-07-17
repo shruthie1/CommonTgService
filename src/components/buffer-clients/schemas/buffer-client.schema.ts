@@ -26,6 +26,15 @@ export class BufferClient {
 
   @Prop({ required: true, type: Number })
   channels: number;
+  
+  @Prop({
+    required: true,
+    enum: ['active', 'inactive'],
+    default: 'active',
+    type: String,
+    description: 'Status of the buffer client',
+  })
+  status: 'active' | 'inactive';
 }
 
 export const BufferClientSchema = SchemaFactory.createForClass(BufferClient);

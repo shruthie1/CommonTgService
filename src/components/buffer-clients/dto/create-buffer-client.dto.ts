@@ -37,4 +37,14 @@ export class CreateBufferClientDto {
   })
   @IsNumber()
   readonly channels: number;
+
+  @ApiProperty({
+    description: 'Status of the buffer client',
+    example: 'active',
+    enum: ['active', 'inactive'],
+    default: 'active',
+    required: false,
+  })
+  @IsString()
+  readonly status?: 'active' | 'inactive';
 }

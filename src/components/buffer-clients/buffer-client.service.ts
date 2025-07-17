@@ -58,12 +58,18 @@ export class BufferClientService implements OnModuleDestroy {
     }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
-        const newUser = new this.bufferClientModel(bufferClient);
+        // Ensure status is set to 'active' by default if not provided
+        const newUser = new this.bufferClientModel({
+            ...bufferClient,
+            status: bufferClient.status || 'active',
+        });
         return newUser.save();
     }
 
-    async findAll(): Promise<BufferClient[]> {
-        return this.bufferClientModel.find().exec();
+
+    async findAll(status?: 'active' | 'inactive'): Promise<BufferClient[]> {
+        const filter = status ? { status } : {};
+        return this.bufferClientModel.find(filter).exec();
     }
 
     async findOne(mobile: string, throwErr: boolean = true): Promise<BufferClient> {
@@ -76,6 +82,7 @@ export class BufferClientService implements OnModuleDestroy {
 
 
     async update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
+        // Allow updating status as well
         const updatedUser = await this.bufferClientModel.findOneAndUpdate(
             { mobile },
             { $set: updateClientDto },
@@ -96,7 +103,8 @@ export class BufferClientService implements OnModuleDestroy {
             return this.update(existingUser.mobile, createOrUpdateUserDto as UpdateBufferClientDto);
         } else {
             console.log("creating")
-            return this.create(createOrUpdateUserDto as CreateBufferClientDto);
+            // Ensure status is set to 'active' by default if not provided
+            return this.create({ ...createOrUpdateUserDto, status: (createOrUpdateUserDto as any).status || 'active' } as CreateBufferClientDto);
         }
     }
 
@@ -117,11 +125,13 @@ export class BufferClientService implements OnModuleDestroy {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter: any): Promise<BufferClient[]> {
-        console.log(filter)
+        // Allow filtering by status
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') }
         }
-        console.log(filter)
+        if (filter.status) {
+            filter.status = filter.status;
+        }
         return this.bufferClientModel.find(filter).exec();
     }
 
@@ -461,14 +471,14 @@ export class BufferClientService implements OnModuleDestroy {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map(client => client?.mobile);
-        
+
         // Get promote mobiles using the new schema
         const allPromoteMobiles = [];
         for (const client of clients) {
             const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
             allPromoteMobiles.push(...clientPromoteMobiles);
         }
-        
+
         if (!allPromoteMobiles.includes(mobile) && !clientMobiles.includes(mobile)) {
             try {
                 const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false })
@@ -488,7 +498,8 @@ export class BufferClientService implements OnModuleDestroy {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
-                }
+                    status: 'active',
+                };
                 await this.bufferClientModel.findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true }).exec();
             } catch (error) {
                 const errorDetails = parseError(error)
@@ -510,7 +521,8 @@ export class BufferClientService implements OnModuleDestroy {
         await connectionManager.disconnectAll();
         await sleep(2000);
 
-        const bufferclients = await this.findAll();
+        // Only verify buffer clients with status 'active'
+        const bufferclients = await this.findAll('active');
         const badIds: string[] = [];
         let goodIds: string[] = [];
 
@@ -663,12 +675,13 @@ export class BufferClientService implements OnModuleDestroy {
                         const channels = await client.channelInfo(true);
 
                         this.logger.debug("Creating buffer client document");
-                        const bufferClient = {
+                        const bufferClient: CreateBufferClientDto = {
                             tgId: document.tgId,
                             session: document.session,
                             mobile: document.mobile,
                             availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
                             channels: channels.ids.length,
+                            status: 'active',
                         };
                         await this.create(bufferClient);
                         await this.usersService.update(document.tgId, { twoFA: true });
