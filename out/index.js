@@ -14715,7 +14715,8 @@ let ClientService = ClientService_1 = class ClientService {
                                 availableDate,
                                 session: existingClientUser.session,
                                 tgId: existingClientUser.tgId,
-                                channels: 170
+                                channels: 170,
+                                status: days > 25 ? 'inactive' : 'active'
                             };
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             console.log("client Archived: ", updatedBufferClient);
