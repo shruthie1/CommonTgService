@@ -9400,7 +9400,6 @@ const active_channels_service_1 = __webpack_require__(/*! ./active-channels.serv
 const create_active_channel_dto_1 = __webpack_require__(/*! ./dto/create-active-channel.dto */ "./src/components/active-channels/dto/create-active-channel.dto.ts");
 const update_active_channel_dto_1 = __webpack_require__(/*! ./dto/update-active-channel.dto */ "./src/components/active-channels/dto/update-active-channel.dto.ts");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const add_reaction_dto_1 = __webpack_require__(/*! ./dto/add-reaction.dto */ "./src/components/active-channels/dto/add-reaction.dto.ts");
 let ActiveChannelsController = class ActiveChannelsController {
     constructor(activeChannelsService) {
         this.activeChannelsService = activeChannelsService;
@@ -9425,21 +9424,6 @@ let ActiveChannelsController = class ActiveChannelsController {
     }
     async remove(channelId) {
         return this.activeChannelsService.remove(channelId);
-    }
-    addReaction(channelId, addReactionDto) {
-        if (!addReactionDto.reactions) {
-            throw new common_1.BadRequestException('Reaction is required');
-        }
-        return this.activeChannelsService.addReactions(channelId, addReactionDto.reactions);
-    }
-    getRandomReaction(channelId) {
-        return this.activeChannelsService.getRandomReaction(channelId);
-    }
-    removeReaction(channelId, addReactionDto) {
-        if (!addReactionDto.reactions) {
-            throw new common_1.BadRequestException('Reaction is required');
-        }
-        return this.activeChannelsService.removeReaction(channelId, addReactionDto.reactions[0]);
     }
 };
 exports.ActiveChannelsController = ActiveChannelsController;
@@ -9515,32 +9499,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "remove", null);
-__decorate([
-    (0, common_1.Post)(':channelId/reactions'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add reaction to chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, add_reaction_dto_1.AddReactionDto]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "addReaction", null);
-__decorate([
-    (0, common_1.Get)(':channelId/reactions/random'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get a random reaction from chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "getRandomReaction", null);
-__decorate([
-    (0, common_1.Delete)(':channelId/reactions'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove reaction from chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, add_reaction_dto_1.AddReactionDto]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "removeReaction", null);
 exports.ActiveChannelsController = ActiveChannelsController = __decorate([
     (0, swagger_1.ApiTags)('Active Channels'),
     (0, common_1.Controller)('active-channels'),
@@ -9665,29 +9623,6 @@ let ActiveChannelsService = class ActiveChannelsService {
     async search(filter) {
         console.log(filter);
         return this.activeChannelModel.find(filter).exec();
-    }
-    async addReactions(channelId, reactions) {
-        const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-            $addToSet: { reactions: reactions }
-        });
-        return channel;
-    }
-    async getRandomReaction(channelId) {
-        const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
-        if (!channel) {
-            return undefined;
-        }
-        if (channel.reactions.length === 0) {
-            return undefined;
-        }
-        const randomIndex = Math.floor(Math.random() * channel.reactions.length);
-        return channel.reactions[randomIndex];
-    }
-    async removeReaction(channelId, reaction) {
-        const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-            $pull: { reactions: reaction },
-        });
-        return channel;
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
         const query = {
@@ -9829,36 +9764,6 @@ exports.ActiveChannelsService = ActiveChannelsService = __decorate([
 
 /***/ }),
 
-/***/ "./src/components/active-channels/dto/add-reaction.dto.ts":
-/*!****************************************************************!*\
-  !*** ./src/components/active-channels/dto/add-reaction.dto.ts ***!
-  \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AddReactionDto = void 0;
-const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-class AddReactionDto {
-}
-exports.AddReactionDto = AddReactionDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: true }),
-    __metadata("design:type", Array)
-], AddReactionDto.prototype, "reactions", void 0);
-
-
-/***/ }),
-
 /***/ "./src/components/active-channels/dto/create-active-channel.dto.ts":
 /*!*************************************************************************!*\
   !*** ./src/components/active-channels/dto/create-active-channel.dto.ts ***!
@@ -9883,16 +9788,6 @@ class CreateActiveChannelDto {
         this.reactRestricted = false;
         this.wordRestriction = 0;
         this.dMRestriction = 0;
-        this.reactions = [
-            '❤', '🔥', '👏', '🥰', '😁', '🤔',
-            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-            '🤣', '💔', '🏆', '😭', '😴', '👍',
-            '🌚', '⚡', '🍌', '😐', '💋', '👻',
-            '👀', '🙈', '🤝', '🤗', '🆒',
-            '🗿', '🙉', '🙊', '🤷', '👎'
-        ];
         this.banned = false;
         this.private = false;
     }
@@ -9946,21 +9841,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ type: [String] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        type: [String], default: [
-            '❤', '🔥', '👏', '🥰', '😁', '🤔',
-            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-            '🤣', '💔', '🏆', '😭', '😴', '👍',
-            '🌚', '⚡', '🍌', '😐', '💋', '👻',
-            '👀', '🙈', '🤝', '🤗', '🆒',
-            '🗿', '🙉', '🙊', '🤷', '👎'
-        ]
-    }),
-    __metadata("design:type", Array)
-], CreateActiveChannelDto.prototype, "reactions", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
@@ -10116,13 +9996,6 @@ __decorate([
     (0, mongoose_1.Prop)({ type: [String], default: utils_1.defaultMessages }),
     __metadata("design:type", Array)
 ], ActiveChannel.prototype, "availableMsgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: [String], default: utils_1.defaultReactions }),
-    (0, mongoose_1.Prop)({
-        type: [String], default: utils_1.defaultReactions
-    }),
-    __metadata("design:type", Array)
-], ActiveChannel.prototype, "reactions", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -24488,7 +24361,7 @@ exports.Transaction = Transaction = __decorate([
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
-                ret.id = ret._id;
+                ret['id'] = ret._id;
                 delete ret._id;
                 return ret;
             },
