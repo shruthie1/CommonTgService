@@ -121,7 +121,7 @@ exports.Transaction = Transaction = __decorate([
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
-                ret.id = ret._id;
+                ret['id'] = ret._id;
                 delete ret._id;
                 return ret;
             },

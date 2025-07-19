@@ -13,7 +13,7 @@ export type TransactionDocument = Transaction & Document;
   toJSON: {
     virtuals: true,
     transform: (doc, ret) => {
-      ret.id = ret._id;
+      ret['id'] = ret._id;
       delete ret._id;
       return ret;
     },
@@ -21,69 +21,69 @@ export type TransactionDocument = Transaction & Document;
 })
 export class Transaction {
   @ApiProperty({ description: 'Unique transaction ID (UTR)' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
-    required: true, 
+  @Prop({
+    type: MongooseSchema.Types.String,
+    required: true,
     unique: true,
-    index: true 
+    index: true
   })
   transactionId: string;
 
   @ApiProperty({ description: 'Amount involved in the transaction' })
-  @Prop({ 
-    type: MongooseSchema.Types.Number, 
+  @Prop({
+    type: MongooseSchema.Types.Number,
     required: true,
-    min: 0 
+    min: 0
   })
   amount: number;
 
   @ApiProperty({ description: 'Issue type reported by the user' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
+  @Prop({
+    type: MongooseSchema.Types.String,
     required: true,
     index: true
   })
   issue: string;
 
   @ApiProperty({ description: 'Description of issue reported by the user' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
-    required: true 
+  @Prop({
+    type: MongooseSchema.Types.String,
+    required: true
   })
   description: string;
 
   @ApiProperty({ description: 'Refund method selected by the user' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
+  @Prop({
+    type: MongooseSchema.Types.String,
     default: 'undefined',
     index: true
   })
   refundMethod: string;
 
   @ApiProperty({ description: 'User profile ID' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
+  @Prop({
+    type: MongooseSchema.Types.String,
     default: 'undefined',
     index: true
   })
   profile: string;
 
   @ApiProperty({ description: 'User chat ID' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
+  @Prop({
+    type: MongooseSchema.Types.String,
     default: 'undefined',
     index: true
   })
   chatId: string;
 
   @ApiProperty({ description: 'IP address of the user' })
-  @Prop({ 
-    type: MongooseSchema.Types.String, 
-    default: 'undefined' 
+  @Prop({
+    type: MongooseSchema.Types.String,
+    default: 'undefined'
   })
   ip: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Transaction status',
     enum: TransactionStatus,
     default: TransactionStatus.PENDING
