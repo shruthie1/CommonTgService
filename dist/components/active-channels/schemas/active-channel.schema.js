@@ -106,13 +106,6 @@ __decorate([
     __metadata("design:type", Array)
 ], ActiveChannel.prototype, "availableMsgs", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ type: [String], default: utils_1.defaultReactions }),
-    (0, mongoose_1.Prop)({
-        type: [String], default: utils_1.defaultReactions
-    }),
-    __metadata("design:type", Array)
-], ActiveChannel.prototype, "reactions", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)

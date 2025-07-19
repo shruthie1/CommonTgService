@@ -5,7 +5,6 @@ import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { ActiveChannel } from './schemas/active-channel.schema';
-import { AddReactionDto } from './dto/add-reaction.dto';
 
 @ApiTags('Active Channels')
 @Controller('active-channels')
@@ -74,29 +73,5 @@ export class ActiveChannelsController {
   //@apiresponse({ status: 404, description: 'Channel not found' })
   async remove(@Param('channelId') channelId: string) {
     return this.activeChannelsService.remove(channelId);
-  }
-
-  @Post(':channelId/reactions')
-  @ApiOperation({ summary: 'Add reaction to chat group' })
-  addReaction(@Param('channelId') channelId: string, @Body() addReactionDto: AddReactionDto): Promise<ActiveChannel> {
-    if (!addReactionDto.reactions) {
-      throw new BadRequestException('Reaction is required');
-    }
-    return this.activeChannelsService.addReactions(channelId, addReactionDto.reactions);
-  }
-
-  @Get(':channelId/reactions/random')
-  @ApiOperation({ summary: 'Get a random reaction from chat group' })
-  getRandomReaction(@Param('channelId') channelId: string): Promise<string> {
-    return this.activeChannelsService.getRandomReaction(channelId);
-  }
-
-  @Delete(':channelId/reactions')
-  @ApiOperation({ summary: 'Remove reaction from chat group' })
-  removeReaction(@Param('channelId') channelId: string, @Body() addReactionDto: AddReactionDto): Promise<ActiveChannel> {
-    if (!addReactionDto.reactions) {
-      throw new BadRequestException('Reaction is required');
-    }
-    return this.activeChannelsService.removeReaction(channelId, addReactionDto.reactions[0]);
   }
 }

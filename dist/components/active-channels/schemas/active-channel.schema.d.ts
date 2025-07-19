@@ -13,7 +13,6 @@ export declare class ActiveChannel {
     wordRestriction: number;
     dMRestriction: number;
     availableMsgs: string[];
-    reactions: string[];
     banned: boolean;
     megagroup: boolean;
     private: boolean;

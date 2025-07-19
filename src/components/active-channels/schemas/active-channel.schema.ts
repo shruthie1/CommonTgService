@@ -60,12 +60,6 @@ export class ActiveChannel {
   @Prop({ type: [String], default: defaultMessages })
   availableMsgs: string[];
 
-  @ApiProperty({ type: [String], default: defaultReactions })
-  @Prop({
-    type: [String], default: defaultReactions
-  })
-  reactions: string[];
-
   @ApiProperty({ default: false })
   @Prop({ default: false })
   banned: boolean;

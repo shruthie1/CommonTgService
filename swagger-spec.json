@@ -3966,96 +3966,6 @@
         ]
       }
     },
-    "/active-channels/{channelId}/reactions": {
-      "post": {
-        "operationId": "ActiveChannelsController_addReaction",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddReactionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Add reaction to chat group",
-        "tags": [
-          "Active Channels"
-        ]
-      },
-      "delete": {
-        "operationId": "ActiveChannelsController_removeReaction",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddReactionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Remove reaction from chat group",
-        "tags": [
-          "Active Channels"
-        ]
-      }
-    },
-    "/active-channels/{channelId}/reactions/random": {
-      "get": {
-        "operationId": "ActiveChannelsController_getRandomReaction",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get a random reaction from chat group",
-        "tags": [
-          "Active Channels"
-        ]
-      }
-    },
     "/promote-msgs": {
       "get": {
         "operationId": "PromoteMsgsController_findOne",
@@ -10361,6 +10271,16 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the buffer client",
+            "example": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
           }
         },
         "required": [
@@ -10398,6 +10318,16 @@
             "type": "number",
             "description": "Channel Count",
             "example": 23
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the buffer client",
+            "example": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
           }
         }
       },
@@ -10451,60 +10381,6 @@
               "type": "string"
             }
           },
-          "reactions": {
-            "default": [
-              "❤",
-              "🔥",
-              "👏",
-              "🥰",
-              "😁",
-              "🤔",
-              "🤯",
-              "😱",
-              "🤬",
-              "😢",
-              "🎉",
-              "🤩",
-              "🤮",
-              "💩",
-              "🙏",
-              "👌",
-              "🕊",
-              "🤡",
-              "🥱",
-              "🥴",
-              "😍",
-              "🐳",
-              "❤‍🔥",
-              "💯",
-              "🤣",
-              "💔",
-              "🏆",
-              "😭",
-              "😴",
-              "👍",
-              "🌚",
-              "⚡",
-              "🍌",
-              "😐",
-              "💋",
-              "👻",
-              "👀",
-              "🙈",
-              "🤝",
-              "🤗",
-              "🆒",
-              "🗿",
-              "🙉",
-              "🙊",
-              "🤷",
-              "👎"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "banned": {
             "type": "boolean",
             "default": false
@@ -10536,7 +10412,6 @@
           "wordRestriction",
           "dMRestriction",
           "availableMsgs",
-          "reactions",
           "banned"
         ]
       },
@@ -10590,60 +10465,6 @@
               "type": "string"
             }
           },
-          "reactions": {
-            "default": [
-              "❤",
-              "🔥",
-              "👏",
-              "🥰",
-              "😁",
-              "🤔",
-              "🤯",
-              "😱",
-              "🤬",
-              "😢",
-              "🎉",
-              "🤩",
-              "🤮",
-              "💩",
-              "🙏",
-              "👌",
-              "🕊",
-              "🤡",
-              "🥱",
-              "🥴",
-              "😍",
-              "🐳",
-              "❤‍🔥",
-              "💯",
-              "🤣",
-              "💔",
-              "🏆",
-              "😭",
-              "😴",
-              "👍",
-              "🌚",
-              "⚡",
-              "🍌",
-              "😐",
-              "💋",
-              "👻",
-              "👀",
-              "🙈",
-              "🤝",
-              "🤗",
-              "🆒",
-              "🗿",
-              "🙉",
-              "🙊",
-              "🤷",
-              "👎"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "banned": {
             "type": "boolean",
             "default": false
@@ -10662,20 +10483,6 @@
             "example": false
           }
         }
-      },
-      "AddReactionDto": {
-        "type": "object",
-        "properties": {
-          "reactions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "reactions"
-        ]
       },
       "CreateChannelDto": {
         "type": "object",

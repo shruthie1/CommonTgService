@@ -11,7 +11,6 @@ export declare class CreateActiveChannelDto {
     wordRestriction?: number;
     dMRestriction?: number;
     availableMsgs?: string[];
-    reactions?: string[];
     banned?: boolean;
     megagroup?: boolean;
     forbidden?: boolean;

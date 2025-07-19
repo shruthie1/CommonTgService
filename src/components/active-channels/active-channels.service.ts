@@ -74,32 +74,6 @@ export class ActiveChannelsService {
     return this.activeChannelModel.find(filter).exec();
   }
 
-  async addReactions(channelId: string, reactions: string[]): Promise<ActiveChannel> {
-    const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-      $addToSet: { reactions: reactions }
-    })
-    return channel;
-  }
-
-  async getRandomReaction(channelId: string): Promise<string> {
-    const channel = (await this.activeChannelModel.findOne({ channelId }).exec())?.toJSON();
-    if (!channel) {
-      return undefined;
-    }
-    if (channel.reactions.length === 0) {
-      return undefined;
-    }
-    const randomIndex = Math.floor(Math.random() * channel.reactions.length);
-    return channel.reactions[randomIndex];
-  }
-
-  async removeReaction(channelId: string, reaction: string): Promise<ActiveChannel> {
-    const channel = await this.activeChannelModel.findOneAndUpdate({ channelId }, {
-      $pull: { reactions: reaction },
-    })
-    return channel;
-  }
-
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {
     const query = {
       '$and':

@@ -18,7 +18,6 @@ const active_channels_service_1 = require("./active-channels.service");
 const create_active_channel_dto_1 = require("./dto/create-active-channel.dto");
 const update_active_channel_dto_1 = require("./dto/update-active-channel.dto");
 const swagger_1 = require("@nestjs/swagger");
-const add_reaction_dto_1 = require("./dto/add-reaction.dto");
 let ActiveChannelsController = class ActiveChannelsController {
     constructor(activeChannelsService) {
         this.activeChannelsService = activeChannelsService;
@@ -43,21 +42,6 @@ let ActiveChannelsController = class ActiveChannelsController {
     }
     async remove(channelId) {
         return this.activeChannelsService.remove(channelId);
-    }
-    addReaction(channelId, addReactionDto) {
-        if (!addReactionDto.reactions) {
-            throw new common_1.BadRequestException('Reaction is required');
-        }
-        return this.activeChannelsService.addReactions(channelId, addReactionDto.reactions);
-    }
-    getRandomReaction(channelId) {
-        return this.activeChannelsService.getRandomReaction(channelId);
-    }
-    removeReaction(channelId, addReactionDto) {
-        if (!addReactionDto.reactions) {
-            throw new common_1.BadRequestException('Reaction is required');
-        }
-        return this.activeChannelsService.removeReaction(channelId, addReactionDto.reactions[0]);
     }
 };
 exports.ActiveChannelsController = ActiveChannelsController;
@@ -133,32 +117,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "remove", null);
-__decorate([
-    (0, common_1.Post)(':channelId/reactions'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add reaction to chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, add_reaction_dto_1.AddReactionDto]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "addReaction", null);
-__decorate([
-    (0, common_1.Get)(':channelId/reactions/random'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get a random reaction from chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "getRandomReaction", null);
-__decorate([
-    (0, common_1.Delete)(':channelId/reactions'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove reaction from chat group' }),
-    __param(0, (0, common_1.Param)('channelId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, add_reaction_dto_1.AddReactionDto]),
-    __metadata("design:returntype", Promise)
-], ActiveChannelsController.prototype, "removeReaction", null);
 exports.ActiveChannelsController = ActiveChannelsController = __decorate([
     (0, swagger_1.ApiTags)('Active Channels'),
     (0, common_1.Controller)('active-channels'),

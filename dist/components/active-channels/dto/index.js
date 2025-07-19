@@ -16,5 +16,4 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./create-active-channel.dto"), exports);
 __exportStar(require("./update-active-channel.dto"), exports);
-__exportStar(require("./add-reaction.dto"), exports);
 //# sourceMappingURL=index.js.map

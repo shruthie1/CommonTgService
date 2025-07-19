@@ -16,16 +16,6 @@ class CreateActiveChannelDto {
         this.reactRestricted = false;
         this.wordRestriction = 0;
         this.dMRestriction = 0;
-        this.reactions = [
-            '❤', '🔥', '👏', '🥰', '😁', '🤔',
-            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-            '🤣', '💔', '🏆', '😭', '😴', '👍',
-            '🌚', '⚡', '🍌', '😐', '💋', '👻',
-            '👀', '🙈', '🤝', '🤗', '🆒',
-            '🗿', '🙉', '🙊', '🤷', '👎'
-        ];
         this.banned = false;
         this.private = false;
     }
@@ -79,21 +69,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ type: [String] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        type: [String], default: [
-            '❤', '🔥', '👏', '🥰', '😁', '🤔',
-            '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-            '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-            '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-            '🤣', '💔', '🏆', '😭', '😴', '👍',
-            '🌚', '⚡', '🍌', '😐', '💋', '👻',
-            '👀', '🙈', '🤝', '🤗', '🆒',
-            '🗿', '🙉', '🙊', '🤷', '👎'
-        ]
-    }),
-    __metadata("design:type", Array)
-], CreateActiveChannelDto.prototype, "reactions", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
