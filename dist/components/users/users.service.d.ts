@@ -18,5 +18,9 @@ export declare class UsersService {
     delete(tgId: string): Promise<void>;
     deleteById(userId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
-    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<User[]>;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<(import("mongoose").Document<unknown, {}, UserDocument, {}> & User & Document & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    })[]>;
 }
