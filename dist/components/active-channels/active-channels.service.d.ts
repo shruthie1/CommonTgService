@@ -29,5 +29,4 @@ export declare class ActiveChannelsService {
     resetWordRestrictions(): Promise<void>;
     resetAvailableMsgs(): Promise<void>;
     updateBannedChannels(): Promise<void>;
-    updateDefaultReactions(): Promise<void>;
 }
