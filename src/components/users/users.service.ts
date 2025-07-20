@@ -81,7 +81,7 @@ export class UsersService {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
   }
-  
+
   async deleteById(userId: string): Promise<void> {
     const result = await this.userModel.deleteOne({ _id: userId }).exec();
     if (result.deletedCount === 0) {
@@ -100,7 +100,7 @@ export class UsersService {
     return this.userModel.find(filter).sort({ updatedAt: -1 }).exec();
   }
 
-  async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<User[]> {
+  async executeQuery(query: any, sort?: any, limit?: number, skip?: number) {
     try {
       if (!query) {
         throw new BadRequestException('Query is invalid.');
