@@ -3,8 +3,15 @@ export function sleep(ms: number): Promise<void> {
 }
 
 export function contains(str: string | null | undefined, arr: string[]): boolean {
-  if (!str || !Array.isArray(arr)) return false;
-  return arr.some(element => element && str.includes(element.toLowerCase()));
+  if (typeof str !== 'string' || !Array.isArray(arr) || arr.length === 0) return false;
+
+  const normalizedStr = str.trim().toLowerCase();
+
+  return arr.some(element =>
+    typeof element === 'string' &&
+    element.trim() !== '' &&
+    normalizedStr.includes(element.trim().toLowerCase())
+  );
 }
 
 export function toBoolean(value: string | number | boolean | null | undefined): boolean {
