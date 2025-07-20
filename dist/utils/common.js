@@ -12,9 +12,12 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 function contains(str, arr) {
-    if (!str || !Array.isArray(arr))
+    if (typeof str !== 'string' || !Array.isArray(arr) || arr.length === 0)
         return false;
-    return arr.some(element => element && str.includes(element.toLowerCase()));
+    const normalizedStr = str.trim().toLowerCase();
+    return arr.some(element => typeof element === 'string' &&
+        element.trim() !== '' &&
+        normalizedStr.includes(element.trim().toLowerCase()));
 }
 function toBoolean(value) {
     if (value === null || value === undefined)
