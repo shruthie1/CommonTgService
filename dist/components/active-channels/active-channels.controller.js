@@ -76,7 +76,6 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'wordRestriction', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'dMRestriction', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'availableMsgs', required: false, type: [String] }),
-    (0, swagger_1.ApiQuery)({ name: 'reactions', required: false, type: [String] }),
     (0, swagger_1.ApiQuery)({ name: 'banned', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'reactRestricted', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'megagroup', required: false, type: Boolean }),

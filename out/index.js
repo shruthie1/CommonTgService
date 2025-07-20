@@ -8351,7 +8351,11 @@ class ConnectionManager {
         };
         this.clients.set(mobile, clientInfo);
         try {
-            const client = await telegramManager.createClient(options.handler);
+            const timeoutMs = 15000;
+            const client = await Promise.race([
+                telegramManager.createClient(options.handler),
+                new Promise((_, reject) => setTimeout(() => reject(new Error(`Client creation timed out after ${timeoutMs}ms for ${mobile}`)), timeoutMs))
+            ]);
             if (client) {
                 clientInfo.state = 'connected';
                 clientInfo.consecutiveFailures = 0;
@@ -9458,7 +9462,6 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'wordRestriction', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'dMRestriction', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'availableMsgs', required: false, type: [String] }),
-    (0, swagger_1.ApiQuery)({ name: 'reactions', required: false, type: [String] }),
     (0, swagger_1.ApiQuery)({ name: 'banned', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'reactRestricted', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'megagroup', required: false, type: Boolean }),
@@ -9732,22 +9735,6 @@ let ActiveChannelsService = class ActiveChannelsService {
                 "dMRestriction": 0,
                 banned: false,
                 "private": false
-            }
-        });
-    }
-    async updateDefaultReactions() {
-        await this.activeChannelModel.updateMany({}, {
-            $set: {
-                reactions: [
-                    '❤', '🔥', '👏', '🥰', '😁', '🤔',
-                    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-                    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-                    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-                    '🤣', '💔', '🏆', '😭', '😴', '👍',
-                    '🌚', '⚡', '🍌', '😐', '💋', '👻',
-                    '👀', '🙈', '🤝', '🤗', '🆒',
-                    '🗿', '🙉', '🙊', '🤷', '👎'
-                ]
             }
         });
     }
@@ -14267,13 +14254,17 @@ let ClientService = ClientService_1 = class ClientService {
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
         this.lastUpdateMap = new Map();
-        setInterval(async () => {
+        this.checkInterval = null;
+        this.checkInterval = setInterval(async () => {
             await this.refreshMap();
             await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
     async onModuleDestroy() {
         console.log('Module is being Destroyed, Disconnecting all clients');
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
         await connection_manager_1.connectionManager.handleShutdown();
     }
     async checkNpoint() {
@@ -25011,16 +25002,22 @@ let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
         this.UpiIdModel = UpiIdModel;
         this.npointSerive = npointSerive;
+        this.checkInterval = null;
         this.upiIds = {};
         this.findOne().then(() => {
-            setInterval(async () => {
+            this.checkInterval = setInterval(async () => {
                 await this.refreshUPIs();
                 await this.checkNpoint();
             }, 5 * 60000);
         });
     }
-    async OnModuleInit() {
-        console.log("Config Module Inited");
+    onModuleDestroy() {
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
+    }
+    onModuleInit() {
+        console.log("UPI ID Service Initialized");
     }
     async refreshUPIs() {
         console.log("Refreshing UPIs");

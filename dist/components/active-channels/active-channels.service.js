@@ -178,22 +178,6 @@ let ActiveChannelsService = class ActiveChannelsService {
             }
         });
     }
-    async updateDefaultReactions() {
-        await this.activeChannelModel.updateMany({}, {
-            $set: {
-                reactions: [
-                    '❤', '🔥', '👏', '🥰', '😁', '🤔',
-                    '🤯', '😱', '🤬', '😢', '🎉', '🤩',
-                    '🤮', '💩', '🙏', '👌', '🕊', '🤡',
-                    '🥱', '🥴', '😍', '🐳', '❤‍🔥', '💯',
-                    '🤣', '💔', '🏆', '😭', '😴', '👍',
-                    '🌚', '⚡', '🍌', '😐', '💋', '👻',
-                    '👀', '🙈', '🤝', '🤗', '🆒',
-                    '🗿', '🙉', '🙊', '🤷', '👎'
-                ]
-            }
-        });
-    }
 };
 exports.ActiveChannelsService = ActiveChannelsService;
 exports.ActiveChannelsService = ActiveChannelsService = __decorate([

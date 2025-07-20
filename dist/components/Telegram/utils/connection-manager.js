@@ -231,7 +231,11 @@ class ConnectionManager {
         };
         this.clients.set(mobile, clientInfo);
         try {
-            const client = await telegramManager.createClient(options.handler);
+            const timeoutMs = 15000;
+            const client = await Promise.race([
+                telegramManager.createClient(options.handler),
+                new Promise((_, reject) => setTimeout(() => reject(new Error(`Client creation timed out after ${timeoutMs}ms for ${mobile}`)), timeoutMs))
+            ]);
             if (client) {
                 clientInfo.state = 'connected';
                 clientInfo.consecutiveFailures = 0;
