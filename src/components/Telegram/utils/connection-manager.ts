@@ -334,7 +334,6 @@ class ConnectionManager {
         });
 
         const telegramManager = new TelegramManager(user.session, user.mobile);
-
         // Initialize client info for tracking
         const clientInfo: ClientInfo = {
             client: telegramManager,
@@ -346,11 +345,17 @@ class ConnectionManager {
             consecutiveFailures: 0,
             cleanupAttempts: 0
         };
-
         this.clients.set(mobile, clientInfo);
 
         try {
-            const client = await telegramManager.createClient(options.handler);
+            const timeoutMs = 15000; // 15 seconds timeout
+            const client = await Promise.race([
+                telegramManager.createClient(options.handler),
+                new Promise<null>((_, reject) =>
+                    setTimeout(() => reject(new Error(`Client creation timed out after ${timeoutMs}ms for ${mobile}`)), timeoutMs)
+                )
+            ]);
+
             if (client) {
                 clientInfo.state = 'connected';
                 clientInfo.consecutiveFailures = 0;
@@ -395,6 +400,7 @@ class ConnectionManager {
 
             return this.handleConnectionError(mobile, clientInfo, error as Error);
         }
+
     }
 
     // Enhanced cleanup with proper resource management

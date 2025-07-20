@@ -26,6 +26,7 @@ export declare class ClientService implements OnModuleDestroy {
     private readonly logger;
     private clientsMap;
     private lastUpdateMap;
+    private checkInterval;
     constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, ipManagementService: IpManagementService, npointSerive: NpointService);
     onModuleDestroy(): Promise<void>;
     checkNpoint(): Promise<void>;

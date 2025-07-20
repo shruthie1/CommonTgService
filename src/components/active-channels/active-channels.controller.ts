@@ -37,7 +37,6 @@ export class ActiveChannelsController {
   @ApiQuery({ name: 'wordRestriction', required: false, type: Number })
   @ApiQuery({ name: 'dMRestriction', required: false, type: Number })
   @ApiQuery({ name: 'availableMsgs', required: false, type: [String] })
-  @ApiQuery({ name: 'reactions', required: false, type: [String] })
   @ApiQuery({ name: 'banned', required: false, type: Boolean })
   @ApiQuery({ name: 'reactRestricted', required: false, type: Boolean })
   @ApiQuery({ name: 'megagroup', required: false, type: Boolean })

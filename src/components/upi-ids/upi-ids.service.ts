@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
@@ -7,21 +7,26 @@ import { areJsonsNotSame } from '../../utils';
 import { NpointService } from '../n-point/npoint.service';
 
 @Injectable()
-export class UpiIdService {
+export class UpiIdService implements OnModuleDestroy, OnModuleInit {
+    private checkInterval: NodeJS.Timeout | null = null;
     private upiIds = {}
     constructor(@InjectModel('UpiIdModule') private UpiIdModel: Model<UpiId>,
         private npointSerive: NpointService
     ) {
         this.findOne().then(() => {
-            setInterval(async () => {
+            this.checkInterval = setInterval(async () => {
                 await this.refreshUPIs();
                 await this.checkNpoint();
             }, 5 * 60000);
         });
     }
-
-    async OnModuleInit() {
-        console.log("Config Module Inited")
+    onModuleDestroy() {
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
+    }
+    onModuleInit() {
+        console.log("UPI ID Service Initialized");
     }
 
     async refreshUPIs() {

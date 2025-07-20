@@ -26,16 +26,22 @@ let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
         this.UpiIdModel = UpiIdModel;
         this.npointSerive = npointSerive;
+        this.checkInterval = null;
         this.upiIds = {};
         this.findOne().then(() => {
-            setInterval(async () => {
+            this.checkInterval = setInterval(async () => {
                 await this.refreshUPIs();
                 await this.checkNpoint();
             }, 5 * 60000);
         });
     }
-    async OnModuleInit() {
-        console.log("Config Module Inited");
+    onModuleDestroy() {
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
+    }
+    onModuleInit() {
+        console.log("UPI ID Service Initialized");
     }
     async refreshUPIs() {
         console.log("Refreshing UPIs");

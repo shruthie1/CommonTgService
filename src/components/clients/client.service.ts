@@ -39,6 +39,7 @@ export class ClientService implements OnModuleDestroy {
     private readonly logger = new Logger(ClientService.name);
     private clientsMap: Map<string, Client> = new Map();
     private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
+    private checkInterval: NodeJS.Timeout | null = null;
     constructor(@InjectModel(Client.name) private clientModel: Model<ClientDocument>,
         @InjectModel(PromoteClient.name) private promoteClientModel: Model<PromoteClientDocument>,
         @Inject(forwardRef(() => TelegramService))
@@ -55,7 +56,7 @@ export class ClientService implements OnModuleDestroy {
         private ipManagementService: IpManagementService,
         private npointSerive: NpointService
     ) {
-        setInterval(async () => {
+        this.checkInterval = setInterval(async () => {
             await this.refreshMap();
             await this.checkNpoint();
         }, 5 * 60 * 1000);
@@ -63,6 +64,9 @@ export class ClientService implements OnModuleDestroy {
 
     async onModuleDestroy() {
         console.log('Module is being Destroyed, Disconnecting all clients');
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
         await connectionManager.handleShutdown();
     }
 

@@ -82,13 +82,17 @@ let ClientService = ClientService_1 = class ClientService {
         this.logger = new common_1.Logger(ClientService_1.name);
         this.clientsMap = new Map();
         this.lastUpdateMap = new Map();
-        setInterval(async () => {
+        this.checkInterval = null;
+        this.checkInterval = setInterval(async () => {
             await this.refreshMap();
             await this.checkNpoint();
         }, 5 * 60 * 1000);
     }
     async onModuleDestroy() {
         console.log('Module is being Destroyed, Disconnecting all clients');
+        if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+        }
         await connection_manager_1.connectionManager.handleShutdown();
     }
     async checkNpoint() {

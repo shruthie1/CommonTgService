@@ -271,10 +271,12 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
+        console.log("Creating Telegram Client for: ", this.phoneNumber, this.session, process.env.API_ID, process.env.API_HASH);
         this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
             connectionRetries: 5,
         });
-        this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+        console.log("Creating Telegram Client for: ", this.phoneNumber);
+        this.client.setLogLevel(Logger_1.LogLevel.DEBUG);
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
