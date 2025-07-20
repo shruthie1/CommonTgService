@@ -81,6 +81,14 @@ export class UsersService {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
   }
+  
+  async deleteById(userId: string): Promise<void> {
+    const result = await this.userModel.deleteOne({ _id: userId }).exec();
+    if (result.deletedCount === 0) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+  }
+
   async search(filter: SearchUserDto): Promise<User[]> {
     if (filter.firstName) {
       filter.firstName = { $regex: new RegExp(filter.firstName, 'i') } as any
