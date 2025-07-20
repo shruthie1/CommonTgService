@@ -451,7 +451,7 @@ export class ClientService implements OnModuleDestroy {
                                 session: existingClientUser.session,
                                 tgId: existingClientUser.tgId,
                                 channels: 170,
-                                status: days > 25 ? 'inactive' : 'active'
+                                status: days > 35 ? 'inactive' : 'active'
                             }
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             // await this.archivedClientService.update(existingMobile, existingClient);
