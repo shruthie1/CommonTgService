@@ -26572,6 +26572,12 @@ let UsersService = class UsersService {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
     }
+    async deleteById(userId) {
+        const result = await this.userModel.deleteOne({ _id: userId }).exec();
+        if (result.deletedCount === 0) {
+            throw new common_1.NotFoundException(`User with id ${userId} not found`);
+        }
+    }
     async search(filter) {
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
