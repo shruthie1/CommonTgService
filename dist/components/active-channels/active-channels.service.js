@@ -104,15 +104,16 @@ let ActiveChannelsService = class ActiveChannelsService {
                 }
             ]
         };
-        const sort = { participantsCount: -1 };
         try {
-            const result = await this.activeChannelModel.aggregate([
+            const pipeline = [
                 { $match: query },
+                { $addFields: { randomField: { $rand: {} } } },
+                { $sort: { randomField: 1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $sort: sort },
                 { $project: { randomField: 0 } }
-            ]).exec();
+            ];
+            const result = await this.activeChannelModel.aggregate(pipeline).exec();
             return result;
         }
         catch (error) {

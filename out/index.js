@@ -9664,15 +9664,16 @@ let ActiveChannelsService = class ActiveChannelsService {
                 }
             ]
         };
-        const sort = { participantsCount: -1 };
         try {
-            const result = await this.activeChannelModel.aggregate([
+            const pipeline = [
                 { $match: query },
+                { $addFields: { randomField: { $rand: {} } } },
+                { $sort: { randomField: 1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $sort: sort },
                 { $project: { randomField: 0 } }
-            ]).exec();
+            ];
+            const result = await this.activeChannelModel.aggregate(pipeline).exec();
             return result;
         }
         catch (error) {
@@ -13259,20 +13260,20 @@ let ChannelsService = class ChannelsService {
                 }
             ]
         };
-        const sort = notIds.length > 300 && false ? 0 : { participantsCount: -1 };
         try {
-            const result = await this.ChannelModel.aggregate([
+            const pipeline = [
                 { $match: query },
+                { $addFields: { randomField: { $rand: {} } } },
+                { $sort: { randomField: 1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: sort },
                 { $project: { randomField: 0 } }
-            ]).exec();
+            ];
+            const result = await this.ChannelModel.aggregate(pipeline).exec();
             return result;
         }
         catch (error) {
-            console.error('Error:', error);
+            console.error('🔴 Aggregation Error:', error);
             return [];
         }
     }
