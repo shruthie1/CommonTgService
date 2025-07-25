@@ -112,48 +112,4 @@ export declare class ClientService implements OnModuleDestroy {
         success: boolean;
         message: string;
     }>;
-    migratePromoteMobilesToClientId(): Promise<{
-        success: boolean;
-        message: string;
-        results: {
-            totalClients: number;
-            clientsWithPromoteMobiles: number;
-            mobilesProcessed: number;
-            mobilesUpdated: number;
-            mobilesCreated: number;
-            errors: Array<{
-                clientId: string;
-                mobile: string;
-                error: string;
-            }>;
-            backupCollection: string;
-        };
-    }>;
-    verifyPromoteMobileMigration(): Promise<{
-        success: boolean;
-        message: string;
-        verification: {
-            totalClientsWithPromoteMobile: number;
-            totalPromoteClientsWithClientId: number;
-            totalPromoteClientsWithoutClientId: number;
-            consistencyIssues: Array<{
-                issue: string;
-                clientId?: string;
-                mobile?: string;
-                details: string;
-            }>;
-        };
-    }>;
-    rollbackPromoteMobileMigration(backupCollectionName: string): Promise<{
-        success: boolean;
-        message: string;
-        restored: number;
-    }>;
-    checkPromoteMobileMigrationStatus(): Promise<{
-        isLegacyData: boolean;
-        legacyClientsCount: number;
-        modernClientsCount: number;
-        totalPromoteClients: number;
-        recommendations: string[];
-    }>;
 }

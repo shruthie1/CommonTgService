@@ -80,28 +80,4 @@ export declare class ClientController {
         success: boolean;
         message: string;
     }>;
-    checkMigrationStatus(): Promise<{
-        isLegacyData: boolean;
-        legacyClientsCount: number;
-        modernClientsCount: number;
-        totalPromoteClients: number;
-        recommendations: string[];
-    }>;
-    migratePromoteMobiles(): Promise<{
-        success: boolean;
-        message: string;
-        results: any;
-    }>;
-    verifyMigration(): Promise<{
-        success: boolean;
-        message: string;
-        verification: any;
-    }>;
-    rollbackMigration(body: {
-        backupCollectionName: string;
-    }): Promise<{
-        success: boolean;
-        message: string;
-        restored: number;
-    }>;
 }

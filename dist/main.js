@@ -82,6 +82,7 @@ async function bootstrap() {
             return;
         isShuttingDown = true;
         console.log(`${signal} received`);
+        console.log("CTS exit Request");
         await app.close();
         process.exit(0);
     };
