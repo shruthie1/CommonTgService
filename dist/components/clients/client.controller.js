@@ -227,38 +227,6 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async checkMigrationStatus() {
-        try {
-            return await this.clientService.checkPromoteMobileMigrationStatus();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async migratePromoteMobiles() {
-        try {
-            return await this.clientService.migratePromoteMobilesToClientId();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async verifyMigration() {
-        try {
-            return await this.clientService.verifyPromoteMobileMigration();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async rollbackMigration(body) {
-        try {
-            return await this.clientService.rollbackPromoteMobileMigration(body.backupCollectionName);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
 };
 exports.ClientController = ClientController;
 __decorate([
@@ -459,48 +427,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "releaseIpFromMobile", null);
-__decorate([
-    (0, common_1.Get)('migration/status'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check promote mobile migration status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration status retrieved successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "checkMigrationStatus", null);
-__decorate([
-    (0, common_1.Post)('migration/migrate'),
-    (0, swagger_1.ApiOperation)({ summary: 'Migrate promote mobiles from array to clientId reference' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration completed successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "migratePromoteMobiles", null);
-__decorate([
-    (0, common_1.Post)('migration/verify'),
-    (0, swagger_1.ApiOperation)({ summary: 'Verify promote mobile migration' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration verification completed' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "verifyMigration", null);
-__decorate([
-    (0, common_1.Post)('migration/rollback'),
-    (0, swagger_1.ApiOperation)({ summary: 'Rollback promote mobile migration' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                backupCollectionName: { type: 'string', description: 'Name of backup collection to restore from' }
-            },
-            required: ['backupCollectionName']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration rollback completed' }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "rollbackMigration", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),

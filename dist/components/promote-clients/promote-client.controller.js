@@ -16,14 +16,12 @@ exports.PromoteClientController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const promote_client_service_1 = require("./promote-client.service");
-const migration_service_1 = require("./migration.service");
 const create_promote_client_dto_1 = require("./dto/create-promote-client.dto");
 const search_promote_client_dto_1 = require("./dto/search-promote-client.dto");
 const update_promote_client_dto_1 = require("./dto/update-promote-client.dto");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService, migrationService) {
+    constructor(clientService) {
         this.clientService = clientService;
-        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -113,19 +111,6 @@ let PromoteClientController = class PromoteClientController {
     }
     async getUsageStatistics(clientId) {
         return this.clientService.getUsageStatistics(clientId);
-    }
-    async getMigrationStatus() {
-        return this.migrationService.getMigrationStatus();
-    }
-    async getMigrationPreview() {
-        return this.migrationService.getMigrationPreview();
-    }
-    async executeRoundRobinMigration(body = {}) {
-        const dryRun = body.dryRun !== false;
-        return this.migrationService.executeRoundRobinMigration(dryRun);
-    }
-    async executeRoundRobinMigrationLive() {
-        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -389,54 +374,9 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getUsageStatistics", null);
-__decorate([
-    (0, common_1.Get)('migration/status'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "getMigrationStatus", null);
-__decorate([
-    (0, common_1.Get)('migration/preview'),
-    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "getMigrationPreview", null);
-__decorate([
-    (0, common_1.Post)('migration/execute'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                dryRun: {
-                    type: 'boolean',
-                    description: 'Run in dry-run mode (no changes will be made)',
-                    default: true
-                }
-            }
-        }
-    }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "executeRoundRobinMigration", null);
-__decorate([
-    (0, common_1.Post)('migration/execute-live'),
-    (0, swagger_1.ApiOperation)({
-        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
-        description: 'This endpoint will make actual changes to the database. Use with caution!'
-    }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
-        migration_service_1.PromoteClientMigrationService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
 ], PromoteClientController);
 //# sourceMappingURL=promote-client.controller.js.map

@@ -13822,38 +13822,6 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
         }
     }
-    async checkMigrationStatus() {
-        try {
-            return await this.clientService.checkPromoteMobileMigrationStatus();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async migratePromoteMobiles() {
-        try {
-            return await this.clientService.migratePromoteMobilesToClientId();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async verifyMigration() {
-        try {
-            return await this.clientService.verifyPromoteMobileMigration();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-    async rollbackMigration(body) {
-        try {
-            return await this.clientService.rollbackPromoteMobileMigration(body.backupCollectionName);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
 };
 exports.ClientController = ClientController;
 __decorate([
@@ -14054,48 +14022,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "releaseIpFromMobile", null);
-__decorate([
-    (0, common_1.Get)('migration/status'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check promote mobile migration status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration status retrieved successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "checkMigrationStatus", null);
-__decorate([
-    (0, common_1.Post)('migration/migrate'),
-    (0, swagger_1.ApiOperation)({ summary: 'Migrate promote mobiles from array to clientId reference' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration completed successfully' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "migratePromoteMobiles", null);
-__decorate([
-    (0, common_1.Post)('migration/verify'),
-    (0, swagger_1.ApiOperation)({ summary: 'Verify promote mobile migration' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration verification completed' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "verifyMigration", null);
-__decorate([
-    (0, common_1.Post)('migration/rollback'),
-    (0, swagger_1.ApiOperation)({ summary: 'Rollback promote mobile migration' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                backupCollectionName: { type: 'string', description: 'Name of backup collection to restore from' }
-            },
-            required: ['backupCollectionName']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Migration rollback completed' }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "rollbackMigration", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),
@@ -14942,280 +14868,6 @@ let ClientService = ClientService_1 = class ClientService {
                 success: false,
                 message: `Failed to release IP: ${error.message}`
             };
-        }
-    }
-    async migratePromoteMobilesToClientId() {
-        this.logger.log('🚀 Starting promote mobile migration...');
-        const results = {
-            totalClients: 0,
-            clientsWithPromoteMobiles: 0,
-            mobilesProcessed: 0,
-            mobilesUpdated: 0,
-            mobilesCreated: 0,
-            errors: [],
-            backupCollection: ''
-        };
-        try {
-            const backupCollectionName = `clients_backup_${Date.now()}`;
-            results.backupCollection = backupCollectionName;
-            const allClients = await this.clientModel.find().lean();
-            results.totalClients = allClients.length;
-            const clientsWithPromoteMobiles = allClients.filter((client) => client.promoteMobile &&
-                Array.isArray(client.promoteMobile) &&
-                client.promoteMobile.length > 0);
-            results.clientsWithPromoteMobiles = clientsWithPromoteMobiles.length;
-            this.logger.log(`📊 Found ${clientsWithPromoteMobiles.length} clients with promote mobiles out of ${allClients.length} total clients`);
-            if (clientsWithPromoteMobiles.length === 0) {
-                return {
-                    success: true,
-                    message: 'No clients with promoteMobile arrays found. Migration not needed.',
-                    results
-                };
-            }
-            await this.clientModel.db.collection(backupCollectionName).insertMany(clientsWithPromoteMobiles);
-            this.logger.log(`💾 Backup created: ${backupCollectionName}`);
-            for (const client of clientsWithPromoteMobiles) {
-                this.logger.debug(`📱 Processing client: ${client.clientId} (${client.name})`);
-                this.logger.debug(`   Promote mobiles: ${client.promoteMobile.join(', ')}`);
-                for (const mobile of client.promoteMobile) {
-                    try {
-                        results.mobilesProcessed++;
-                        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
-                        if (existingPromoteClient) {
-                            if (existingPromoteClient.clientId !== client.clientId) {
-                                await this.promoteClientModel.updateOne({ mobile }, { $set: { clientId: client.clientId } });
-                                results.mobilesUpdated++;
-                                this.logger.debug(`   ✅ Updated ${mobile} with clientId: ${client.clientId}`);
-                            }
-                            else {
-                                this.logger.debug(`   ⚠️  ${mobile} already has correct clientId: ${client.clientId}`);
-                            }
-                        }
-                        else {
-                            const newPromoteClient = {
-                                mobile,
-                                clientId: client.clientId,
-                                tgId: `migrated_${mobile}`,
-                                lastActive: new Date().toISOString().split('T')[0],
-                                availableDate: new Date().toISOString().split('T')[0],
-                                channels: 0
-                            };
-                            await this.promoteClientModel.create(newPromoteClient);
-                            results.mobilesCreated++;
-                            this.logger.debug(`   🆕 Created PromoteClient for ${mobile} with clientId: ${client.clientId}`);
-                            this.logger.debug(`   ⚠️  Note: Created with placeholder data - please update tgId, lastActive, and channels manually`);
-                        }
-                    }
-                    catch (mobileError) {
-                        const errorMsg = `Error processing mobile ${mobile}: ${mobileError.message}`;
-                        this.logger.error(`   ❌ ${errorMsg}`);
-                        results.errors.push({
-                            clientId: client.clientId,
-                            mobile,
-                            error: errorMsg
-                        });
-                    }
-                }
-            }
-            this.logger.log('\n📊 Migration Summary:');
-            this.logger.log(`   ✅ Mobiles processed: ${results.mobilesProcessed}`);
-            this.logger.log(`   🔄 Existing mobiles updated: ${results.mobilesUpdated}`);
-            this.logger.log(`   🆕 New PromoteClient documents created: ${results.mobilesCreated}`);
-            this.logger.log(`   ❌ Errors encountered: ${results.errors.length}`);
-            this.logger.log(`   💾 Backup collection: ${results.backupCollection}`);
-            if (results.errors.length > 0) {
-                this.logger.warn('⚠️  Some errors occurred during migration:');
-                results.errors.forEach(error => {
-                    this.logger.warn(`   - Client ${error.clientId}, Mobile ${error.mobile}: ${error.error}`);
-                });
-            }
-            this.logger.log('🧹 Cleaning up old promoteMobile fields...');
-            const cleanupResult = await this.clientModel.updateMany({ promoteMobile: { $exists: true } }, { $unset: { promoteMobile: '' } });
-            this.logger.log(`   ✅ Removed promoteMobile field from ${cleanupResult.modifiedCount} clients`);
-            const successMessage = `Migration completed successfully! ` +
-                `Processed ${results.mobilesProcessed} promote mobiles from ${results.clientsWithPromoteMobiles} clients. ` +
-                `Updated ${results.mobilesUpdated} existing and created ${results.mobilesCreated} new PromoteClient documents. ` +
-                `Cleaned up promoteMobile field from ${cleanupResult.modifiedCount} clients.`;
-            this.logger.log(`🎉 ${successMessage}`);
-            return {
-                success: true,
-                message: successMessage,
-                results
-            };
-        }
-        catch (error) {
-            const errorMessage = `Migration failed: ${error.message}`;
-            this.logger.error(`💥 ${errorMessage}`, error.stack);
-            return {
-                success: false,
-                message: errorMessage,
-                results
-            };
-        }
-    }
-    async verifyPromoteMobileMigration() {
-        this.logger.log('🔍 Verifying promote mobile migration...');
-        try {
-            const verification = {
-                totalClientsWithPromoteMobile: 0,
-                totalPromoteClientsWithClientId: 0,
-                totalPromoteClientsWithoutClientId: 0,
-                consistencyIssues: []
-            };
-            const clientsWithPromoteMobile = await this.clientModel.countDocuments({
-                promoteMobile: { $exists: true, $type: 'array', $not: { $size: 0 } }
-            });
-            verification.totalClientsWithPromoteMobile = clientsWithPromoteMobile;
-            const promoteClientsWithClientId = await this.promoteClientModel.countDocuments({
-                clientId: { $exists: true }
-            });
-            verification.totalPromoteClientsWithClientId = promoteClientsWithClientId;
-            const promoteClientsWithoutClientId = await this.promoteClientModel.countDocuments({
-                clientId: { $exists: false }
-            });
-            verification.totalPromoteClientsWithoutClientId = promoteClientsWithoutClientId;
-            if (clientsWithPromoteMobile > 0) {
-                verification.consistencyIssues.push({
-                    issue: 'clients_still_have_promote_mobile_arrays',
-                    details: `${clientsWithPromoteMobile} clients still have promoteMobile arrays. Migration may not be complete.`
-                });
-            }
-            if (promoteClientsWithoutClientId > 0) {
-                verification.consistencyIssues.push({
-                    issue: 'promote_clients_without_client_id',
-                    details: `${promoteClientsWithoutClientId} PromoteClient documents don't have clientId assigned. These may be unassigned promote clients.`
-                });
-            }
-            const promoteClientsWithClientIds = await this.promoteClientModel.find({
-                clientId: { $exists: true }
-            }).lean();
-            const allClientIds = new Set((await this.clientModel.find().lean()).map(c => c.clientId));
-            for (const promoteClient of promoteClientsWithClientIds) {
-                if (!allClientIds.has(promoteClient.clientId)) {
-                    verification.consistencyIssues.push({
-                        issue: 'orphaned_promote_client',
-                        mobile: promoteClient.mobile,
-                        clientId: promoteClient.clientId,
-                        details: `PromoteClient ${promoteClient.mobile} references non-existent client ${promoteClient.clientId}`
-                    });
-                }
-            }
-            let message;
-            let success;
-            if (verification.consistencyIssues.length === 0) {
-                message = `✅ Migration verification passed! All ${promoteClientsWithClientId} PromoteClient documents have valid clientId assignments.`;
-                success = true;
-            }
-            else {
-                message = `⚠️  Migration verification found ${verification.consistencyIssues.length} consistency issues that may need attention.`;
-                success = false;
-            }
-            this.logger.log(message);
-            if (verification.consistencyIssues.length > 0) {
-                this.logger.warn('Consistency issues found:');
-                verification.consistencyIssues.forEach(issue => {
-                    this.logger.warn(`  - ${issue.issue}: ${issue.details}`);
-                });
-            }
-            return {
-                success,
-                message,
-                verification
-            };
-        }
-        catch (error) {
-            const errorMessage = `Verification failed: ${error.message}`;
-            this.logger.error(errorMessage, error.stack);
-            return {
-                success: false,
-                message: errorMessage,
-                verification: {
-                    totalClientsWithPromoteMobile: 0,
-                    totalPromoteClientsWithClientId: 0,
-                    totalPromoteClientsWithoutClientId: 0,
-                    consistencyIssues: [{
-                            issue: 'verification_error',
-                            details: error.message
-                        }]
-                }
-            };
-        }
-    }
-    async rollbackPromoteMobileMigration(backupCollectionName) {
-        this.logger.warn(`🔄 Rolling back migration using backup: ${backupCollectionName}`);
-        try {
-            const backupData = await this.clientModel.db.collection(backupCollectionName).find().toArray();
-            if (backupData.length === 0) {
-                throw new Error(`Backup collection ${backupCollectionName} is empty or doesn't exist`);
-            }
-            let restored = 0;
-            for (const backupClient of backupData) {
-                await this.clientModel.updateOne({ clientId: backupClient.clientId }, { $set: { promoteMobile: backupClient.promoteMobile } });
-                if (backupClient.promoteMobile && Array.isArray(backupClient.promoteMobile)) {
-                    for (const mobile of backupClient.promoteMobile) {
-                        await this.promoteClientModel.updateOne({ mobile }, { $unset: { clientId: 1 } });
-                    }
-                }
-                restored++;
-            }
-            const message = `✅ Rollback completed! Restored ${restored} clients to original state.`;
-            this.logger.log(message);
-            return {
-                success: true,
-                message,
-                restored
-            };
-        }
-        catch (error) {
-            const errorMessage = `❌ Rollback failed: ${error.message}`;
-            this.logger.error(errorMessage, error.stack);
-            return {
-                success: false,
-                message: errorMessage,
-                restored: 0
-            };
-        }
-    }
-    async checkPromoteMobileMigrationStatus() {
-        this.logger.log('🔍 Checking promote mobile migration status...');
-        try {
-            const allClients = await this.clientModel.find().lean();
-            const legacyClients = allClients.filter((client) => client.promoteMobile &&
-                Array.isArray(client.promoteMobile) &&
-                client.promoteMobile.length > 0);
-            const modernPromoteClients = await this.promoteClientModel.countDocuments({
-                clientId: { $exists: true, $ne: null }
-            });
-            const totalPromoteClients = await this.promoteClientModel.countDocuments();
-            const isLegacyData = legacyClients.length > 0;
-            const recommendations = [];
-            if (isLegacyData) {
-                recommendations.push(`🔄 Migration needed: ${legacyClients.length} clients still use legacy array storage`);
-                recommendations.push('📦 Run migratePromoteMobilesToClientId() to migrate data');
-                recommendations.push('✅ Run verifyPromoteMobileMigration() after migration to verify');
-            }
-            else {
-                recommendations.push('✅ All clients are using modern reference-based storage');
-                if (modernPromoteClients === 0) {
-                    recommendations.push('ℹ️ No promote mobile relationships found');
-                }
-                else {
-                    recommendations.push(`📊 ${modernPromoteClients} promote mobile relationships are properly configured`);
-                }
-            }
-            const status = {
-                isLegacyData,
-                legacyClientsCount: legacyClients.length,
-                modernClientsCount: modernPromoteClients,
-                totalPromoteClients,
-                recommendations
-            };
-            this.logger.log(`📋 Migration Status: ${JSON.stringify(status, null, 2)}`);
-            return status;
-        }
-        catch (error) {
-            this.logger.error('❌ Error checking migration status:', error.stack);
-            throw error;
         }
     }
 };
@@ -18786,295 +18438,6 @@ __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-clie
 
 /***/ }),
 
-/***/ "./src/components/promote-clients/migration.service.ts":
-/*!*************************************************************!*\
-  !*** ./src/components/promote-clients/migration.service.ts ***!
-  \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
-var PromoteClientMigrationService_1;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PromoteClientMigrationService = void 0;
-const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
-const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
-const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
-const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
-const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
-let PromoteClientMigrationService = PromoteClientMigrationService_1 = class PromoteClientMigrationService {
-    constructor(promoteClientModel, promoteClientService, clientService) {
-        this.promoteClientModel = promoteClientModel;
-        this.promoteClientService = promoteClientService;
-        this.clientService = clientService;
-        this.logger = new common_1.Logger(PromoteClientMigrationService_1.name);
-    }
-    async executeRoundRobinMigration(dryRun = false) {
-        const startTime = Date.now();
-        this.logger.log('🚀 Starting PromoteClient Round-Robin Migration');
-        this.logger.log(`📋 Mode: ${dryRun ? 'DRY RUN (no changes will be made)' : 'LIVE MIGRATION'}`);
-        const stats = {
-            totalPromoteClients: 0,
-            unassignedPromoteClients: 0,
-            availableClients: 0,
-            assignedCount: 0,
-            skippedCount: 0,
-            errorCount: 0,
-            distributionBefore: {},
-            distributionAfter: {}
-        };
-        try {
-            await this.gatherInitialStats(stats);
-            const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
-            if (unassignedPromoteClients.length === 0) {
-                const executionTime = Date.now() - startTime;
-                this.logger.log('✅ No unassigned promote clients found. Migration not needed.');
-                return {
-                    success: true,
-                    message: 'No unassigned promote clients found. Migration not needed.',
-                    stats,
-                    executionTime
-                };
-            }
-            const availableClients = await this.getAvailableClients();
-            if (availableClients.length === 0) {
-                const executionTime = Date.now() - startTime;
-                this.logger.error('❌ No available clients found. Cannot proceed with migration.');
-                return {
-                    success: false,
-                    message: 'No available clients found. Cannot proceed with migration.',
-                    stats,
-                    executionTime
-                };
-            }
-            const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
-            this.logAssignmentPlan(assignments, availableClients);
-            if (!dryRun) {
-                await this.executeAssignments(assignments, stats);
-                await this.gatherFinalStats(stats);
-            }
-            const executionTime = Date.now() - startTime;
-            const message = dryRun
-                ? `DRY RUN: Would assign ${assignments.length} promote clients across ${availableClients.length} clients`
-                : `Successfully assigned ${stats.assignedCount} promote clients with ${stats.errorCount} errors`;
-            return {
-                success: true,
-                message,
-                stats,
-                executionTime
-            };
-        }
-        catch (error) {
-            const executionTime = Date.now() - startTime;
-            this.logger.error('💥 Migration failed:', error.message);
-            return {
-                success: false,
-                message: `Migration failed: ${error.message}`,
-                stats,
-                executionTime
-            };
-        }
-    }
-    async getMigrationPreview() {
-        const unassignedPromoteClients = await this.getUnassignedPromoteClientsSorted();
-        const availableClients = await this.getAvailableClients();
-        const currentDistribution = await this.getCurrentDistribution();
-        if (unassignedPromoteClients.length === 0 || availableClients.length === 0) {
-            return {
-                unassignedCount: unassignedPromoteClients.length,
-                availableClients,
-                projectedDistribution: currentDistribution,
-                currentDistribution,
-                isBalanced: true
-            };
-        }
-        const assignments = this.calculateRoundRobinAssignments(unassignedPromoteClients, availableClients);
-        const projectedDistribution = { ...currentDistribution };
-        for (const assignment of assignments) {
-            projectedDistribution[assignment.clientId] = (projectedDistribution[assignment.clientId] || 0) + 1;
-        }
-        const counts = Object.values(projectedDistribution);
-        const minCount = Math.min(...counts);
-        const maxCount = Math.max(...counts);
-        const isBalanced = (maxCount - minCount) <= 1;
-        return {
-            unassignedCount: unassignedPromoteClients.length,
-            availableClients,
-            projectedDistribution,
-            currentDistribution,
-            isBalanced
-        };
-    }
-    async getMigrationStatus() {
-        const totalPromoteClients = await this.promoteClientModel.countDocuments();
-        const unassignedPromoteClients = await this.promoteClientModel.countDocuments({
-            $or: [
-                { clientId: { $exists: false } },
-                { clientId: null },
-                { clientId: '' }
-            ]
-        });
-        const assignedPromoteClients = totalPromoteClients - unassignedPromoteClients;
-        const distributionPerClient = await this.getCurrentDistribution();
-        return {
-            totalPromoteClients,
-            assignedPromoteClients,
-            unassignedPromoteClients,
-            distributionPerClient,
-            lastMigrationNeeded: unassignedPromoteClients > 0
-        };
-    }
-    async gatherInitialStats(stats) {
-        this.logger.log('📊 Gathering initial statistics...');
-        stats.totalPromoteClients = await this.promoteClientModel.countDocuments();
-        stats.unassignedPromoteClients = await this.promoteClientModel.countDocuments({
-            $or: [
-                { clientId: { $exists: false } },
-                { clientId: null },
-                { clientId: '' }
-            ]
-        });
-        const clients = await this.clientService.findAll();
-        stats.availableClients = clients.length;
-        stats.distributionBefore = await this.getCurrentDistribution();
-        this.logger.log(`📈 Initial Stats:`);
-        this.logger.log(`   Total PromoteClients: ${stats.totalPromoteClients}`);
-        this.logger.log(`   Unassigned PromoteClients: ${stats.unassignedPromoteClients}`);
-        this.logger.log(`   Available Clients: ${stats.availableClients}`);
-    }
-    async getUnassignedPromoteClientsSorted() {
-        this.logger.log('🔍 Finding unassigned promote clients...');
-        const unassigned = await this.promoteClientModel.find({
-            $or: [
-                { clientId: { $exists: false } },
-                { clientId: null },
-                { clientId: '' }
-            ]
-        }).sort({ channels: 1 }).exec();
-        this.logger.log(`📱 Found ${unassigned.length} unassigned promote clients`);
-        if (unassigned.length > 0) {
-            const channelRange = {
-                min: Math.min(...unassigned.map(pc => pc.channels)),
-                max: Math.max(...unassigned.map(pc => pc.channels)),
-                avg: Math.round(unassigned.reduce((sum, pc) => sum + pc.channels, 0) / unassigned.length)
-            };
-            this.logger.log(`📊 Channel count range: ${channelRange.min} - ${channelRange.max} (avg: ${channelRange.avg})`);
-        }
-        return unassigned;
-    }
-    async getAvailableClients() {
-        this.logger.log('👥 Getting available clients...');
-        const clients = await this.clientService.findAll();
-        const clientIds = clients.map(client => client.clientId).filter(Boolean);
-        this.logger.log(`👤 Found ${clientIds.length} available clients: ${clientIds.join(', ')}`);
-        return clientIds;
-    }
-    calculateRoundRobinAssignments(promoteClients, availableClients) {
-        this.logger.log('🔄 Calculating round-robin assignments...');
-        const assignments = [];
-        let clientIndex = 0;
-        for (const promoteClient of promoteClients) {
-            const assignedClientId = availableClients[clientIndex];
-            assignments.push({
-                mobile: promoteClient.mobile,
-                clientId: assignedClientId,
-                channels: promoteClient.channels
-            });
-            clientIndex = (clientIndex + 1) % availableClients.length;
-        }
-        return assignments;
-    }
-    logAssignmentPlan(assignments, availableClients) {
-        this.logger.log('📋 Assignment Plan:');
-        const assignmentsByClient = availableClients.reduce((acc, clientId) => {
-            acc[clientId] = assignments.filter(a => a.clientId === clientId);
-            return acc;
-        }, {});
-        for (const clientId of availableClients) {
-            const clientAssignments = assignmentsByClient[clientId];
-            const totalChannels = clientAssignments.reduce((sum, a) => sum + a.channels, 0);
-            this.logger.log(`   ${clientId}: ${clientAssignments.length} promote clients, ${totalChannels} total channels`);
-        }
-        const countsPerClient = availableClients.map(clientId => assignmentsByClient[clientId].length);
-        const minCount = Math.min(...countsPerClient);
-        const maxCount = Math.max(...countsPerClient);
-        const isBalanced = (maxCount - minCount) <= 1;
-        this.logger.log(`⚖️  Distribution balance: ${isBalanced ? '✅ BALANCED' : '⚠️  UNBALANCED'} (min: ${minCount}, max: ${maxCount})`);
-    }
-    async executeAssignments(assignments, stats) {
-        this.logger.log('💾 Executing assignments...');
-        const batchSize = 10;
-        for (let i = 0; i < assignments.length; i += batchSize) {
-            const batch = assignments.slice(i, i + batchSize);
-            const batchNumber = Math.floor(i / batchSize) + 1;
-            const totalBatches = Math.ceil(assignments.length / batchSize);
-            this.logger.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} assignments)...`);
-            const results = await Promise.allSettled(batch.map(async (assignment) => {
-                try {
-                    await this.promoteClientModel.findOneAndUpdate({ mobile: assignment.mobile }, {
-                        $set: {
-                            clientId: assignment.clientId,
-                            status: 'active',
-                            message: `Assigned to ${assignment.clientId} via round-robin migration`
-                        }
-                    }, { new: true }).exec();
-                    stats.assignedCount++;
-                    this.logger.debug(`✅ Assigned ${assignment.mobile} → ${assignment.clientId}`);
-                }
-                catch (error) {
-                    stats.errorCount++;
-                    this.logger.error(`❌ Failed to assign ${assignment.mobile}: ${error.message}`);
-                    throw error;
-                }
-            }));
-            const failedCount = results.filter(result => result.status === 'rejected').length;
-            if (failedCount > 0) {
-                this.logger.warn(`⚠️  Batch ${batchNumber}: ${failedCount} failed assignments`);
-            }
-            if (i + batchSize < assignments.length) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        }
-        this.logger.log(`✅ Assignment execution completed: ${stats.assignedCount} assigned, ${stats.errorCount} errors`);
-    }
-    async gatherFinalStats(stats) {
-        this.logger.log('📊 Gathering final statistics...');
-        stats.distributionAfter = await this.getCurrentDistribution();
-    }
-    async getCurrentDistribution() {
-        const distribution = {};
-        const clients = await this.clientService.findAll();
-        for (const client of clients) {
-            const count = await this.promoteClientModel.countDocuments({ clientId: client.clientId });
-            distribution[client.clientId] = count;
-        }
-        return distribution;
-    }
-};
-exports.PromoteClientMigrationService = PromoteClientMigrationService;
-exports.PromoteClientMigrationService = PromoteClientMigrationService = PromoteClientMigrationService_1 = __decorate([
-    (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model,
-        promote_client_service_1.PromoteClientService,
-        client_service_1.ClientService])
-], PromoteClientMigrationService);
-
-
-/***/ }),
-
 /***/ "./src/components/promote-clients/promote-client.controller.ts":
 /*!*********************************************************************!*\
   !*** ./src/components/promote-clients/promote-client.controller.ts ***!
@@ -19099,14 +18462,12 @@ exports.PromoteClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
-const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts");
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 let PromoteClientController = class PromoteClientController {
-    constructor(clientService, migrationService) {
+    constructor(clientService) {
         this.clientService = clientService;
-        this.migrationService = migrationService;
     }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
@@ -19196,19 +18557,6 @@ let PromoteClientController = class PromoteClientController {
     }
     async getUsageStatistics(clientId) {
         return this.clientService.getUsageStatistics(clientId);
-    }
-    async getMigrationStatus() {
-        return this.migrationService.getMigrationStatus();
-    }
-    async getMigrationPreview() {
-        return this.migrationService.getMigrationPreview();
-    }
-    async executeRoundRobinMigration(body = {}) {
-        const dryRun = body.dryRun !== false;
-        return this.migrationService.executeRoundRobinMigration(dryRun);
-    }
-    async executeRoundRobinMigrationLive() {
-        return this.migrationService.executeRoundRobinMigration(false);
     }
 };
 exports.PromoteClientController = PromoteClientController;
@@ -19472,55 +18820,10 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getUsageStatistics", null);
-__decorate([
-    (0, common_1.Get)('migration/status'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get current migration status' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "getMigrationStatus", null);
-__decorate([
-    (0, common_1.Get)('migration/preview'),
-    (0, swagger_1.ApiOperation)({ summary: 'Preview round-robin migration without executing' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "getMigrationPreview", null);
-__decorate([
-    (0, common_1.Post)('migration/execute'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute round-robin migration for unassigned promote clients' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                dryRun: {
-                    type: 'boolean',
-                    description: 'Run in dry-run mode (no changes will be made)',
-                    default: true
-                }
-            }
-        }
-    }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "executeRoundRobinMigration", null);
-__decorate([
-    (0, common_1.Post)('migration/execute-live'),
-    (0, swagger_1.ApiOperation)({
-        summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
-        description: 'This endpoint will make actual changes to the database. Use with caution!'
-    }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "executeRoundRobinMigrationLive", null);
 exports.PromoteClientController = PromoteClientController = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
-    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService,
-        migration_service_1.PromoteClientMigrationService])
+    __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
 ], PromoteClientController);
 
 
@@ -19544,7 +18847,6 @@ exports.PromoteClientModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
-const migration_service_1 = __webpack_require__(/*! ./migration.service */ "./src/components/promote-clients/migration.service.ts");
 const promote_client_controller_1 = __webpack_require__(/*! ./promote-client.controller */ "./src/components/promote-clients/promote-client.controller.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
@@ -19572,8 +18874,8 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
-        providers: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService],
-        exports: [promote_client_service_1.PromoteClientService, migration_service_1.PromoteClientMigrationService]
+        providers: [promote_client_service_1.PromoteClientService],
+        exports: [promote_client_service_1.PromoteClientService]
     })
 ], PromoteClientModule);
 
@@ -26735,6 +26037,7 @@ async function bootstrap() {
             return;
         isShuttingDown = true;
         console.log(`${signal} received`);
+        console.log("CTS exit Request");
         await app.close();
         process.exit(0);
     };

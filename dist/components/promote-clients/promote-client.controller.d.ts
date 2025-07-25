@@ -1,13 +1,11 @@
 import { PromoteClientService } from './promote-client.service';
-import { PromoteClientMigrationService, MigrationResult } from './migration.service';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
 import { PromoteClient } from './schemas/promote-client.schema';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 export declare class PromoteClientController {
     private readonly clientService;
-    private readonly migrationService;
-    constructor(clientService: PromoteClientService, migrationService: PromoteClientMigrationService);
+    constructor(clientService: PromoteClientService);
     create(createClientDto: CreatePromoteClientDto): Promise<PromoteClient>;
     search(query: SearchPromoteClientDto): Promise<PromoteClient[]>;
     joinChannelsforPromoteClients(): Promise<string>;
@@ -56,22 +54,4 @@ export declare class PromoteClientController {
         usedInLastWeek: number;
         averageUsageGap: number;
     }>;
-    getMigrationStatus(): Promise<{
-        totalPromoteClients: number;
-        assignedPromoteClients: number;
-        unassignedPromoteClients: number;
-        distributionPerClient: Record<string, number>;
-        lastMigrationNeeded: boolean;
-    }>;
-    getMigrationPreview(): Promise<{
-        unassignedCount: number;
-        availableClients: string[];
-        projectedDistribution: Record<string, number>;
-        currentDistribution: Record<string, number>;
-        isBalanced: boolean;
-    }>;
-    executeRoundRobinMigration(body?: {
-        dryRun?: boolean;
-    }): Promise<MigrationResult>;
-    executeRoundRobinMigrationLive(): Promise<MigrationResult>;
 }
