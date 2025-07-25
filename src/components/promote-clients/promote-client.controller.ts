@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { PromoteClientService } from './promote-client.service';
-import { PromoteClientMigrationService, MigrationResult } from './migration.service';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
 import { PromoteClient } from './schemas/promote-client.schema';
@@ -12,7 +11,6 @@ import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 export class PromoteClientController {
   constructor(
     private readonly clientService: PromoteClientService,
-    private readonly migrationService: PromoteClientMigrationService
   ) { }
 
   @Post()
@@ -278,60 +276,4 @@ export class PromoteClientController {
   }> {
     return this.clientService.getUsageStatistics(clientId);
   }
-
-  // Migration endpoints
-  @Get('migration/status')
-  @ApiOperation({ summary: 'Get current migration status' })
-  async getMigrationStatus(): Promise<{
-    totalPromoteClients: number;
-    assignedPromoteClients: number;
-    unassignedPromoteClients: number;
-    distributionPerClient: Record<string, number>;
-    lastMigrationNeeded: boolean;
-  }> {
-    return this.migrationService.getMigrationStatus();
-  }
-
-  @Get('migration/preview')
-  @ApiOperation({ summary: 'Preview round-robin migration without executing' })
-  async getMigrationPreview(): Promise<{
-    unassignedCount: number;
-    availableClients: string[];
-    projectedDistribution: Record<string, number>;
-    currentDistribution: Record<string, number>;
-    isBalanced: boolean;
-  }> {
-    return this.migrationService.getMigrationPreview();
-  }
-
-  @Post('migration/execute')
-  @ApiOperation({ summary: 'Execute round-robin migration for unassigned promote clients' })
-  @ApiBody({ 
-    schema: {
-      type: 'object',
-      properties: {
-        dryRun: { 
-          type: 'boolean', 
-          description: 'Run in dry-run mode (no changes will be made)',
-          default: true
-        }
-      }
-    }
-  })
-  async executeRoundRobinMigration(
-    @Body() body: { dryRun?: boolean } = {}
-  ): Promise<MigrationResult> {
-    const dryRun = body.dryRun !== false; // Default to true for safety
-    return this.migrationService.executeRoundRobinMigration(dryRun);
-  }
-
-  @Post('migration/execute-live')
-  @ApiOperation({ 
-    summary: 'Execute round-robin migration in LIVE mode (makes actual changes)',
-    description: 'This endpoint will make actual changes to the database. Use with caution!'
-  })
-  async executeRoundRobinMigrationLive(): Promise<MigrationResult> {
-    return this.migrationService.executeRoundRobinMigration(false);
-  }
-
 }
