@@ -5,6 +5,8 @@ import { Model } from 'mongoose';
 import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import { Channel, ChannelDocument } from './schemas/channel.schema';
+import { PipelineStage } from 'mongoose';
+
 @Injectable()
 export class ChannelsService {
   constructor(
@@ -160,20 +162,22 @@ export class ChannelsService {
         ]
     }
 
-    const sort: Record<string, 1 | -1> = notIds.length > 300 && false ? { randomField: 1 } : { participantsCount: -1 }
     try {
-      const result: Channel[] = await this.ChannelModel.aggregate([
+
+      const pipeline: PipelineStage[] = [
         { $match: query },
+        { $addFields: { randomField: { $rand: {} } } },
+        { $sort: { randomField: 1 as const } },
         { $skip: skip },
         { $limit: limit },
-        { $addFields: { randomField: { $rand: {} } } }, // Add a random field
-        { $sort: sort }, // Sort by the random field
-        { $project: { randomField: 0 } } // Remove the random field from the output
-      ]).exec();
+        { $project: { randomField: 0 } }
+      ];
+      const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline).exec();
       return result;
     } catch (error) {
-      console.error('Error:', error);
+      console.error('🔴 Aggregation Error:', error);
       return [];
     }
+
   }
 }

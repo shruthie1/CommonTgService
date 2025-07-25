@@ -2,7 +2,7 @@ import { PromoteMsgsService } from './../promote-msgs/promote-msgs.service';
 // src/activechannels/activechannels.service.ts
 import { BadRequestException, Inject, Injectable, InternalServerErrorException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, PipelineStage } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
@@ -115,15 +115,17 @@ export class ActiveChannelsService {
         ]
     }
 
-    const sort: Record<string, 1 | -1> = { participantsCount: -1 }
     try {
-      const result: ActiveChannel[] = await this.activeChannelModel.aggregate([
+
+      const pipeline: PipelineStage[] = [
         { $match: query },
+        { $addFields: { randomField: { $rand: {} } } },
+        { $sort: { randomField: 1 as const } },
         { $skip: skip },
         { $limit: limit },
-        { $sort: sort }, // Sort by the random field
-        { $project: { randomField: 0 } } // Remove the random field from the output
-      ]).exec();
+        { $project: { randomField: 0 } }
+      ];
+      const result: ActiveChannel[] = await this.activeChannelModel.aggregate<ActiveChannel>(pipeline).exec();
       return result;
     } catch (error) {
       console.error('Error:', error);
