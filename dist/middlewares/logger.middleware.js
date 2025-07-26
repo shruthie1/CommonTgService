@@ -26,11 +26,11 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
-                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`);
                     this.logger.error(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 400) {
-                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${statusCode}`)}`);
+                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`);
                     this.logger.warn(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 300) {
