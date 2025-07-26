@@ -8695,7 +8695,7 @@ function generateTGConfig() {
     return {
         connectionRetries: 10,
         requestRetries: 10,
-        retryDelay: 3000,
+        retryDelay: 5000,
         timeout: 60000,
         autoReconnect: true,
         useWSS: true,
