@@ -3504,6 +3504,7 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ./utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const message_search_dto_1 = __webpack_require__(/*! ./dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
+const generateTGConfig_1 = __webpack_require__(/*! ./utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -3723,9 +3724,7 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 5,
-        });
+        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();
@@ -8667,6 +8666,49 @@ class ConnectionManager {
 }
 ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
+
+
+/***/ }),
+
+/***/ "./src/components/Telegram/utils/generateTGConfig.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/Telegram/utils/generateTGConfig.ts ***!
+  \***********************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.generateTGConfig = generateTGConfig;
+function generateTGConfig() {
+    const deviceModels = [
+        "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12", "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
+    ];
+    const systemVersions = [
+        "Android 13", "iOS 16.6", "Windows 10", "Windows 11", "macOS 13.5", "Ubuntu 22.04", "Arch Linux"
+    ];
+    const appVersions = [
+        "1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"
+    ];
+    function pickRandom(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+    return {
+        connectionRetries: 10,
+        requestRetries: 10,
+        retryDelay: 3000,
+        timeout: 60000,
+        autoReconnect: true,
+        useWSS: true,
+        maxConcurrentDownloads: 3,
+        downloadRetries: 10,
+        floodSleepThreshold: 180,
+        deviceModel: pickRandom(deviceModels),
+        systemVersion: pickRandom(systemVersions),
+        appVersion: pickRandom(appVersions),
+        useIPV6: true,
+        testServers: false
+    };
+}
 
 
 /***/ }),

@@ -52,6 +52,7 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
+const generateTGConfig_1 = require("./utils/generateTGConfig");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.session = new sessions_1.StringSession(sessionString);
@@ -271,7 +272,7 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, generateTGConfig());
+        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();
