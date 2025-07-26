@@ -21,7 +21,7 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
 import { connectionManager } from './utils/connection-manager';
 import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
-import { BotConfig, ChannelCategory } from '../../utils/TelegramBots.config';
+import { generateTGConfig } from './utils/generateTGConfig';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -347,9 +347,7 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-        this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 5,
-        });
+        this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, generateTGConfig());
         this.client.setLogLevel(LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler
         await this.client.connect();

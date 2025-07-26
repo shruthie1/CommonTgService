@@ -3775,17 +3775,6 @@
             }
           },
           {
-            "name": "reactions",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "availableMsgs",
             "required": false,
             "in": "query",

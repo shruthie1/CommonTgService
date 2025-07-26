@@ -271,9 +271,7 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 5,
-        });
+        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, generateTGConfig());
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();
