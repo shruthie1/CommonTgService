@@ -1,4 +1,4 @@
-declare function generateTGConfig(): {
+export declare function generateTGConfig(): {
     connectionRetries: number;
     requestRetries: number;
     retryDelay: number;
