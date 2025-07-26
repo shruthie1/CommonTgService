@@ -49,7 +49,7 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) {}
+    ) { }
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
@@ -171,72 +171,116 @@ export class BufferClientService implements OnModuleDestroy {
     }
 
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
-        if (!this.telegramService.getActiveClientSetup()) {
-            this.logger.log('Starting join channel process');
-            await connectionManager.disconnectAll();
-
-            // Clear both queues before starting new process
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
-
-            await sleep(2000);
-            const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
-            const clients = await this.bufferClientModel.find({ channels: { "$lt": 350 }, mobile: { $nin: existingkeys } }).sort({ channels: 1 }).limit(8);
-
-            this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
-
-            if (clients.length > 0) {
-                for (const document of clients) {
-                    try {
-                        const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: false });
-                        this.logger.log(`Started joining process for mobile: ${document.mobile}`);
-
-                        const channels = await client.channelInfo(true);
-                        this.logger.debug(`Client ${document.mobile} has ${channels.ids.length} existing channels`);
-
-                        await this.update(document.mobile, { channels: channels.ids.length });
-                        this.logger.debug(`Client ${document.mobile} has ${channels.canSendFalseChats.length} channels that can't send messages`);
-
-                        let result = [];
-                        if (channels.canSendFalseCount < 10) {
-                            if (channels.ids.length < 220) {
-                                result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
-                            } else {
-                                result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
-                            }
-                            this.logger.debug(`Adding ${result.length} new channels to join queue for ${document.mobile}`);
-                            this.joinChannelMap.set(document.mobile, result);
-                            this.joinChannelQueue();
-                            await connectionManager.unregisterClient(document.mobile);
-                        } else {
-                            this.logger.warn(`Client ${document.mobile} has too many restricted channels, moving to leave queue: ${channels.canSendFalseChats.length}`);
-                            this.joinChannelMap.delete(document.mobile);
-                            this.leaveChannelMap.set(document.mobile, channels.canSendFalseChats);
-                            this.leaveChannelQueue();
-                            await connectionManager.unregisterClient(document.mobile);
-
-                        }
-                        // console.log("DbChannelsLen: ", result.length);
-                        // let resp = '';
-                        // this.telegramService.joinChannels(document.mobile, result);
-                    } catch (error) {
-                        if (error.message === "SESSION_REVOKED" ||
-                            error.message === "AUTH_KEY_UNREGISTERED" ||
-                            error.message === "USER_DEACTIVATED" ||
-                            error.message === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${document.mobile}, removing client`, error.stack);
-                            await this.remove(document.mobile);
-                            await connectionManager.unregisterClient(document.mobile);
-                        }
-                        parseError(error)
-                    }
-                }
-            }
-            this.logger.log(`Join channel process initiated for ${clients.length} clients`);
-            return `Initiated Joining channels ${clients.length}`
-        } else {
+        if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
+            return 'Active client setup exists, skipping buffer promotion';
         }
+
+        this.logger.log('Starting join channel process for buffer clients');
+
+        // Disconnect all clients and reset queue maps
+        await connectionManager.disconnectAll();
+        await sleep(2000);
+
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+
+        // 🧹 Clear previous state for fresh run
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
+
+        const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
+        const clients = await this.bufferClientModel.find({
+            channels: { $lt: 350 },
+            mobile: { $nin: existingKeys }
+        }).sort({ channels: 1 }).limit(8);
+
+        this.logger.debug(`Found ${clients.length} buffer clients to process`);
+
+        const joinSet = new Set<string>();
+        const leaveSet = new Set<string>();
+
+        const results = await Promise.allSettled(
+            clients.map(async (document) => {
+                const mobile = document.mobile;
+                this.logger.debug(`Processing buffer client: ${mobile}`);
+
+                try {
+                    const client = await connectionManager.getClient(mobile, {
+                        autoDisconnect: false,
+                        handler: false
+                    });
+
+                    const channels = await client.channelInfo(true);
+                    this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
+                    await this.update(mobile, { channels: channels.ids.length });
+
+                    if (channels.canSendFalseCount < 10) {
+                        const excludedIds = channels.ids;
+                        const result = channels.ids.length < 220
+                            ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
+                            : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+
+                        if (!this.joinChannelMap.has(mobile)) {
+                            this.joinChannelMap.set(mobile, result);
+                            joinSet.add(mobile);
+                            this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
+                        } else {
+                            this.logger.debug(`${mobile}: Already present in join map, skipping`);
+                        }
+
+                    } else {
+                        if (!this.leaveChannelMap.has(mobile)) {
+                            this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
+                            leaveSet.add(mobile);
+                            this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
+                        } else {
+                            this.logger.debug(`${mobile}: Already present in leave map, skipping`);
+                        }
+                    }
+
+                } catch (error) {
+                    const errorDetails = parseError(error);
+                    const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
+
+                    const isFatal = [
+                        "SESSION_REVOKED",
+                        "AUTH_KEY_UNREGISTERED",
+                        "USER_DEACTIVATED",
+                        "USER_DEACTIVATED_BAN"
+                    ].includes(errorMsg);
+
+                    if (isFatal) {
+                        this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
+                        try {
+                            await this.remove(mobile);
+                        } catch (removeErr) {
+                            this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
+                        }
+                    } else {
+                        this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
+                    }
+                } finally {
+                    connectionManager.unregisterClient(mobile);
+                }
+            })
+        );
+
+        const successCount = results.filter(r => r.status === 'fulfilled').length;
+        const failCount = results.length - successCount;
+
+        if (joinSet.size > 0) {
+            this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
+            this.joinChannelQueue();
+        }
+
+        if (leaveSet.size > 0) {
+            this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
+            this.leaveChannelQueue();
+        }
+
+        this.logger.log(`Join process complete — Success: ${successCount}, Fail: ${failCount}`);
+        return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
     }
 
     async joinChannelQueue() {

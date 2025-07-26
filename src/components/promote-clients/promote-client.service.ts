@@ -46,7 +46,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService,
-    ) {}
+    ) { }
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         // Set default values if not provided
@@ -192,92 +192,128 @@ export class PromoteClientService implements OnModuleDestroy {
     }
 
     async joinchannelForPromoteClients(skipExisting: boolean = true): Promise<string> {
-        if (!this.telegramService.getActiveClientSetup()) {
-            this.logger.log('Starting join channel process');
+        if (this.telegramService.getActiveClientSetup()) {
+            this.logger.warn('Active client setup exists, skipping promotion process');
+            return 'Active client setup exists, skipping promotion';
+        }
 
-            // Clear both queues before starting new process
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
+        this.logger.log('Starting join channel process');
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
 
-            try {
-                await connectionManager.disconnectAll();
-                await sleep(2000);
-                const existingkeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys())
-                const clients = await this.promoteClientModel.find({
-                    channels: { "$lt": 300 },
-                    mobile: { $nin: existingkeys },
-                    status: 'active' // Only process active promote clients
-                }).sort({ channels: 1 }).limit(8);
+        try {
+            await connectionManager.disconnectAll();
+            await sleep(2000);
+            this.joinChannelMap.clear();
+            this.leaveChannelMap.clear();
 
-                this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
 
-                if (clients.length > 0) {
-                    for (const document of clients) {
-                        try {
-                            this.logger.debug(`Processing client: ${document.mobile}`);
-                            const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false, handler: false });
+            const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
 
-                            const channels = await client.channelInfo(true);
-                            this.logger.debug(`${document.mobile}: Found ${channels.ids.length} existing channels`);
+            const clients = await this.promoteClientModel.find({
+                channels: { $lt: 350 },
+                mobile: { $nin: existingKeys },
+                status: 'active'
+            }).sort({ channels: 1 }).limit(8);
 
-                            await this.update(document.mobile, { channels: channels.ids.length });
+            this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
 
-                            if (channels.canSendFalseCount < 10) {
-                                if (channels.ids.length < 220) {
-                                    this.logger.debug(`${document.mobile}: Getting channels from channels service`);
-                                    const result = await this.channelsService.getActiveChannels(150, 0, channels.ids);
-                                    this.joinChannelMap.set(document.mobile, result);
-                                    this.joinChannelQueue();
-                                } else {
-                                    this.logger.debug(`${document.mobile}: Getting channels from active channels service`);
-                                    const result = await this.activeChannelsService.getActiveChannels(150, 0, channels.ids);
-                                    this.joinChannelMap.set(document.mobile, result);
-                                    this.joinChannelQueue();
-                                }
+            const joinSet = new Set<string>();
+            const leaveSet = new Set<string>();
+
+            const results = await Promise.allSettled(
+                clients.map(async (document) => {
+                    const mobile = document.mobile;
+                    this.logger.debug(`Processing client: ${mobile}`);
+
+                    try {
+                        const client = await connectionManager.getClient(mobile, {
+                            autoDisconnect: false,
+                            handler: false
+                        });
+
+                        const channels = await client.channelInfo(true);
+                        this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+
+                        await this.update(mobile, { channels: channels.ids.length });
+
+                        if (channels.canSendFalseCount < 10) {
+                            const excludedIds = channels.ids;
+                            const channelLimit = 150;
+
+                            const result = channels.ids.length < 220
+                                ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
+                                : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+
+                            if (!this.joinChannelMap.has(mobile)) {
+                                this.joinChannelMap.set(mobile, result);
+                                joinSet.add(mobile);
                             } else {
-                                this.logger.debug(`${document.mobile}: Too many channels with no send permissions, queueing for leave: ${channels.canSendFalseChats.length}`);
-                                this.leaveChannelMap.set(document.mobile, channels.canSendFalseChats);
-                                this.leaveChannelQueue();
+                                this.logger.debug(`${mobile}: Already in join queue, skipping re-add`);
                             }
-                        } catch (error) {
-                            const errorDetails = parseError(error);
-                            this.logger.error(`Error processing client ${document.mobile}:`, errorDetails);
+                        } else {
+                            this.logger.debug(`${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
+                            if (!this.leaveChannelMap.has(mobile)) {
+                                this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
+                                leaveSet.add(mobile);
+                            } else {
+                                this.logger.debug(`${mobile}: Already in leave queue, skipping re-add`);
+                            }
+                        }
+                    } catch (error) {
+                        const errorDetails = parseError(error);
+                        this.logger.error(`Error processing client ${mobile}:`, errorDetails);
 
-                            // Check for both error.message and error.errorMessage for compatibility
-                            const errorMsg = error.errorMessage || error.message || 'Unknown error';
-                            if (errorMsg === "SESSION_REVOKED" ||
-                                errorMsg === "AUTH_KEY_UNREGISTERED" ||
-                                errorMsg === "USER_DEACTIVATED" ||
-                                errorMsg === "USER_DEACTIVATED_BAN" ||
-                                errorMsg === "FROZEN_METHOD_INVALID") {
-                                this.logger.warn(`${document.mobile}: Session invalid, marking as inactive and removing client`);
-                                try {
-                                    await this.markAsInactive(document.mobile, `Session error: ${errorMsg}`);
-                                } catch (statusUpdateError) {
-                                    this.logger.error(`Failed to update status for ${document.mobile}:`, statusUpdateError);
-                                }
-                                await this.remove(document.mobile);
+                        const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
+                        const isFatalSessionError = [
+                            "SESSION_REVOKED",
+                            "AUTH_KEY_UNREGISTERED",
+                            "USER_DEACTIVATED",
+                            "USER_DEACTIVATED_BAN",
+                            "FROZEN_METHOD_INVALID"
+                        ].includes(errorMsg);
+
+                        if (isFatalSessionError) {
+                            this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
+                            try {
+                                await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
+                            } catch (statusUpdateError) {
+                                this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
                             }
-                        } finally {
-                            connectionManager.unregisterClient(document.mobile);
+                            await this.remove(mobile);
+                        } else {
+                            this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
                         }
                     }
-                }
+                })
+            );
 
-                this.logger.log(`Join channel process initiated for ${clients.length} clients`);
-                return `Initiated Joining channels ${clients.length}`
-            } catch (error) {
-                this.logger.error('Error during joinchannelForPromoteClients:', error);
-                // Clean up on error
-                this.clearJoinChannelInterval();
-                this.clearLeaveChannelInterval();
-                throw new Error("Failed to initiate channel joining process");
+            // Log results for debugging
+            const successCount = results.filter(r => r.status === 'fulfilled').length;
+            const failCount = results.length - successCount;
+            this.logger.debug(`Client processing results — Success: ${successCount}, Failed: ${failCount}`);
+
+            // Start queues only once
+            if (joinSet.size > 0) {
+                this.logger.debug(`Starting join queue for ${joinSet.size} clients`);
+                this.joinChannelQueue();
             }
-        } else {
-            this.logger.warn('Ignored active check promote channels as active client setup exists');
-            return "Active client setup exists, skipping promotion";
+            if (leaveSet.size > 0) {
+                this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
+                this.leaveChannelQueue();
+            }
+
+            this.logger.log(`Join channel process completed for ${clients.length} clients`);
+            return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
+
+        } catch (error) {
+            this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            throw new Error('Failed to initiate channel joining process');
         }
     }
+
 
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
@@ -985,7 +1021,7 @@ export class PromoteClientService implements OnModuleDestroy {
     }
 
 
-    async getPromoteClientsWithMessages(): Promise<Array<{mobile: string, status: string, message: string, clientId?: string, lastUsed?: Date}>> {
+    async getPromoteClientsWithMessages(): Promise<Array<{ mobile: string, status: string, message: string, clientId?: string, lastUsed?: Date }>> {
         return this.promoteClientModel
             .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
             .exec();
