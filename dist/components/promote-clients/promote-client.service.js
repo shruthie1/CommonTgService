@@ -173,13 +173,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             return 'Active client setup exists, skipping promotion';
         }
         this.logger.log('Starting join channel process');
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(2000);
         try {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
             const clients = await this.promoteClientModel.find({
                 channels: { $lt: 350 },
