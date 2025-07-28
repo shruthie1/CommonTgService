@@ -49,7 +49,7 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) { }
+    ) {}
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
@@ -178,14 +178,12 @@ export class BufferClientService implements OnModuleDestroy {
 
         this.logger.log('Starting join channel process for buffer clients');
 
-        // Disconnect all clients and reset queue maps
         await connectionManager.disconnectAll();
         await sleep(2000);
 
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
 
-        // 🧹 Clear previous state for fresh run
         this.joinChannelMap.clear();
         this.leaveChannelMap.clear();
 
@@ -200,74 +198,77 @@ export class BufferClientService implements OnModuleDestroy {
         const joinSet = new Set<string>();
         const leaveSet = new Set<string>();
 
-        const results = await Promise.allSettled(
-            clients.map(async (document) => {
-                const mobile = document.mobile;
-                this.logger.debug(`Processing buffer client: ${mobile}`);
+        let successCount = 0;
+        let failCount = 0;
 
-                try {
-                    const client = await connectionManager.getClient(mobile, {
-                        autoDisconnect: false,
-                        handler: false
-                    });
+        for (const document of clients) {
+            const mobile = document.mobile;
+            this.logger.debug(`Processing buffer client: ${mobile}`);
 
-                    const channels = await client.channelInfo(true);
-                    this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
-                    await this.update(mobile, { channels: channels.ids.length });
+            try {
+                const client = await connectionManager.getClient(mobile, {
+                    autoDisconnect: false,
+                    handler: false
+                });
 
-                    if (channels.canSendFalseCount < 10) {
-                        const excludedIds = channels.ids;
-                        const result = channels.ids.length < 220
-                            ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
-                            : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+                const channels = await client.channelInfo(true);
+                this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
 
-                        if (!this.joinChannelMap.has(mobile)) {
-                            this.joinChannelMap.set(mobile, result);
-                            joinSet.add(mobile);
-                            this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
-                        } else {
-                            this.logger.debug(`${mobile}: Already present in join map, skipping`);
-                        }
+                if (channels.canSendFalseCount < 10) {
+                    const excludedIds = channels.ids;
+                    const result = channels.ids.length < 220
+                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
+                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
 
+                    if (!this.joinChannelMap.has(mobile)) {
+                        this.joinChannelMap.set(mobile, result);
+                        joinSet.add(mobile);
+                        this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
                     } else {
-                        if (!this.leaveChannelMap.has(mobile)) {
-                            this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
-                            leaveSet.add(mobile);
-                            this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
-                        } else {
-                            this.logger.debug(`${mobile}: Already present in leave map, skipping`);
-                        }
+                        this.logger.debug(`${mobile}: Already present in join map, skipping`);
                     }
 
-                } catch (error) {
-                    const errorDetails = parseError(error);
-                    const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-
-                    const isFatal = [
-                        "SESSION_REVOKED",
-                        "AUTH_KEY_UNREGISTERED",
-                        "USER_DEACTIVATED",
-                        "USER_DEACTIVATED_BAN"
-                    ].includes(errorMsg);
-
-                    if (isFatal) {
-                        this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
-                        try {
-                            await this.remove(mobile);
-                        } catch (removeErr) {
-                            this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
-                        }
+                } else {
+                    if (!this.leaveChannelMap.has(mobile)) {
+                        this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
+                        leaveSet.add(mobile);
+                        this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
                     } else {
-                        this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
+                        this.logger.debug(`${mobile}: Already present in leave map, skipping`);
                     }
-                } finally {
-                    connectionManager.unregisterClient(mobile);
                 }
-            })
-        );
 
-        const successCount = results.filter(r => r.status === 'fulfilled').length;
-        const failCount = results.length - successCount;
+                successCount++;
+
+            } catch (error) {
+                failCount++;
+
+                const errorDetails = parseError(error);
+                const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
+
+                const isFatal = [
+                    "SESSION_REVOKED",
+                    "AUTH_KEY_UNREGISTERED",
+                    "USER_DEACTIVATED",
+                    "USER_DEACTIVATED_BAN"
+                ].includes(errorMsg);
+
+                if (isFatal) {
+                    this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
+                    try {
+                        await this.remove(mobile);
+                    } catch (removeErr) {
+                        this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
+                    }
+                } else {
+                    this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
+                }
+            } finally {
+                connectionManager.unregisterClient(mobile);
+            }
+            await sleep(2000);
+        }
 
         if (joinSet.size > 0) {
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);

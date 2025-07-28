@@ -46,7 +46,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService,
-    ) { }
+    ) {}
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         // Set default values if not provided
@@ -207,7 +207,6 @@ export class PromoteClientService implements OnModuleDestroy {
             this.joinChannelMap.clear();
             this.leaveChannelMap.clear();
 
-
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
 
             const clients = await this.promoteClientModel.find({
@@ -220,84 +219,86 @@ export class PromoteClientService implements OnModuleDestroy {
 
             const joinSet = new Set<string>();
             const leaveSet = new Set<string>();
+            let successCount = 0;
+            let failCount = 0;
 
-            const results = await Promise.allSettled(
-                clients.map(async (document) => {
-                    const mobile = document.mobile;
-                    this.logger.debug(`Processing client: ${mobile}`);
+            for (const document of clients) {
+                const mobile = document.mobile;
+                this.logger.debug(`Processing client: ${mobile}`);
 
-                    try {
-                        const client = await connectionManager.getClient(mobile, {
-                            autoDisconnect: false,
-                            handler: false
-                        });
+                try {
+                    const client = await connectionManager.getClient(mobile, {
+                        autoDisconnect: false,
+                        handler: false
+                    });
 
-                        const channels = await client.channelInfo(true);
-                        this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                    const channels = await client.channelInfo(true);
+                    this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
 
-                        await this.update(mobile, { channels: channels.ids.length });
+                    await this.update(mobile, { channels: channels.ids.length });
 
-                        if (channels.canSendFalseCount < 10) {
-                            const excludedIds = channels.ids;
-                            const channelLimit = 150;
+                    if (channels.canSendFalseCount < 10) {
+                        const excludedIds = channels.ids;
+                        const channelLimit = 150;
 
-                            const result = channels.ids.length < 220
-                                ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
-                                : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        const result = channels.ids.length < 220
+                            ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
+                            : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
 
-                            if (!this.joinChannelMap.has(mobile)) {
-                                this.joinChannelMap.set(mobile, result);
-                                joinSet.add(mobile);
-                            } else {
-                                this.logger.debug(`${mobile}: Already in join queue, skipping re-add`);
-                            }
+                        if (!this.joinChannelMap.has(mobile)) {
+                            this.joinChannelMap.set(mobile, result);
+                            joinSet.add(mobile);
                         } else {
-                            this.logger.debug(`${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
-                            if (!this.leaveChannelMap.has(mobile)) {
-                                this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
-                                leaveSet.add(mobile);
-                            } else {
-                                this.logger.debug(`${mobile}: Already in leave queue, skipping re-add`);
-                            }
+                            this.logger.debug(`${mobile}: Already in join queue, skipping re-add`);
                         }
-                    } catch (error) {
-                        const errorDetails = parseError(error);
-                        this.logger.error(`Error processing client ${mobile}:`, errorDetails);
-
-                        const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                        const isFatalSessionError = [
-                            "SESSION_REVOKED",
-                            "AUTH_KEY_UNREGISTERED",
-                            "USER_DEACTIVATED",
-                            "USER_DEACTIVATED_BAN",
-                            "FROZEN_METHOD_INVALID"
-                        ].includes(errorMsg);
-
-                        if (isFatalSessionError) {
-                            this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
-                            try {
-                                await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
-                            } catch (statusUpdateError) {
-                                this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
-                            }
-                            await this.remove(mobile);
+                    } else {
+                        this.logger.debug(`${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
+                        if (!this.leaveChannelMap.has(mobile)) {
+                            this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
+                            leaveSet.add(mobile);
                         } else {
-                            this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
+                            this.logger.debug(`${mobile}: Already in leave queue, skipping re-add`);
                         }
                     }
-                })
-            );
 
-            // Log results for debugging
-            const successCount = results.filter(r => r.status === 'fulfilled').length;
-            const failCount = results.length - successCount;
-            this.logger.debug(`Client processing results — Success: ${successCount}, Failed: ${failCount}`);
+                    successCount++;
 
-            // Start queues only once
+                } catch (error) {
+                    failCount++;
+                    const errorDetails = parseError(error);
+                    this.logger.error(`Error processing client ${mobile}:`, errorDetails);
+
+                    const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
+                    const isFatalSessionError = [
+                        "SESSION_REVOKED",
+                        "AUTH_KEY_UNREGISTERED",
+                        "USER_DEACTIVATED",
+                        "USER_DEACTIVATED_BAN",
+                        "FROZEN_METHOD_INVALID"
+                    ].includes(errorMsg);
+
+                    if (isFatalSessionError) {
+                        this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
+                        try {
+                            await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
+                        } catch (statusUpdateError) {
+                            this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
+                        }
+                        await this.remove(mobile);
+                    } else {
+                        this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
+                    }
+                } finally {
+                    connectionManager.unregisterClient(mobile);
+                    await sleep(2000); // brief pause to reduce CPU bursts
+                }
+            }
+
             if (joinSet.size > 0) {
                 this.logger.debug(`Starting join queue for ${joinSet.size} clients`);
                 this.joinChannelQueue();
             }
+
             if (leaveSet.size > 0) {
                 this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
                 this.leaveChannelQueue();
@@ -313,7 +314,6 @@ export class PromoteClientService implements OnModuleDestroy {
             throw new Error('Failed to initiate channel joining process');
         }
     }
-
 
     async joinChannelQueue() {
         if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
