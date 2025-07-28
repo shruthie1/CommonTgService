@@ -178,14 +178,11 @@ export class BufferClientService implements OnModuleDestroy {
 
         this.logger.log('Starting join channel process for buffer clients');
 
-        await connectionManager.disconnectAll();
-        await sleep(2000);
-
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-
         this.joinChannelMap.clear();
         this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+        await sleep(2000);
 
         const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
         const clients = await this.bufferClientModel.find({

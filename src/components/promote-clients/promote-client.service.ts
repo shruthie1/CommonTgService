@@ -198,15 +198,13 @@ export class PromoteClientService implements OnModuleDestroy {
         }
 
         this.logger.log('Starting join channel process');
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
+        await sleep(2000);
 
         try {
-            await connectionManager.disconnectAll();
-            await sleep(2000);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
-
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
 
             const clients = await this.promoteClientModel.find({
