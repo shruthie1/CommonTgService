@@ -165,7 +165,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.debug(`Found ${clients.length} buffer clients to process`);
         const joinSet = new Set();
         const leaveSet = new Set();
-        const results = await Promise.allSettled(clients.map(async (document) => {
+        let successCount = 0;
+        let failCount = 0;
+        for (const document of clients) {
             const mobile = document.mobile;
             this.logger.debug(`Processing buffer client: ${mobile}`);
             try {
@@ -200,8 +202,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         this.logger.debug(`${mobile}: Already present in leave map, skipping`);
                     }
                 }
+                successCount++;
             }
             catch (error) {
+                failCount++;
                 const errorDetails = (0, parseError_1.parseError)(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
                 const isFatal = [
@@ -226,9 +230,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             finally {
                 connection_manager_1.connectionManager.unregisterClient(mobile);
             }
-        }));
-        const successCount = results.filter(r => r.status === 'fulfilled').length;
-        const failCount = results.length - successCount;
+            await (0, Helpers_1.sleep)(2000);
+        }
         if (joinSet.size > 0) {
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
             this.joinChannelQueue();

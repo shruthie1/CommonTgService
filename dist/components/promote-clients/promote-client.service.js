@@ -189,7 +189,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             const joinSet = new Set();
             const leaveSet = new Set();
-            const results = await Promise.allSettled(clients.map(async (document) => {
+            let successCount = 0;
+            let failCount = 0;
+            for (const document of clients) {
                 const mobile = document.mobile;
                 this.logger.debug(`Processing client: ${mobile}`);
                 try {
@@ -224,8 +226,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             this.logger.debug(`${mobile}: Already in leave queue, skipping re-add`);
                         }
                     }
+                    successCount++;
                 }
                 catch (error) {
+                    failCount++;
                     const errorDetails = (0, parseError_1.parseError)(error);
                     this.logger.error(`Error processing client ${mobile}:`, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
@@ -250,10 +254,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
                     }
                 }
-            }));
-            const successCount = results.filter(r => r.status === 'fulfilled').length;
-            const failCount = results.length - successCount;
-            this.logger.debug(`Client processing results — Success: ${successCount}, Failed: ${failCount}`);
+                finally {
+                    connection_manager_1.connectionManager.unregisterClient(mobile);
+                    await (0, Helpers_1.sleep)(2000);
+                }
+            }
             if (joinSet.size > 0) {
                 this.logger.debug(`Starting join queue for ${joinSet.size} clients`);
                 this.joinChannelQueue();
