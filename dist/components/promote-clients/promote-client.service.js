@@ -773,7 +773,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log('Cleaning up PromoteClientService resources');
         this.clearPromoteMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();

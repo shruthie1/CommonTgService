@@ -52,7 +52,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel({
@@ -522,7 +521,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const bufferclients = await this.findAll('active');
         const badIds = [];

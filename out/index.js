@@ -2717,7 +2717,6 @@ let TelegramService = class TelegramService {
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval);
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
@@ -10711,7 +10710,6 @@ let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientServic
     }
     async checkArchivedClients() {
         console.log('Starting archived clients check...');
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();
@@ -11956,7 +11954,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel({
@@ -12426,7 +12423,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const bufferclients = await this.findAll('active');
         const badIds = [];
@@ -14599,7 +14595,6 @@ let ClientService = ClientService_1 = class ClientService {
             console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await connection_manager_1.connectionManager.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
             const client = await this.findOne(clientId);
             await connection_manager_1.connectionManager.getClient(newMobile, { handler: true, autoDisconnect: false });
@@ -14680,7 +14675,6 @@ let ClientService = ClientService_1 = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
-            await connection_manager_1.connectionManager.disconnectAll();
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error in updating client session', true);
@@ -19819,7 +19813,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log('Cleaning up PromoteClientService resources');
         this.clearPromoteMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();

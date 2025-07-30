@@ -75,7 +75,6 @@ let TelegramService = class TelegramService {
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval);
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
