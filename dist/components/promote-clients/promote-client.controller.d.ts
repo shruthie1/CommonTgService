@@ -9,6 +9,7 @@ export declare class PromoteClientController {
     create(createClientDto: CreatePromoteClientDto): Promise<PromoteClient>;
     search(query: SearchPromoteClientDto): Promise<PromoteClient[]>;
     joinChannelsforPromoteClients(): Promise<string>;
+    updateInfo(): Promise<string>;
     checkpromoteClients(): Promise<string>;
     addNewUserstoPromoteClients(body: {
         goodIds: string[];

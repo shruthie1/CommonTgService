@@ -29,6 +29,12 @@ let BufferClientController = class BufferClientController {
     async search(query) {
         return this.clientService.search(query);
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async joinChannelsforBufferClients() {
         return this.clientService.joinchannelForBufferClients();
     }
@@ -84,6 +90,13 @@ __decorate([
     __metadata("design:paramtypes", [search_buffer__client_dto_1.SearchBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),

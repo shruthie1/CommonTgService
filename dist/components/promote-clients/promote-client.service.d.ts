@@ -46,6 +46,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
+    updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;

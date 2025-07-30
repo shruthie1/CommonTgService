@@ -32,6 +32,12 @@ let PromoteClientController = class PromoteClientController {
     async joinChannelsforPromoteClients() {
         return this.clientService.joinchannelForPromoteClients();
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async checkpromoteClients() {
         this.clientService.checkPromoteClients().catch(error => {
             console.error('Error in checkPromoteClients:', error);
@@ -141,6 +147,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "joinChannelsforPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),

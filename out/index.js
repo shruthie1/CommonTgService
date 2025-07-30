@@ -11684,6 +11684,12 @@ let BufferClientController = class BufferClientController {
     async search(query) {
         return this.clientService.search(query);
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async joinChannelsforBufferClients() {
         return this.clientService.joinchannelForBufferClients();
     }
@@ -11739,6 +11745,13 @@ __decorate([
     __metadata("design:paramtypes", [search_buffer__client_dto_1.SearchBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
@@ -12035,6 +12048,38 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         console.log("BufferMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
+    }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
     }
     async joinchannelForBufferClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
@@ -18576,6 +18621,12 @@ let PromoteClientController = class PromoteClientController {
     async joinChannelsforPromoteClients() {
         return this.clientService.joinchannelForPromoteClients();
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async checkpromoteClients() {
         this.clientService.checkPromoteClients().catch(error => {
             console.error('Error in checkPromoteClients:', error);
@@ -18685,6 +18736,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "joinChannelsforPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),
@@ -19154,6 +19212,28 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.debug("PromoteMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
+    }
+    async updateInfo() {
+        const clients = await this.promoteClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
     }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {

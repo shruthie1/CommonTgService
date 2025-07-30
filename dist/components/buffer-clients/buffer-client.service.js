@@ -145,6 +145,38 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
     async joinchannelForBufferClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
