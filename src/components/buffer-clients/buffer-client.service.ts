@@ -54,7 +54,6 @@ export class BufferClientService implements OnModuleDestroy {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connectionManager.disconnectAll();
     }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
@@ -596,11 +595,7 @@ export class BufferClientService implements OnModuleDestroy {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-
-        await connectionManager.disconnectAll();
         await sleep(2000);
-
-        // Only verify buffer clients with status 'active'
         const bufferclients = await this.findAll('active');
         const badIds: string[] = [];
         let goodIds: string[] = [];

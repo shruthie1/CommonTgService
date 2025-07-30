@@ -402,7 +402,6 @@ export class ClientService implements OnModuleDestroy {
             console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await connectionManager.disconnectAll();
             await sleep(2000)
             const client = await this.findOne(clientId);
             await connectionManager.getClient(newMobile, { handler: true, autoDisconnect: false });
@@ -479,7 +478,6 @@ export class ClientService implements OnModuleDestroy {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await fetchWithTimeout(`${notifbot()}&text=Update finished`);
-            await connectionManager.disconnectAll();
         } catch (e) {
             parseError(e, 'Error in updating client session', true);
             this.telegramService.setActiveClientSetup(undefined)

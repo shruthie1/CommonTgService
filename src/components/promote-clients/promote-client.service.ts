@@ -883,7 +883,6 @@ export class PromoteClientService implements OnModuleDestroy {
         this.logger.log('Cleaning up PromoteClientService resources');
         this.clearPromoteMap();
         this.clearLeaveMap();
-        await connectionManager.disconnectAll();
     }
 
     /**
