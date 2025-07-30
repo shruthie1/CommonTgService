@@ -191,6 +191,29 @@ export class PromoteClientService implements OnModuleDestroy {
         this.clearJoinChannelInterval();
     }
 
+    async updateInfo() {
+        const clients = await this.promoteClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 })
+
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connectionManager.unregisterClient(mobile);
+                await sleep(2000);
+            } catch (error) {
+                const errorDetails = parseError(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
+
     async joinchannelForPromoteClients(skipExisting: boolean = true): Promise<string> {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Active client setup exists, skipping promotion process');

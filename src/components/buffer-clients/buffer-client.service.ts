@@ -49,7 +49,7 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) {}
+    ) { }
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
@@ -168,6 +168,43 @@ export class BufferClientService implements OnModuleDestroy {
         console.log("BufferMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
+    }
+
+
+    async updateStatus(mobile: string, status: string, message?: string): Promise<BufferClient> {
+        const updateData: any = { status };
+        if (message) {
+            updateData.message = message;
+        }
+
+        return this.update(mobile, updateData);
+    }
+
+    async markAsInactive(mobile: string, reason: string): Promise<BufferClient> {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 })
+
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connectionManager.unregisterClient(mobile);
+                await sleep(2000);
+            } catch (error) {
+                const errorDetails = parseError(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
     }
 
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {

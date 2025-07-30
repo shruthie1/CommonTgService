@@ -23,6 +23,17 @@ export class BufferClientController {
     return this.clientService.search(query);
   }
 
+   @Get('updateInfo')
+    @ApiOperation({ summary: 'Update promote Clients Info' })
+    async updateInfo(): Promise<string> {
+      // Fire-and-forget pattern for long-running operations
+      this.clientService.updateInfo().catch(error => {
+        console.error('Error in checkPromoteClients:', error);
+      });
+      return "initiated Checking"
+    }
+  
+
   @Get('joinChannelsForBufferClients')
   @ApiOperation({ summary: 'Join Channels for BufferClients' })
   async joinChannelsforBufferClients(): Promise<string> {

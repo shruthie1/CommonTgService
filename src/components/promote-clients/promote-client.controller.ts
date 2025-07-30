@@ -35,6 +35,16 @@ export class PromoteClientController {
     return this.clientService.joinchannelForPromoteClients();
   }
 
+  @Get('updateInfo')
+  @ApiOperation({ summary: 'Update promote Clients Info' })
+  async updateInfo(): Promise<string> {
+    // Fire-and-forget pattern for long-running operations
+    this.clientService.updateInfo().catch(error => {
+      console.error('Error in checkPromoteClients:', error);
+    });
+    return "initiated Checking"
+  }
+
   @Get('checkPromoteClients')
   @ApiOperation({ summary: 'Check Promote Clients' })
   async checkpromoteClients(): Promise<string> {
@@ -47,7 +57,7 @@ export class PromoteClientController {
 
   @Post('addNewUserstoPromoteClients')
   @ApiOperation({ summary: 'Add New Users to Promote Clients' })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
@@ -57,24 +67,24 @@ export class PromoteClientController {
       }
     }
   })
-  async addNewUserstoPromoteClients(@Body() body: { 
-    goodIds: string[], 
-    badIds: string[], 
-    clientsNeedingPromoteClients?: string[] 
+  async addNewUserstoPromoteClients(@Body() body: {
+    goodIds: string[],
+    badIds: string[],
+    clientsNeedingPromoteClients?: string[]
   }): Promise<string> {
     // Validate input parameters
     if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
       throw new BadRequestException('goodIds and badIds must be arrays');
     }
-    
+
     if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
       throw new BadRequestException('clientsNeedingPromoteClients must be an array');
     }
 
     // Fire-and-forget pattern for long-running operations
     this.clientService.addNewUserstoPromoteClients(
-      body.badIds, 
-      body.goodIds, 
+      body.badIds,
+      body.goodIds,
       body.clientsNeedingPromoteClients || [],
       undefined // No promoteClientsPerClient map available in controller
     ).catch(error => {
@@ -149,14 +159,14 @@ export class PromoteClientController {
 
   @Get('messages/all')
   @ApiOperation({ summary: 'Get all promote clients with their status messages' })
-  async getPromoteClientsWithMessages(): Promise<Array<{mobile: string, status: string, message: string, clientId?: string}>> {
+  async getPromoteClientsWithMessages(): Promise<Array<{ mobile: string, status: string, message: string, clientId?: string }>> {
     return this.clientService.getPromoteClientsWithMessages();
   }
 
   @Patch('status/:mobile')
   @ApiOperation({ summary: 'Update status of a promote client' })
   @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
@@ -167,7 +177,7 @@ export class PromoteClientController {
     }
   })
   async updateStatus(
-    @Param('mobile') mobile: string, 
+    @Param('mobile') mobile: string,
     @Body() body: { status: string, message?: string }
   ): Promise<PromoteClient> {
     return this.clientService.updateStatus(mobile, body.status, body.message);
@@ -176,7 +186,7 @@ export class PromoteClientController {
   @Patch('activate/:mobile')
   @ApiOperation({ summary: 'Mark a promote client as active' })
   @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
@@ -185,7 +195,7 @@ export class PromoteClientController {
     }
   })
   async markAsActive(
-    @Param('mobile') mobile: string, 
+    @Param('mobile') mobile: string,
     @Body() body: { message?: string } = {}
   ): Promise<PromoteClient> {
     return this.clientService.markAsActive(mobile, body.message);
@@ -194,7 +204,7 @@ export class PromoteClientController {
   @Patch('deactivate/:mobile')
   @ApiOperation({ summary: 'Mark a promote client as inactive' })
   @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
@@ -204,7 +214,7 @@ export class PromoteClientController {
     }
   })
   async markAsInactive(
-    @Param('mobile') mobile: string, 
+    @Param('mobile') mobile: string,
     @Body() body: { reason: string }
   ): Promise<PromoteClient> {
     return this.clientService.markAsInactive(mobile, body.reason);
@@ -213,7 +223,7 @@ export class PromoteClientController {
   @Patch('mark-used/:mobile')
   @ApiOperation({ summary: 'Mark a promote client as used (update lastUsed timestamp)' })
   @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
@@ -222,7 +232,7 @@ export class PromoteClientController {
     }
   })
   async markAsUsed(
-    @Param('mobile') mobile: string, 
+    @Param('mobile') mobile: string,
     @Body() body: { message?: string } = {}
   ): Promise<PromoteClient> {
     return this.clientService.markAsUsed(mobile, body.message);
