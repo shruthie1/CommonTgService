@@ -49,6 +49,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
+        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16;
     }
     async create(promoteClient) {
         const promoteClientData = {
@@ -578,7 +579,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             for (const client of clients) {
                 const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
                 promoteClientsPerClient.set(client.clientId, assignedCount);
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 if (needed > 0) {
                     clientNeedingPromoteClients.push(client.clientId);
                 }
@@ -588,7 +589,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
                     break;
                 const assignedCount = promoteClientsPerClient.get(clientId) || 0;
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
                 totalSlotsNeeded += allocatedForThisClient;
             }
@@ -615,14 +616,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             totalNeededFromClients += needed;
         }
@@ -646,14 +647,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
         }
@@ -834,7 +835,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
             const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
             const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, 12 - activeCount);
+            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - activeCount);
             const status = needed === 0 ? 'sufficient' : 'needs_more';
             distributionPerClient.push({
                 clientId: client.clientId,
