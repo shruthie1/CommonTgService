@@ -1,4 +1,6 @@
-export function generateTGConfig() {
+import { TelegramClientParams } from "telegram/client/telegramBaseClient";
+
+export function generateTGConfig(): TelegramClientParams{
   const deviceModels = [
     "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12", "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
   ];
@@ -25,9 +27,9 @@ export function generateTGConfig() {
     maxConcurrentDownloads: 3,
     downloadRetries: 10,
     floodSleepThreshold: 180,
-    deviceModel: pickRandom(deviceModels),
-    systemVersion: pickRandom(systemVersions),
-    appVersion: pickRandom(appVersions),
+    // deviceModel: pickRandom(deviceModels),
+    // systemVersion: pickRandom(systemVersions),
+    // appVersion: pickRandom(appVersions),
     useIPV6: true,
     testServers: false
   };
