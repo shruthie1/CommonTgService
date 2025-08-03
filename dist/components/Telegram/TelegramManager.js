@@ -542,10 +542,14 @@ class TelegramManager {
             { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] }
         ];
         return authCriteria.some(criterion => {
-            if ('values' in criterion) {
-                return criterion.values.some(value => auth[criterion.field].toLowerCase().includes(value.toLowerCase()));
+            const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
+            if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk')) {
+                return true;
             }
-            return auth[criterion.field].toLowerCase().includes(criterion.value.toLowerCase());
+            if ('values' in criterion) {
+                return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+            }
+            return fieldValue.includes(criterion.value.toLowerCase());
         });
     }
     async resetAuthorization(auth) {
