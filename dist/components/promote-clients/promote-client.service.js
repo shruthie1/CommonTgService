@@ -637,7 +637,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, totalNeeded + 5);
         this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
         let processedCount = 0;
@@ -715,7 +715,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         }

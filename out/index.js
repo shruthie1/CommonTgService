@@ -12521,7 +12521,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, badIds.length + 3);
         this.logger.debug(`New buffer documents to be added: ${documents.length}`);
         while (badIds.length > 0 && documents.length > 0) {
@@ -12565,7 +12565,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         badIds.pop();
                     }
                     else {
-                        this.logger.warn("Failed to Update as BufferClient has Password");
+                        this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
                         await this.usersService.update(document.tgId, { twoFA: true });
                     }
                 }
@@ -19682,7 +19682,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, totalNeeded + 5);
         this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
         let processedCount = 0;
@@ -19760,7 +19760,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         }
