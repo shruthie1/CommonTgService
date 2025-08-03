@@ -657,14 +657,22 @@ class TelegramManager {
         ];
 
         return authCriteria.some(criterion => {
+            const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
+
+            if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk')) {
+                return true;
+            }
+
             if ('values' in criterion) {
                 return criterion.values.some(value =>
-                    auth[criterion.field].toLowerCase().includes(value.toLowerCase())
+                    fieldValue.includes(value.toLowerCase())
                 );
             }
-            return auth[criterion.field].toLowerCase().includes(criterion.value.toLowerCase());
+
+            return fieldValue.includes(criterion.value.toLowerCase());
         });
     }
+
 
     private async resetAuthorization(auth: Api.Authorization): Promise<void> {
         try {
