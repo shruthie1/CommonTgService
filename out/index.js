@@ -4000,7 +4000,12 @@ class TelegramManager {
         });
     }
     async resetAuthorization(auth) {
-        await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        try {
+            await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, `Failed to reset authorization for ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        }
     }
     async getAuths() {
         if (!this.client)
