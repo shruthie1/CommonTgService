@@ -358,7 +358,6 @@ let ClientService = ClientService_1 = class ClientService {
             console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await connection_manager_1.connectionManager.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
             const client = await this.findOne(clientId);
             await connection_manager_1.connectionManager.getClient(newMobile, { handler: true, autoDisconnect: false });
@@ -439,7 +438,6 @@ let ClientService = ClientService_1 = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
-            await connection_manager_1.connectionManager.disconnectAll();
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error in updating client session', true);
