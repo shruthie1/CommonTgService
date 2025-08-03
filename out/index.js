@@ -8706,9 +8706,6 @@ function generateTGConfig() {
         maxConcurrentDownloads: 3,
         downloadRetries: 10,
         floodSleepThreshold: 180,
-        deviceModel: pickRandom(deviceModels),
-        systemVersion: pickRandom(systemVersions),
-        appVersion: pickRandom(appVersions),
         useIPV6: true,
         testServers: false
     };
