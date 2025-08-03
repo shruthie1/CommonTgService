@@ -666,8 +666,12 @@ class TelegramManager {
         });
     }
 
-    private async resetAuthorization(auth: any): Promise<void> {
-        await this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
+    private async resetAuthorization(auth: Api.Authorization): Promise<void> {
+        try {
+            await this.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
+        } catch (error) {
+            parseError(error, `Failed to reset authorization for ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        }
     }
 
     async getAuths(): Promise<any> {
