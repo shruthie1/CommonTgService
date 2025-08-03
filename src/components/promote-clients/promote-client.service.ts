@@ -46,7 +46,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService,
-    ) {}
+    ) { }
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         // Set default values if not provided
@@ -733,7 +733,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 expired: false,
                 twoFA: false,
                 lastActive: { $lt: sixMonthsAgo },
-                totalChats: { $gt: 250 }
+                totalChats: { $gt: 150 }
             },
             { tgId: 1 },
             totalNeeded + 5 // Get a few extra in case some fail
@@ -823,7 +823,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     } else {
-                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         } catch (userUpdateError) {
