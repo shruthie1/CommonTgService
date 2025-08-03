@@ -31,6 +31,7 @@ export class PromoteClientService implements OnModuleDestroy {
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
+    private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16; // Max promote clients per client
     constructor(@InjectModel(PromoteClient.name) private promoteClientModel: Model<PromoteClientDocument>,
         @Inject(forwardRef(() => TelegramService))
         private telegramService: TelegramService,
@@ -652,7 +653,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
                 promoteClientsPerClient.set(client.clientId, assignedCount);
 
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 if (needed > 0) {
                     clientNeedingPromoteClients.push(client.clientId);
                 }
@@ -666,7 +667,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) break;
 
                 const assignedCount = promoteClientsPerClient.get(clientId) || 0;
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
 
                 totalSlotsNeeded += allocatedForThisClient;
@@ -705,14 +706,14 @@ export class PromoteClientService implements OnModuleDestroy {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             } else {
                 // Fallback to database query if map not provided - only count active
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             totalNeededFromClients += needed;
         }
@@ -749,14 +750,14 @@ export class PromoteClientService implements OnModuleDestroy {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             } else {
                 // Fallback to database query if map not provided - only count active
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
         }
@@ -992,7 +993,7 @@ export class PromoteClientService implements OnModuleDestroy {
             const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
             const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
             const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, 12 - activeCount); // Only count active clients
+            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - activeCount); // Only count active clients
             const status = needed === 0 ? 'sufficient' : 'needs_more';
 
             distributionPerClient.push({
