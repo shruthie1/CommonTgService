@@ -346,11 +346,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
-                        this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
+                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                         const errorMsg = error.errorMessage || error.message;
-                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
-                            this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
+                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -358,8 +358,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         if (errorMsg === "SESSION_REVOKED" ||
                             errorMsg === "AUTH_KEY_UNREGISTERED" ||
                             errorMsg === "USER_DEACTIVATED" ||
-                            errorMsg === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            errorMsg === "USER_DEACTIVATED_BAN" ||
+                            errorMsg === "FROZEN_METHOD_INVALID") {
+                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                            this.removeFromPromoteMap(mobile);
                             try {
                                 await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             }

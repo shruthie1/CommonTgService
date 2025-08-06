@@ -313,7 +313,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
@@ -333,12 +332,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                        try {
-                            await connection_manager_1.connectionManager.unregisterClient(mobile);
-                        }
-                        catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
             }
