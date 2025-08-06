@@ -365,7 +365,6 @@ export class BufferClientService implements OnModuleDestroy {
                         const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connectionManager.unregisterClient(mobile);
                     } catch (error: any) {
                         const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
                         this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
@@ -386,12 +385,8 @@ export class BufferClientService implements OnModuleDestroy {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-
-                        try {
-                            await connectionManager.unregisterClient(mobile);
-                        } catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    } finally {
+                        await connectionManager.unregisterClient(mobile);
                     }
                 }
             } catch (error) {
