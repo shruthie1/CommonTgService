@@ -73,7 +73,7 @@ let TelegramService = class TelegramService {
         connection_manager_1.connectionManager.setUsersService(this.usersService);
     }
     async onModuleDestroy() {
-        this.logger.logOperation('system', 'Module destroy initiated');
+        this.logger.info('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval);
     }
     getActiveClientSetup() {
@@ -106,17 +106,17 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
-            console.log(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
+            this.logger.debug(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
             if (chatEntity.canSendMsgs) {
             }
             else {
                 await this.channelsService.remove(chatEntity.channelId);
                 await this.activeChannelsService.remove(chatEntity.channelId);
-                console.log("Removed Channel- ", chatEntity.username);
+                this.logger.debug("Removed Channel- ", chatEntity.username);
             }
         }
         catch (error) {
-            console.log(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
+            this.logger.debug(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username);
             throw error;
         }
@@ -128,17 +128,17 @@ let TelegramService = class TelegramService {
                 if (channelId) {
                     await this.channelsService.remove(channelId);
                     await this.activeChannelsService.remove(channelId);
-                    console.log("Removed Channel- ", channelId);
+                    this.logger.debug("Removed Channel- ", channelId);
                 }
                 else {
                     const channelDetails = (await this.channelsService.search({ username: username }))[0];
                     await this.channelsService.remove(channelDetails.channelId);
                     await this.activeChannelsService.remove(channelDetails.channelId);
-                    console.log("Removed Channel - ", channelDetails.channelId);
+                    this.logger.debug("Removed Channel - ", channelDetails.channelId);
                 }
             }
             catch (searchError) {
-                console.log("Failed to search/remove channel: ", searchError);
+                this.logger.debug("Failed to search/remove channel: ", searchError);
             }
         }
         else if (error.errorMessage === "CHANNEL_PRIVATE") {
@@ -152,7 +152,7 @@ let TelegramService = class TelegramService {
             return await telegramClient.getGrpMembers(entity);
         }
         catch (err) {
-            console.error("Error fetching group members:", err);
+            this.logger.error(mobile, "Error fetching group members:", err);
         }
     }
     async addContact(mobile, data, prefix) {
@@ -161,7 +161,7 @@ let TelegramService = class TelegramService {
             return await telegramClient.addContact(data, prefix);
         }
         catch (err) {
-            console.error("Error fetching adding Contacts:", err);
+            this.logger.error(mobile, "Error fetching adding Contacts:", err);
         }
     }
     async addContacts(mobile, phoneNumbers, prefix) {
@@ -170,7 +170,7 @@ let TelegramService = class TelegramService {
             return await telegramClient.addContacts(phoneNumbers, prefix);
         }
         catch (err) {
-            console.error("Error fetching adding Contacts:", err);
+            this.logger.error(mobile, "Error fetching adding Contacts:", err);
         }
     }
     async getSelfMsgsInfo(mobile) {
@@ -189,7 +189,7 @@ let TelegramService = class TelegramService {
                 await this.leaveChannel(mobile, "2302868706");
             }
             catch (error) {
-                console.log("Error in forwardMedia: ", error);
+                this.logger.debug("Error in forwardMedia: ", error);
             }
         }, 5 * 60000);
         return "Media forward initiated";
@@ -231,7 +231,7 @@ let TelegramService = class TelegramService {
             return "Media forward initiated successfully";
         }
         catch (error) {
-            console.error("Error forwarding media:", error);
+            this.logger.error(mobile, "Error forwarding media:", error);
             return `Media forward failed: ${error.message}`;
         }
     }
@@ -293,7 +293,7 @@ let TelegramService = class TelegramService {
             await cloudinary_1.CloudinaryService.getInstance(name);
             await (0, Helpers_1.sleep)(2000);
             const rootPath = process.cwd();
-            console.log("checking path", rootPath);
+            this.logger.debug("checking path", rootPath);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
@@ -327,7 +327,8 @@ let TelegramService = class TelegramService {
             return await telegramClient.downloadProfilePic(index);
         }
         catch (error) {
-            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Error Downloading Profile Picture:`);
+            this.logger.error(mobile, errorDetails.message, error);
             throw new Error("Failed to update username");
         }
     }
@@ -337,7 +338,8 @@ let TelegramService = class TelegramService {
             return await telegramClient.updateUsername(username);
         }
         catch (error) {
-            console.log("Some Error: ", (0, parseError_1.parseError)(error), error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Error Updating Username:`);
+            this.logger.error(mobile, errorDetails.message, error);
             throw new Error("Failed to update username");
         }
     }
@@ -395,7 +397,7 @@ let TelegramService = class TelegramService {
             rateLimited: 0,
             totalOperations: 0
         };
-        this.logger.logOperation('system', 'Connection status retrieved', status);
+        this.logger.info('system', 'Connection status retrieved', status);
         return status;
     }
     async forwardBulkMessages(mobile, fromChatId, toChatId, messageIds) {
@@ -405,7 +407,7 @@ let TelegramService = class TelegramService {
     async getAuths(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const auths = await telegramClient.getAuths();
-        this.logger.logOperation(mobile, 'Retrieved authorizations', {
+        this.logger.info(mobile, 'Retrieved authorizations', {
             count: auths?.length || 0
         });
         return auths;
@@ -413,7 +415,7 @@ let TelegramService = class TelegramService {
     async removeOtherAuths(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.removeOtherAuths();
-        this.logger.logOperation(mobile, 'Removed other authorizations');
+        this.logger.info(mobile, 'Removed other authorizations');
         return "Removed other authorizations";
     }
     async processBatch(items, batchSize, processor, delayMs = 2000) {
@@ -430,7 +432,7 @@ let TelegramService = class TelegramService {
             }
             catch (error) {
                 errors.push(error);
-                this.logger.logError('batch-process', 'Batch processing failed', error);
+                this.logger.error('batch-process', 'Batch processing failed', error);
             }
         }
         return { processed, errors };
@@ -443,7 +445,7 @@ let TelegramService = class TelegramService {
             const chat = result.chats[result.chats.length - 1];
             groupId = chat.id?.toString();
         }
-        this.logger.logOperation(mobile, 'Group created', { id: groupId });
+        this.logger.info(mobile, 'Group created', { id: groupId });
         return result;
     }
     async updateGroupSettings(mobile, settings) {
@@ -502,77 +504,77 @@ let TelegramService = class TelegramService {
     }
     async demoteAdmin(mobile, groupId, userId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Demoted admin to regular member', { groupId, userId });
+        this.logger.info(mobile, 'Demoted admin to regular member', { groupId, userId });
         return await telegramClient.demoteAdmin(groupId, userId);
     }
     async unblockGroupUser(mobile, groupId, userId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Unblocked user in group', { groupId, userId });
+        this.logger.info(mobile, 'Unblocked user in group', { groupId, userId });
         return await telegramClient.unblockGroupUser(groupId, userId);
     }
     async getGroupAdmins(mobile, groupId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get group admins', { groupId });
+        this.logger.info(mobile, 'Get group admins', { groupId });
         return await telegramClient.getGroupAdmins(groupId);
     }
     async getGroupBannedUsers(mobile, groupId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get group banned users', { groupId });
+        this.logger.info(mobile, 'Get group banned users', { groupId });
         return await telegramClient.getGroupBannedUsers(groupId);
     }
     async searchMessages(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Search messages', params);
+        this.logger.info(mobile, 'Search messages', params);
         return await telegramClient.searchMessages(params);
     }
     async getFilteredMedia(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get filtered media', params);
+        this.logger.info(mobile, 'Get filtered media', params);
         return await telegramClient.getFilteredMedia(params);
     }
     async exportContacts(mobile, format, includeBlocked = false) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Export contacts', { format, includeBlocked });
+        this.logger.info(mobile, 'Export contacts', { format, includeBlocked });
         return await telegramClient.exportContacts(format, includeBlocked);
     }
     async importContacts(mobile, contacts) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Import contacts', { contactCount: contacts.length });
+        this.logger.info(mobile, 'Import contacts', { contactCount: contacts.length });
         return await telegramClient.importContacts(contacts);
     }
     async manageBlockList(mobile, userIds, block) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, block ? 'Block users' : 'Unblock users', { userIds });
+        this.logger.info(mobile, block ? 'Block users' : 'Unblock users', { userIds });
         return await telegramClient.manageBlockList(userIds, block);
     }
     async getContactStatistics(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get contact statistics');
+        this.logger.info(mobile, 'Get contact statistics');
         return await telegramClient.getContactStatistics();
     }
     async createChatFolder(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Create chat folder', { name: options.name });
+        this.logger.info(mobile, 'Create chat folder', { name: options.name });
         return await telegramClient.createChatFolder(options);
     }
     async getChatFolders(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get chat folders');
+        this.logger.info(mobile, 'Get chat folders');
         return await telegramClient.getChatFolders();
     }
     async getSessionInfo(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get session info');
+        this.logger.info(mobile, 'Get session info');
         return await telegramClient.getSessionInfo();
     }
     async terminateSession(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Terminate session', options);
+        this.logger.info(mobile, 'Terminate session', options);
         return await telegramClient.terminateSession(options);
     }
     async editMessage(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Edit message', { chatId: options.chatId, messageId: options.messageId });
+        this.logger.info(mobile, 'Edit message', { chatId: options.chatId, messageId: options.messageId });
         return await telegramClient.editMessage(options);
     }
     async updateChatSettings(mobile, settings) {
@@ -580,42 +582,42 @@ let TelegramService = class TelegramService {
             throw new Error('chatId is required');
         }
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Update chat settings', { chatId: settings.chatId });
+        this.logger.info(mobile, 'Update chat settings', { chatId: settings.chatId });
         return await telegramClient.updateChatSettings(settings);
     }
     async sendMediaBatch(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
+        this.logger.info(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
         return await telegramClient.sendMediaBatch(options);
     }
     async hasPassword(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Check password status');
+        this.logger.info(mobile, 'Check password status');
         return await telegramClient.hasPassword();
     }
     async getContacts(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get contacts list');
+        this.logger.info(mobile, 'Get contacts list');
         return await telegramClient.getContacts();
     }
     async getChats(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get chats', options);
+        this.logger.info(mobile, 'Get chats', options);
         return await telegramClient.getChats(options);
     }
     async getFileUrl(mobile, url, filename) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get file URL', { url, filename });
+        this.logger.info(mobile, 'Get file URL', { url, filename });
         return await telegramClient.getFileUrl(url, filename);
     }
     async getMessageStats(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get message statistics', options);
+        this.logger.info(mobile, 'Get message statistics', options);
         return await telegramClient.getMessageStats(options);
     }
     async sendViewOnceMedia(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Send view once media', { sourceType: options.sourceType, chatId: options.chatId });
+        this.logger.info(mobile, 'Send view once media', { sourceType: options.sourceType, chatId: options.chatId });
         const { sourceType, chatId, caption, filename } = options;
         try {
             if (sourceType === 'path') {
@@ -632,7 +634,7 @@ let TelegramService = class TelegramService {
                         isVideo = true;
                     }
                     const fileBuffer = fs.readFileSync(localPath);
-                    this.logger.logOperation(mobile, 'Sending view once media from local file', {
+                    this.logger.info(mobile, 'Sending view once media from local file', {
                         path: localPath,
                         isVideo,
                         size: fileBuffer.length,
@@ -644,7 +646,7 @@ let TelegramService = class TelegramService {
                     if (error instanceof common_1.BadRequestException) {
                         throw error;
                     }
-                    this.logger.logError(mobile, 'Failed to read local file', error);
+                    this.logger.error(mobile, 'Failed to read local file', error);
                     throw new common_1.BadRequestException(`Failed to read local file: ${error.message}`);
                 }
             }
@@ -659,14 +661,14 @@ let TelegramService = class TelegramService {
                         isVideo = true;
                     }
                 }
-                this.logger.logOperation(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
+                this.logger.info(mobile, 'Sending view once media from base64', { isVideo, size: base64String.length });
                 const mediaData = Buffer.from(base64String, 'base64');
                 return await telegramClient.sendViewOnceMedia(chatId, mediaData, caption, isVideo, filename);
             }
             else if (sourceType === 'binary') {
                 if (!options.binaryData)
                     throw new common_1.BadRequestException('Binary data is required when sourceType is binary');
-                this.logger.logOperation(mobile, 'Sending view once media from binary', {
+                this.logger.info(mobile, 'Sending view once media from binary', {
                     size: options.binaryData.length,
                     filename: filename || 'unknown'
                 });
@@ -684,17 +686,17 @@ let TelegramService = class TelegramService {
             }
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to send view once media', error);
+            this.logger.error(mobile, 'Failed to send view once media', error);
             throw error;
         }
     }
     async getTopPrivateChats(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Get top private chats');
+        this.logger.info(mobile, 'Get top private chats');
         return await telegramClient.getTopPrivateChats();
     }
     async addBotsToChannel(mobile, channelIds = [process.env.accountsChannel, process.env.updatesChannel, process.env.notifChannel, "miscmessages", process.env.httpFailuresChannel]) {
-        this.logger.logOperation(mobile, 'Add bots to channel', { channelIds });
+        this.logger.info(mobile, 'Add bots to channel', { channelIds });
         const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
         if (botTokens.length === 0) {
             throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
@@ -721,7 +723,7 @@ let TelegramService = class TelegramService {
                 }
             }
             catch (error) {
-                this.logger.logError(mobile, 'Failed to setup bot in channel', error);
+                this.logger.error(mobile, 'Failed to setup bot in channel', error);
             }
         }
     }
@@ -739,28 +741,28 @@ let TelegramService = class TelegramService {
     }
     async setupBotInChannel(mobile, channelId, botId, botUsername, permissions) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.logOperation(mobile, 'Setup bot in channel', { channelId, botId, botUsername });
+        this.logger.info(mobile, 'Setup bot in channel', { channelId, botId, botUsername });
         try {
             await telegramClient.joinChannel(channelId);
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to join channel', error);
+            this.logger.error(mobile, 'Failed to join channel', error);
         }
         try {
             await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
-            this.logger.logOperation(mobile, 'Bot added to channel', { channelId, botUsername });
+            this.logger.info(mobile, 'Bot added to channel', { channelId, botUsername });
             await (0, Helpers_1.sleep)(2000);
-            this.logger.logOperation(mobile, `Bot ${botUsername} successfully added to channel ${channelId}`);
+            this.logger.info(mobile, `Bot ${botUsername} successfully added to channel ${channelId}`);
         }
         catch (error) {
-            this.logger.logError(mobile, `Failed to add bot ${botUsername} to channel ${channelId}`, error);
+            this.logger.error(mobile, `Failed to add bot ${botUsername} to channel ${channelId}`, error);
         }
         try {
             await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
-            console.log(`Bot ${botUsername} promoted as admin in channel ${channelId}`);
+            this.logger.debug(mobile, `Bot ${botUsername} promoted as admin in channel ${channelId}`);
         }
         catch (error) {
-            this.logger.logError(mobile, `Failed to setup bot ${botUsername} in channel ${channelId}`, error);
+            this.logger.error(mobile, `Failed to setup bot ${botUsername} in channel ${channelId}`, error);
         }
     }
     async createBot(mobile, createBotDto) {

@@ -31,6 +31,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
     private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT;
     private readonly MAX_MAP_SIZE;
+    private readonly CHANNEL_PROCESSING_DELAY;
     private readonly CLEANUP_INTERVAL;
     private cleanupIntervalId;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
@@ -58,11 +59,13 @@ export declare class PromoteClientService implements OnModuleDestroy {
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
+    private processJoinChannelSequentially;
     clearJoinChannelInterval(): void;
     removeFromLeaveMap(key: string): void;
     clearLeaveMap(): void;
-    clearLeaveChannelInterval(): void;
     leaveChannelQueue(): Promise<void>;
+    private processLeaveChannelSequentially;
+    clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
@@ -109,4 +112,5 @@ export declare class PromoteClientService implements OnModuleDestroy {
         usedInLastWeek: number;
         averageUsageGap: number;
     }>;
+    private createTimeout;
 }

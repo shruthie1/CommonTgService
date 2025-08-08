@@ -22,16 +22,16 @@ class TelegramLogger {
             ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
             : `[${mobile}] ${message}`;
     }
-    logOperation(mobile, operation, details) {
+    info(mobile, operation, details) {
         this.logger.log(this.formatMessage(mobile, operation, details));
     }
-    logError(mobile, operation, error) {
+    error(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
     }
-    logWarning(mobile, message, details) {
+    waning(mobile, message, details) {
         this.logger.warn(this.formatMessage(mobile, message, details));
     }
-    logDebug(mobile, message, details) {
+    debug(mobile, message, details) {
         this.logger.debug(this.formatMessage(mobile, message, details));
     }
 }
