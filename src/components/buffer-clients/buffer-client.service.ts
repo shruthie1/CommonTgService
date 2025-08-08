@@ -432,8 +432,8 @@ export class BufferClientService implements OnModuleDestroy {
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
                     const result = channels.ids.length < 220
-                        ? await this.channelsService.getActiveChannels(120, 0, excludedIds) // Reduced limit
-                        : await this.activeChannelsService.getActiveChannels(120, 0, excludedIds);
+                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds) // Reduced limit
+                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
 
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {
@@ -566,23 +566,10 @@ export class BufferClientService implements OnModuleDestroy {
                     continue;
                 }
 
-                // Process one channel at a time
                 currentChannel = channels.shift();
                 this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
-
-                // Add delay before getting client
-                await sleep(2000);
-                const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-
-                this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
-
-                // Add delay before joining channel
-                await sleep(1500);
                 await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-
-                this.logger.debug(`${mobile} successfully joined channel: @${currentChannel.username}`);
-
             } catch (error: any) {
                 const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
                 this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
@@ -600,15 +587,13 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 }
 
-                const fatalErrors = [
+                if (contains(errorDetails.message, [
                     "SESSION_REVOKED",
                     "AUTH_KEY_UNREGISTERED",
                     "USER_DEACTIVATED",
                     "USER_DEACTIVATED_BAN",
                     "FROZEN_METHOD_INVALID"
-                ];
-
-                if (fatalErrors.includes(error.errorMessage)) {
+                ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromBufferMap(mobile);
                     try {
@@ -628,7 +613,10 @@ export class BufferClientService implements OnModuleDestroy {
 
                 // Add delay between channel processing operations
                 if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
+                    console.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`)
                     await sleep(this.CHANNEL_PROCESSING_DELAY);
+                } else {
+                    console.log(`Not Sleeping before continuing with next Mobile`)
                 }
             }
         }
@@ -735,14 +723,13 @@ export class BufferClientService implements OnModuleDestroy {
             } catch (error: any) {
                 const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
 
-                const fatalErrors = [
+                if (contains(errorDetails.message, [
                     "SESSION_REVOKED",
                     "AUTH_KEY_UNREGISTERED",
                     "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN"
-                ];
-
-                if (fatalErrors.includes(errorDetails.message)) {
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
                         await this.remove(mobile);

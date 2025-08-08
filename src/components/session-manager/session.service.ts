@@ -74,7 +74,7 @@ export class SessionManager {
             return { success: false, error: 'Mobile number is required', retryable: false };
         }
 
-        this.logger.logOperation(mobile, 'Starting session creation process with priority order');
+        this.logger.info(mobile, 'Starting session creation process with priority order');
 
         // Check for existing sessions
         const existingCheck = this.checkExistingSession(mobile);
@@ -85,19 +85,19 @@ export class SessionManager {
         // Try strategies in priority order: 1. Old session -> 2. Existing manager
         const strategies = this.getCreationStrategies(options);
 
-        this.logger.logOperation(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
+        this.logger.info(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
 
         for (const strategy of strategies) {
             try {
-                this.logger.logOperation(mobile, `Attempting strategy: ${strategy.strategyName}`);
+                this.logger.info(mobile, `Attempting strategy: ${strategy.strategyName}`);
                 const result = await strategy();
                 if (result.success) {
-                    this.logger.logOperation(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
+                    this.logger.info(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
                     return result;
                 }
-                this.logger.logOperation(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
+                this.logger.info(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
             } catch (error) {
-                this.logger.logError(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
+                this.logger.error(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
             }
         }
 
@@ -241,11 +241,11 @@ export class SessionManager {
             if (!userInfo || userInfo.phone !== mobile) {
                 return { isValid: false, error: 'Phone number mismatch or invalid user info' };
             }
-            this.logger.logOperation(mobile, 'Session validation successful');
+            this.logger.info(mobile, 'Session validation successful');
             await this.cleanupClient(tempClient, mobile);
             return { isValid: true, userInfo };
         } catch (error) {
-            this.logger.logError(mobile, 'Session validation failed', error);
+            this.logger.error(mobile, 'Session validation failed', error);
             await this.cleanupClient(tempClient, mobile);
             return { isValid: false, error: error.message || error.toString() || error.errorMessage };
         } finally {
@@ -305,7 +305,7 @@ export class SessionManager {
     private async waitForOtp(oldClient: TelegramClient, mobile: string, attempt: number): Promise<string> {
         const startTime = Date.now();
 
-        this.logger.logOperation(mobile, `Waiting for OTP (attempt ${attempt})`);
+        this.logger.info(mobile, `Waiting for OTP (attempt ${attempt})`);
 
         while (Date.now() - startTime < this.OTP_WAIT_TIME) {
             try {
@@ -318,7 +318,7 @@ export class SessionManager {
                     if (messageText) {
                         const code = this.extractOtpCode(messageText.toLowerCase());
                         if (code) {
-                            this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                            this.logger.info(mobile, `OTP extracted: ${code}`);
                             return code;
                         }
                     }
@@ -327,7 +327,7 @@ export class SessionManager {
                 await sleep(this.OTP_CHECK_INTERVAL);
 
             } catch (error) {
-                this.logger.logError(mobile, 'Error checking OTP messages', error);
+                this.logger.error(mobile, 'Error checking OTP messages', error);
                 await sleep(this.OTP_CHECK_INTERVAL);
             }
         }
@@ -363,7 +363,7 @@ export class SessionManager {
         try {
             // Check if client is already destroyed to prevent double cleanup
             if ((client as any)._destroyed) {
-                this.logger.logOperation(mobile, 'Client already destroyed, skipping cleanup');
+                this.logger.info(mobile, 'Client already destroyed, skipping cleanup');
                 return;
             }
 
@@ -377,7 +377,7 @@ export class SessionManager {
             connectionManager.unregisterClient(mobile);
             await sleep(1000);
         } catch (error) {
-            this.logger.logError(mobile, 'Client cleanup error', error);
+            this.logger.error(mobile, 'Client cleanup error', error);
         } finally {
             if (client) {
                 try {
@@ -386,9 +386,9 @@ export class SessionManager {
                         await (client as any)._sender.disconnect().catch(() => {});
                     }
                 } catch (finalCleanupError) {
-                    this.logger.logError(mobile, 'Final cleanup error', finalCleanupError);
+                    this.logger.error(mobile, 'Final cleanup error', finalCleanupError);
                 }
-                this.logger.logOperation(mobile, 'Client cleanup completed');
+                this.logger.info(mobile, 'Client cleanup completed');
             }
         }
     }
@@ -597,7 +597,7 @@ export class SessionService {
             }
         }
 
-        this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
+        this.logger.info(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
 
         if (!mobile || typeof mobile !== 'string') {
             return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
@@ -616,19 +616,19 @@ export class SessionService {
 
         try {
             if (options.oldSession) {
-                this.logger.logOperation(mobile, 'Trying with provided old session (Priority 1)');
+                this.logger.info(mobile, 'Trying with provided old session (Priority 1)');
                 const result = await this.sessionManager.createSession(options);
 
                 if (result.success && result.session) {
                     await this.updateAuditOnSuccess(mobile, result.session, SessionCreationMethod.INPUT_SESSION);
                     return result;
                 } else {
-                    this.logger.logOperation(mobile, `Old session failed: ${result.error}`);
+                    this.logger.info(mobile, `Old session failed: ${result.error}`);
                 }
             }
 
             // PRIORITY 2: Try with existing manager (mobile-based)
-            this.logger.logOperation(mobile, 'Trying with existing manager (Priority 2)');
+            this.logger.info(mobile, 'Trying with existing manager (Priority 2)');
             const managerResult = await this.sessionManager.createSession({
                 ...options,
                 oldSession: undefined // Clear old session to force using existing manager
@@ -638,17 +638,17 @@ export class SessionService {
                 await this.updateAuditOnSuccess(mobile, managerResult.session, SessionCreationMethod.USER_MOBILE);
                 return managerResult;
             } else {
-                this.logger.logOperation(mobile, `Existing manager failed: ${managerResult.error}`);
+                this.logger.info(mobile, `Existing manager failed: ${managerResult.error}`);
             }
 
             // PRIORITY 3: Try with audit sessions (fallback)
-            this.logger.logOperation(mobile, 'Trying with audit sessions (Priority 3)');
+            this.logger.info(mobile, 'Trying with audit sessions (Priority 3)');
             const auditResult = await this.tryAuditSessions(mobile, options);
             if (auditResult.success) {
                 await this.updateAuditOnSuccess(mobile, auditResult.session!, SessionCreationMethod.OLD_SESSION);
                 return auditResult;
             } else {
-                this.logger.logOperation(mobile, `Audit sessions failed: ${auditResult.error}`);
+                this.logger.info(mobile, `Audit sessions failed: ${auditResult.error}`);
             }
 
             // All strategies failed
@@ -693,7 +693,7 @@ export class SessionService {
                         return result;
                     }
                 } catch (error) {
-                    this.logger.logError(mobile, `Audit session ${i + 1} failed`, error);
+                    this.logger.error(mobile, `Audit session ${i + 1} failed`, error);
                 }
             }
 
@@ -717,7 +717,7 @@ export class SessionService {
                 creationMessage: 'Session created successfully'
             });
         } catch (error) {
-            this.logger.logError(mobile, 'Failed to create new audit record on success', error);
+            this.logger.error(mobile, 'Failed to create new audit record on success', error);
         }
     }
     async getSessionAuditHistory(mobile: string, options?: {
@@ -752,7 +752,7 @@ export class SessionService {
         try {
             const result = await this.sessionAuditService.markSessionUsed(mobile, sessionString);
             if (result) {
-                this.logger.logOperation(mobile, 'Session last used timestamp updated');
+                this.logger.info(mobile, 'Session last used timestamp updated');
                 return { success: true };
             } else {
                 return { success: false, error: 'No active session found to update' };
@@ -770,10 +770,10 @@ export class SessionService {
             }
 
             const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
-            this.logger.logDebug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
+            this.logger.debug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
 
             if (!recentSessions || recentSessions.length === 0) {
-                this.logger.logDebug(mobile, 'No recent sessions found for this month');
+                this.logger.debug(mobile, 'No recent sessions found for this month');
                 return { success: false, error: 'No recent sessions found for this month' };
             }
 
@@ -784,16 +784,16 @@ export class SessionService {
                     // if (isActive.isValid) {
                     //     return { success: true, session };
                     // } else {
-                    //     this.logger.logDebug(mobile, `Session found from this month but not valid: ${session}`);
+                    //     this.logger.debug(mobile, `Session found from this month but not valid: ${session}`);
                     //     this.sessionAuditService.revokeSession(session.mobile, session.sessionString, isActive.error);
                     // }
                 }
             }
 
-            this.logger.logDebug(mobile, 'No valid session found from this month');
+            this.logger.debug(mobile, 'No valid session found from this month');
             return { success: false, error: 'No valid session found from this month' };
         } catch (error) {
-            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            this.logger.error(mobile, 'Failed to find valid session from this month', error);
             return { success: false, error: error.message || 'Failed to find valid session from this month' };
         }
     }

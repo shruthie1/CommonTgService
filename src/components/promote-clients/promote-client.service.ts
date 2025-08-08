@@ -33,6 +33,7 @@ export class PromoteClientService implements OnModuleDestroy {
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
     private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16; // Max promote clients per client
     private readonly MAX_MAP_SIZE = 100; // Prevent unbounded Map growth
+    private readonly CHANNEL_PROCESSING_DELAY = 10000; // 10 seconds between channel operations
     private readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10 minutes
     private cleanupIntervalId: NodeJS.Timeout | null = null;
     constructor(@InjectModel(PromoteClient.name) private promoteClientModel: Model<PromoteClientDocument>,
@@ -468,182 +469,140 @@ export class PromoteClientService implements OnModuleDestroy {
     }
 
     async joinChannelQueue() {
-        if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
+        this.logger.debug('Attempting to start join channel queue');
+        if (this.isJoinChannelProcessing) {
             this.logger.warn('Join channel process is already running');
             return;
         }
 
         const existingKeys = Array.from(this.joinChannelMap.keys());
         if (existingKeys.length === 0) {
-            this.logger.debug('No channels to join, skipping queue');
+            this.logger.debug('No channels to join, not starting queue');
             return;
         }
 
+        // Perform memory health check
+        this.checkMemoryHealth();
+
         this.isJoinChannelProcessing = true;
-        this.joinChannelIntervalId = setInterval(async () => {
-            let processTimeout: NodeJS.Timeout;
+
+        try {
+            await this.processJoinChannelSequentially();
+        } catch (error) {
+            this.logger.error('Error in join channel queue', error);
+        } finally {
+            this.isJoinChannelProcessing = false;
+
+            // Schedule next run if there are still items to process
+            if (this.joinChannelMap.size > 0) {
+                this.logger.debug('Scheduling next join channel process');
+                this.createTimeout(() => {
+                    this.joinChannelQueue();
+                }, this.JOIN_CHANNEL_INTERVAL);
+            }
+        }
+    }
+
+    private async processJoinChannelSequentially() {
+        const keys = Array.from(this.joinChannelMap.keys());
+        this.logger.debug(`Processing join channel queue sequentially for ${keys.length} clients`);
+
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+            let currentChannel: Channel | null = null;
+
             try {
-                // Periodic cleanup to prevent memory leaks
-                this.checkMemoryHealth();
-
-                const keys = Array.from(this.joinChannelMap.keys());
-                if (keys.length === 0) {
-                    this.logger.log('Join channel map is empty, clearing interval');
-                    this.clearJoinChannelInterval();
-                    return;
+                const channels = this.joinChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
+                    this.removeFromPromoteMap(mobile);
+                    continue;
                 }
 
-                // Increased timeout for safer processing - using managed timeout
-                processTimeout = this.createManagedTimeout(() => {
-                    this.logger.error('Join channel interval processing timeout');
-                    this.clearJoinChannelInterval();
-                }, this.JOIN_CHANNEL_INTERVAL - 5000);
+                currentChannel = channels.shift();
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
+                this.joinChannelMap.set(mobile, channels);
+                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+            } catch (error: any) {
+                const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
+                this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
 
-                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
+                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
+                    this.removeFromPromoteMap(mobile);
 
-                // Sequential processing - only process one client per interval cycle
-                const mobile = keys[0]; // Process only the first client
-                let currentChannel: Channel | null = null;
-
-                try {
-                    const channels = this.joinChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No more channels to join for ${mobile}, removing from map`);
-                        this.removeFromPromoteMap(mobile);
-                        return; // Exit early, next interval will pick up next client
-                    }
-
-                    currentChannel = channels.shift();
-
-                    // Only update map if there are remaining channels
-                    if (channels.length > 0) {
-                        this.logger.debug(`${mobile}: Pending channels to join: ${channels.length}`);
-                        this.joinChannelMap.set(mobile, channels);
-                    } else {
-                        this.removeFromPromoteMap(mobile);
-                    }
-
-                    // Add delay before getting client
-                    await sleep(2000);
-                    await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-
-                    this.logger.debug(`${mobile}: Attempting to join channel: @${currentChannel.username}`);
-
-                    // Add delay before joining channel
-                    await sleep(3000);
-                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-
-                    this.logger.debug(`${mobile}: Successfully joined channel: @${currentChannel.username}`);
-
-                } catch (error: any) {
-                    const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
-                    this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
-
-                    const errorMsg = error.errorMessage || error.message;
-
-                    if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                        this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
-                        this.removeFromPromoteMap(mobile);
-
-                        try {
-                            // Add delay before getting channel info
-                            await sleep(2000);
-                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                            await sleep(1000);
-                            await this.update(mobile, { channels: channelsInfo.ids.length });
-                        } catch (updateError) {
-                            this.logger.error(`Failed to update channel count for ${mobile}:`, updateError);
-                        }
-                    }
-
-                    if (errorMsg === "SESSION_REVOKED" ||
-                        errorMsg === "AUTH_KEY_UNREGISTERED" ||
-                        errorMsg === "USER_DEACTIVATED" ||
-                        errorMsg === "USER_DEACTIVATED_BAN" ||
-                        errorMsg === "FROZEN_METHOD_INVALID") {
-                        this.logger.error(`Session invalid for ${mobile}, removing client`);
-                        this.removeFromPromoteMap(mobile);
-
-                        try {
-                            await sleep(1000);
-                            await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
-                            await sleep(1000);
-                            await this.remove(mobile);
-                        } catch (statusUpdateError) {
-                            this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
-                        }
-                    }
-                } finally {
                     try {
-                        await connectionManager.unregisterClient(mobile);
-                    } catch (cleanupError) {
-                        this.logger.warn(`Error during client cleanup for ${mobile}:`, cleanupError);
+                        await sleep(2000);
+                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                    } catch (updateError) {
+                        this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
-
-                    // Longer delay to reduce CPU usage
-                    await sleep(20000);
                 }
 
-            } catch (error) {
-                this.logger.error('Error in join channel interval', error);
-                this.clearJoinChannelInterval();
+                if (contains(errorDetails.message, [
+                    "SESSION_REVOKED",
+                    "AUTH_KEY_UNREGISTERED",
+                    "USER_DEACTIVATED",
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
+                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                    this.removeFromPromoteMap(mobile);
+                    try {
+                        await this.remove(mobile);
+                        await sleep(2000);
+                    } catch (removeError) {
+                        this.logger.error(`Error removing client ${mobile}:`, removeError);
+                    }
+                }
+
             } finally {
-                if (processTimeout) {
-                    // Remove from active timeouts and clear
-                    this.activeTimeouts.delete(processTimeout);
-                    clearTimeout(processTimeout);
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
+                }
+
+                // Add delay between channel processing operations
+                if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
+                    console.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`)
+                    await sleep(this.CHANNEL_PROCESSING_DELAY);
+                } else {
+                    console.log(`Not Sleeping before continuing with next Mobile`)
                 }
             }
-        }, this.JOIN_CHANNEL_INTERVAL);
-
-        this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
+        }
     }
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
             this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
+            this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
-            this.isJoinChannelProcessing = false;
-
-            if (this.joinChannelMap.size > 0) {
-                // Use managed timeout for automatic cleanup
-                this.createManagedTimeout(() => {
-                    this.logger.debug('Triggering next join channel process after extended cooldown');
-                    this.joinchannelForPromoteClients(false);
-                }, 90000); // 1.5 minutes instead of 30 seconds
-            }
         }
+        this.isJoinChannelProcessing = false;
+        this.logger.debug('Join channel processing cleared and flag reset');
     }
 
     removeFromLeaveMap(key: string) {
-        const deleted = this.leaveChannelMap.delete(key);
-        if (deleted) {
-            this.logger.debug(`Removed ${key} from leave channel map`);
-        }
+        this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
             this.clearLeaveChannelInterval();
         }
     }
 
     clearLeaveMap() {
-        this.logger.debug("LeaveMap cleared");
+        const mapSize = this.leaveChannelMap.size;
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
-    }
-
-    clearLeaveChannelInterval() {
-        if (this.leaveChannelIntervalId) {
-            this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
-            clearInterval(this.leaveChannelIntervalId);
-            this.leaveChannelIntervalId = null;
-        }
-        this.isLeaveChannelProcessing = false;
-        this.logger.debug('Leave channel interval cleared and processing flag reset');
+        this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
     }
 
     async leaveChannelQueue() {
-        if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
+        this.logger.debug('Attempting to start leave channel queue');
+        if (this.isLeaveChannelProcessing) {
             this.logger.warn('Leave channel process is already running');
             return;
         }
@@ -654,106 +613,106 @@ export class PromoteClientService implements OnModuleDestroy {
             return;
         }
 
+        // Perform memory health check
+        this.checkMemoryHealth();
+
         this.isLeaveChannelProcessing = true;
-        this.leaveChannelIntervalId = setInterval(async () => {
-            let processTimeout: NodeJS.Timeout;
+
+        try {
+            await this.processLeaveChannelSequentially();
+        } catch (error) {
+            this.logger.error('Error in leave channel queue', error);
+        } finally {
+            this.isLeaveChannelProcessing = false;
+
+            // Schedule next run if there are still items to process
+            if (this.leaveChannelMap.size > 0) {
+                this.logger.debug('Scheduling next leave channel process');
+                this.createTimeout(() => {
+                    this.leaveChannelQueue();
+                }, this.LEAVE_CHANNEL_INTERVAL);
+            }
+        }
+    }
+
+    private async processLeaveChannelSequentially() {
+        const keys = Array.from(this.leaveChannelMap.keys());
+        this.logger.debug(`Processing leave channel queue sequentially for ${keys.length} clients`);
+
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+
             try {
-                // Periodic cleanup to prevent memory leaks
-                this.checkMemoryHealth();
-
-                const keys = Array.from(this.leaveChannelMap.keys());
-                if (keys.length === 0) {
-                    this.logger.debug('Leave map is empty, clearing interval');
-                    this.clearLeaveChannelInterval();
-                    return;
+                const channels = this.leaveChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
+                    this.removeFromLeaveMap(mobile);
+                    continue;
                 }
 
-                // Increased timeout for safer processing - using managed timeout
-                processTimeout = this.createManagedTimeout(() => {
-                    this.logger.error('Leave channel interval processing timeout');
-                    this.clearLeaveChannelInterval();
-                }, this.LEAVE_CHANNEL_INTERVAL - 5000);
+                // Process smaller batches sequentially
+                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
 
-                this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
+                // Only update map if there are remaining channels
+                if (channels.length > 0) {
+                    this.leaveChannelMap.set(mobile, channels);
+                } else {
+                    this.removeFromLeaveMap(mobile);
+                }
 
-                // Sequential processing - only process one client per interval cycle
-                const mobile = keys[0]; // Process only the first client
+                const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
 
-                try {
-                    this.logger.debug(`Processing leave channels for mobile: ${mobile}`);
-                    const channels = this.leaveChannelMap.get(mobile);
-                    if (!channels || channels.length === 0) {
-                        this.logger.debug(`No channels to leave for mobile: ${mobile}`);
-                        this.removeFromLeaveMap(mobile);
-                        return; // Exit early, next interval will pick up next client
-                    }
+                this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
+                await sleep(1500);
+                await client.leaveChannels(channelsToProcess);
+                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+            } catch (error: any) {
+                const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
 
-                    const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-
-                    // Only update map if there are remaining channels
-                    if (channels.length > 0) {
-                        this.logger.debug(`${mobile}: Processing ${channelsToProcess.length} channels, ${channels.length} remaining`);
-                        this.leaveChannelMap.set(mobile, channels);
-                    } else {
-                        this.removeFromLeaveMap(mobile);
-                    }
-
-                    // Add delay before getting client
-                    await sleep(2000);
-                    const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-
-                    this.logger.debug(`${mobile}: Attempting to leave ${channelsToProcess.length} channels`);
-
-                    // Add delay before leaving channels
-                    await sleep(3000);
-                    await client.leaveChannels(channelsToProcess);
-
-                    this.logger.debug(`${mobile}: Successfully left ${channelsToProcess.length} channels`);
-
-                } catch (error: any) {
-                    const errorDetails = parseError(error);
-                    this.logger.error(`Error in leave channel process for ${mobile}:`, errorDetails);
-
-                    if (
-                        errorDetails.message === "SESSION_REVOKED" ||
-                        errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
-                        errorDetails.message === "USER_DEACTIVATED" ||
-                        errorDetails.message === "USER_DEACTIVATED_BAN"
-                    ) {
-                        this.logger.warn(`${mobile}: Session invalid, removing client`);
-
-                        try {
-                            await sleep(1000);
-                            await this.remove(mobile);
-                            this.removeFromLeaveMap(mobile);
-                        } catch (removeError) {
-                            this.logger.error(`Failed to remove client ${mobile}:`, removeError);
-                        }
-                    }
-                } finally {
+                if (contains(errorDetails.message, [
+                    "SESSION_REVOKED",
+                    "AUTH_KEY_UNREGISTERED",
+                    "USER_DEACTIVATED",
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
+                    this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        await connectionManager.unregisterClient(mobile);
-                    } catch (cleanupError) {
-                        this.logger.warn(`Error during client cleanup for ${mobile}:`, cleanupError);
+                        await this.remove(mobile);
+                        await sleep(2000);
+                    } catch (removeError) {
+                        this.logger.error(`Error removing client ${mobile}:`, removeError);
                     }
-
-                    // Add delay after processing each client
-                    await sleep(10000);
+                    this.removeFromLeaveMap(mobile);
+                } else {
+                    this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
                 }
 
-            } catch (error) {
-                this.logger.error('Error in leave channel interval', error);
-                this.clearLeaveChannelInterval();
             } finally {
-                if (processTimeout) {
-                    // Remove from active timeouts and clear
-                    this.activeTimeouts.delete(processTimeout);
-                    clearTimeout(processTimeout);
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                }
+
+                // Add delay between leave operations
+                if (i < keys.length - 1 || this.leaveChannelMap.get(mobile)?.length > 0) {
+                    await sleep(this.LEAVE_CHANNEL_INTERVAL / 2); // Half the interval as delay
                 }
             }
-        }, this.LEAVE_CHANNEL_INTERVAL);
+        }
+    }
 
-        this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
+    clearLeaveChannelInterval() {
+        if (this.leaveChannelIntervalId) {
+            this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
+            clearInterval(this.leaveChannelIntervalId);
+            this.activeTimeouts.delete(this.leaveChannelIntervalId);
+            this.leaveChannelIntervalId = null;
+        }
+        this.isLeaveChannelProcessing = false;
+        this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
 
     async setAsPromoteClient(
@@ -1379,5 +1338,14 @@ export class PromoteClientService implements OnModuleDestroy {
             usedInLastWeek,
             averageUsageGap
         };
+    }
+
+    private createTimeout(callback: () => void, delay: number): NodeJS.Timeout {
+        const timeout = setTimeout(() => {
+            this.activeTimeouts.delete(timeout);
+            callback();
+        }, delay);
+        this.activeTimeouts.add(timeout);
+        return timeout;
     }
 }
