@@ -30,7 +30,14 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
     private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT;
+    private readonly MAX_MAP_SIZE;
+    private readonly CLEANUP_INTERVAL;
+    private cleanupIntervalId;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
+    private checkMemoryHealth;
+    private startMemoryCleanup;
+    private clearMemoryCleanup;
+    private performMemoryCleanup;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;
@@ -48,7 +55,6 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearPromoteMap(): void;
     private createManagedTimeout;
     private clearAllTimeouts;
-    private preventMapOverflow;
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;

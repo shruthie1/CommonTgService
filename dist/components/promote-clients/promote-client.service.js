@@ -52,6 +52,69 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
         this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16;
+        this.MAX_MAP_SIZE = 100;
+        this.CLEANUP_INTERVAL = 10 * 60 * 1000;
+        this.cleanupIntervalId = null;
+        this.startMemoryCleanup();
+    }
+    checkMemoryHealth() {
+        const memoryStats = {
+            joinMapSize: this.joinChannelMap.size,
+            leaveMapSize: this.leaveChannelMap.size,
+            activeTimeouts: this.activeTimeouts.size,
+            isJoinProcessing: this.isJoinChannelProcessing,
+            isLeaveProcessing: this.isLeaveChannelProcessing
+        };
+        this.logger.debug('Memory health check:', memoryStats);
+        if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
+            this.logger.warn('Join map approaching memory limit, performing emergency cleanup');
+            this.performMemoryCleanup();
+        }
+        if (memoryStats.leaveMapSize > this.MAX_MAP_SIZE * 0.9) {
+            this.logger.warn('Leave map approaching memory limit, performing emergency cleanup');
+            this.performMemoryCleanup();
+        }
+    }
+    startMemoryCleanup() {
+        this.cleanupIntervalId = setInterval(() => {
+            this.performMemoryCleanup();
+        }, this.CLEANUP_INTERVAL);
+        this.activeTimeouts.add(this.cleanupIntervalId);
+    }
+    clearMemoryCleanup() {
+        if (this.cleanupIntervalId) {
+            clearInterval(this.cleanupIntervalId);
+            this.activeTimeouts.delete(this.cleanupIntervalId);
+            this.cleanupIntervalId = null;
+        }
+    }
+    performMemoryCleanup() {
+        try {
+            for (const [mobile, channels] of this.joinChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.joinChannelMap.delete(mobile);
+                }
+            }
+            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.leaveChannelMap.delete(mobile);
+                }
+            }
+            if (this.joinChannelMap.size > this.MAX_MAP_SIZE) {
+                const keysToRemove = Array.from(this.joinChannelMap.keys()).slice(this.MAX_MAP_SIZE);
+                keysToRemove.forEach(key => this.joinChannelMap.delete(key));
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`);
+            }
+            if (this.leaveChannelMap.size > this.MAX_MAP_SIZE) {
+                const keysToRemove = Array.from(this.leaveChannelMap.keys()).slice(this.MAX_MAP_SIZE);
+                keysToRemove.forEach(key => this.leaveChannelMap.delete(key));
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
+            }
+            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
+        }
+        catch (error) {
+            this.logger.error('Error during memory cleanup:', error);
+        }
     }
     async create(promoteClient) {
         const promoteClientData = {
@@ -191,26 +254,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
         });
         this.activeTimeouts.clear();
-    }
-    preventMapOverflow() {
-        const MAX_MAP_SIZE = 100;
-        if (this.joinChannelMap.size > MAX_MAP_SIZE) {
-            this.logger.warn(`Join channel map size (${this.joinChannelMap.size}) exceeds limit, clearing oldest entries`);
-            const entries = Array.from(this.joinChannelMap.entries());
-            const keepEntries = entries.slice(-MAX_MAP_SIZE / 2);
-            this.joinChannelMap.clear();
-            keepEntries.forEach(([key, value]) => this.joinChannelMap.set(key, value));
-        }
-        if (this.leaveChannelMap.size > MAX_MAP_SIZE) {
-            this.logger.warn(`Leave channel map size (${this.leaveChannelMap.size}) exceeds limit, clearing oldest entries`);
-            const entries = Array.from(this.leaveChannelMap.entries());
-            const keepEntries = entries.slice(-MAX_MAP_SIZE / 2);
-            this.leaveChannelMap.clear();
-            keepEntries.forEach(([key, value]) => this.leaveChannelMap.set(key, value));
-        }
-        if (this.activeTimeouts.size > 50) {
-            this.logger.warn(`Active timeouts size (${this.activeTimeouts.size}) is high, may indicate memory leak`);
-        }
     }
     async updateInfo() {
         const clients = await this.promoteClientModel.find({
@@ -369,7 +412,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelIntervalId = setInterval(async () => {
             let processTimeout;
             try {
-                this.preventMapOverflow();
+                this.checkMemoryHealth();
                 const keys = Array.from(this.joinChannelMap.keys());
                 if (keys.length === 0) {
                     this.logger.log('Join channel map is empty, clearing interval');
@@ -514,7 +557,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.leaveChannelIntervalId = setInterval(async () => {
             let processTimeout;
             try {
-                this.preventMapOverflow();
+                this.checkMemoryHealth();
                 const keys = Array.from(this.leaveChannelMap.keys());
                 if (keys.length === 0) {
                     this.logger.debug('Leave map is empty, clearing interval');
@@ -868,6 +911,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async cleanup() {
         try {
             this.clearAllTimeouts();
+            this.clearMemoryCleanup();
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
             this.clearPromoteMap();
