@@ -95,11 +95,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         try {
             for (const [mobile, channels] of this.joinChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
+                    console.log(`Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.joinChannelMap.delete(mobile);
                 }
             }
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
+                    console.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.leaveChannelMap.delete(mobile);
                 }
             }
@@ -113,7 +115,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 keysToRemove.forEach(key => this.leaveChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
-            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
+            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
         }
         catch (error) {
             this.logger.error('Error during memory cleanup:', error);
