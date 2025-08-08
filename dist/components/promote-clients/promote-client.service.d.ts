@@ -60,6 +60,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
+    private cleanup;
     onModuleDestroy(): Promise<void>;
     getPromoteClientDistribution(): Promise<{
         totalPromoteClients: number;

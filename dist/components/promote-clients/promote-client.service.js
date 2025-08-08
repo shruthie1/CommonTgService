@@ -865,15 +865,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.joinchannelForPromoteClients();
         }, 2 * 60 * 1000);
     }
+    async cleanup() {
+        try {
+            this.clearAllTimeouts();
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            this.clearPromoteMap();
+            this.clearLeaveMap();
+            this.isJoinChannelProcessing = false;
+            this.isLeaveChannelProcessing = false;
+            this.logger.log('BufferClientService cleanup completed');
+        }
+        catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
     async onModuleDestroy() {
         this.logger.log('Cleaning up PromoteClientService resources');
-        this.clearPromoteMap();
-        this.clearLeaveMap();
-        this.clearAllTimeouts();
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.isJoinChannelProcessing = false;
-        this.isLeaveChannelProcessing = false;
+        await this.cleanup();
         this.logger.log('PromoteClientService cleanup completed');
     }
     async getPromoteClientDistribution() {
