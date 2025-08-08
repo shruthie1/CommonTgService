@@ -56,7 +56,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.CHANNEL_PROCESSING_DELAY = 10000;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
         this.cleanupIntervalId = null;
-        this.startMemoryCleanup();
     }
     checkMemoryHealth() {
         const memoryStats = {
@@ -64,7 +63,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             leaveMapSize: this.leaveChannelMap.size,
             activeTimeouts: this.activeTimeouts.size,
             isJoinProcessing: this.isJoinChannelProcessing,
-            isLeaveProcessing: this.isLeaveChannelProcessing
+            isLeaveProcessing: this.isLeaveChannelProcessing,
         };
         this.logger.debug('Memory health check:', memoryStats);
         if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
@@ -105,12 +104,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             if (this.joinChannelMap.size > this.MAX_MAP_SIZE) {
                 const keysToRemove = Array.from(this.joinChannelMap.keys()).slice(this.MAX_MAP_SIZE);
-                keysToRemove.forEach(key => this.joinChannelMap.delete(key));
+                keysToRemove.forEach((key) => this.joinChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`);
             }
             if (this.leaveChannelMap.size > this.MAX_MAP_SIZE) {
                 const keysToRemove = Array.from(this.leaveChannelMap.keys()).slice(this.MAX_MAP_SIZE);
-                keysToRemove.forEach(key => this.leaveChannelMap.delete(key));
+                keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
             this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
@@ -123,7 +122,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         const promoteClientData = {
             ...promoteClient,
             status: promoteClient.status || 'active',
-            message: promoteClient.message || 'Account is functioning properly'
+            message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
         return newUser.save();
@@ -140,7 +139,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return user;
     }
     async update(mobile, updateClientDto) {
-        const updatedUser = await this.promoteClientModel.findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' }).exec();
+        const updatedUser = await this.promoteClientModel
+            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         }
@@ -172,18 +173,20 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            this.logger.debug("Updating existing promote client");
+            this.logger.debug('Updating existing promote client');
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            this.logger.debug("Creating new promote client");
+            this.logger.debug('Creating new promote client');
             return this.create(createOrUpdateUserDto);
         }
     }
     async remove(mobile) {
         try {
             this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
-            const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
+            const deleteResult = await this.promoteClientModel
+                .deleteOne({ mobile })
+                .exec();
             if (deleteResult.deletedCount === 0) {
                 throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
@@ -235,19 +238,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
     }
     clearPromoteMap() {
-        this.logger.debug("PromoteMap cleared");
+        this.logger.debug('PromoteMap cleared');
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
     async updateInfo() {
-        const clients = await this.promoteClientModel.find({
-            status: 'active'
-        }).sort({ channels: 1 });
+        const clients = await this.promoteClientModel
+            .find({
+            status: 'active',
+        })
+            .sort({ channels: 1 });
         for (const client of clients) {
             const mobile = client.mobile;
             try {
                 this.logger.debug(`Updating info for client: ${mobile}`);
-                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                    autoDisconnect: false,
+                    handler: false,
+                });
                 const channels = await telegramClient.channelInfo(true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
@@ -273,12 +281,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clearLeaveChannelInterval();
         await (0, Helpers_1.sleep)(3000);
         try {
-            const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
-            const clients = await this.promoteClientModel.find({
+            const existingKeys = skipExisting
+                ? []
+                : Array.from(this.joinChannelMap.keys());
+            const clients = await this.promoteClientModel
+                .find({
                 channels: { $lt: 350 },
                 mobile: { $nin: existingKeys },
-                status: 'active'
-            }).sort({ channels: 1 }).limit(16);
+                status: 'active',
+            })
+                .sort({ channels: 1 })
+                .limit(16);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             const joinSet = new Set();
             const leaveSet = new Set();
@@ -291,7 +304,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 try {
                     const client = await connection_manager_1.connectionManager.getClient(mobile, {
                         autoDisconnect: false,
-                        handler: false
+                        handler: false,
                     });
                     await (0, Helpers_1.sleep)(2000);
                     const channels = await client.channelInfo(true);
@@ -330,11 +343,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.logger.error(`Error processing client ${mobile}:`, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
                     if ((0, utils_1.contains)(errorDetails.message, [
-                        "SESSION_REVOKED",
-                        "AUTH_KEY_UNREGISTERED",
-                        "USER_DEACTIVATED",
-                        "USER_DEACTIVATED_BAN",
-                        "FROZEN_METHOD_INVALID"
+                        'SESSION_REVOKED',
+                        'AUTH_KEY_UNREGISTERED',
+                        'USER_DEACTIVATED',
+                        'USER_DEACTIVATED_BAN',
+                        'FROZEN_METHOD_INVALID',
                     ])) {
                         this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
@@ -363,6 +376,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             await (0, Helpers_1.sleep)(3000);
             if (joinSet.size > 0) {
+                this.startMemoryCleanup();
                 this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
                 this.createTimeout(() => this.joinChannelQueue(), 2000);
             }
@@ -451,7 +465,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
                 this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
-                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                if (errorDetails.error === 'FloodWaitError' ||
+                    error.errorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                     this.removeFromPromoteMap(mobile);
                     try {
@@ -464,11 +479,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     }
                 }
                 if ((0, utils_1.contains)(errorDetails.message, [
-                    "SESSION_REVOKED",
-                    "AUTH_KEY_UNREGISTERED",
-                    "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN",
-                    "FROZEN_METHOD_INVALID"
+                    'SESSION_REVOKED',
+                    'AUTH_KEY_UNREGISTERED',
+                    'USER_DEACTIVATED',
+                    'USER_DEACTIVATED_BAN',
+                    'FROZEN_METHOD_INVALID',
                 ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromPromoteMap(mobile);
@@ -488,7 +503,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 catch (unregisterError) {
                     this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
-                if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
+                if (i < keys.length - 1 ||
+                    this.joinChannelMap.get(mobile)?.length > 0) {
                     console.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
                     await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
                 }
@@ -590,7 +606,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 else {
                     this.removeFromLeaveMap(mobile);
                 }
-                const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const client = await connection_manager_1.connectionManager.getClient(mobile, {
+                    autoDisconnect: false,
+                    handler: false,
+                });
                 this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
                 await (0, Helpers_1.sleep)(1500);
                 await client.leaveChannels(channelsToProcess);
@@ -599,11 +618,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
                 if ((0, utils_1.contains)(errorDetails.message, [
-                    "SESSION_REVOKED",
-                    "AUTH_KEY_UNREGISTERED",
-                    "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN",
-                    "FROZEN_METHOD_INVALID"
+                    'SESSION_REVOKED',
+                    'AUTH_KEY_UNREGISTERED',
+                    'USER_DEACTIVATED',
+                    'USER_DEACTIVATED_BAN',
+                    'FROZEN_METHOD_INVALID',
                 ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
@@ -626,7 +645,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 catch (unregisterError) {
                     this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
                 }
-                if (i < keys.length - 1 || this.leaveChannelMap.get(mobile)?.length > 0) {
+                if (i < keys.length - 1 ||
+                    this.leaveChannelMap.get(mobile)?.length > 0) {
                     await (0, Helpers_1.sleep)(this.LEAVE_CHANNEL_INTERVAL / 2);
                 }
             }
@@ -642,7 +662,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.isLeaveChannelProcessing = false;
         this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
-    async setAsPromoteClient(mobile, availableDate = (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0]) {
+    async setAsPromoteClient(mobile, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0]) {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
@@ -652,13 +674,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             throw new common_1.ConflictException('PromoteClient already exist');
         }
         const clients = await this.clientService.findAll();
-        const clientMobiles = clients.map(client => client?.mobile);
+        const clientMobiles = clients.map((client) => client?.mobile);
         const existingAssignment = await this.promoteClientModel.findOne({
             mobile,
-            clientId: { $exists: true }
+            clientId: { $exists: true },
         });
         if (!clientMobiles.includes(mobile) && !existingAssignment) {
-            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                autoDisconnect: false,
+            });
             try {
                 await telegramClient.set2fa();
                 await (0, Helpers_1.sleep)(15000);
@@ -666,58 +690,64 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.updatePrivacyforDeletedAccount();
                 await (0, Helpers_1.sleep)(3000);
-                await telegramClient.updateProfile("Deleted Account", "Deleted Account");
+                await telegramClient.updateProfile('Deleted Account', 'Deleted Account');
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
                 const promoteClient = {
                     tgId: user.tgId,
-                    lastActive: "default",
+                    lastActive: 'default',
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
                     status: 'active',
                     message: 'Manually configured as promote client',
-                    lastUsed: null
+                    lastUsed: null,
                 };
-                await this.promoteClientModel.findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel
+                    .findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true })
+                    .exec();
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
                 throw new common_1.HttpException(errorDetails.message, errorDetails.status);
             }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
-            return "Client set as promote successfully";
+            return 'Client set as promote successfully';
         }
         else {
-            throw new common_1.BadRequestException("Number is a Active Client");
+            throw new common_1.BadRequestException('Number is a Active Client');
         }
     }
     async checkPromoteClients() {
         if (!this.telegramService.getActiveClientSetup()) {
             const clients = await this.clientService.findAll();
             const bufferClients = await this.bufferClientService.findAll();
-            const clientMainMobiles = clients.map(c => c.mobile);
-            const bufferClientIds = bufferClients.map(c => c.mobile);
+            const clientMainMobiles = clients.map((c) => c.mobile);
+            const bufferClientIds = bufferClients.map((c) => c.mobile);
             const assignedPromoteMobiles = await this.promoteClientModel
                 .find({ clientId: { $exists: true }, status: 'active' })
                 .distinct('mobile');
-            const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
+            const goodIds = [
+                ...clientMainMobiles,
+                ...bufferClientIds,
+                ...assignedPromoteMobiles,
+            ].filter(Boolean);
             const promoteClientsPerClient = new Map();
             const clientNeedingPromoteClients = [];
             const promoteClientCounts = await this.promoteClientModel.aggregate([
                 {
                     $match: {
                         clientId: { $exists: true, $ne: null },
-                        status: 'active'
-                    }
+                        status: 'active',
+                    },
                 },
                 {
                     $group: {
                         _id: '$clientId',
-                        count: { $sum: 1 }
-                    }
-                }
+                        count: { $sum: 1 },
+                    },
+                },
             ]);
             for (const result of promoteClientCounts) {
                 promoteClientsPerClient.set(result._id, result.count);
@@ -752,11 +782,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
         }
         else {
-            this.logger.warn("Ignored active check promote channels as active client setup exists");
+            this.logger.warn('Ignored active check promote channels as active client setup exists');
         }
     }
     async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
-        const sixMonthsAgo = (new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        const sixMonthsAgo = new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0];
         let totalNeededFromClients = 0;
         for (const clientId of clientsNeedingPromoteClients) {
             let needed = 0;
@@ -767,7 +799,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
-                    status: 'active'
+                    status: 'active',
                 });
                 needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
@@ -784,7 +816,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 150 }
+            totalChats: { $gt: 150 },
         }, { tgId: 1 }, totalNeeded + 5);
         this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
         let processedCount = 0;
@@ -798,13 +830,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
-                    status: 'active'
+                    status: 'active',
                 });
                 needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
         }
-        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) && documents.length > 0 && clientsNeedingPromoteClients.length > 0) {
+        while (processedCount <
+            Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) &&
+            documents.length > 0 &&
+            clientsNeedingPromoteClients.length > 0) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) {
                 this.logger.warn('Invalid document found, skipping');
@@ -823,34 +858,38 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 break;
             }
             try {
-                const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
+                const client = await connection_manager_1.connectionManager.getClient(document.mobile, {
+                    autoDisconnect: false,
+                });
                 try {
                     const hasPassword = await client.hasPassword();
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await client.set2fa();
-                        this.logger.debug("Waiting for setting 2FA");
+                        this.logger.debug('Waiting for setting 2FA');
                         await (0, Helpers_1.sleep)(30000);
                         await client.updateUsername('');
                         await (0, Helpers_1.sleep)(3000);
                         await client.updatePrivacyforDeletedAccount();
                         await (0, Helpers_1.sleep)(3000);
-                        await client.updateProfile("Deleted Account", "Deleted Account");
+                        await client.updateProfile('Deleted Account', 'Deleted Account');
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
                         const channels = await client.channelInfo(true);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
-                            lastActive: "today",
+                            lastActive: 'today',
                             mobile: document.mobile,
-                            availableDate: (new Date(Date.now() - (24 * 60 * 60 * 1000))).toISOString().split('T')[0],
+                            availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
+                                .toISOString()
+                                .split('T')[0],
                             channels: channels.ids.length,
                             clientId: targetClientId,
                             status: 'active',
                             message: 'Account successfully configured as promote client',
-                            lastUsed: null
+                            lastUsed: null,
                         };
                         await this.create(promoteClient);
                         try {
@@ -903,10 +942,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         this.logger.log(`✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`);
         if (clientsNeedingPromoteClients.length > 0) {
-            const stillNeeded = clientsNeedingPromoteClients.map(clientId => {
+            const stillNeeded = clientsNeedingPromoteClients
+                .map((clientId) => {
                 const needed = clientAssignmentTracker.get(clientId) || 0;
                 return `${clientId}:${needed}`;
-            }).join(', ');
+            })
+                .join(', ');
             this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
         }
         else {
@@ -914,7 +955,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
     }
     clearAllTimeouts() {
-        this.activeTimeouts.forEach(timeout => {
+        this.activeTimeouts.forEach((timeout) => {
             clearTimeout(timeout);
         });
         this.activeTimeouts.clear();
@@ -944,47 +985,51 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts] = await Promise.all([
+        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts,] = await Promise.all([
             this.promoteClientModel.countDocuments(),
             this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
             this.promoteClientModel.countDocuments({ status: 'active' }),
             this.promoteClientModel.countDocuments({ status: 'inactive' }),
             this.promoteClientModel.aggregate([
                 { $match: { clientId: { $exists: true, $ne: null } } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]),
             this.promoteClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+                {
+                    $match: { clientId: { $exists: true, $ne: null }, status: 'active' },
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]),
             this.promoteClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'inactive',
+                    },
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]),
             this.promoteClientModel.aggregate([
                 {
                     $match: {
                         clientId: { $exists: true, $ne: null },
                         status: 'active',
-                        $or: [
-                            { lastUsed: { $exists: false } },
-                            { lastUsed: null }
-                        ]
-                    }
+                        $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+                    },
                 },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } }
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]),
             this.promoteClientModel.aggregate([
                 {
                     $match: {
                         clientId: { $exists: true, $ne: null },
                         status: 'active',
-                        lastUsed: { $gte: last24Hours }
-                    }
+                        lastUsed: { $gte: last24Hours },
+                    },
                 },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } }
-            ])
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
         ]);
         const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
         const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
@@ -1011,7 +1056,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 needed,
                 status,
                 neverUsed,
-                usedInLast24Hours
+                usedInLast24Hours,
             });
             if (status === 'sufficient') {
                 clientsWithSufficient++;
@@ -1034,8 +1079,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 clientsNeedingPromoteClients: clientsNeedingMore,
                 totalPromoteClientsNeeded: totalNeeded,
                 maxPromoteClientsPerTrigger: maxPerTrigger,
-                triggersNeededToSatisfyAll: triggersNeeded
-            }
+                triggersNeededToSatisfyAll: triggersNeeded,
+            },
         };
     }
     async getPromoteClientsByStatus(status) {
@@ -1058,14 +1103,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return clients.length > 0 ? clients[0] : null;
     }
     async getUnusedPromoteClients(hoursAgo = 24, clientId) {
-        const cutoffDate = new Date(Date.now() - (hoursAgo * 60 * 60 * 1000));
+        const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
         const filter = {
             status: 'active',
             $or: [
                 { lastUsed: { $lt: cutoffDate } },
                 { lastUsed: { $exists: false } },
-                { lastUsed: null }
-            ]
+                { lastUsed: null },
+            ],
         };
         if (clientId) {
             filter.clientId = clientId;
@@ -1078,26 +1123,25 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             filter.clientId = clientId;
         }
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients] = await Promise.all([
+        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
             this.promoteClientModel.countDocuments(filter),
             this.promoteClientModel.countDocuments({
                 ...filter,
-                $or: [
-                    { lastUsed: { $exists: false } },
-                    { lastUsed: null }
-                ]
+                $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
             }),
             this.promoteClientModel.countDocuments({
                 ...filter,
-                lastUsed: { $gte: last24Hours }
+                lastUsed: { $gte: last24Hours },
             }),
             this.promoteClientModel.countDocuments({
                 ...filter,
-                lastUsed: { $gte: lastWeek }
+                lastUsed: { $gte: lastWeek },
             }),
-            this.promoteClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec()
+            this.promoteClientModel
+                .find(filter, { lastUsed: 1, createdAt: 1 })
+                .exec(),
         ]);
         let totalGap = 0;
         let gapCount = 0;
@@ -1114,7 +1158,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             neverUsed,
             usedInLast24Hours,
             usedInLastWeek,
-            averageUsageGap
+            averageUsageGap,
         };
     }
     createTimeout(callback, delay) {
