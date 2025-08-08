@@ -27,9 +27,11 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
         const errorMessage = typeof errorDetails.message === 'string'
             ? errorDetails.message
             : JSON.stringify(errorDetails.message);
-        const formattedMessage = errorMessage.includes('ETIMEDOUT') ? 'Connection timed out' :
-            errorMessage.includes('ECONNREFUSED') ? 'Connection refused' :
-                (0, parseError_1.extractMessage)(errorDetails?.message);
+        const formattedMessage = errorMessage.includes('ETIMEDOUT')
+            ? 'Connection timed out'
+            : errorMessage.includes('ECONNREFUSED')
+                ? 'Connection refused'
+                : (0, parseError_1.extractMessage)(errorDetails?.message);
         console.error(`${prefix}\n${formattedMessage}`);
         if (errorDetails.status === 429)
             return;
@@ -38,11 +40,11 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, notificationText);
         }
         catch (error) {
-            console.error("Failed to send notification:", error.response?.data || error.message || error.code);
+            console.error('Failed to send notification:', error.response?.data || error.message || error.code);
         }
     }
     catch (error) {
-        console.error("Error in notification process:", error.response?.data || error.message || error.code);
+        console.error('Error in notification process:', error.response?.data || error.message || error.code);
     }
 }
 const RETRYABLE_NETWORK_ERRORS = [
@@ -53,7 +55,7 @@ const RETRYABLE_NETWORK_ERRORS = [
     'ERR_NETWORK',
     'ERR_BAD_RESPONSE',
     'EHOSTUNREACH',
-    'ENETUNREACH'
+    'ENETUNREACH',
 ];
 const RETRYABLE_STATUS_CODES = [408, 500, 502, 503, 504];
 function shouldRetry(error, parsedError) {
@@ -77,14 +79,14 @@ async function makeBypassRequest(url, options) {
     if (!bypassUrl) {
         throw new Error('Bypass URL is not provided');
     }
-    const finalBypassUrl = bypassUrl.startsWith('http') ?
-        bypassUrl :
-        'https://ravishing-perception-production.up.railway.app/execute-request';
+    const finalBypassUrl = bypassUrl.startsWith('http')
+        ? bypassUrl
+        : 'https://helper-thge.onrender.com/execute-request';
     const bypassAxios = axios_1.default.create({
         responseType: options.responseType || 'json',
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: options.timeout || 30000
+        timeout: options.timeout || 30000,
     });
     const response = await bypassAxios.post(finalBypassUrl, {
         url,
@@ -95,19 +97,20 @@ async function makeBypassRequest(url, options) {
         responseType: options.responseType,
         timeout: options.timeout,
         followRedirects: options.maxRedirects !== 0,
-        maxRedirects: options.maxRedirects
+        maxRedirects: options.maxRedirects,
     }, {
         headers: {
             'Content-Type': 'application/json',
-            ...options.headers
-        }
+            ...options.headers,
+        },
     });
-    if (response && (options.responseType === 'arraybuffer' ||
-        response.headers['content-type']?.includes('application/octet-stream') ||
-        response.headers['content-type']?.includes('image/') ||
-        response.headers['content-type']?.includes('audio/') ||
-        response.headers['content-type']?.includes('video/') ||
-        response.headers['content-type']?.includes('application/pdf'))) {
+    if (response &&
+        (options.responseType === 'arraybuffer' ||
+            response.headers['content-type']?.includes('application/octet-stream') ||
+            response.headers['content-type']?.includes('image/') ||
+            response.headers['content-type']?.includes('audio/') ||
+            response.headers['content-type']?.includes('video/') ||
+            response.headers['content-type']?.includes('application/pdf'))) {
         response.data = Buffer.from(response.data);
     }
     return response;
@@ -120,7 +123,7 @@ function parseUrl(url) {
         const parsedUrl = new URL(url);
         return {
             host: parsedUrl.host,
-            endpoint: parsedUrl.pathname + parsedUrl.search
+            endpoint: parsedUrl.pathname + parsedUrl.search,
         };
     }
     catch (error) {
@@ -136,14 +139,16 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
     const retryConfig = {
         ...DEFAULT_RETRY_CONFIG,
         ...options.retryConfig,
-        maxRetries: maxRetries !== undefined ? maxRetries : (options.retryConfig?.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries)
+        maxRetries: maxRetries !== undefined
+            ? maxRetries
+            : options.retryConfig?.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries,
     };
     const notificationConfig = {
         ...DEFAULT_NOTIFICATION_CONFIG,
-        ...options.notificationConfig
+        ...options.notificationConfig,
     };
     options.timeout = options.timeout || 30000;
-    options.method = options.method || "GET";
+    options.method = options.method || 'GET';
     const urlInfo = parseUrl(url);
     if (!urlInfo) {
         console.error(`Invalid URL: ${url}`);
@@ -154,13 +159,13 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
     let lastError = null;
     for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
         const controller = new AbortController();
-        const currentTimeout = options.timeout + (attempt * 5000);
+        const currentTimeout = options.timeout + attempt * 5000;
         const timeoutId = setTimeout(() => {
             try {
                 controller.abort();
             }
             catch (abortError) {
-                console.error("Error during abort:", abortError);
+                console.error('Error during abort:', abortError);
             }
         }, currentTimeout);
         try {
@@ -182,13 +187,18 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                 parsedError = (0, parseError_1.parseError)(error, `host: ${host}\nendpoint:${endpoint}`, false);
             }
             catch (parseErrorError) {
-                console.error("Error in parseError:", parseErrorError);
-                parsedError = { status: 500, message: String(error), error: "ParseError" };
+                console.error('Error in parseError:', parseErrorError);
+                parsedError = {
+                    status: 500,
+                    message: String(error),
+                    error: 'ParseError',
+                };
             }
             const message = parsedError.message;
-            const isTimeout = axios_1.default.isAxiosError(error) && (error.code === "ECONNABORTED" ||
-                (message && message.includes("timeout")) ||
-                parsedError.status === 408);
+            const isTimeout = axios_1.default.isAxiosError(error) &&
+                (error.code === 'ECONNABORTED' ||
+                    (message && message.includes('timeout')) ||
+                    parsedError.status === 408);
             if (parsedError.status === 403 || parsedError.status === 495) {
                 try {
                     const bypassResponse = await makeBypassRequest(url, options);
@@ -204,23 +214,25 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                         errorDetails = (0, parseError_1.extractMessage)(bypassParsedError);
                     }
                     catch (extractBypassError) {
-                        console.error("Error extracting bypass error message:", extractBypassError);
+                        console.error('Error extracting bypass error message:', extractBypassError);
                         errorDetails = String(bypassError);
                     }
-                    await notifyInternal(`Bypass attempt failed`, { message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}` }, notificationConfig);
+                    await notifyInternal(`Bypass attempt failed`, {
+                        message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}`,
+                    }, notificationConfig);
                 }
             }
             else {
                 if (isTimeout) {
                     await notifyInternal(`Request timeout on attempt ${attempt}`, {
                         message: `${clientId} host=${host}\nendpoint=${endpoint}\ntimeout=${options.timeout}ms`,
-                        status: 408
+                        status: 408,
                     }, notificationConfig);
                 }
                 else {
                     await notifyInternal(`Attempt ${attempt} failed`, {
                         message: `${clientId} host=${host}\nendpoint=${endpoint}\n${`mgs: ${message.slice(0, 150)}`}`,
-                        status: parsedError.status
+                        status: parsedError.status,
                     }, notificationConfig);
                 }
             }
@@ -247,7 +259,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
             }
         }
         catch (extractLastError) {
-            console.error("Error extracting last error:", extractLastError);
+            console.error('Error extracting last error:', extractLastError);
             errorData = String(lastError) || 'Unknown error';
         }
         await notifyInternal(`All ${retryConfig.maxRetries} retries exhausted`, { message: `${errorData.slice(0, 150)}` }, notificationConfig);
