@@ -38,7 +38,7 @@ export class BufferClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 4 minutes
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
-    private readonly CLIENT_PROCESSING_DELAY = 8000; // 8 seconds between clients
+    private readonly CLIENT_PROCESSING_DELAY = 5000; // 5 seconds between clients
     private readonly CHANNEL_PROCESSING_DELAY = 10000; // 10 seconds between channel operations
 
     // Memory management constants
@@ -426,15 +426,10 @@ export class BufferClientService implements OnModuleDestroy {
                 await sleep(2000);
                 const channels = await client.channelInfo(true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
-
-                // Update with delay
-                await sleep(1000);
                 await this.update(mobile, { channels: channels.ids.length });
 
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
-                    await sleep(1500); // Delay before fetching active channels
-
                     const result = channels.ids.length < 220
                         ? await this.channelsService.getActiveChannels(120, 0, excludedIds) // Reduced limit
                         : await this.activeChannelsService.getActiveChannels(120, 0, excludedIds);

@@ -313,12 +313,6 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.logger.debug(`Processing client ${i + 1}/${clients.length}: ${mobile}`);
 
                 try {
-                    // Progressive delay to prevent CPU spikes
-                    if (i > 0) {
-                        const progressiveDelay = Math.min(8000 + (i * 1000), 15000);
-                        await sleep(progressiveDelay);
-                    }
-
                     const client = await connectionManager.getClient(mobile, {
                         autoDisconnect: false,
                         handler: false
@@ -328,9 +322,6 @@ export class PromoteClientService implements OnModuleDestroy {
                     await sleep(2000);
                     const channels = await client.channelInfo(true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-
-                    // Add delay before database update
-                    await sleep(1000);
                     await this.update(mobile, { channels: channels.ids.length });
 
                     if (channels.canSendFalseCount < 10) {
@@ -396,9 +387,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     } catch (cleanupError) {
                         this.logger.warn(`Error during client cleanup for ${mobile}:`, cleanupError);
                     }
-
-                    // Longer delay between client processing to reduce CPU load
-                    await sleep(8000);
+                    await sleep(5000);
                 }
             }
 
@@ -413,7 +402,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
             if (leaveSet.size > 0) {
                 this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
-                await sleep(1000); // Delay before starting leave queue
+                await sleep(5000); // Delay before starting leave queue
                 this.leaveChannelQueue();
             }
 
