@@ -56,7 +56,7 @@ export class BufferClientService implements OnModuleDestroy {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ClientService))
         private clientService: ClientService,
-        @Inject(forwardRef(() => ActiveChannelsService))
+        @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,

@@ -1033,24 +1033,32 @@ export class PromoteClientService implements OnModuleDestroy {
         }, 2 * 60 * 1000);
     }
 
+        private async cleanup(): Promise<void> {
+        try {
+            // Clear all timeouts
+            this.clearAllTimeouts();
+
+            // Clear intervals
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+
+            // Clear maps
+            this.clearPromoteMap();
+            this.clearLeaveMap();
+
+            // Reset processing flags
+            this.isJoinChannelProcessing = false;
+            this.isLeaveChannelProcessing = false;
+
+            this.logger.log('BufferClientService cleanup completed');
+        } catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
+
     async onModuleDestroy() {
         this.logger.log('Cleaning up PromoteClientService resources');
-
-        // Clear all intervals
-        this.clearPromoteMap();
-        this.clearLeaveMap();
-
-        // Clear all managed timeouts to prevent memory leaks
-        this.clearAllTimeouts();
-
-        // Clear all maps to free memory
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-
-        // Reset processing flags
-        this.isJoinChannelProcessing = false;
-        this.isLeaveChannelProcessing = false;
-
+        await this.cleanup();
         this.logger.log('PromoteClientService cleanup completed');
     }
 
