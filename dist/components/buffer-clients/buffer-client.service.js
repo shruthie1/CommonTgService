@@ -50,7 +50,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
-        this.CLIENT_PROCESSING_DELAY = 8000;
+        this.CLIENT_PROCESSING_DELAY = 5000;
         this.CHANNEL_PROCESSING_DELAY = 10000;
         this.MAX_MAP_SIZE = 100;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
@@ -344,11 +344,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 await (0, Helpers_1.sleep)(2000);
                 const channels = await client.channelInfo(true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
-                await (0, Helpers_1.sleep)(1000);
                 await this.update(mobile, { channels: channels.ids.length });
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
-                    await (0, Helpers_1.sleep)(1500);
                     const result = channels.ids.length < 220
                         ? await this.channelsService.getActiveChannels(120, 0, excludedIds)
                         : await this.activeChannelsService.getActiveChannels(120, 0, excludedIds);

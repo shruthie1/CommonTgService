@@ -261,10 +261,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 const mobile = document.mobile;
                 this.logger.debug(`Processing client ${i + 1}/${clients.length}: ${mobile}`);
                 try {
-                    if (i > 0) {
-                        const progressiveDelay = Math.min(8000 + (i * 1000), 15000);
-                        await (0, Helpers_1.sleep)(progressiveDelay);
-                    }
                     const client = await connection_manager_1.connectionManager.getClient(mobile, {
                         autoDisconnect: false,
                         handler: false
@@ -272,7 +268,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await (0, Helpers_1.sleep)(2000);
                     const channels = await client.channelInfo(true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-                    await (0, Helpers_1.sleep)(1000);
                     await this.update(mobile, { channels: channels.ids.length });
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
@@ -336,7 +331,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     catch (cleanupError) {
                         this.logger.warn(`Error during client cleanup for ${mobile}:`, cleanupError);
                     }
-                    await (0, Helpers_1.sleep)(8000);
+                    await (0, Helpers_1.sleep)(5000);
                 }
             }
             await (0, Helpers_1.sleep)(3000);
@@ -347,7 +342,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             if (leaveSet.size > 0) {
                 this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
-                await (0, Helpers_1.sleep)(1000);
+                await (0, Helpers_1.sleep)(5000);
                 this.leaveChannelQueue();
             }
             this.logger.log(`Join channel process completed for ${clients.length} clients (Success: ${successCount}, Failed: ${failCount})`);
