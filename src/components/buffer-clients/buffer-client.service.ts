@@ -49,7 +49,7 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) { }
+    ) {}
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
@@ -299,8 +299,8 @@ export class BufferClientService implements OnModuleDestroy {
                 }
             } finally {
                 connectionManager.unregisterClient(mobile);
+                await sleep(5000);
             }
-            await sleep(2000);
         }
 
         if (joinSet.size > 0) {
@@ -387,6 +387,7 @@ export class BufferClientService implements OnModuleDestroy {
                         }
                     } finally {
                         await connectionManager.unregisterClient(mobile);
+                        await sleep(15000);
                     }
                 }
             } catch (error) {

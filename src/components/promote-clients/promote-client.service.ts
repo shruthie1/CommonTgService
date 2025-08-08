@@ -17,7 +17,6 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager'
 import { SessionService } from '../session-manager';
-import TelegramManager from '../Telegram/TelegramManager';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -27,7 +26,7 @@ export class PromoteClientService implements OnModuleDestroy {
     private leaveChannelIntervalId: NodeJS.Timeout;
     private isLeaveChannelProcessing: boolean = false;
     private isJoinChannelProcessing: boolean = false;
-    private readonly JOIN_CHANNEL_INTERVAL = 3 * 60 * 1000; // 3 minutes
+    private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 3 minutes
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
@@ -45,8 +44,6 @@ export class PromoteClientService implements OnModuleDestroy {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
-        @Inject(forwardRef(() => SessionService))
-        private sessionService: SessionService,
     ) { }
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
@@ -416,7 +413,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
                     } finally {
                         await connectionManager.unregisterClient(mobile);
-                        await sleep(10000);
+                        await sleep(15000);
                     }
                 }
             } catch (error) {
