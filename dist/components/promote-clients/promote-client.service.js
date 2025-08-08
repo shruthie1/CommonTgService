@@ -45,7 +45,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.leaveChannelMap = new Map();
         this.isLeaveChannelProcessing = false;
         this.isJoinChannelProcessing = false;
-        this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
+        this.JOIN_CHANNEL_INTERVAL = 3 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
@@ -207,7 +207,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 channels: { $lt: 350 },
                 mobile: { $nin: existingKeys },
                 status: 'active'
-            }).sort({ channels: 1 }).limit(8);
+            }).sort({ channels: 1 }).limit(16);
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             const joinSet = new Set();
             const leaveSet = new Set();
@@ -278,7 +278,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 }
                 finally {
                     connection_manager_1.connectionManager.unregisterClient(mobile);
-                    await (0, Helpers_1.sleep)(2000);
+                    await (0, Helpers_1.sleep)(5000);
                 }
             }
             if (joinSet.size > 0) {
@@ -373,6 +373,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     }
                     finally {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        await (0, Helpers_1.sleep)(10000);
                     }
                 }
             }
