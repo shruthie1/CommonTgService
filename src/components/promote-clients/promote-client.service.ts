@@ -27,7 +27,7 @@ export class PromoteClientService implements OnModuleDestroy {
     private leaveChannelIntervalId: NodeJS.Timeout;
     private isLeaveChannelProcessing: boolean = false;
     private isJoinChannelProcessing: boolean = false;
-    private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 4 minutes
+    private readonly JOIN_CHANNEL_INTERVAL = 3 * 60 * 1000; // 3 minutes
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
@@ -211,7 +211,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 channels: { $lt: 350 },
                 mobile: { $nin: existingKeys },
                 status: 'active'
-            }).sort({ channels: 1 }).limit(8);
+            }).sort({ channels: 1 }).limit(16);
 
             this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
 
@@ -288,7 +288,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                 } finally {
                     connectionManager.unregisterClient(mobile);
-                    await sleep(2000); // brief pause to reduce CPU bursts
+                    await sleep(5000); // brief pause to reduce CPU bursts
                 }
             }
 
@@ -390,6 +390,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
                     } finally {
                         await connectionManager.unregisterClient(mobile);
+                        await sleep(10000);
                     }
                 }
             } catch (error) {
