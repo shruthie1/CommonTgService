@@ -20,6 +20,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
+import { contains } from '../../utils';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -466,14 +467,13 @@ export class BufferClientService implements OnModuleDestroy {
                 const errorDetails = parseError(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
 
-                const isFatal = [
+                if (contains(errorMsg, [
                     "SESSION_REVOKED",
                     "AUTH_KEY_UNREGISTERED",
                     "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN"
-                ].includes(errorMsg);
-
-                if (isFatal) {
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile);

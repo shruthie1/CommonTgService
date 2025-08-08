@@ -16,7 +16,7 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager'
-import { SessionService } from '../session-manager';
+import { contains } from '../../utils';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -45,7 +45,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private channelsService: ChannelsService,
         @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
-    ) { }
+    ) {}
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         // Set default values if not provided
@@ -358,15 +358,14 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.logger.error(`Error processing client ${mobile}:`, errorDetails);
 
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    const isFatalSessionError = [
+
+                    if (contains(errorDetails.message, [
                         "SESSION_REVOKED",
                         "AUTH_KEY_UNREGISTERED",
                         "USER_DEACTIVATED",
                         "USER_DEACTIVATED_BAN",
                         "FROZEN_METHOD_INVALID"
-                    ].includes(errorMsg);
-
-                    if (isFatalSessionError) {
+                    ])) {
                         this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
