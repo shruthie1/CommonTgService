@@ -124,7 +124,6 @@ let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientServic
     }
     async checkArchivedClients() {
         console.log('Starting archived clients check...');
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();

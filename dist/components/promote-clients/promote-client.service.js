@@ -49,6 +49,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
+        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16;
     }
     async create(promoteClient) {
         const promoteClientData = {
@@ -167,19 +168,40 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
+    async updateInfo() {
+        const clients = await this.promoteClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Active client setup exists, skipping promotion process');
             return 'Active client setup exists, skipping promotion';
         }
         this.logger.log('Starting join channel process');
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(2000);
         try {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
             const clients = await this.promoteClientModel.find({
                 channels: { $lt: 350 },
@@ -324,11 +346,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
-                        this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
+                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                         const errorMsg = error.errorMessage || error.message;
-                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
-                            this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
+                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -336,8 +358,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         if (errorMsg === "SESSION_REVOKED" ||
                             errorMsg === "AUTH_KEY_UNREGISTERED" ||
                             errorMsg === "USER_DEACTIVATED" ||
-                            errorMsg === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            errorMsg === "USER_DEACTIVATED_BAN" ||
+                            errorMsg === "FROZEN_METHOD_INVALID") {
+                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                            this.removeFromPromoteMap(mobile);
                             try {
                                 await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             }
@@ -557,7 +581,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             for (const client of clients) {
                 const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
                 promoteClientsPerClient.set(client.clientId, assignedCount);
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 if (needed > 0) {
                     clientNeedingPromoteClients.push(client.clientId);
                 }
@@ -567,7 +591,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
                     break;
                 const assignedCount = promoteClientsPerClient.get(clientId) || 0;
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
                 totalSlotsNeeded += allocatedForThisClient;
             }
@@ -594,14 +618,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             totalNeededFromClients += needed;
         }
@@ -616,7 +640,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, totalNeeded + 5);
         this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
         let processedCount = 0;
@@ -625,14 +649,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
         }
@@ -694,7 +718,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         }
@@ -752,7 +776,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log('Cleaning up PromoteClientService resources');
         this.clearPromoteMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -814,7 +837,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
             const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
             const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, 12 - activeCount);
+            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - activeCount);
             const status = needed === 0 ? 'sufficient' : 'needs_more';
             distributionPerClient.push({
                 clientId: client.clientId,

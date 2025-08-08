@@ -8,6 +8,7 @@ export declare class BufferClientController {
     constructor(clientService: BufferClientService);
     create(createClientDto: CreateBufferClientDto): Promise<BufferClient>;
     search(query: SearchBufferClientDto): Promise<BufferClient[]>;
+    updateInfo(): Promise<string>;
     joinChannelsforBufferClients(): Promise<string>;
     checkbufferClients(): Promise<string>;
     addNewUserstoBufferClients(body: {

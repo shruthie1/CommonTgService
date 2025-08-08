@@ -49,12 +49,11 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) {}
+    ) { }
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connectionManager.disconnectAll();
     }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
@@ -168,6 +167,43 @@ export class BufferClientService implements OnModuleDestroy {
         console.log("BufferMap cleared");
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
+    }
+
+
+    async updateStatus(mobile: string, status: string, message?: string): Promise<BufferClient> {
+        const updateData: any = { status };
+        if (message) {
+            updateData.message = message;
+        }
+
+        return this.update(mobile, updateData);
+    }
+
+    async markAsInactive(mobile: string, reason: string): Promise<BufferClient> {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 })
+
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connectionManager.unregisterClient(mobile);
+                await sleep(2000);
+            } catch (error) {
+                const errorDetails = parseError(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
     }
 
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
@@ -329,7 +365,6 @@ export class BufferClientService implements OnModuleDestroy {
                         const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connectionManager.unregisterClient(mobile);
                     } catch (error: any) {
                         const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
                         this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
@@ -350,12 +385,8 @@ export class BufferClientService implements OnModuleDestroy {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-
-                        try {
-                            await connectionManager.unregisterClient(mobile);
-                        } catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    } finally {
+                        await connectionManager.unregisterClient(mobile);
                     }
                 }
             } catch (error) {
@@ -559,11 +590,7 @@ export class BufferClientService implements OnModuleDestroy {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-
-        await connectionManager.disconnectAll();
         await sleep(2000);
-
-        // Only verify buffer clients with status 'active'
         const bufferclients = await this.findAll('active');
         const badIds: string[] = [];
         let goodIds: string[] = [];
@@ -674,7 +701,7 @@ export class BufferClientService implements OnModuleDestroy {
                 expired: false,
                 twoFA: false,
                 lastActive: { $lt: sixMonthsAgo },
-                totalChats: { $gt: 250 }
+                totalChats: { $gt: 150 }
             },
             { tgId: 1 },
             badIds.length + 3
@@ -730,7 +757,7 @@ export class BufferClientService implements OnModuleDestroy {
                         this.logger.debug("=============Created BufferClient=============");
                         badIds.pop();
                     } else {
-                        this.logger.warn("Failed to Update as BufferClient has Password");
+                        this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
                         await this.usersService.update(document.tgId, { twoFA: true });
                     }
                 } catch (error: any) {

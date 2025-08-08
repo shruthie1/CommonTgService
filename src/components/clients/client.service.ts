@@ -24,6 +24,7 @@ import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
 import { IpManagementService } from '../ip-management/ip-management.service';
 import { PromoteClient, PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
+import { obfuscateText } from '../../utils/obfuscateText';
 
 /**
  * Enhanced Client Service with IP Management Integration
@@ -402,7 +403,6 @@ export class ClientService implements OnModuleDestroy {
             console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await connectionManager.disconnectAll();
             await sleep(2000)
             const client = await this.findOne(clientId);
             await connectionManager.getClient(newMobile, { handler: true, autoDisconnect: false });
@@ -479,7 +479,6 @@ export class ClientService implements OnModuleDestroy {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await fetchWithTimeout(`${notifbot()}&text=Update finished`);
-            await connectionManager.disconnectAll();
         } catch (e) {
             parseError(e, 'Error in updating client session', true);
             this.telegramService.setActiveClientSetup(undefined)
@@ -517,7 +516,7 @@ export class ClientService implements OnModuleDestroy {
             }
             await sleep(1000)
             if (me.firstName !== client.name) {
-                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+                await telegramClient.updateProfile(obfuscateText(client.name), `${obfuscateText("Genuine Paid Girl")}🥰, ${obfuscateText("Best Services")}❤️`);
             }
             await sleep(1000)
             await telegramClient.deleteProfilePhotos();

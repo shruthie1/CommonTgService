@@ -41,6 +41,9 @@ export declare class BufferClientService implements OnModuleDestroy {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClient[]>;
     removeFromBufferMap(key: string): void;
     clearBufferMap(): void;
+    updateStatus(mobile: string, status: string, message?: string): Promise<BufferClient>;
+    markAsInactive(mobile: string, reason: string): Promise<BufferClient>;
+    updateInfo(): Promise<void>;
     joinchannelForBufferClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;

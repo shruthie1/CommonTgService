@@ -44,7 +44,6 @@ export class TelegramService implements OnModuleDestroy {
     async onModuleDestroy() {
         this.logger.logOperation('system', 'Module destroy initiated');
         clearInterval(this.cleanupInterval as NodeJS.Timeout);
-        await connectionManager.disconnectAll();
     }
     public getActiveClientSetup() {
         return TelegramManager.getActiveClientSetup();

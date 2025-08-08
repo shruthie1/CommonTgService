@@ -542,14 +542,23 @@ class TelegramManager {
             { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] }
         ];
         return authCriteria.some(criterion => {
-            if ('values' in criterion) {
-                return criterion.values.some(value => auth[criterion.field].toLowerCase().includes(value.toLowerCase()));
+            const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
+            if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk')) {
+                return true;
             }
-            return auth[criterion.field].toLowerCase().includes(criterion.value.toLowerCase());
+            if ('values' in criterion) {
+                return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+            }
+            return fieldValue.includes(criterion.value.toLowerCase());
         });
     }
     async resetAuthorization(auth) {
-        await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        try {
+            await this.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, `Failed to reset authorization for ${this.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        }
     }
     async getAuths() {
         if (!this.client)

