@@ -442,6 +442,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return;
         }
         this.checkMemoryHealth();
+        if (!this.joinChannelIntervalId) {
+            this.logger.debug('Starting join channel interval');
+            this.joinChannelIntervalId = setInterval(async () => {
+                await this.processJoinChannelInterval();
+            }, this.JOIN_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.joinChannelIntervalId);
+            await this.processJoinChannelInterval();
+        }
+        else {
+            this.logger.warn('Join channel interval is already running');
+        }
+    }
+    async processJoinChannelInterval() {
+        if (this.isJoinChannelProcessing) {
+            this.logger.debug('Join channel process already running, skipping interval');
+            return;
+        }
+        const existingKeys = Array.from(this.joinChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to join, clearing interval');
+            this.clearJoinChannelInterval();
+            return;
+        }
         this.isJoinChannelProcessing = true;
         try {
             await this.processJoinChannelSequentially();
@@ -451,11 +474,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         finally {
             this.isJoinChannelProcessing = false;
-            if (this.joinChannelMap.size > 0) {
-                this.logger.debug('Scheduling next join channel process');
-                this.createTimeout(() => {
-                    this.joinChannelQueue();
-                }, this.JOIN_CHANNEL_INTERVAL);
+            if (this.joinChannelMap.size === 0) {
+                this.logger.debug('No more channels to join, clearing interval');
+                this.clearJoinChannelInterval();
             }
         }
     }
@@ -561,6 +582,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return;
         }
         this.checkMemoryHealth();
+        if (!this.leaveChannelIntervalId) {
+            this.logger.debug('Starting leave channel interval');
+            this.leaveChannelIntervalId = setInterval(async () => {
+                await this.processLeaveChannelInterval();
+            }, this.LEAVE_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.leaveChannelIntervalId);
+            await this.processLeaveChannelInterval();
+        }
+        else {
+            this.logger.debug('Leave channel interval is already running');
+        }
+    }
+    async processLeaveChannelInterval() {
+        if (this.isLeaveChannelProcessing) {
+            this.logger.debug('Leave channel process already running, skipping interval');
+            return;
+        }
+        const existingKeys = Array.from(this.leaveChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to leave, clearing interval');
+            this.clearLeaveChannelInterval();
+            return;
+        }
         this.isLeaveChannelProcessing = true;
         try {
             await this.processLeaveChannelSequentially();
@@ -570,11 +614,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         finally {
             this.isLeaveChannelProcessing = false;
-            if (this.leaveChannelMap.size > 0) {
-                this.logger.debug('Scheduling next leave channel process');
-                this.createTimeout(() => {
-                    this.leaveChannelQueue();
-                }, this.LEAVE_CHANNEL_INTERVAL);
+            if (this.leaveChannelMap.size === 0) {
+                this.logger.debug('No more channels to leave, clearing interval');
+                this.clearLeaveChannelInterval();
             }
         }
     }

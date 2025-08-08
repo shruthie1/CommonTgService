@@ -61,11 +61,13 @@ export declare class BufferClientService implements OnModuleDestroy {
     updateInfo(): Promise<void>;
     joinchannelForBufferClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
+    private processJoinChannelInterval;
     private processJoinChannelSequentially;
     clearJoinChannelInterval(): void;
     removeFromLeaveMap(key: string): void;
     clearLeaveMap(): void;
     leaveChannelQueue(): Promise<void>;
+    private processLeaveChannelInterval;
     private processLeaveChannelSequentially;
     clearLeaveChannelInterval(): void;
     setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;

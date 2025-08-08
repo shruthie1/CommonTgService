@@ -54,21 +54,22 @@ export declare class PromoteClientService implements OnModuleDestroy {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
-    private createManagedTimeout;
-    private clearAllTimeouts;
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
+    private processJoinChannelInterval;
     private processJoinChannelSequentially;
     clearJoinChannelInterval(): void;
     removeFromLeaveMap(key: string): void;
     clearLeaveMap(): void;
     leaveChannelQueue(): Promise<void>;
+    private processLeaveChannelInterval;
     private processLeaveChannelSequentially;
     clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
+    private clearAllTimeouts;
     private cleanup;
     onModuleDestroy(): Promise<void>;
     getPromoteClientDistribution(): Promise<{
