@@ -637,9 +637,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         return; // Exit early, next interval will pick up next client
                     }
 
-                    // Reduced batch size for more controlled processing
-                    const reducedBatchSize = Math.min(this.LEAVE_CHANNEL_BATCH_SIZE, 5);
-                    const channelsToProcess = channels.splice(0, reducedBatchSize);
+                    const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
 
                     // Only update map if there are remaining channels
                     if (channels.length > 0) {
