@@ -29,6 +29,7 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
+const utils_1 = require("../../utils");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -383,13 +384,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 failCount++;
                 const errorDetails = (0, parseError_1.parseError)(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-                const isFatal = [
+                if ((0, utils_1.contains)(errorMsg, [
                     "SESSION_REVOKED",
                     "AUTH_KEY_UNREGISTERED",
                     "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN"
-                ].includes(errorMsg);
-                if (isFatal) {
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile);

@@ -29,6 +29,7 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
+const utils_1 = require("../../utils");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
@@ -301,14 +302,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     const errorDetails = (0, parseError_1.parseError)(error);
                     this.logger.error(`Error processing client ${mobile}:`, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    const isFatalSessionError = [
+                    if ((0, utils_1.contains)(errorDetails.message, [
                         "SESSION_REVOKED",
                         "AUTH_KEY_UNREGISTERED",
                         "USER_DEACTIVATED",
                         "USER_DEACTIVATED_BAN",
                         "FROZEN_METHOD_INVALID"
-                    ].includes(errorMsg);
-                    if (isFatalSessionError) {
+                    ])) {
                         this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);

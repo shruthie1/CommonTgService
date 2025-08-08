@@ -11940,6 +11940,7 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -12294,13 +12295,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 failCount++;
                 const errorDetails = (0, parseError_1.parseError)(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-                const isFatal = [
+                if ((0, utils_1.contains)(errorMsg, [
                     "SESSION_REVOKED",
                     "AUTH_KEY_UNREGISTERED",
                     "USER_DEACTIVATED",
-                    "USER_DEACTIVATED_BAN"
-                ].includes(errorMsg);
-                if (isFatal) {
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ])) {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile);
@@ -19306,6 +19307,7 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
@@ -19578,14 +19580,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     const errorDetails = (0, parseError_1.parseError)(error);
                     this.logger.error(`Error processing client ${mobile}:`, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    const isFatalSessionError = [
+                    if ((0, utils_1.contains)(errorDetails.message, [
                         "SESSION_REVOKED",
                         "AUTH_KEY_UNREGISTERED",
                         "USER_DEACTIVATED",
                         "USER_DEACTIVATED_BAN",
                         "FROZEN_METHOD_INVALID"
-                    ].includes(errorMsg);
-                    if (isFatalSessionError) {
+                    ])) {
                         this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
