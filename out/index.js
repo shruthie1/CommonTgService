@@ -12833,7 +12833,7 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
@@ -20143,15 +20143,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.joinchannelForPromoteClients();
         }, 2 * 60 * 1000);
     }
+    async cleanup() {
+        try {
+            this.clearAllTimeouts();
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            this.clearPromoteMap();
+            this.clearLeaveMap();
+            this.isJoinChannelProcessing = false;
+            this.isLeaveChannelProcessing = false;
+            this.logger.log('BufferClientService cleanup completed');
+        }
+        catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
     async onModuleDestroy() {
         this.logger.log('Cleaning up PromoteClientService resources');
-        this.clearPromoteMap();
-        this.clearLeaveMap();
-        this.clearAllTimeouts();
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.isJoinChannelProcessing = false;
-        this.isLeaveChannelProcessing = false;
+        await this.cleanup();
         this.logger.log('PromoteClientService cleanup completed');
     }
     async getPromoteClientDistribution() {
