@@ -19813,8 +19813,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.removeFromLeaveMap(mobile);
                         return;
                     }
-                    const reducedBatchSize = Math.min(this.LEAVE_CHANNEL_BATCH_SIZE, 5);
-                    const channelsToProcess = channels.splice(0, reducedBatchSize);
+                    const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
                     if (channels.length > 0) {
                         this.logger.debug(`${mobile}: Processing ${channelsToProcess.length} channels, ${channels.length} remaining`);
                         this.leaveChannelMap.set(mobile, channels);
