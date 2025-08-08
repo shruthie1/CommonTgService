@@ -25,14 +25,26 @@ import { SessionService } from '../session-manager';
 export class BufferClientService implements OnModuleDestroy {
     private readonly logger = new Logger(BufferClientService.name);
     private joinChannelMap: Map<string, Channel[]> = new Map();
-    private joinChannelIntervalId: NodeJS.Timeout;
+    private joinChannelIntervalId: NodeJS.Timeout | null = null;
     private leaveChannelMap: Map<string, string[]> = new Map();
-    private leaveChannelIntervalId: NodeJS.Timeout;
+    private leaveChannelIntervalId: NodeJS.Timeout | null = null;
     private isJoinChannelProcessing: boolean = false;
     private isLeaveChannelProcessing: boolean = false;
+
+    // Track all timeouts for proper cleanup
+    private activeTimeouts: Set<NodeJS.Timeout> = new Set();
+
+    // Fixed constant values to match comments
     private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 4 minutes
-    private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 30 seconds
+    private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 60 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
+    private readonly CLIENT_PROCESSING_DELAY = 8000; // 8 seconds between clients
+    private readonly CHANNEL_PROCESSING_DELAY = 10000; // 10 seconds between channel operations
+
+    // Memory management constants
+    private readonly MAX_MAP_SIZE = 100; // Prevent unbounded Map growth
+    private readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10 minutes
+    private cleanupIntervalId: NodeJS.Timeout | null = null;
 
     constructor(@InjectModel('bufferClientModule') private bufferClientModel: Model<BufferClientDocument>,
         @Inject(forwardRef(() => TelegramService))
@@ -49,11 +61,129 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService
-    ) {}
+    ) {
+        // Start periodic memory cleanup
+        this.startMemoryCleanup();
+    }
+
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
-        this.clearBufferMap();
-        this.clearLeaveMap();
+        await this.cleanup();
+    }
+
+    private async cleanup(): Promise<void> {
+        try {
+            // Clear all timeouts
+            this.clearAllTimeouts();
+
+            // Clear intervals
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            this.clearMemoryCleanup();
+
+            // Clear maps
+            this.clearBufferMap();
+            this.clearLeaveMap();
+
+            // Reset processing flags
+            this.isJoinChannelProcessing = false;
+            this.isLeaveChannelProcessing = false;
+
+            this.logger.log('BufferClientService cleanup completed');
+        } catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
+
+    private startMemoryCleanup(): void {
+        this.cleanupIntervalId = setInterval(() => {
+            this.performMemoryCleanup();
+        }, this.CLEANUP_INTERVAL);
+
+        this.activeTimeouts.add(this.cleanupIntervalId);
+    }
+
+    private clearMemoryCleanup(): void {
+        if (this.cleanupIntervalId) {
+            clearInterval(this.cleanupIntervalId);
+            this.activeTimeouts.delete(this.cleanupIntervalId);
+            this.cleanupIntervalId = null;
+        }
+    }
+
+    private performMemoryCleanup(): void {
+        try {
+            // Clean up empty entries in joinChannelMap
+            for (const [mobile, channels] of this.joinChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.joinChannelMap.delete(mobile);
+                }
+            }
+
+            // Clean up empty entries in leaveChannelMap
+            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.leaveChannelMap.delete(mobile);
+                }
+            }
+
+            // Prevent Map growth beyond reasonable limits
+            if (this.joinChannelMap.size > this.MAX_MAP_SIZE) {
+                const keysToRemove = Array.from(this.joinChannelMap.keys()).slice(this.MAX_MAP_SIZE);
+                keysToRemove.forEach(key => this.joinChannelMap.delete(key));
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`);
+            }
+
+            if (this.leaveChannelMap.size > this.MAX_MAP_SIZE) {
+                const keysToRemove = Array.from(this.leaveChannelMap.keys()).slice(this.MAX_MAP_SIZE);
+                keysToRemove.forEach(key => this.leaveChannelMap.delete(key));
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
+            }
+
+            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
+        } catch (error) {
+            this.logger.error('Error during memory cleanup:', error);
+        }
+    }
+
+    private createTimeout(callback: () => void, delay: number): NodeJS.Timeout {
+        const timeout = setTimeout(() => {
+            this.activeTimeouts.delete(timeout);
+            callback();
+        }, delay);
+        this.activeTimeouts.add(timeout);
+        return timeout;
+    }
+
+    private clearAllTimeouts(): void {
+        this.activeTimeouts.forEach(timeout => {
+            clearTimeout(timeout);
+        });
+        this.activeTimeouts.clear();
+        this.logger.debug('Cleared all active timeouts');
+    }
+
+    private checkMemoryHealth(): void {
+        const memoryStats = {
+            joinMapSize: this.joinChannelMap.size,
+            leaveMapSize: this.leaveChannelMap.size,
+            activeTimeouts: this.activeTimeouts.size,
+            isJoinProcessing: this.isJoinChannelProcessing,
+            isLeaveProcessing: this.isLeaveChannelProcessing
+        };
+
+        this.logger.debug('Memory health check:', memoryStats);
+
+        // Emergency cleanup if memory usage is too high
+        if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
+            this.logger.warn('Join map approaching memory limit, performing emergency cleanup');
+            this.performMemoryCleanup();
+        }
+
+        if (memoryStats.leaveMapSize > this.MAX_MAP_SIZE * 0.9) {
+            this.logger.warn('Leave map approaching memory limit, performing emergency cleanup');
+            this.performMemoryCleanup();
+        }
     }
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
@@ -163,10 +293,29 @@ export class BufferClientService implements OnModuleDestroy {
         this.joinChannelMap.delete(key);
     }
 
+    private safeSetJoinChannelMap(mobile: string, channels: Channel[]): boolean {
+        if (this.joinChannelMap.size >= this.MAX_MAP_SIZE && !this.joinChannelMap.has(mobile)) {
+            this.logger.warn(`Join channel map size limit reached (${this.MAX_MAP_SIZE}), cannot add ${mobile}`);
+            return false;
+        }
+        this.joinChannelMap.set(mobile, channels);
+        return true;
+    }
+
+    private safeSetLeaveChannelMap(mobile: string, channels: string[]): boolean {
+        if (this.leaveChannelMap.size >= this.MAX_MAP_SIZE && !this.leaveChannelMap.has(mobile)) {
+            this.logger.warn(`Leave channel map size limit reached (${this.MAX_MAP_SIZE}), cannot add ${mobile}`);
+            return false;
+        }
+        this.leaveChannelMap.set(mobile, channels);
+        return true;
+    }
+
     clearBufferMap() {
-        console.log("BufferMap cleared");
+        const mapSize = this.joinChannelMap.size;
         this.joinChannelMap.clear();
         this.clearJoinChannelInterval();
+        this.logger.debug(`BufferMap cleared, removed ${mapSize} entries`);
     }
 
 
@@ -186,24 +335,51 @@ export class BufferClientService implements OnModuleDestroy {
     async updateInfo() {
         const clients = await this.bufferClientModel.find({
             status: 'active'
-        }).sort({ channels: 1 })
+        }).sort({ channels: 1 });
 
-        for (const client of clients) {
+        this.logger.debug(`Updating info for ${clients.length} buffer clients`);
+
+        for (let i = 0; i < clients.length; i++) {
+            const client = clients[i];
             const mobile = client.mobile;
+
             try {
-                this.logger.debug(`Updating info for client: ${mobile}`);
+                this.logger.debug(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
+
+                // Add delay before getting client
+                await sleep(2000);
                 const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+
+                await sleep(1500); // Delay before channel info call
                 const channels = await telegramClient.channelInfo(true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+
+                await sleep(1000); // Delay before update
                 await this.update(mobile, { channels: channels.ids.length });
-                await connectionManager.unregisterClient(mobile);
-                await sleep(2000);
+
             } catch (error) {
                 const errorDetails = parseError(error);
-                await this.markAsInactive(mobile, `${errorDetails.message}`);
-                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+                try {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
+                } catch (markError) {
+                    this.logger.error(`Error marking client ${mobile} as inactive:`, markError);
+                }
+                this.logger.error(`Error updating info for client ${mobile}:`, errorDetails);
+            } finally {
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
+                }
+
+                // Add delay between client processing
+                if (i < clients.length - 1) {
+                    await sleep(4000); // 4 seconds between each client
+                }
             }
         }
+
+        this.logger.debug('Completed updating info for all buffer clients');
     }
 
     async joinchannelForBufferClients(skipExisting: boolean = true): Promise<string> {
@@ -218,13 +394,13 @@ export class BufferClientService implements OnModuleDestroy {
         this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
-        await sleep(2000);
+        await sleep(3000); // Increased initial sleep
 
         const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
         const clients = await this.bufferClientModel.find({
             channels: { $lt: 350 },
             mobile: { $nin: existingKeys }
-        }).sort({ channels: 1 }).limit(8);
+        }).sort({ channels: 1 }).limit(8); // Reduced limit for better performance
 
         this.logger.debug(`Found ${clients.length} buffer clients to process`);
 
@@ -234,9 +410,11 @@ export class BufferClientService implements OnModuleDestroy {
         let successCount = 0;
         let failCount = 0;
 
-        for (const document of clients) {
+        // Sequential processing with proper delays
+        for (let i = 0; i < clients.length; i++) {
+            const document = clients[i];
             const mobile = document.mobile;
-            this.logger.debug(`Processing buffer client: ${mobile}`);
+            this.logger.debug(`Processing buffer client ${i + 1}/${clients.length}: ${mobile}`);
 
             try {
                 const client = await connectionManager.getClient(mobile, {
@@ -244,29 +422,42 @@ export class BufferClientService implements OnModuleDestroy {
                     handler: false
                 });
 
+                // Add delay before channel info call
+                await sleep(2000);
                 const channels = await client.channelInfo(true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
+
+                // Update with delay
+                await sleep(1000);
                 await this.update(mobile, { channels: channels.ids.length });
 
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
+                    await sleep(1500); // Delay before fetching active channels
+
                     const result = channels.ids.length < 220
-                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
-                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+                        ? await this.channelsService.getActiveChannels(120, 0, excludedIds) // Reduced limit
+                        : await this.activeChannelsService.getActiveChannels(120, 0, excludedIds);
 
                     if (!this.joinChannelMap.has(mobile)) {
-                        this.joinChannelMap.set(mobile, result);
-                        joinSet.add(mobile);
-                        this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
+                        if (this.safeSetJoinChannelMap(mobile, result)) {
+                            joinSet.add(mobile);
+                            this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
+                        } else {
+                            this.logger.warn(`Failed to add ${mobile} to join queue due to memory limits`);
+                        }
                     } else {
                         this.logger.debug(`${mobile}: Already present in join map, skipping`);
                     }
 
                 } else {
                     if (!this.leaveChannelMap.has(mobile)) {
-                        this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
-                        leaveSet.add(mobile);
-                        this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
+                        if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                            leaveSet.add(mobile);
+                            this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
+                        } else {
+                            this.logger.warn(`Failed to add ${mobile} to leave queue due to memory limits`);
+                        }
                     } else {
                         this.logger.debug(`${mobile}: Already present in leave map, skipping`);
                     }
@@ -291,6 +482,7 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile);
+                        await sleep(2000); // Delay after removal
                     } catch (removeErr) {
                         this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
                     }
@@ -298,19 +490,30 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
                 }
             } finally {
-                connectionManager.unregisterClient(mobile);
-                await sleep(5000);
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
+                }
+
+                // Progressive delay between clients to prevent CPU spikes
+                if (i < clients.length - 1) {
+                    await sleep(this.CLIENT_PROCESSING_DELAY);
+                }
             }
         }
 
+        // Add delay before starting queues
+        await sleep(3000);
+
         if (joinSet.size > 0) {
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
-            this.joinChannelQueue();
+            this.createTimeout(() => this.joinChannelQueue(), 2000); // Delayed start
         }
 
         if (leaveSet.size > 0) {
             this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
-            this.leaveChannelQueue();
+            this.createTimeout(() => this.leaveChannelQueue(), 5000); // Delayed start
         }
 
         this.logger.log(`Join process complete — Success: ${successCount}, Fail: ${failCount}`);
@@ -319,7 +522,7 @@ export class BufferClientService implements OnModuleDestroy {
 
     async joinChannelQueue() {
         this.logger.debug('Attempting to start join channel queue');
-        if (this.isJoinChannelProcessing || this.joinChannelIntervalId) {
+        if (this.isJoinChannelProcessing) {
             this.logger.warn('Join channel process is already running');
             return;
         }
@@ -330,94 +533,121 @@ export class BufferClientService implements OnModuleDestroy {
             return;
         }
 
+        // Perform memory health check
+        this.checkMemoryHealth();
+
         this.isJoinChannelProcessing = true;
-        this.joinChannelIntervalId = setInterval(async () => {
-            let processTimeout: NodeJS.Timeout;
+
+        try {
+            await this.processJoinChannelSequentially();
+        } catch (error) {
+            this.logger.error('Error in join channel queue', error);
+        } finally {
+            this.isJoinChannelProcessing = false;
+
+            // Schedule next run if there are still items to process
+            if (this.joinChannelMap.size > 0) {
+                this.logger.debug('Scheduling next join channel process');
+                this.createTimeout(() => {
+                    this.joinChannelQueue();
+                }, this.JOIN_CHANNEL_INTERVAL);
+            }
+        }
+    }
+
+    private async processJoinChannelSequentially() {
+        const keys = Array.from(this.joinChannelMap.keys());
+        this.logger.debug(`Processing join channel queue sequentially for ${keys.length} clients`);
+
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+            let currentChannel: Channel | null = null;
+
             try {
-                const keys = Array.from(this.joinChannelMap.keys());
-                if (keys.length === 0) {
-                    this.clearJoinChannelInterval();
-                    return;
+                const channels = this.joinChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
+                    this.removeFromBufferMap(mobile);
+                    continue;
                 }
 
-                // Add timeout to prevent infinite processing
-                processTimeout = setTimeout(() => {
-                    this.logger.error('Join channel interval processing timeout');
-                    this.clearJoinChannelInterval();
-                }, this.JOIN_CHANNEL_INTERVAL - 1000);
+                // Process one channel at a time
+                currentChannel = channels.shift();
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
+                this.joinChannelMap.set(mobile, channels);
 
-                this.logger.debug(`Processing join channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.joinChannelIntervalId}`);
+                // Add delay before getting client
+                await sleep(2000);
+                const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
 
-                for (const mobile of keys) {
-                    let currentChannel: Channel | null = null;
+                this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
+
+                // Add delay before joining channel
+                await sleep(1500);
+                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+
+                this.logger.debug(`${mobile} successfully joined channel: @${currentChannel.username}`);
+
+            } catch (error: any) {
+                const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
+                this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
+
+                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
+                    this.removeFromBufferMap(mobile);
+
                     try {
-                        const channels = this.joinChannelMap.get(mobile);
-                        if (!channels || channels.length === 0) {
-                            this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
-                            this.removeFromBufferMap(mobile);
-                            continue;
-                        }
-
-                        currentChannel = channels.shift();
-                        this.logger.debug(`${mobile} has ${channels.length} pending channels to join`);
-                        this.joinChannelMap.set(mobile, channels);
-
-                        const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                        this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
-                        await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                    } catch (error: any) {
-                        const errorDetails = parseError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
-                        this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
-
-                        if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                            this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
-                            this.removeFromBufferMap(mobile);
-                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                            await this.update(mobile, { channels: channelsInfo.ids.length });
-                        }
-
-                        if (error.errorMessage === "SESSION_REVOKED" ||
-                            error.errorMessage === "AUTH_KEY_UNREGISTERED" ||
-                            error.errorMessage === "USER_DEACTIVATED" ||
-                            error.errorMessage === "USER_DEACTIVATED_BAN" ||
-                            error.errorMessage === "FROZEN_METHOD_INVALID") {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`);
-                            this.removeFromBufferMap(mobile);
-                            await this.remove(mobile);
-                        }
-                    } finally {
-                        await connectionManager.unregisterClient(mobile);
-                        await sleep(15000);
+                        await sleep(2000);
+                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                    } catch (updateError) {
+                        this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
                 }
-            } catch (error) {
-                this.logger.error('Error in join channel interval', error);
-                this.clearJoinChannelInterval();
+
+                const fatalErrors = [
+                    "SESSION_REVOKED",
+                    "AUTH_KEY_UNREGISTERED",
+                    "USER_DEACTIVATED",
+                    "USER_DEACTIVATED_BAN",
+                    "FROZEN_METHOD_INVALID"
+                ];
+
+                if (fatalErrors.includes(error.errorMessage)) {
+                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                    this.removeFromBufferMap(mobile);
+                    try {
+                        await this.remove(mobile);
+                        await sleep(2000);
+                    } catch (removeError) {
+                        this.logger.error(`Error removing client ${mobile}:`, removeError);
+                    }
+                }
+
             } finally {
-                if (processTimeout) {
-                    clearTimeout(processTimeout);
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
+                }
+
+                // Add delay between channel processing operations
+                if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
+                    await sleep(this.CHANNEL_PROCESSING_DELAY);
                 }
             }
-        }, this.JOIN_CHANNEL_INTERVAL);
-
-        this.logger.debug(`Started join channel queue with interval ID: ${this.joinChannelIntervalId}`);
+        }
     }
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
             this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
+            this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
-            this.isJoinChannelProcessing = false;
-
-            // Only schedule next run if there are items in the map
-            if (this.joinChannelMap.size > 0) {
-                setTimeout(() => {
-                    this.logger.debug('Triggering next join channel process');
-                    this.joinchannelForBufferClients(false);
-                }, 30000);
-            }
         }
+        this.isJoinChannelProcessing = false;
+        this.logger.debug('Join channel processing cleared and flag reset');
     }
 
     removeFromLeaveMap(key: string) {
@@ -428,13 +658,15 @@ export class BufferClientService implements OnModuleDestroy {
     }
 
     clearLeaveMap() {
-        console.log("LeaveMap cleared");
+        const mapSize = this.leaveChannelMap.size;
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
+        this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
     }
 
     async leaveChannelQueue() {
-        if (this.isLeaveChannelProcessing || this.leaveChannelIntervalId) {
+        this.logger.debug('Attempting to start leave channel queue');
+        if (this.isLeaveChannelProcessing) {
             this.logger.warn('Leave channel process is already running');
             return;
         }
@@ -445,86 +677,109 @@ export class BufferClientService implements OnModuleDestroy {
             return;
         }
 
+        // Perform memory health check
+        this.checkMemoryHealth();
+
         this.isLeaveChannelProcessing = true;
-        this.leaveChannelIntervalId = setInterval(async () => {
-            let processTimeout: NodeJS.Timeout;
+
+        try {
+            await this.processLeaveChannelSequentially();
+        } catch (error) {
+            this.logger.error('Error in leave channel queue', error);
+        } finally {
+            this.isLeaveChannelProcessing = false;
+
+            // Schedule next run if there are still items to process
+            if (this.leaveChannelMap.size > 0) {
+                this.logger.debug('Scheduling next leave channel process');
+                this.createTimeout(() => {
+                    this.leaveChannelQueue();
+                }, this.LEAVE_CHANNEL_INTERVAL);
+            }
+        }
+    }
+
+    private async processLeaveChannelSequentially() {
+        const keys = Array.from(this.leaveChannelMap.keys());
+        this.logger.debug(`Processing leave channel queue sequentially for ${keys.length} clients`);
+
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+
             try {
-                const keys = Array.from(this.leaveChannelMap.keys());
-                if (keys.length === 0) {
-                    this.logger.debug('Leave map is empty, clearing interval');
-                    this.clearLeaveChannelInterval();
-                    return;
+                const channels = this.leaveChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
+                    this.removeFromLeaveMap(mobile);
+                    continue;
                 }
 
-                // Add timeout to prevent infinite processing
-                processTimeout = setTimeout(() => {
-                    this.logger.error('Leave channel interval processing timeout');
-                    this.clearLeaveChannelInterval();
-                }, this.LEAVE_CHANNEL_INTERVAL - 1000);
+                // Process smaller batches sequentially
+                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
 
-                this.logger.debug(`Processing leave channel queue at ${new Date().toISOString()}, ${keys.length} clients remaining, interval:${this.leaveChannelIntervalId}`);
+                // Only update map if there are remaining channels
+                if (channels.length > 0) {
+                    this.leaveChannelMap.set(mobile, channels);
+                } else {
+                    this.removeFromLeaveMap(mobile);
+                }
 
-                for (const mobile of keys) {
+                // Add delay before getting client
+                await sleep(2000);
+                const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+
+                this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
+
+                // Add delay before leaving channels
+                await sleep(1500);
+                await client.leaveChannels(channelsToProcess);
+
+                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+
+            } catch (error: any) {
+                const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
+
+                const fatalErrors = [
+                    "SESSION_REVOKED",
+                    "AUTH_KEY_UNREGISTERED",
+                    "USER_DEACTIVATED",
+                    "USER_DEACTIVATED_BAN"
+                ];
+
+                if (fatalErrors.includes(errorDetails.message)) {
+                    this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        const channels = this.leaveChannelMap.get(mobile);
-                        if (!channels || channels.length === 0) {
-                            this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
-                            this.removeFromLeaveMap(mobile);
-                            continue;
-                        }
-
-                        const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                        this.logger.debug(`${mobile} has ${channels.length} pending channels to leave`);
-
-                        // Only update map if there are remaining channels
-                        if (channels.length > 0) {
-                            this.leaveChannelMap.set(mobile, channels);
-                        } else {
-                            this.removeFromLeaveMap(mobile);
-                        }
-
-                        const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                        this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
-                        await client.leaveChannels(channelsToProcess);
-                        this.logger.debug(`${mobile} left channels successfully`);
-                        await connectionManager.unregisterClient(mobile);
-                    } catch (error: any) {
-                        const errorDetails = parseError(error, `${mobile} Leave Channel ERR: `, false);
-                        if (
-                            errorDetails.message === "SESSION_REVOKED" ||
-                            errorDetails.message === "AUTH_KEY_UNREGISTERED" ||
-                            errorDetails.message === "USER_DEACTIVATED" ||
-                            errorDetails.message === "USER_DEACTIVATED_BAN"
-                        ) {
-                            this.logger.error(`Session invalid for ${mobile}, removing client`);
-                            await this.remove(mobile);
-                            this.removeFromLeaveMap(mobile);
-                        }
-
-                        try {
-                            await connectionManager.unregisterClient(mobile);
-                        } catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                        await this.remove(mobile);
+                        await sleep(2000);
+                    } catch (removeError) {
+                        this.logger.error(`Error removing client ${mobile}:`, removeError);
                     }
+                    this.removeFromLeaveMap(mobile);
+                } else {
+                    this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
                 }
-            } catch (error) {
-                this.logger.error('Error in leave channel interval', error);
-                this.clearLeaveChannelInterval();
+
             } finally {
-                if (processTimeout) {
-                    clearTimeout(processTimeout);
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                }
+
+                // Add delay between leave operations
+                if (i < keys.length - 1 || this.leaveChannelMap.get(mobile)?.length > 0) {
+                    await sleep(this.LEAVE_CHANNEL_INTERVAL / 2); // Half the interval as delay
                 }
             }
-        }, this.LEAVE_CHANNEL_INTERVAL);
-
-        this.logger.debug(`Started leave channel queue with interval ID: ${this.leaveChannelIntervalId}`);
+        }
     }
 
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
             this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
             clearInterval(this.leaveChannelIntervalId);
+            this.activeTimeouts.delete(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
         this.isLeaveChannelProcessing = false;
@@ -591,7 +846,8 @@ export class BufferClientService implements OnModuleDestroy {
             this.logger.warn("Ignored active check buffer channels as active client setup exists");
             return;
         }
-        await sleep(2000);
+
+        await sleep(3000); // Increased initial delay
         const bufferclients = await this.findAll('active');
         const badIds: string[] = [];
         let goodIds: string[] = [];
@@ -615,31 +871,51 @@ export class BufferClientService implements OnModuleDestroy {
         const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
 
         const promoteclientIds = promoteclients.map(c => c.mobile);
-        const today = new Date().toISOString().split('T')[0];
 
         const toProcess = bufferclients.filter(doc =>
             !clientIds.includes(doc.mobile) &&
             !promoteclientIds.includes(doc.mobile)
         );
 
-        const parallelLimit = 4;
-        for (let i = 0; i < toProcess.length; i += parallelLimit) {
-            const chunk = toProcess.slice(i, i + parallelLimit);
-            const results = await Promise.allSettled(chunk.map(doc => this.processBufferClient(doc, badIds, goodIds)));
-            await sleep(2000); // delay between batches
+        // Sequential processing instead of parallel
+        this.logger.debug(`Processing ${toProcess.length} buffer clients sequentially`);
+        for (let i = 0; i < toProcess.length; i++) {
+            const doc = toProcess[i];
+            this.logger.debug(`Processing buffer client ${i + 1}/${toProcess.length}: ${doc.mobile}`);
+
+            try {
+                await this.processBufferClient(doc, badIds, goodIds);
+            } catch (error) {
+                this.logger.error(`Error processing buffer client ${doc.mobile}:`, error);
+                badIds.push(doc.mobile);
+            }
+
+            // Add delay between client processing
+            if (i < toProcess.length - 1) {
+                await sleep(5000); // 5 seconds between each client
+            }
         }
 
-        // Mark already active clients as good
-        for (const doc of bufferclients) {
+        // Mark already active clients as good (sequential processing)
+        for (let i = 0; i < bufferclients.length; i++) {
+            const doc = bufferclients[i];
             if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
-                this.logger.warn("Number is an Active Client");
+                this.logger.warn(`Number ${doc.mobile} is an Active Client`);
                 goodIds.push(doc.mobile);
-                await this.remove(doc.mobile);
+                try {
+                    await this.remove(doc.mobile);
+                    await sleep(1000); // Delay after removal
+                } catch (removeError) {
+                    this.logger.error(`Error removing active client ${doc.mobile}:`, removeError);
+                }
             }
         }
 
         goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
         this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
+
+        // Add delay before processing new users
+        await sleep(2000);
         await this.addNewUserstoBufferClients(badIds, goodIds);
     }
 
@@ -664,27 +940,43 @@ export class BufferClientService implements OnModuleDestroy {
                 const hasPassword = await cli.hasPassword();
 
                 if (!hasPassword) {
-                    this.logger.warn("Client does not have password");
+                    this.logger.warn(`Client ${doc.mobile} does not have password`);
                     badIds.push(doc.mobile);
                 } else {
-                    this.logger.debug(doc.mobile + " : ALL Good");
+                    this.logger.debug(`${doc.mobile}: ALL Good`);
                     goodIds.push(doc.mobile);
                 }
             } catch (innerError: any) {
                 this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
                 badIds.push(doc.mobile);
-                await this.remove(doc.mobile);
+                try {
+                    await this.remove(doc.mobile);
+                    await sleep(1500); // Delay after removal
+                } catch (removeError) {
+                    this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                }
             } finally {
-                await connectionManager.unregisterClient(doc.mobile);
+                try {
+                    await connectionManager.unregisterClient(doc.mobile);
+                } catch (unregisterError) {
+                    this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+                }
             }
 
-            await sleep(2000); // slight delay between individual client ops
+            await sleep(3000); // Increased delay between individual client ops
 
         } catch (error: any) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
             parseError(error);
             badIds.push(doc.mobile);
-            await this.remove(doc.mobile);
+
+            try {
+                await this.remove(doc.mobile);
+                await sleep(1500);
+            } catch (removeError) {
+                this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+            }
+
             try {
                 await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError) {
@@ -710,15 +1002,21 @@ export class BufferClientService implements OnModuleDestroy {
 
         this.logger.debug(`New buffer documents to be added: ${documents.length}`);
 
+        let processedCount = 0;
         while (badIds.length > 0 && documents.length > 0) {
             const document = documents.shift();
+            processedCount++;
+
             if (!document || !document.mobile || !document.tgId || !document.session) {
                 this.logger.warn('Invalid document found, skipping');
                 continue;
             }
 
+            this.logger.debug(`Processing new buffer client ${processedCount}: ${document.mobile}`);
+
             try {
                 const client = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
+
                 try {
                     const hasPassword = await client.hasPassword();
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
@@ -744,7 +1042,7 @@ export class BufferClientService implements OnModuleDestroy {
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true);
 
-                        this.logger.debug("Creating buffer client document");
+                        this.logger.debug(`Creating buffer client document for ${document.mobile}`);
                         const bufferClient: CreateBufferClientDto = {
                             tgId: document.tgId,
                             session: document.session,
@@ -753,12 +1051,18 @@ export class BufferClientService implements OnModuleDestroy {
                             channels: channels.ids.length,
                             status: 'active',
                         };
+
+                        await sleep(1000);
                         await this.create(bufferClient);
+
+                        await sleep(1000);
                         await this.usersService.update(document.tgId, { twoFA: true });
-                        this.logger.debug("=============Created BufferClient=============");
+
+                        this.logger.debug(`Created BufferClient for ${document.mobile}`);
                         badIds.pop();
                     } else {
                         this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
+                        await sleep(1000);
                         await this.usersService.update(document.tgId, { twoFA: true });
                     }
                 } catch (error: any) {
@@ -767,6 +1071,7 @@ export class BufferClientService implements OnModuleDestroy {
                 } finally {
                     try {
                         await connectionManager.unregisterClient(document.mobile);
+                        await sleep(1500); // Delay after unregistering
                     } catch (unregisterError: any) {
                         this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
                     }
@@ -775,12 +1080,17 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 parseError(error);
             }
+
+            // Add significant delay between processing each new user
+            if (badIds.length > 0 && documents.length > 0) {
+                await sleep(8000); // 8 seconds between each new user processing
+            }
         }
 
-        // Schedule next join channel process
-        setTimeout(() => {
-            this.logger.log('Starting next join channel process');
+        // Schedule next join channel process with delay
+        this.createTimeout(() => {
+            this.logger.log('Starting next join channel process after adding new users');
             this.joinchannelForBufferClients();
-        }, 2 * 60 * 1000);
+        }, 5 * 60 * 1000); // 5 minutes delay
     }
 }
