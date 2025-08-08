@@ -19496,7 +19496,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
-        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16;
+        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 12;
         this.MAX_MAP_SIZE = 100;
         this.CHANNEL_PROCESSING_DELAY = 10000;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
