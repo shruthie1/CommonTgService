@@ -927,13 +927,24 @@ export class BufferClientService implements OnModuleDestroy {
           continue;
         }
 
-        // Process smaller batches sequentially
-        const channelsToProcess = channels.splice(
+        const totalBefore = channels.length;
+        const channelsToProcess = channels.slice(
           0,
           this.LEAVE_CHANNEL_BATCH_SIZE,
         );
+        const remainingAfter = totalBefore - channelsToProcess.length;
+
+        if (remainingAfter > 0) {
+          this.leaveChannelMap.set(
+            mobile,
+            channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE),
+          );
+        } else {
+          this.removeFromLeaveMap(mobile);
+        }
+
         this.logger.debug(
-          `${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`,
+          `${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, remaining after: ${remainingAfter}`,
         );
 
         // Only update map if there are remaining channels
