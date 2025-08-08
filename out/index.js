@@ -12170,8 +12170,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             finally {
                 connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(5000);
             }
-            await (0, Helpers_1.sleep)(2000);
         }
         if (joinSet.size > 0) {
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
@@ -12246,6 +12246,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                     finally {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        await (0, Helpers_1.sleep)(15000);
                     }
                 }
             }
@@ -19075,9 +19076,8 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
-const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -19085,13 +19085,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
-        this.sessionService = sessionService;
         this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
         this.isLeaveChannelProcessing = false;
         this.isJoinChannelProcessing = false;
-        this.JOIN_CHANNEL_INTERVAL = 3 * 60 * 1000;
+        this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
         this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
@@ -19419,7 +19418,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     }
                     finally {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
-                        await (0, Helpers_1.sleep)(10000);
+                        await (0, Helpers_1.sleep)(15000);
                     }
                 }
             }
@@ -20011,15 +20010,13 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService,
-        session_manager_1.SessionService])
+        buffer_client_service_1.BufferClientService])
 ], PromoteClientService);
 
 

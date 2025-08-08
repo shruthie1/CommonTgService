@@ -9,7 +9,6 @@ import { ActiveChannelsService } from '../active-channels/active-channels.servic
 import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
-import { SessionService } from '../session-manager';
 export declare class PromoteClientService implements OnModuleDestroy {
     private promoteClientModel;
     private telegramService;
@@ -18,7 +17,6 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private clientService;
     private channelsService;
     private bufferClientService;
-    private sessionService;
     private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
@@ -31,7 +29,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
     private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT;
-    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService);
+    constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService);
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;

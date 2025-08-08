@@ -259,8 +259,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             finally {
                 connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(5000);
             }
-            await (0, Helpers_1.sleep)(2000);
         }
         if (joinSet.size > 0) {
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
@@ -335,6 +335,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                     finally {
                         await connection_manager_1.connectionManager.unregisterClient(mobile);
+                        await (0, Helpers_1.sleep)(15000);
                     }
                 }
             }
