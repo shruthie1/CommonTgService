@@ -45,7 +45,7 @@ export class PromoteClientService implements OnModuleDestroy {
   private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 1 minute - increased for CPU performance
   private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
   private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
-  private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 16; // Max promote clients per client
+  private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 12; // Max promote clients per client
   private readonly MAX_MAP_SIZE = 100; // Prevent unbounded Map growth
   private readonly CHANNEL_PROCESSING_DELAY = 10000; // 10 seconds between channel operations
   private readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10 minutes
