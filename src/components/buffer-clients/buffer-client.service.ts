@@ -533,6 +533,32 @@ export class BufferClientService implements OnModuleDestroy {
         // Perform memory health check
         this.checkMemoryHealth();
 
+        // Start interval if not already running
+        if (!this.joinChannelIntervalId) {
+            this.logger.debug('Starting join channel interval');
+            this.joinChannelIntervalId = setInterval(async () => {
+                await this.processJoinChannelInterval();
+            }, this.JOIN_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.joinChannelIntervalId);
+            await this.processJoinChannelInterval();
+        } else {
+            this.logger.warn('Join channel interval is already running');
+        }
+    }
+
+    private async processJoinChannelInterval() {
+        if (this.isJoinChannelProcessing) {
+            this.logger.debug('Join channel process already running, skipping interval');
+            return;
+        }
+
+        const existingKeys = Array.from(this.joinChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to join, clearing interval');
+            this.clearJoinChannelInterval();
+            return;
+        }
+
         this.isJoinChannelProcessing = true;
 
         try {
@@ -542,12 +568,10 @@ export class BufferClientService implements OnModuleDestroy {
         } finally {
             this.isJoinChannelProcessing = false;
 
-            // Schedule next run if there are still items to process
-            if (this.joinChannelMap.size > 0) {
-                this.logger.debug('Scheduling next join channel process');
-                this.createTimeout(() => {
-                    this.joinChannelQueue();
-                }, this.JOIN_CHANNEL_INTERVAL);
+            // Clear interval if no more items to process
+            if (this.joinChannelMap.size === 0) {
+                this.logger.debug('No more channels to join, clearing interval');
+                this.clearJoinChannelInterval();
             }
         }
     }
@@ -665,6 +689,32 @@ export class BufferClientService implements OnModuleDestroy {
         // Perform memory health check
         this.checkMemoryHealth();
 
+        // Start interval if not already running
+        if (!this.leaveChannelIntervalId) {
+            this.logger.debug('Starting leave channel interval');
+            this.leaveChannelIntervalId = setInterval(async () => {
+                await this.processLeaveChannelInterval();
+            }, this.LEAVE_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.leaveChannelIntervalId);
+            await this.processLeaveChannelInterval();
+        } else {
+            this.logger.debug('Leave channel interval is already running');
+        }
+    }
+
+    private async processLeaveChannelInterval() {
+        if (this.isLeaveChannelProcessing) {
+            this.logger.debug('Leave channel process already running, skipping interval');
+            return;
+        }
+
+        const existingKeys = Array.from(this.leaveChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to leave, clearing interval');
+            this.clearLeaveChannelInterval();
+            return;
+        }
+
         this.isLeaveChannelProcessing = true;
 
         try {
@@ -674,12 +724,10 @@ export class BufferClientService implements OnModuleDestroy {
         } finally {
             this.isLeaveChannelProcessing = false;
 
-            // Schedule next run if there are still items to process
-            if (this.leaveChannelMap.size > 0) {
-                this.logger.debug('Scheduling next leave channel process');
-                this.createTimeout(() => {
-                    this.leaveChannelQueue();
-                }, this.LEAVE_CHANNEL_INTERVAL);
+            // Clear interval if no more items to process
+            if (this.leaveChannelMap.size === 0) {
+                this.logger.debug('No more channels to leave, clearing interval');
+                this.clearLeaveChannelInterval();
             }
         }
     }

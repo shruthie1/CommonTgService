@@ -278,32 +278,6 @@ export class PromoteClientService implements OnModuleDestroy {
         this.clearJoinChannelInterval();
     }
 
-    /**
-     * Create a managed timeout that will be automatically cleaned up
-     */
-    private createManagedTimeout(callback: () => void, delay: number): NodeJS.Timeout {
-        const timeout = setTimeout(() => {
-            this.activeTimeouts.delete(timeout);
-            callback();
-        }, delay);
-        this.activeTimeouts.add(timeout);
-        return timeout;
-    }
-
-    /**
-     * Clear all active timeouts to prevent memory leaks
-     */
-    private clearAllTimeouts(): void {
-        this.activeTimeouts.forEach(timeout => {
-            try {
-                clearTimeout(timeout);
-            } catch (error) {
-                this.logger.warn('Error clearing timeout:', error);
-            }
-        });
-        this.activeTimeouts.clear();
-    }
-
     async updateInfo() {
         const clients = await this.promoteClientModel.find({
             status: 'active'
@@ -448,15 +422,13 @@ export class PromoteClientService implements OnModuleDestroy {
             await sleep(3000);
 
             if (joinSet.size > 0) {
-                this.logger.debug(`Starting join queue for ${joinSet.size} clients`);
-                await sleep(2000); // Delay before starting join queue
-                this.joinChannelQueue();
+                this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
+                this.createTimeout(() => this.joinChannelQueue(), 2000); // Delayed start
             }
 
             if (leaveSet.size > 0) {
-                this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
-                await sleep(5000); // Delay before starting leave queue
-                this.leaveChannelQueue();
+                this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
+                this.createTimeout(() => this.leaveChannelQueue(), 5000); // Delayed start
             }
 
             this.logger.log(`Join channel process completed for ${clients.length} clients (Success: ${successCount}, Failed: ${failCount})`);
@@ -486,6 +458,32 @@ export class PromoteClientService implements OnModuleDestroy {
         // Perform memory health check
         this.checkMemoryHealth();
 
+        // Start interval if not already running
+        if (!this.joinChannelIntervalId) {
+            this.logger.debug('Starting join channel interval');
+            this.joinChannelIntervalId = setInterval(async () => {
+                await this.processJoinChannelInterval();
+            }, this.JOIN_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.joinChannelIntervalId);
+            await this.processJoinChannelInterval();
+        } else {
+            this.logger.warn('Join channel interval is already running');
+        }
+    }
+
+    private async processJoinChannelInterval() {
+        if (this.isJoinChannelProcessing) {
+            this.logger.debug('Join channel process already running, skipping interval');
+            return;
+        }
+
+        const existingKeys = Array.from(this.joinChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to join, clearing interval');
+            this.clearJoinChannelInterval();
+            return;
+        }
+
         this.isJoinChannelProcessing = true;
 
         try {
@@ -495,12 +493,10 @@ export class PromoteClientService implements OnModuleDestroy {
         } finally {
             this.isJoinChannelProcessing = false;
 
-            // Schedule next run if there are still items to process
-            if (this.joinChannelMap.size > 0) {
-                this.logger.debug('Scheduling next join channel process');
-                this.createTimeout(() => {
-                    this.joinChannelQueue();
-                }, this.JOIN_CHANNEL_INTERVAL);
+            // Clear interval if no more items to process
+            if (this.joinChannelMap.size === 0) {
+                this.logger.debug('No more channels to join, clearing interval');
+                this.clearJoinChannelInterval();
             }
         }
     }
@@ -618,6 +614,32 @@ export class PromoteClientService implements OnModuleDestroy {
         // Perform memory health check
         this.checkMemoryHealth();
 
+        // Start interval if not already running
+        if (!this.leaveChannelIntervalId) {
+            this.logger.debug('Starting leave channel interval');
+            this.leaveChannelIntervalId = setInterval(async () => {
+                await this.processLeaveChannelInterval();
+            }, this.LEAVE_CHANNEL_INTERVAL);
+            this.activeTimeouts.add(this.leaveChannelIntervalId);
+            await this.processLeaveChannelInterval();
+        } else {
+            this.logger.warn('Leave channel interval is already running');
+        }
+    }
+
+    private async processLeaveChannelInterval() {
+        if (this.isLeaveChannelProcessing) {
+            this.logger.debug('Leave channel process already running, skipping interval');
+            return;
+        }
+
+        const existingKeys = Array.from(this.leaveChannelMap.keys());
+        if (existingKeys.length === 0) {
+            this.logger.debug('No channels to leave, clearing interval');
+            this.clearLeaveChannelInterval();
+            return;
+        }
+
         this.isLeaveChannelProcessing = true;
 
         try {
@@ -627,12 +649,10 @@ export class PromoteClientService implements OnModuleDestroy {
         } finally {
             this.isLeaveChannelProcessing = false;
 
-            // Schedule next run if there are still items to process
-            if (this.leaveChannelMap.size > 0) {
-                this.logger.debug('Scheduling next leave channel process');
-                this.createTimeout(() => {
-                    this.leaveChannelQueue();
-                }, this.LEAVE_CHANNEL_INTERVAL);
+            // Clear interval if no more items to process
+            if (this.leaveChannelMap.size === 0) {
+                this.logger.debug('No more channels to leave, clearing interval');
+                this.clearLeaveChannelInterval();
             }
         }
     }
@@ -1038,11 +1058,14 @@ export class PromoteClientService implements OnModuleDestroy {
         } else {
             this.logger.log(`🎉 All clients now have sufficient promote clients!`);
         }
+    }
 
-        // Use managed timeout to prevent memory leaks
-        this.createManagedTimeout(() => {
-            this.joinchannelForPromoteClients()
-        }, 2 * 60 * 1000);
+    private clearAllTimeouts(): void {
+        this.activeTimeouts.forEach(timeout => {
+            clearTimeout(timeout);
+        });
+        this.activeTimeouts.clear();
+        this.logger.debug('Cleared all active timeouts');
     }
 
     private async cleanup(): Promise<void> {
@@ -1341,7 +1364,6 @@ export class PromoteClientService implements OnModuleDestroy {
             averageUsageGap
         };
     }
-
     private createTimeout(callback: () => void, delay: number): NodeJS.Timeout {
         const timeout = setTimeout(() => {
             this.activeTimeouts.delete(timeout);
