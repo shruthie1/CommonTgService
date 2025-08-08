@@ -26895,8 +26895,13 @@ let LoggerMiddleware = class LoggerMiddleware {
         const { method, originalUrl, baseUrl } = req;
         const userAgent = req.get('user-agent') || '';
         const ip = req.ip;
-        const excludedEndpoints = ['/sendtochannel', '/favicon.', '/tgsignup', '/timestamps'];
-        const isExcluded = (url) => excludedEndpoints.some(endpoint => url.startsWith(endpoint));
+        const excludedEndpoints = [
+            '/sendtochannel',
+            '/favicon.',
+            '/tgsignup',
+            '/timestamps',
+        ];
+        const isExcluded = (url) => excludedEndpoints.some((endpoint) => url.startsWith(endpoint));
         if (!isExcluded(originalUrl) && originalUrl !== '/') {
             res.on('finish', () => {
                 const { statusCode } = res;
@@ -26918,7 +26923,7 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
             res.on('error', (error) => {
                 const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
-                (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+                (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId ? process.env.clientId : process.env.serviceName} Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
             });
         }
         else {
