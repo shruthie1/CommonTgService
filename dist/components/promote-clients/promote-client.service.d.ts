@@ -24,6 +24,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private leaveChannelIntervalId;
     private isLeaveChannelProcessing;
     private isJoinChannelProcessing;
+    private activeTimeouts;
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
@@ -45,14 +46,17 @@ export declare class PromoteClientService implements OnModuleDestroy {
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
+    private createManagedTimeout;
+    private clearAllTimeouts;
+    private preventMapOverflow;
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
     clearJoinChannelInterval(): void;
     removeFromLeaveMap(key: string): void;
     clearLeaveMap(): void;
-    leaveChannelQueue(): Promise<void>;
     clearLeaveChannelInterval(): void;
+    leaveChannelQueue(): Promise<void>;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
