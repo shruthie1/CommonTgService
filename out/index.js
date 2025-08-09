@@ -27097,12 +27097,6 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         else if (!passedReason) {
             this.logger.debug(`❌ IP not allowed`);
         }
-        if (!passedReason && origin && this.isOriginAllowed(origin)) {
-            passedReason = 'Origin allowed';
-        }
-        else if (!passedReason) {
-            this.logger.debug(`❌ Origin not allowed`);
-        }
         if (passedReason) {
             return true;
         }
@@ -27112,12 +27106,6 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     isIgnoredPath(path) {
         return IGNORE_PATHS.some(ignore => typeof ignore === 'string' ? ignore === path : ignore.test(path));
-    }
-    isOriginAllowed(origin) {
-        if (!origin)
-            return false;
-        const normalizedOrigin = origin.toLowerCase().trim();
-        return ALLOWED_ORIGINS.includes(normalizedOrigin);
     }
     getHeaderValue(request, headerName) {
         return request.headers[headerName.toLowerCase()];
