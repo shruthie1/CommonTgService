@@ -204,11 +204,11 @@ function extractStatusCode(err: any, defaultStatus: number): number {
   if (err.response) {
     const response = err.response;
     return response.data?.statusCode ||
-           response.data?.status ||
-           response.data?.ResponseCode ||
-           response.status ||
-           err.status ||
-           defaultStatus;
+      response.data?.status ||
+      response.data?.ResponseCode ||
+      response.status ||
+      err.status ||
+      defaultStatus;
   }
 
   // Try direct properties
@@ -228,27 +228,27 @@ function extractErrorMessage(err: any, defaultMessage: string): string {
   if (err.response?.data) {
     const responseData = err.response.data;
     return responseData.message ||
-           responseData.errors ||
-           responseData.ErrorMessage ||
-           responseData.errorMessage ||
-           responseData.UserMessage ||
-           (typeof responseData === 'string' ? responseData : null) ||
-           err.response.statusText ||
-           err.message ||
-           defaultMessage;
+      responseData.errors ||
+      responseData.ErrorMessage ||
+      responseData.errorMessage ||
+      responseData.UserMessage ||
+      (typeof responseData === 'string' ? responseData : null) ||
+      err.response.statusText ||
+      err.message ||
+      defaultMessage;
   }
 
   // Error message from request
   if (err.request) {
     return err.data?.message ||
-           err.data?.errors ||
-           err.data?.ErrorMessage ||
-           err.data?.errorMessage ||
-           err.data?.UserMessage ||
-           (typeof err.data === 'string' ? err.data : null) ||
-           err.message ||
-           err.statusText ||
-           'The request was triggered but no response was received';
+      err.data?.errors ||
+      err.data?.ErrorMessage ||
+      err.data?.errorMessage ||
+      err.data?.UserMessage ||
+      (typeof err.data === 'string' ? err.data : null) ||
+      err.message ||
+      err.statusText ||
+      'The request was triggered but no response was received';
   }
 
   // Direct error message
@@ -289,7 +289,7 @@ export function parseError(
   const fullConfig = { ...DEFAULT_ERROR_CONFIG, ...config };
 
   try {
-    const clientId = process.env.clientId || 'UptimeChecker2';
+    const clientId = process.env.clientId || process.env.serviceName;
     const prefixStr = `${clientId}${prefix ? ` - ${prefix}` : ''}`;
 
     // Extract error components

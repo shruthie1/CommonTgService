@@ -342,7 +342,7 @@ class TelegramManager {
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
             // console.error(`Error occurred: ${this.phoneNumber}:`, error);
-            parseError(error)
+            parseError(error, `${this.phoneNumber}:RPC Error`, true);
         }
     }
 
