@@ -301,7 +301,7 @@ export class SessionController {
         }
     }
 
-    @Post('get-oldest-or-create')
+    @Post('telegram/session/oldest')
     @ApiOperation({
         summary: 'Get oldest valid session or create new session as fallback',
         description: 'Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.'
