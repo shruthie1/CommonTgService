@@ -27047,24 +27047,30 @@ exports.AuthGuard = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const logbots_1 = __webpack_require__(/*! ../utils/logbots */ "./src/utils/logbots.ts");
-const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
+const ALLOWED_IPS = [
+    '31.97.59.2',
+    '148.230.84.50',
+    '13.228.225.19',
+    '18.142.128.26',
+    '54.254.162.138',
+];
 const ALLOWED_ORIGINS = [
     'https://paidgirl.site',
     'https://zomcall.netlify.app',
     'https://tgchats.netlify.app',
     'https://tg-chats.netlify.app',
-    'https://report-upi.netlify.app'
-].map(origin => origin.toLowerCase());
+    'https://report-upi.netlify.app',
+].map((origin) => origin.toLowerCase());
 const IGNORE_PATHS = [
     '/',
     '/favicon.ico',
+    '/apim',
+    '/health',
     /^\/userdata(?:$|\/)/i,
     /^\/favicon(?:$|\/)/i,
     /^\/blockuserall(?:$|\/)/i,
     /^\/sendtoall(?:$|\/)/i,
     /^\/sendtochannel(?:$|\/)/i,
-    '/apim',
-    '/health',
     /^\/public(?:$|\/)/i,
 ];
 let AuthGuard = AuthGuard_1 = class AuthGuard {
@@ -27076,12 +27082,13 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const path = request.path;
         const url = request.url;
         const originalUrl = request.originalUrl;
-        const apiKey = request.headers['x-api-key']?.toString() || request.query['apiKey']?.toString();
-        const clientIp = this.extractRealClientIP(request);
-        const origin = this.extractRealOrigin(request);
         if (this.isIgnoredPath(path, url, originalUrl)) {
             return true;
         }
+        const apiKey = request.headers['x-api-key']?.toString() ||
+            request.query['apiKey']?.toString();
+        const clientIp = this.extractRealClientIP(request);
+        const origin = this.extractRealOrigin(request);
         this.logger.debug(`Request Received: ${originalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === 'santoor') {
