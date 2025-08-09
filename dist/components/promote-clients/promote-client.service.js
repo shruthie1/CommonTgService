@@ -600,16 +600,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
-                const totalBefore = channels.length;
-                const channelsToProcess = channels.slice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                const remainingAfter = totalBefore - channelsToProcess.length;
-                if (remainingAfter > 0) {
-                    this.leaveChannelMap.set(mobile, channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE));
-                }
-                else {
-                    this.removeFromLeaveMap(mobile);
-                }
-                this.logger.debug(`${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, will remain after: ${remainingAfter}`);
+                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
                 if (channels.length > 0) {
                     this.leaveChannelMap.set(mobile, channels);
                 }
