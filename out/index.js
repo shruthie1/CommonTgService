@@ -27068,6 +27068,7 @@ const ALLOWED_ORIGINS = [
 ].map(origin => origin.toLowerCase());
 const IGNORE_PATHS = [
     '/',
+    /^\/favicon\//i,
     /^\/sendtochannel\//i,
     '/apim',
     '/health',
