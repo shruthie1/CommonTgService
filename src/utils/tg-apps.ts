@@ -2,6 +2,7 @@ interface ITelegramCredentials {
     apiId: number;
     apiHash: string;
 }
+
 const API_CREDENTIALS: ITelegramCredentials[] = [
     { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
     { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
@@ -12,6 +13,5 @@ const API_CREDENTIALS: ITelegramCredentials[] = [
 ];
 
 export function getRandomCredentials(): ITelegramCredentials {
-    const index = Math.floor(Math.random() * API_CREDENTIALS.length);
-    return API_CREDENTIALS[index];
+    return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }

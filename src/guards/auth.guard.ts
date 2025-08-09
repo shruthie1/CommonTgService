@@ -6,11 +6,7 @@ import { notifbot } from '../utils/logbots';
 const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
 const ALLOWED_ORIGINS = [
     'https://paidgirl.site',
-    'https://zomcall.netlify.app',
-    'https://ums-test.paidgirl.site', // Your nginx server
-    'http://localhost:3000', // Development
-    'http://localhost:3001', // Development
-    'http://localhost:5002', // Local backend
+    'https://zomcall.netlify.app'
 ].map(origin => origin.toLowerCase()); // Normalize all origins to lowercase
 
 // ✅ Ignore list (exact paths or regex)
@@ -68,12 +64,12 @@ export class AuthGuard implements CanActivate {
         }
 
         // Check Origin (case-insensitive)
-        // if (!passedReason && origin && this.isOriginAllowed(origin)) {
-        //     // this.logger.debug(`✅ Origin allowed`);
-        //     passedReason = 'Origin allowed';
-        // } else if (!passedReason) {
-        //     this.logger.debug(`❌ Origin not allowed`);
-        // }
+        if (!passedReason && origin && this.isOriginAllowed(origin)) {
+            // this.logger.debug(`✅ Origin allowed`);
+            passedReason = 'Origin allowed';
+        } else if (!passedReason) {
+            this.logger.debug(`❌ Origin not allowed`);
+        }
 
         if (passedReason) {
             // this.logger.debug(`Access granted because: ${passedReason}`);
@@ -96,14 +92,14 @@ export class AuthGuard implements CanActivate {
     /**
      * Check if origin is allowed (case-insensitive)
      */
-    // private isOriginAllowed(origin: string): boolean {
-    //     if (!origin) return false;
+    private isOriginAllowed(origin: string): boolean {
+        if (!origin) return false;
 
-    //     const normalizedOrigin = origin.toLowerCase().trim();
+        const normalizedOrigin = origin.toLowerCase().trim();
 
-    //     // Since ALLOWED_ORIGINS is already normalized to lowercase, direct comparison works
-    //     return ALLOWED_ORIGINS.includes(normalizedOrigin);
-    // }
+        // Since ALLOWED_ORIGINS is already normalized to lowercase, direct comparison works
+        return ALLOWED_ORIGINS.includes(normalizedOrigin);
+    }
 
     /**
      * Get header value with case-insensitive lookup
