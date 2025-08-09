@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-empty-object-type */
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import mongoose from 'mongoose'
 import { AppModule } from './app.module';
@@ -42,7 +42,20 @@ async function bootstrap() {
   document.components.securitySchemes ??= {};
   document.security = [{ 'x-api-key': [] }]; // Global security requirement
   fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('apim', app, document,
+    {
+      swaggerOptions: {
+        persistAuthorization: true,
+        authAction: {
+          'x-api-key': {
+            name: 'x-api-key',
+            schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+            value: process.env.API_KEY || 'santoor',
+          },
+        },
+      },
+    }
+  );
   mongoose.set('debug', true)
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
