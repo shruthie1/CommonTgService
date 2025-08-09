@@ -19769,6 +19769,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         else {
                             this.logger.debug(`${mobile}: Already in join queue, skipping re-add`);
                         }
+                        await this.sessionService.getOldestSessionOrCreate({
+                            mobile: document.mobile
+                        });
                     }
                     else {
                         this.logger.debug(`${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
@@ -20343,9 +20346,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                         }
-                        await this.sessionService.createSession({
-                            mobile: document.mobile,
-                            password: "Ajtdmwajt1@"
+                        await this.sessionService.getOldestSessionOrCreate({
+                            mobile: document.mobile
                         });
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
@@ -23178,7 +23180,7 @@ let SessionService = class SessionService {
         }
     }
     async getOldestSessionOrCreate(options) {
-        const { mobile, allowFallback = true, maxAgeDays = 30 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
         try {
             if (!mobile || typeof mobile !== 'string') {
                 return {

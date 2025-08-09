@@ -602,7 +602,7 @@ let SessionService = class SessionService {
         }
     }
     async getOldestSessionOrCreate(options) {
-        const { mobile, allowFallback = true, maxAgeDays = 30 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
         try {
             if (!mobile || typeof mobile !== 'string') {
                 return {
