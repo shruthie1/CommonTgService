@@ -22,11 +22,10 @@ import { TransactionModule } from './components/transactions/transaction.module'
 import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
-import { MemoryCleanerService } from './memory-cleanup.service';
 import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
 import { APP_GUARD } from '@nestjs/core';
-import { ApiKeyOrIpOrOriginGuard } from './guards/auth.guard';
+import { AuthGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
@@ -57,7 +56,7 @@ import { ApiKeyOrIpOrOriginGuard } from './guards/auth.guard';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ApiKeyOrIpOrOriginGuard,
+      useClass: AuthGuard,
     },
   ],
   controllers: [AppController],

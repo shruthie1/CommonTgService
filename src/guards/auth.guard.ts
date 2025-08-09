@@ -1,12 +1,14 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { Request } from 'express';
+import { fetchWithTimeout } from '../utils';
+import { notifbot } from '../utils/logbots';
 
 const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
 const ALLOWED_ORIGINS = ['https://paidgirl.site', 'https://zomcall.netlify.app'];
 
 @Injectable()
-export class ApiKeyOrIpOrOriginGuard implements CanActivate {
-    private readonly logger = new Logger(ApiKeyOrIpOrOriginGuard.name);
+export class AuthGuard implements CanActivate {
+    private readonly logger = new Logger(AuthGuard.name);
 
     canActivate(context: ExecutionContext): boolean {
         const request = context.switchToHttp().getRequest<Request>();
@@ -54,6 +56,7 @@ export class ApiKeyOrIpOrOriginGuard implements CanActivate {
         }
 
         this.logger.warn(`❌ Access denied — no condition satisfied`);
+        fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`${process.env.clientId ? process.env.clientId : process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${request.originalUrl}`)}`); // Log unauthorized access attempt
         throw new UnauthorizedException('Access denied: No valid API key, IP, or Origin');
     }
 }
