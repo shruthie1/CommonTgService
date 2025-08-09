@@ -27058,7 +27058,7 @@ const ALLOWED_ORIGINS = [
 const IGNORE_PATHS = [
     '/',
     '/favicon.ico',
-    '/userdata',
+    /^\/userdata(?:$|\/)/i,
     /^\/favicon(?:$|\/)/i,
     /^\/blockuserall(?:$|\/)/i,
     /^\/sendtoall(?:$|\/)/i,
