@@ -929,24 +929,12 @@ export class BufferClientService implements OnModuleDestroy {
                     continue;
                 }
 
-                const totalBefore = channels.length;
-                const channelsToProcess = channels.slice(
+                const channelsToProcess = channels.splice(
                     0,
                     this.LEAVE_CHANNEL_BATCH_SIZE,
                 );
-                const remainingAfter = totalBefore - channelsToProcess.length;
-
-                if (remainingAfter > 0) {
-                    this.leaveChannelMap.set(
-                        mobile,
-                        channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE),
-                    );
-                } else {
-                    this.removeFromLeaveMap(mobile);
-                }
-
                 this.logger.debug(
-                    `${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, remaining after: ${remainingAfter}`,
+                    `${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`,
                 );
 
                 // Only update map if there are remaining channels
@@ -955,9 +943,6 @@ export class BufferClientService implements OnModuleDestroy {
                 } else {
                     this.removeFromLeaveMap(mobile);
                 }
-
-                // Add delay before getting client
-                await sleep(2000);
                 const client = await connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
@@ -966,11 +951,7 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.debug(
                     `${mobile} attempting to leave ${channelsToProcess.length} channels`,
                 );
-
-                // Add delay before leaving channels
-                await sleep(1500);
                 await client.leaveChannels(channelsToProcess);
-
                 this.logger.debug(
                     `${mobile} left ${channelsToProcess.length} channels successfully`,
                 );

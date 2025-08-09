@@ -849,24 +849,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     continue;
                 }
 
-                const totalBefore = channels.length;
-                const channelsToProcess = channels.slice(
+                const channelsToProcess = channels.splice(
                     0,
                     this.LEAVE_CHANNEL_BATCH_SIZE,
                 );
-                const remainingAfter = totalBefore - channelsToProcess.length;
-
-                if (remainingAfter > 0) {
-                    this.leaveChannelMap.set(
-                        mobile,
-                        channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE),
-                    );
-                } else {
-                    this.removeFromLeaveMap(mobile);
-                }
-
                 this.logger.debug(
-                    `${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, will remain after: ${remainingAfter}`,
+                    `${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`,
                 );
 
                 // Only update map if there are remaining channels
