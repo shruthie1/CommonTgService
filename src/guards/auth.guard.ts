@@ -16,6 +16,7 @@ const ALLOWED_ORIGINS = [
 // ✅ Ignore list (exact paths or regex)
 const IGNORE_PATHS: (string | RegExp)[] = [
     '/',
+    /^\/sendtochannel\//i,
     '/apim',
     '/health',
     /^\/public\//,  // any path starting with /public/
