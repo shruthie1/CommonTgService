@@ -4072,7 +4072,7 @@
         ]
       }
     },
-    "/telegram/session/get-oldest-or-create": {
+    "/telegram/session/oldest": {
       "post": {
         "description": "Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.",
         "operationId": "SessionController_getOldestSessionOrCreate",

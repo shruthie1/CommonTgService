@@ -30,7 +30,7 @@ export class UserDataService {
         if (user) {
             return { ...user, count: this.callCounts.get(chatId) };
         } else {
-            return undefined
+            throw new NotFoundException("User not Found")
         }
     }
 
