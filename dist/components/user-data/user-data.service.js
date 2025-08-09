@@ -41,7 +41,7 @@ let UserDataService = class UserDataService {
             return { ...user, count: this.callCounts.get(chatId) };
         }
         else {
-            return undefined;
+            throw new common_1.NotFoundException("User not Found");
         }
     }
     clearCount(chatId) {
