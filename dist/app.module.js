@@ -71,7 +71,7 @@ exports.AppModule = AppModule = __decorate([
         providers: [
             {
                 provide: core_1.APP_GUARD,
-                useClass: auth_guard_1.ApiKeyOrIpOrOriginGuard,
+                useClass: auth_guard_1.AuthGuard,
             },
         ],
         controllers: [app_controller_1.AppController],
