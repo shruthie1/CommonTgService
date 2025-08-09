@@ -583,8 +583,8 @@ class TelegramManager {
         console.log("Leaving Channels: initaied!!");
         console.log("ChatsLength: ", chats)
         for (const id of chats) {
+            const channelId = id.startsWith('-100') ? id : `-100${id}`;
             try {
-                const channelId = id.startsWith('-100') ? id : `-100${id}`;
                 await this.client.invoke(
                     new Api.channels.LeaveChannel({
                         channel: channelId
@@ -595,17 +595,17 @@ class TelegramManager {
                     await sleep(3000);
                 }
             } catch (error) {
-                const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${id}:`);
+                const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${channelId}:`, false);
                 if (errorDetails.message.includes('CHANNEL_INVALID')) {
                     try {
-                        const entity = await this.client.getInputEntity(id);
+                        const entity = await this.safeGetEntity(channelId);
                         await this.client.invoke(
                             new Api.channels.LeaveChannel({
                                 channel: entity
                             })
                         );
                     } catch (err) {
-                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${id}, likely not a member or invalid`);
+                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${channelId}, likely not a member or invalid`);
                         continue;
                     }
 
