@@ -12572,29 +12572,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
-                const totalBefore = channels.length;
-                const channelsToProcess = channels.slice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                const remainingAfter = totalBefore - channelsToProcess.length;
-                if (remainingAfter > 0) {
-                    this.leaveChannelMap.set(mobile, channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE));
-                }
-                else {
-                    this.removeFromLeaveMap(mobile);
-                }
-                this.logger.debug(`${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, remaining after: ${remainingAfter}`);
+                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
                 if (channels.length > 0) {
                     this.leaveChannelMap.set(mobile, channels);
                 }
                 else {
                     this.removeFromLeaveMap(mobile);
                 }
-                await (0, Helpers_1.sleep)(2000);
                 const client = await connection_manager_1.connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
                 });
                 this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
-                await (0, Helpers_1.sleep)(1500);
                 await client.leaveChannels(channelsToProcess);
                 this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
             }
@@ -20060,16 +20050,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
-                const totalBefore = channels.length;
-                const channelsToProcess = channels.slice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                const remainingAfter = totalBefore - channelsToProcess.length;
-                if (remainingAfter > 0) {
-                    this.leaveChannelMap.set(mobile, channels.slice(this.LEAVE_CHANNEL_BATCH_SIZE));
-                }
-                else {
-                    this.removeFromLeaveMap(mobile);
-                }
-                this.logger.debug(`${mobile} had ${totalBefore} pending channels, processing ${channelsToProcess.length}, will remain after: ${remainingAfter}`);
+                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
                 if (channels.length > 0) {
                     this.leaveChannelMap.set(mobile, channels);
                 }
