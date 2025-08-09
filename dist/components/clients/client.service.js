@@ -67,7 +67,6 @@ const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
 const ip_management_service_1 = require("../ip-management/ip-management.service");
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
-const obfuscateText_1 = require("../../utils/obfuscateText");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
@@ -540,7 +539,7 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
                 this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile((0, obfuscateText_1.obfuscateText)(client.name, { maintainFormatting: false }), `${(0, obfuscateText_1.obfuscateText)('Genuine Paid Girl', { maintainFormatting: false })}🥰, ${(0, obfuscateText_1.obfuscateText)('Best Services', { maintainFormatting: false })}❤️`);
+                await telegramClient.updateProfile(client.name, `Genuine Paid Girl🥰, Best Services❤️`);
             }
             else {
                 this.logger.log(`First name for ${clientId} is already up to date`);
