@@ -31,6 +31,7 @@ const IGNORE_PATHS = [
     '/apim',
     '/health',
     /^\/userdata(?:$|\/)/i,
+    /^\/paymentstats(?:$|\/)/i,
     /^\/favicon(?:$|\/)/i,
     /^\/blockuserall(?:$|\/)/i,
     /^\/sendtoall(?:$|\/)/i,
