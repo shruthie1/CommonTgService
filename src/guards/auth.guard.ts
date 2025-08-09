@@ -30,7 +30,6 @@ export class AuthGuard implements CanActivate {
 
         // ✅ Skip if path is in ignore list
         if (this.isIgnoredPath(path)) {
-            this.logger.debug(`⏩ Skipping AuthGuard for ignored path: ${path}`);
             return true;
         }
 
