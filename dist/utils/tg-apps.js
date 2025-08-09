@@ -10,7 +10,6 @@ const API_CREDENTIALS = [
     { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
 ];
 function getRandomCredentials() {
-    const index = Math.floor(Math.random() * API_CREDENTIALS.length);
-    return API_CREDENTIALS[index];
+    return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }
 //# sourceMappingURL=tg-apps.js.map

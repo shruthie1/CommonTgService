@@ -14,11 +14,7 @@ const logbots_1 = require("../utils/logbots");
 const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
 const ALLOWED_ORIGINS = [
     'https://paidgirl.site',
-    'https://zomcall.netlify.app',
-    'https://ums-test.paidgirl.site',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5002',
+    'https://zomcall.netlify.app'
 ].map(origin => origin.toLowerCase());
 const IGNORE_PATHS = [
     '/',
@@ -56,6 +52,12 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         else if (!passedReason) {
             this.logger.debug(`❌ IP not allowed`);
         }
+        if (!passedReason && origin && this.isOriginAllowed(origin)) {
+            passedReason = 'Origin allowed';
+        }
+        else if (!passedReason) {
+            this.logger.debug(`❌ Origin not allowed`);
+        }
         if (passedReason) {
             return true;
         }
@@ -65,6 +67,12 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     isIgnoredPath(path) {
         return IGNORE_PATHS.some(ignore => typeof ignore === 'string' ? ignore === path : ignore.test(path));
+    }
+    isOriginAllowed(origin) {
+        if (!origin)
+            return false;
+        const normalizedOrigin = origin.toLowerCase().trim();
+        return ALLOWED_ORIGINS.includes(normalizedOrigin);
     }
     getHeaderValue(request, headerName) {
         return request.headers[headerName.toLowerCase()];
