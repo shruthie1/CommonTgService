@@ -281,7 +281,10 @@ let AppController = AppController_1 = class AppController {
             const response = await (0, axios_1.default)({
                 url,
                 method,
-                headers,
+                headers: {
+                    ...headers,
+                    'x-api-key': process.env.X_API_KEY || 'santoor',
+                },
                 data,
                 params,
                 responseType,
@@ -341,7 +344,7 @@ let AppController = AppController_1 = class AppController {
         }
     }
     sanitizeHeaders(headers) {
-        const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key'];
+        const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization'];
         const sanitized = { ...headers };
         sensitiveHeaders.forEach(header => {
             Object.keys(sanitized).forEach(key => {
