@@ -14,7 +14,7 @@ export class AppController {
   private readonly DEFAULT_TIMEOUT = 30000;
   private readonly MAX_CONTENT_SIZE = 50 * 1024 * 1024; // 50MB
 
-  constructor() {}
+  constructor() { }
 
   @Get()
   getHello(): string {
@@ -31,7 +31,7 @@ export class AppController {
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error or request execution failed' })
   async executeRequest(
-    @Body(new ValidationPipe({ 
+    @Body(new ValidationPipe({
       transform: true,
       forbidNonWhitelisted: true,
       whitelist: true
@@ -93,7 +93,10 @@ export class AppController {
       const response: AxiosResponse = await axios({
         url,
         method,
-        headers,
+        headers: {
+          ...headers,
+          'x-api-key': process.env.X_API_KEY || 'santoor',
+        },
         data,
         params,
         responseType,
@@ -152,7 +155,7 @@ export class AppController {
 
     } catch (error) {
       const errorDetails = this.handleRequestError(error, requestId);
-      
+
       // Log error details
       this.logger.error({
         message: 'Request failed',
@@ -170,9 +173,9 @@ export class AppController {
   }
 
   private sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
-    const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key'];
+    const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization'];
     const sanitized = { ...headers };
-    
+
     // Redact sensitive headers
     sensitiveHeaders.forEach(header => {
       Object.keys(sanitized).forEach(key => {
@@ -187,7 +190,7 @@ export class AppController {
 
   private isBinaryResponse(responseType: string, contentType?: string): boolean {
     if (responseType === 'arraybuffer') return true;
-    
+
     if (contentType) {
       const binaryTypes = [
         'application/octet-stream',
@@ -199,17 +202,17 @@ export class AppController {
         'application/x-zip-compressed',
         'application/binary'
       ];
-      
+
       return binaryTypes.some(type => contentType.toLowerCase().includes(type.toLowerCase()));
     }
-    
+
     return false;
   }
 
   private handleRequestError(error: any, requestId: string): any {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
+
       // Handle specific error types
       if (axiosError.code === 'ECONNABORTED') {
         return {
