@@ -101,6 +101,7 @@ async function makeBypassRequest(url, options) {
     }, {
         headers: {
             'Content-Type': 'application/json',
+            'x-api-key': process.env.X_API_KEY || 'santoor',
             ...options.headers,
         },
     });
@@ -175,6 +176,11 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                 signal: controller.signal,
                 maxRedirects: options.maxRedirects ?? 5,
                 timeout: currentTimeout,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.X_API_KEY || 'santoor',
+                    ...options.headers,
+                },
             });
             clearTimeout(timeoutId);
             return response;

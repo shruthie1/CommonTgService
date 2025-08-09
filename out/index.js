@@ -496,9 +496,10 @@ const transaction_module_1 = __webpack_require__(/*! ./components/transactions/t
 const npoint_module_1 = __webpack_require__(/*! ./components/n-point/npoint.module */ "./src/components/n-point/npoint.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
 const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
-const memory_cleanup_service_1 = __webpack_require__(/*! ./memory-cleanup.service */ "./src/memory-cleanup.service.ts");
 const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
 const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
+const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
+const auth_guard_1 = __webpack_require__(/*! ./guards/auth.guard */ "./src/guards/auth.guard.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -532,7 +533,12 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
         ],
-        providers: [memory_cleanup_service_1.MemoryCleanerService],
+        providers: [
+            {
+                provide: core_1.APP_GUARD,
+                useClass: auth_guard_1.ApiKeyOrIpOrOriginGuard,
+            },
+        ],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,
@@ -11968,6 +11974,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.CHANNEL_PROCESSING_DELAY = 10000;
         this.MAX_MAP_SIZE = 100;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
+        this.MAX_NEEDED = 160;
         this.cleanupIntervalId = null;
     }
     async onModuleDestroy() {
@@ -19482,9 +19489,10 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -19492,6 +19500,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.clientService = clientService;
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
+        this.sessionService = sessionService;
         this.logger = new common_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
@@ -20359,6 +20368,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                         }
+                        await this.sessionService.createSession({
+                            mobile: document.mobile,
+                            password: "Ajtdmwajt1@"
+                        });
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
@@ -20641,13 +20654,15 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
-        buffer_client_service_1.BufferClientService])
+        buffer_client_service_1.BufferClientService,
+        session_manager_1.SessionService])
 ], PromoteClientService);
 
 
@@ -22132,7 +22147,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SessionController = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
+exports.SessionController = exports.GetOldestSessionDto = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const session_service_1 = __webpack_require__(/*! ./session.service */ "./src/components/session-manager/session.service.ts");
@@ -22211,6 +22226,37 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], SearchAuditDto.prototype, "offset", void 0);
+class GetOldestSessionDto {
+}
+exports.GetOldestSessionDto = GetOldestSessionDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number to get session for',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GetOldestSessionDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Force creation of new session if no valid old session exists',
+        default: true
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], GetOldestSessionDto.prototype, "allowFallback", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Maximum age of session to consider (in days)',
+        default: 3000,
+        minimum: 1
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], GetOldestSessionDto.prototype, "maxAgeDays", void 0);
 let SessionController = class SessionController {
     constructor(sessionService) {
         this.sessionService = sessionService;
@@ -22320,6 +22366,57 @@ let SessionController = class SessionController {
             }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getOldestSessionOrCreate(body) {
+        try {
+            if (!body.mobile || typeof body.mobile !== 'string' || body.mobile.trim().length === 0) {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Mobile number is required and must be a non-empty string',
+                    code: 'INVALID_MOBILE'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            const mobile = body.mobile.trim();
+            const allowFallback = body.allowFallback !== false;
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 30;
+            const result = await this.sessionService.getOldestSessionOrCreate({
+                mobile,
+                allowFallback,
+                maxAgeDays
+            });
+            if (result.success) {
+                return result.data;
+            }
+            else {
+                let httpStatus = common_1.HttpStatus.BAD_REQUEST;
+                if (result.code === 'NO_SESSION_FOUND') {
+                    httpStatus = common_1.HttpStatus.NOT_FOUND;
+                }
+                else if (result.code === 'RATE_LIMIT_EXCEEDED') {
+                    httpStatus = common_1.HttpStatus.TOO_MANY_REQUESTS;
+                }
+                else if (result.code === 'FALLBACK_DISABLED') {
+                    httpStatus = common_1.HttpStatus.NOT_FOUND;
+                }
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.message,
+                    code: result.code,
+                    retryable: result.retryable || false
+                }, httpStatus);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            console.error('Unexpected error in getOldestSessionOrCreate:', error);
+            throw new common_1.HttpException({
+                success: false,
+                message: 'An unexpected error occurred while processing your request',
+                code: 'INTERNAL_ERROR'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 };
 exports.SessionController = SessionController;
 __decorate([
@@ -22396,6 +22493,56 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], SessionController.prototype, "searchAudit", null);
+__decorate([
+    (0, common_1.Post)('get-oldest-or-create'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get oldest valid session or create new session as fallback',
+        description: 'Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.'
+    }),
+    (0, swagger_1.ApiBody)({ type: GetOldestSessionDto }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Session retrieved or created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Oldest session retrieved successfully' },
+                data: {
+                    type: 'object',
+                    properties: {
+                        session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
+                        sessionAge: { type: 'number', example: 5, description: 'Age of session in days' },
+                        isNew: { type: 'boolean', example: false, description: 'Whether this is a newly created session' },
+                        usageCount: { type: 'number', example: 12, description: 'Number of times this session has been used' },
+                        lastUsedAt: { type: 'string', example: '2024-08-05T10:30:00Z', description: 'When the session was last used' },
+                        createdAt: { type: 'string', example: '2024-08-01T14:20:00Z', description: 'When the session was created' }
+                    }
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Bad request - validation failed or no session available'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'No valid session found and fallback disabled'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 429,
+        description: 'Rate limit exceeded'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Internal server error'
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [GetOldestSessionDto]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "getOldestSessionOrCreate", null);
 exports.SessionController = SessionController = __decorate([
     (0, swagger_1.ApiTags)('Telegram Session Management'),
     (0, common_1.Controller)('telegram/session'),
@@ -23054,6 +23201,148 @@ let SessionService = class SessionService {
             this.logger.error(mobile, 'Failed to find valid session from this month', error);
             return { success: false, error: error.message || 'Failed to find valid session from this month' };
         }
+    }
+    async getOldestSessionOrCreate(options) {
+        const { mobile, allowFallback = true, maxAgeDays = 30 } = options;
+        try {
+            if (!mobile || typeof mobile !== 'string') {
+                return {
+                    success: false,
+                    message: 'Mobile number is required and must be a valid string',
+                    code: 'INVALID_MOBILE'
+                };
+            }
+            this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
+            const rateLimitCheck = this.checkRateLimit(mobile);
+            if (!rateLimitCheck.allowed) {
+                const resetTime = new Date(rateLimitCheck.resetTime || 0);
+                return {
+                    success: false,
+                    message: `Rate limit exceeded. Maximum ${this.MAX_SESSIONS_PER_HOUR} requests per hour. Try again after ${resetTime.toISOString()}`,
+                    code: 'RATE_LIMIT_EXCEEDED',
+                    retryable: true
+                };
+            }
+            const oldestSessionResult = await this.findOldestValidSession(mobile, maxAgeDays);
+            if (oldestSessionResult.success && oldestSessionResult.session) {
+                this.logger.info(mobile, 'Oldest valid session found, updating usage and returning');
+                try {
+                    await this.sessionAuditService.markSessionUsed(mobile, oldestSessionResult.session.sessionString);
+                }
+                catch (updateError) {
+                    this.logger.error(mobile, 'Warning: Failed to update session usage', updateError);
+                }
+                const sessionAge = this.calculateSessionAge(oldestSessionResult.session.createdAt);
+                return {
+                    success: true,
+                    message: 'Oldest valid session retrieved successfully',
+                    data: {
+                        session: oldestSessionResult.session.sessionString,
+                        sessionAge,
+                        isNew: false,
+                        usageCount: oldestSessionResult.session.usageCount,
+                        lastUsedAt: oldestSessionResult.session.lastUsedAt.toISOString(),
+                        createdAt: oldestSessionResult.session.createdAt.toISOString()
+                    }
+                };
+            }
+            if (!allowFallback) {
+                this.logger.info(mobile, 'No valid session found and fallback is disabled');
+                return {
+                    success: false,
+                    message: `No valid session found within ${maxAgeDays} days and fallback creation is disabled`,
+                    code: 'FALLBACK_DISABLED'
+                };
+            }
+            this.logger.info(mobile, 'No valid session found, creating new session as fallback');
+            const createResult = await this.createSessionWithFallback(mobile);
+            if (createResult.success && createResult.session) {
+                return {
+                    success: true,
+                    message: 'No existing session found, new session created as fallback',
+                    data: {
+                        session: createResult.session,
+                        sessionAge: 0,
+                        isNew: true,
+                        usageCount: 0,
+                        lastUsedAt: new Date().toISOString(),
+                        createdAt: new Date().toISOString()
+                    }
+                };
+            }
+            else {
+                this.logger.error(mobile, 'Failed to create fallback session', createResult.error);
+                return {
+                    success: false,
+                    message: `Failed to create fallback session: ${createResult.error}`,
+                    code: 'FALLBACK_CREATION_FAILED',
+                    retryable: createResult.retryable || false
+                };
+            }
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Unexpected error in getOldestSessionOrCreate', error);
+            return {
+                success: false,
+                message: 'An unexpected error occurred while processing the request',
+                code: 'INTERNAL_ERROR',
+                retryable: false
+            };
+        }
+    }
+    async findOldestValidSession(mobile, maxAgeDays) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+            this.logger.info(mobile, `Searching for sessions newer than ${cutoffDate.toISOString()}`);
+            const sessions = await this.sessionAuditService.querySessionAudits({
+                mobile,
+                isActive: true,
+                startDate: cutoffDate,
+                limit: 50,
+                offset: 0
+            });
+            if (!sessions.sessions || sessions.sessions.length === 0) {
+                this.logger.info(mobile, 'No sessions found within the specified age limit');
+                return { success: false, error: 'No sessions found within age limit' };
+            }
+            const validSessions = sessions.sessions
+                .filter(session => session.sessionString &&
+                session.sessionString.trim().length > 0 &&
+                (session.status === sessions_schema_1.SessionStatus.ACTIVE || session.status === sessions_schema_1.SessionStatus.CREATED))
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            if (validSessions.length === 0) {
+                this.logger.info(mobile, 'No valid sessions found (all sessions are invalid or empty)');
+                return { success: false, error: 'No valid sessions found' };
+            }
+            const oldestSession = validSessions[0];
+            this.logger.info(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
+            return { success: true, session: oldestSession };
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error finding oldest valid session', error);
+            return { success: false, error: error.message || 'Failed to find oldest valid session' };
+        }
+    }
+    async createSessionWithFallback(mobile) {
+        try {
+            return await this.createSession({ mobile });
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error in createSessionWithFallback', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to create session',
+                retryable: false
+            };
+        }
+    }
+    calculateSessionAge(createdAt) {
+        const now = new Date();
+        const sessionDate = new Date(createdAt);
+        const diffTime = Math.abs(now.getTime() - sessionDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
     }
 };
 exports.SessionService = SessionService;
@@ -26764,6 +27053,77 @@ exports.UsersService = UsersService = __decorate([
 
 /***/ }),
 
+/***/ "./src/guards/auth.guard.ts":
+/*!**********************************!*\
+  !*** ./src/guards/auth.guard.ts ***!
+  \**********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var ApiKeyOrIpOrOriginGuard_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ApiKeyOrIpOrOriginGuard = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
+const ALLOWED_ORIGINS = ['https://paidgirl.site', 'https://zomcall.netlify.app'];
+let ApiKeyOrIpOrOriginGuard = ApiKeyOrIpOrOriginGuard_1 = class ApiKeyOrIpOrOriginGuard {
+    constructor() {
+        this.logger = new common_1.Logger(ApiKeyOrIpOrOriginGuard_1.name);
+    }
+    canActivate(context) {
+        const request = context.switchToHttp().getRequest();
+        const apiKey = request.headers['x-api-key']?.toString() ||
+            request.query['apiKey']?.toString();
+        const clientIp = (request.ip || request.connection.remoteAddress)?.replace('::ffff:', '');
+        const origin = request.headers.origin;
+        this.logger.debug(`Incoming request:`);
+        this.logger.debug(`→ API Key: ${apiKey || 'NONE'}`);
+        this.logger.debug(`→ Client IP: ${clientIp}`);
+        this.logger.debug(`→ Origin: ${origin || 'NONE'}`);
+        let passedReason = null;
+        if (apiKey && apiKey === "santoor") {
+            this.logger.debug(`✅ API Key matched`);
+            passedReason = 'API key valid';
+        }
+        else {
+            this.logger.debug(`❌ API Key mismatch`);
+        }
+        if (!passedReason && ALLOWED_IPS.includes(clientIp)) {
+            this.logger.debug(`✅ IP allowed`);
+            passedReason = 'IP allowed';
+        }
+        else if (!passedReason) {
+            this.logger.debug(`❌ IP not allowed`);
+        }
+        if (!passedReason && origin && ALLOWED_ORIGINS.includes(origin)) {
+            this.logger.debug(`✅ Origin allowed`);
+            passedReason = 'Origin allowed';
+        }
+        else if (!passedReason) {
+            this.logger.debug(`❌ Origin not allowed`);
+        }
+        if (passedReason) {
+            this.logger.debug(`Access granted because: ${passedReason}`);
+            return true;
+        }
+        this.logger.warn(`❌ Access denied — no condition satisfied`);
+        throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
+    }
+};
+exports.ApiKeyOrIpOrOriginGuard = ApiKeyOrIpOrOriginGuard;
+exports.ApiKeyOrIpOrOriginGuard = ApiKeyOrIpOrOriginGuard = ApiKeyOrIpOrOriginGuard_1 = __decorate([
+    (0, common_1.Injectable)()
+], ApiKeyOrIpOrOriginGuard);
+
+
+/***/ }),
+
 /***/ "./src/interfaces/telegram.ts":
 /*!************************************!*\
   !*** ./src/interfaces/telegram.ts ***!
@@ -26839,6 +27199,7 @@ async function bootstrap() {
         .setTitle('NestJS and Express API')
         .setDescription('API documentation')
         .setVersion('1.0')
+        .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
         .build();
     app.use((req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*');
@@ -26850,7 +27211,12 @@ async function bootstrap() {
         allowedHeaders: "*",
         origin: "*"
     });
-    const document = swagger_1.SwaggerModule.createDocument(app, config);
+    const document = swagger_1.SwaggerModule.createDocument(app, config, {
+        deepScanRoutes: true,
+    });
+    document.components ??= {};
+    document.components.securitySchemes ??= {};
+    document.security = [{ 'x-api-key': [] }];
     fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
     swagger_1.SwaggerModule.setup('api', app, document);
     mongoose_1.default.set('debug', true);
@@ -26897,76 +27263,6 @@ async function bootstrap() {
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
-
-
-/***/ }),
-
-/***/ "./src/memory-cleanup.service.ts":
-/*!***************************************!*\
-  !*** ./src/memory-cleanup.service.ts ***!
-  \***************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var MemoryCleanerService_1;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.MemoryCleanerService = void 0;
-const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-let MemoryCleanerService = MemoryCleanerService_1 = class MemoryCleanerService {
-    constructor() {
-        this.logger = new common_1.Logger(MemoryCleanerService_1.name);
-        this.intervalId = null;
-        this.memoryLimitMB = 400;
-        this.cleanupIntervalMs = 5 * 60 * 1000;
-    }
-    onModuleInit() {
-        this.logger.log('MemoryCleanerService initialized.');
-        this.intervalId = setInterval(() => this.monitorAndCleanup(), this.cleanupIntervalMs);
-    }
-    onModuleDestroy() {
-        if (this.intervalId)
-            clearInterval(this.intervalId);
-    }
-    getMemoryUsageInMB() {
-        const mem = process.memoryUsage();
-        return {
-            rss: (mem.rss / 1024 / 1024).toFixed(2),
-            heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2),
-            heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(2),
-            external: (mem.external / 1024 / 1024).toFixed(2),
-        };
-    }
-    monitorAndCleanup() {
-        const mem = process.memoryUsage();
-        const heapUsedMB = mem.heapUsed / 1024 / 1024;
-        this.logger.log(`🧠 Heap Used: ${heapUsedMB.toFixed(2)} MB`);
-        if (heapUsedMB > this.memoryLimitMB) {
-            this.logger.warn(`🚨 Heap exceeded ${this.memoryLimitMB} MB. Cleaning up...`);
-            this.cleanupMemory();
-        }
-    }
-    cleanupMemory() {
-        if (typeof global.gc === 'function') {
-            global.gc();
-            this.logger.log('✅ Manual GC triggered via global.gc()');
-        }
-        else {
-            this.logger.warn('⚠️ GC not available. Start Node with --expose-gc');
-        }
-        const mem = this.getMemoryUsageInMB();
-        this.logger.log(`🧹 Memory After Cleanup: ${JSON.stringify(mem)}`);
-    }
-};
-exports.MemoryCleanerService = MemoryCleanerService;
-exports.MemoryCleanerService = MemoryCleanerService = MemoryCleanerService_1 = __decorate([
-    (0, common_1.Injectable)()
-], MemoryCleanerService);
 
 
 /***/ }),
@@ -27866,6 +28162,7 @@ async function makeBypassRequest(url, options) {
     }, {
         headers: {
             'Content-Type': 'application/json',
+            'x-api-key': process.env.X_API_KEY || 'santoor',
             ...options.headers,
         },
     });
@@ -27940,6 +28237,11 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                 signal: controller.signal,
                 maxRedirects: options.maxRedirects ?? 5,
                 timeout: currentTimeout,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.X_API_KEY || 'santoor',
+                    ...options.headers,
+                },
             });
             clearTimeout(timeoutId);
             return response;
