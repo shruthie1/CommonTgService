@@ -9,10 +9,8 @@ export declare class TgSignupService implements OnModuleDestroy {
     private static readonly PHONE_PREFIX;
     private readonly cleanupInterval;
     private static readonly activeClients;
-    private static readonly API_CREDENTIALS;
     constructor(usersService: UsersService);
     onModuleDestroy(): Promise<void>;
-    private getRandomCredentials;
     private cleanupStaleSessions;
     private validatePhoneNumber;
     private disconnectClient;

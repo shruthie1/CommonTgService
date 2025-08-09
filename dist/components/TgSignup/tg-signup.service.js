@@ -19,6 +19,7 @@ const Logger_1 = require("telegram/extensions/Logger");
 const Password_1 = require("telegram/Password");
 const users_service_1 = require("../users/users.service");
 const parseError_1 = require("../../utils/parseError");
+const tg_apps_1 = require("../../utils/tg-apps");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
         this.usersService = usersService;
@@ -29,10 +30,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         clearInterval(this.cleanupInterval);
         const phones = Array.from(TgSignupService_1.activeClients.keys());
         await Promise.all(phones.map(phone => this.disconnectClient(phone)));
-    }
-    getRandomCredentials() {
-        const index = Math.floor(Math.random() * TgSignupService_1.API_CREDENTIALS.length);
-        return TgSignupService_1.API_CREDENTIALS[index];
     }
     async cleanupStaleSessions() {
         for (const [phone, session] of TgSignupService_1.activeClients) {
@@ -77,7 +74,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = this.getRandomCredentials();
+            const { apiId, apiHash } = (0, tg_apps_1.getRandomCredentials)();
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -144,7 +141,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = this.getRandomCredentials();
+                        const { apiId, apiHash } = (0, tg_apps_1.getRandomCredentials)();
                         const newSession = new sessions_1.StringSession('');
                         const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,
@@ -332,14 +329,6 @@ TgSignupService.LOGIN_TIMEOUT = 300000;
 TgSignupService.SESSION_CLEANUP_INTERVAL = 300000;
 TgSignupService.PHONE_PREFIX = "+";
 TgSignupService.activeClients = new Map();
-TgSignupService.API_CREDENTIALS = [
-    { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
-    { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
-    { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
-    { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
-    { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
-    { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
-];
 exports.TgSignupService = TgSignupService = TgSignupService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [users_service_1.UsersService])
