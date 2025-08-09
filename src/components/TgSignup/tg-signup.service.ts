@@ -9,11 +9,7 @@ import { UsersService } from "../users/users.service";
 import { TgSignupResponse } from "./dto/tg-signup.dto";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { parseError } from "../../utils/parseError";
-
-interface ITelegramCredentials {
-    apiId: number;
-    apiHash: string;
-}
+import { getRandomCredentials } from "../../utils/tg-apps";
 
 @Injectable()
 export class TgSignupService implements OnModuleDestroy {
@@ -32,14 +28,7 @@ export class TgSignupService implements OnModuleDestroy {
     }>();
 
     // API credentials pool for load balancing with correct hashes
-    private static readonly API_CREDENTIALS: ITelegramCredentials[] = [
-        { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
-        { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
-        { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
-        { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
-        { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
-        { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
-    ];
+
 
     constructor(private readonly usersService: UsersService) {
         this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), TgSignupService.SESSION_CLEANUP_INTERVAL);
@@ -50,11 +39,6 @@ export class TgSignupService implements OnModuleDestroy {
         // Cleanup all active sessions
         const phones = Array.from(TgSignupService.activeClients.keys());
         await Promise.all(phones.map(phone => this.disconnectClient(phone)));
-    }
-
-    private getRandomCredentials(): ITelegramCredentials {
-        const index = Math.floor(Math.random() * TgSignupService.API_CREDENTIALS.length);
-        return TgSignupService.API_CREDENTIALS[index];
     }
 
     private async cleanupStaleSessions() {
@@ -109,7 +93,7 @@ export class TgSignupService implements OnModuleDestroy {
                 await this.disconnectClient(phone);
             }
 
-            const { apiId, apiHash } = this.getRandomCredentials();
+            const { apiId, apiHash } = getRandomCredentials();
             const session = new StringSession('');
             const client = new TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -190,7 +174,7 @@ export class TgSignupService implements OnModuleDestroy {
                     // Don't disconnect, just try to reconnect
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = this.getRandomCredentials();
+                        const { apiId, apiHash } = getRandomCredentials();
                         const newSession = new StringSession('');
                         const newClient = new TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,

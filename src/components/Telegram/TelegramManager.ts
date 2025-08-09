@@ -10,7 +10,7 @@ import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { contains } from '../../utils';
+import { contains, getRandomCredentials } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
@@ -348,7 +348,8 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-        this.client = new TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, generateTGConfig());
+        const { apiHash, apiId } = getRandomCredentials()
+        this.client = new TelegramClient(this.session, apiId, apiHash, generateTGConfig());
         this.client.setLogLevel(LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler
         await this.client.connect();
