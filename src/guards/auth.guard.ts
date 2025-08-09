@@ -41,16 +41,17 @@ export class AuthGuard implements CanActivate {
             return true;
         }
 
-        this.logger.debug(`Incoming request:`);
-        this.logger.debug(`→ API Key: ${apiKey || 'NONE'}`);
-        this.logger.debug(`→ Client IP: ${clientIp}`);
-        this.logger.debug(`→ Origin: ${origin || 'NONE'}`);
+
+        this.logger.debug(`Request Received: ${request.originalUrl}`);
+        // this.logger.debug(`→ API Key: ${apiKey || 'NONE'}`);
+        // this.logger.debug(`→ Client IP: ${clientIp}`);
+        // this.logger.debug(`→ Origin: ${origin || 'NONE'}`);
 
         let passedReason: string | null = null;
 
         // Check API Key (case-insensitive)
         if (apiKey && apiKey.toLowerCase() === "santoor") {
-            this.logger.debug(`✅ API Key matched`);
+            // this.logger.debug(`✅ API Key matched`);
             passedReason = 'API key valid';
         } else {
             this.logger.debug(`❌ API Key mismatch`);
@@ -58,7 +59,7 @@ export class AuthGuard implements CanActivate {
 
         // Check IP
         if (!passedReason && ALLOWED_IPS.includes(clientIp)) {
-            this.logger.debug(`✅ IP allowed`);
+            // this.logger.debug(`✅ IP allowed`);
             passedReason = 'IP allowed';
         } else if (!passedReason) {
             this.logger.debug(`❌ IP not allowed`);
@@ -66,14 +67,14 @@ export class AuthGuard implements CanActivate {
 
         // Check Origin (case-insensitive)
         if (!passedReason && origin && this.isOriginAllowed(origin)) {
-            this.logger.debug(`✅ Origin allowed`);
+            // this.logger.debug(`✅ Origin allowed`);
             passedReason = 'Origin allowed';
         } else if (!passedReason) {
             this.logger.debug(`❌ Origin not allowed`);
         }
 
         if (passedReason) {
-            this.logger.debug(`Access granted because: ${passedReason}`);
+            // this.logger.debug(`Access granted because: ${passedReason}`);
             return true;
         }
 
@@ -123,13 +124,13 @@ export class AuthGuard implements CanActivate {
         
         const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
         if (cfConnectingIP) {
-            this.logger.debug(`Using CF-Connecting-IP: ${cfConnectingIP}`);
+            // this.logger.debug(`Using CF-Connecting-IP: ${cfConnectingIP}`);
             return cfConnectingIP;
         }
 
         const xRealIP = this.getHeaderValue(request, 'x-real-ip');
         if (xRealIP) {
-            this.logger.debug(`Using X-Real-IP: ${xRealIP}`);
+            // this.logger.debug(`Using X-Real-IP: ${xRealIP}`);
             return xRealIP;
         }
 
@@ -137,21 +138,21 @@ export class AuthGuard implements CanActivate {
         if (xForwardedFor) {
             // X-Forwarded-For can contain multiple IPs, take the first one (original client)
             const firstIP = xForwardedFor.split(',')[0].trim();
-            this.logger.debug(`Using X-Forwarded-For (first): ${firstIP}`);
+            // this.logger.debug(`Using X-Forwarded-For (first): ${firstIP}`);
             return firstIP;
         }
 
         const expressIP = request.ip;
         if (expressIP) {
             const cleanIP = expressIP.replace('::ffff:', '');
-            this.logger.debug(`Using Express IP: ${cleanIP}`);
+            // this.logger.debug(`Using Express IP: ${cleanIP}`);
             return cleanIP;
         }
 
         const connectionIP = request.connection?.remoteAddress;
         if (connectionIP) {
             const cleanIP = connectionIP.replace('::ffff:', '');
-            this.logger.debug(`Using connection remoteAddress: ${cleanIP}`);
+            // this.logger.debug(`Using connection remoteAddress: ${cleanIP}`);
             return cleanIP;
         }
 
@@ -172,7 +173,7 @@ export class AuthGuard implements CanActivate {
         
         const origin = this.getHeaderValue(request, 'origin');
         if (origin) {
-            this.logger.debug(`Using Origin header: ${origin}`);
+            // this.logger.debug(`Using Origin header: ${origin}`);
             return origin;
         }
 
@@ -181,7 +182,7 @@ export class AuthGuard implements CanActivate {
             // Construct origin from X-Original-Host with proper protocol
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${xOriginalHost}`;
-            this.logger.debug(`Using X-Original-Host to construct origin: ${constructedOrigin}`);
+            // this.logger.debug(`Using X-Original-Host to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
 
@@ -190,7 +191,7 @@ export class AuthGuard implements CanActivate {
             // Construct origin from X-Forwarded-Host with proper protocol
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${xForwardedHost}`;
-            this.logger.debug(`Using X-Forwarded-Host to construct origin: ${constructedOrigin}`);
+            // this.logger.debug(`Using X-Forwarded-Host to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
 
@@ -199,7 +200,7 @@ export class AuthGuard implements CanActivate {
             // Construct origin from Host header with proper protocol
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${host}`;
-            this.logger.debug(`Using Host header to construct origin: ${constructedOrigin}`);
+            // this.logger.debug(`Using Host header to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
 
@@ -209,7 +210,7 @@ export class AuthGuard implements CanActivate {
                 // Extract origin from referer URL
                 const refererUrl = new URL(referer);
                 const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
-                this.logger.debug(`Using Referer to extract origin: ${refererOrigin}`);
+                // this.logger.debug(`Using Referer to extract origin: ${refererOrigin}`);
                 return refererOrigin;
             } catch (error) {
                 this.logger.debug(`Failed to parse referer as URL: ${referer}`);
@@ -227,7 +228,7 @@ export class AuthGuard implements CanActivate {
         // Check X-Forwarded-Proto first (set by your nginx)
         const xForwardedProto = this.getHeaderValue(request, 'x-forwarded-proto');
         if (xForwardedProto) {
-            this.logger.debug(`Using X-Forwarded-Proto: ${xForwardedProto}`);
+            // this.logger.debug(`Using X-Forwarded-Proto: ${xForwardedProto}`);
             return xForwardedProto.toLowerCase(); // Normalize to lowercase
         }
 
@@ -237,7 +238,7 @@ export class AuthGuard implements CanActivate {
             try {
                 const visitor = JSON.parse(cfVisitor);
                 if (visitor.scheme) {
-                    this.logger.debug(`Using CF-Visitor scheme: ${visitor.scheme}`);
+                    // this.logger.debug(`Using CF-Visitor scheme: ${visitor.scheme}`);
                     return visitor.scheme.toLowerCase(); // Normalize to lowercase
                 }
             } catch (error) {
@@ -247,25 +248,25 @@ export class AuthGuard implements CanActivate {
 
         // Check if request is encrypted (Express.js)
         if (request.secure) {
-            this.logger.debug(`Using request.secure: https`);
+            // this.logger.debug(`Using request.secure: https`);
             return 'https';
         }
 
         // Check X-Forwarded-SSL header
         const xForwardedSsl = this.getHeaderValue(request, 'x-forwarded-ssl');
         if (xForwardedSsl && xForwardedSsl.toLowerCase() === 'on') {
-            this.logger.debug(`Using X-Forwarded-SSL: https`);
+            // this.logger.debug(`Using X-Forwarded-SSL: https`);
             return 'https';
         }
 
         // Default to HTTPS for production environments (since you have SSL configured)
         if (process.env.NODE_ENV === 'production') {
-            this.logger.debug(`Production environment, defaulting to https`);
+            // this.logger.debug(`Production environment, defaulting to https`);
             return 'https';
         }
 
         // Default to HTTP for development
-        this.logger.debug(`Development environment, defaulting to http`);
+        // this.logger.debug(`Development environment, defaulting to http`);
         return 'http';
     }
 }
