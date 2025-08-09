@@ -27083,34 +27083,27 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         if (this.isIgnoredPath(path)) {
             return true;
         }
-        this.logger.debug(`Incoming request:`);
-        this.logger.debug(`→ API Key: ${apiKey || 'NONE'}`);
-        this.logger.debug(`→ Client IP: ${clientIp}`);
-        this.logger.debug(`→ Origin: ${origin || 'NONE'}`);
+        this.logger.debug(`Request Received: ${request.originalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === "santoor") {
-            this.logger.debug(`✅ API Key matched`);
             passedReason = 'API key valid';
         }
         else {
             this.logger.debug(`❌ API Key mismatch`);
         }
         if (!passedReason && ALLOWED_IPS.includes(clientIp)) {
-            this.logger.debug(`✅ IP allowed`);
             passedReason = 'IP allowed';
         }
         else if (!passedReason) {
             this.logger.debug(`❌ IP not allowed`);
         }
         if (!passedReason && origin && this.isOriginAllowed(origin)) {
-            this.logger.debug(`✅ Origin allowed`);
             passedReason = 'Origin allowed';
         }
         else if (!passedReason) {
             this.logger.debug(`❌ Origin not allowed`);
         }
         if (passedReason) {
-            this.logger.debug(`Access granted because: ${passedReason}`);
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
@@ -27132,30 +27125,25 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     extractRealClientIP(request) {
         const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
         if (cfConnectingIP) {
-            this.logger.debug(`Using CF-Connecting-IP: ${cfConnectingIP}`);
             return cfConnectingIP;
         }
         const xRealIP = this.getHeaderValue(request, 'x-real-ip');
         if (xRealIP) {
-            this.logger.debug(`Using X-Real-IP: ${xRealIP}`);
             return xRealIP;
         }
         const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
         if (xForwardedFor) {
             const firstIP = xForwardedFor.split(',')[0].trim();
-            this.logger.debug(`Using X-Forwarded-For (first): ${firstIP}`);
             return firstIP;
         }
         const expressIP = request.ip;
         if (expressIP) {
             const cleanIP = expressIP.replace('::ffff:', '');
-            this.logger.debug(`Using Express IP: ${cleanIP}`);
             return cleanIP;
         }
         const connectionIP = request.connection?.remoteAddress;
         if (connectionIP) {
             const cleanIP = connectionIP.replace('::ffff:', '');
-            this.logger.debug(`Using connection remoteAddress: ${cleanIP}`);
             return cleanIP;
         }
         this.logger.warn(`Unable to extract client IP, using fallback`);
@@ -27164,28 +27152,24 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     extractRealOrigin(request) {
         const origin = this.getHeaderValue(request, 'origin');
         if (origin) {
-            this.logger.debug(`Using Origin header: ${origin}`);
             return origin;
         }
         const xOriginalHost = this.getHeaderValue(request, 'x-original-host');
         if (xOriginalHost) {
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${xOriginalHost}`;
-            this.logger.debug(`Using X-Original-Host to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
         const xForwardedHost = this.getHeaderValue(request, 'x-forwarded-host');
         if (xForwardedHost) {
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${xForwardedHost}`;
-            this.logger.debug(`Using X-Forwarded-Host to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
         const host = this.getHeaderValue(request, 'host');
         if (host) {
             const protocol = this.extractProtocol(request);
             const constructedOrigin = `${protocol}://${host}`;
-            this.logger.debug(`Using Host header to construct origin: ${constructedOrigin}`);
             return constructedOrigin;
         }
         const referer = this.getHeaderValue(request, 'referer');
@@ -27193,7 +27177,6 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             try {
                 const refererUrl = new URL(referer);
                 const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
-                this.logger.debug(`Using Referer to extract origin: ${refererOrigin}`);
                 return refererOrigin;
             }
             catch (error) {
@@ -27206,7 +27189,6 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     extractProtocol(request) {
         const xForwardedProto = this.getHeaderValue(request, 'x-forwarded-proto');
         if (xForwardedProto) {
-            this.logger.debug(`Using X-Forwarded-Proto: ${xForwardedProto}`);
             return xForwardedProto.toLowerCase();
         }
         const cfVisitor = this.getHeaderValue(request, 'cf-visitor');
@@ -27214,7 +27196,6 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             try {
                 const visitor = JSON.parse(cfVisitor);
                 if (visitor.scheme) {
-                    this.logger.debug(`Using CF-Visitor scheme: ${visitor.scheme}`);
                     return visitor.scheme.toLowerCase();
                 }
             }
@@ -27223,17 +27204,14 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             }
         }
         if (request.secure) {
-            this.logger.debug(`Using request.secure: https`);
             return 'https';
         }
         const xForwardedSsl = this.getHeaderValue(request, 'x-forwarded-ssl');
         if (xForwardedSsl && xForwardedSsl.toLowerCase() === 'on') {
-            this.logger.debug(`Using X-Forwarded-SSL: https`);
             return 'https';
         }
         if (false) // removed by dead control flow
 {}
-        this.logger.debug(`Development environment, defaulting to http`);
         return 'http';
     }
 };
