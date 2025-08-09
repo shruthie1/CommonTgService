@@ -273,7 +273,8 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        this.client = new telegram_1.TelegramClient(this.session, parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
+        const { apiHash, apiId } = (0, utils_1.getRandomCredentials)();
+        this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, (0, generateTGConfig_1.generateTGConfig)());
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();

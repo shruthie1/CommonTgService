@@ -32,4 +32,5 @@ Object.defineProperty(exports, "ppplbot", { enumerable: true, get: function () {
 var parseError_1 = require("./parseError");
 Object.defineProperty(exports, "parseError", { enumerable: true, get: function () { return parseError_1.parseError; } });
 __exportStar(require("./obfuscateText"), exports);
+__exportStar(require("./tg-apps"), exports);
 //# sourceMappingURL=index.js.map
