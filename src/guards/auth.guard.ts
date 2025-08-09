@@ -5,7 +5,7 @@ import { notifbot } from '../utils/logbots';
 
 const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128.26', '54.254.162.138'];
 const ALLOWED_ORIGINS = [
-    'https://paidgirl.site', 
+    'https://paidgirl.site',
     'https://zomcall.netlify.app',
     'https://ums-test.paidgirl.site', // Your nginx server
     'http://localhost:3000', // Development
@@ -34,7 +34,7 @@ export class AuthGuard implements CanActivate {
             request.query['apiKey']?.toString();
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
-        
+
 
         // ✅ Skip if path is in ignore list
         if (this.isIgnoredPath(path)) {
@@ -66,12 +66,12 @@ export class AuthGuard implements CanActivate {
         }
 
         // Check Origin (case-insensitive)
-        if (!passedReason && origin && this.isOriginAllowed(origin)) {
-            // this.logger.debug(`✅ Origin allowed`);
-            passedReason = 'Origin allowed';
-        } else if (!passedReason) {
-            this.logger.debug(`❌ Origin not allowed`);
-        }
+        // if (!passedReason && origin && this.isOriginAllowed(origin)) {
+        //     // this.logger.debug(`✅ Origin allowed`);
+        //     passedReason = 'Origin allowed';
+        // } else if (!passedReason) {
+        //     this.logger.debug(`❌ Origin not allowed`);
+        // }
 
         if (passedReason) {
             // this.logger.debug(`Access granted because: ${passedReason}`);
@@ -94,14 +94,14 @@ export class AuthGuard implements CanActivate {
     /**
      * Check if origin is allowed (case-insensitive)
      */
-    private isOriginAllowed(origin: string): boolean {
-        if (!origin) return false;
-        
-        const normalizedOrigin = origin.toLowerCase().trim();
-        
-        // Since ALLOWED_ORIGINS is already normalized to lowercase, direct comparison works
-        return ALLOWED_ORIGINS.includes(normalizedOrigin);
-    }
+    // private isOriginAllowed(origin: string): boolean {
+    //     if (!origin) return false;
+
+    //     const normalizedOrigin = origin.toLowerCase().trim();
+
+    //     // Since ALLOWED_ORIGINS is already normalized to lowercase, direct comparison works
+    //     return ALLOWED_ORIGINS.includes(normalizedOrigin);
+    // }
 
     /**
      * Get header value with case-insensitive lookup
@@ -121,7 +121,7 @@ export class AuthGuard implements CanActivate {
         // 3. X-Forwarded-For (first IP in chain)
         // 4. request.ip (Express default)
         // 5. connection.remoteAddress (fallback)
-        
+
         const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
         if (cfConnectingIP) {
             // this.logger.debug(`Using CF-Connecting-IP: ${cfConnectingIP}`);
@@ -170,7 +170,7 @@ export class AuthGuard implements CanActivate {
         // 3. X-Forwarded-Host (standard proxy header)
         // 4. Host header (fallback)
         // 5. Referer header (as last resort for origin detection)
-        
+
         const origin = this.getHeaderValue(request, 'origin');
         if (origin) {
             // this.logger.debug(`Using Origin header: ${origin}`);
