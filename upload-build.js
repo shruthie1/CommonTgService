@@ -25,6 +25,7 @@ async function overwriteFile(branch) {
       body: JSON.stringify(bodyData), // Make sure to stringify the body data
       headers: {
         'Content-Type': 'application/json', // Set the content type header for JSON data
+        'X-API-Key': process.env.API_KEY || 'santoor'
       },
     });
 
