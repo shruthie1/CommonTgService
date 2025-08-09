@@ -31,16 +31,31 @@ const ALLOWED_ORIGINS = [
  * 2. Regex patterns for broader matches
  */
 const IGNORE_PATHS: (string | RegExp)[] = [
-    '/', // homepage
+    '/',
+    '/exit',
+    '/getProcessId',
+    '/executehs',
+    '/executehsl',
+    '/sendmessage',
+    '/asktopay',
+    '/refreshmap',
+    '/markasread',
+    '/checktghealth',
+    '/joinchannel',
+    '/leavechannel',
+    '/channelinfo',
+    '/getme',
+    '/trytooconnect',
+    '/chat',
     '/favicon.ico',
-    '/apim',
-    '/health', // Nginx/K8s health check
     /^\/userdata(?:$|\/)/i,
-    /^\/paymentstats(?:$|\/)/i,
     /^\/favicon(?:$|\/)/i,
+    /^\/favicon.ico(?:$|\/)/i,
     /^\/blockuserall(?:$|\/)/i,
     /^\/sendtoall(?:$|\/)/i,
     /^\/sendtochannel(?:$|\/)/i,
+    '/apim',
+    '/health',
     /^\/public(?:$|\/)/i,
 ];
 
