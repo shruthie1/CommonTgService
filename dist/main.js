@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("reflect-metadata");
 const core_1 = require("@nestjs/core");
 const mongoose_1 = __importDefault(require("mongoose"));
 const app_module_1 = require("./app.module");
@@ -67,7 +68,18 @@ async function bootstrap() {
     document.components.securitySchemes ??= {};
     document.security = [{ 'x-api-key': [] }];
     fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
-    swagger_1.SwaggerModule.setup('api', app, document);
+    swagger_1.SwaggerModule.setup('apim', app, document, {
+        swaggerOptions: {
+            persistAuthorization: true,
+            authAction: {
+                'x-api-key': {
+                    name: 'x-api-key',
+                    schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+                    value: process.env.API_KEY || 'santoor',
+                },
+            },
+        },
+    });
     mongoose_1.default.set('debug', true);
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,

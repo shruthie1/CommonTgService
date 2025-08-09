@@ -265,6 +265,7 @@ class TelegramManager {
     }
     async errorHandler(error) {
         if (error.message && error.message == 'TIMEOUT') {
+            console.error(`Timeout error occurred for ${this.phoneNumber}, disconnecting client.`);
             await this.destroy();
         }
         else {
