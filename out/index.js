@@ -15116,7 +15116,7 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
                 this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile((0, obfuscateText_1.obfuscateText)(client.name), `${(0, obfuscateText_1.obfuscateText)('Genuine Paid Girl')}🥰, ${(0, obfuscateText_1.obfuscateText)('Best Services')}❤️`);
+                await telegramClient.updateProfile((0, obfuscateText_1.obfuscateText)(client.name, { maintainFormatting: false }), `${(0, obfuscateText_1.obfuscateText)('Genuine Paid Girl', { maintainFormatting: false })}🥰, ${(0, obfuscateText_1.obfuscateText)('Best Services', { maintainFormatting: false })}❤️`);
             }
             else {
                 this.logger.log(`First name for ${clientId} is already up to date`);
