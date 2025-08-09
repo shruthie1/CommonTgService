@@ -717,10 +717,7 @@ export class ClientService implements OnModuleDestroy {
         this.logger.log(
           `Updating first name for ${clientId} from ${me.firstName} to ${client.name}`,
         );
-        await telegramClient.updateProfile(
-          obfuscateText(client.name, { maintainFormatting: false }),
-          `${obfuscateText('Genuine Paid Girl', { maintainFormatting: false })}🥰, ${obfuscateText('Best Services', { maintainFormatting: false })}❤️`,
-        );
+        await telegramClient.updateProfile(client.name, `Genuine Paid Girl🥰, Best Services❤️`);
       } else {
         this.logger.log(`First name for ${clientId} is already up to date`);
       }
