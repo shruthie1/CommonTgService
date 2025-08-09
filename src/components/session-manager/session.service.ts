@@ -816,7 +816,7 @@ export class SessionService {
         code?: string;
         retryable?: boolean;
     }> {
-        const { mobile, allowFallback = true, maxAgeDays = 30 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
 
         try {
             // Validate input parameters

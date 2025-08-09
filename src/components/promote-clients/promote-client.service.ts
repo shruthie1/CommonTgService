@@ -478,6 +478,9 @@ export class PromoteClientService implements OnModuleDestroy {
                                 `${mobile}: Already in join queue, skipping re-add`,
                             );
                         }
+                        await this.sessionService.getOldestSessionOrCreate({
+                            mobile: document.mobile
+                        })
                     } else {
                         this.logger.debug(
                             `${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`,
@@ -1292,9 +1295,8 @@ export class PromoteClientService implements OnModuleDestroy {
                             );
                             // Continue anyway as this is not critical
                         }
-                        await this.sessionService.createSession({
-                            mobile: document.mobile,
-                            password: "Ajtdmwajt1@"
+                        await this.sessionService.getOldestSessionOrCreate({
+                            mobile: document.mobile
                         })
 
                         this.logger.log(
