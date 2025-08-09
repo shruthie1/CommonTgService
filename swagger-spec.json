@@ -1,55 +1,6 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/": {
-      "get": {
-        "operationId": "AppController_getHello",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "App"
-        ]
-      }
-    },
-    "/execute-request": {
-      "post": {
-        "description": "Makes an HTTP request to the specified URL with provided configuration and returns the response",
-        "operationId": "AppController_executeRequest",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExecuteRequestDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Request executed successfully"
-          },
-          "400": {
-            "description": "Invalid request parameters"
-          },
-          "429": {
-            "description": "Too many requests"
-          },
-          "500": {
-            "description": "Internal server error or request execution failed"
-          }
-        },
-        "summary": "Execute an HTTP request with given details",
-        "tags": [
-          "App"
-        ]
-      }
-    },
     "/configuration": {
       "get": {
         "operationId": "ConfigurationController_findOne",
@@ -3013,673 +2964,6 @@
         ]
       }
     },
-    "/user": {
-      "post": {
-        "operationId": "UsersController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Create a new user",
-        "tags": [
-          "Telegram Users"
-        ]
-      },
-      "get": {
-        "operationId": "UsersController_findAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get all users",
-        "tags": [
-          "Telegram Users"
-        ]
-      }
-    },
-    "/user/search": {
-      "get": {
-        "operationId": "UsersController_search",
-        "parameters": [
-          {
-            "name": "tgId",
-            "required": false,
-            "in": "query",
-            "description": "Filter by Telegram ID",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mobile",
-            "required": false,
-            "in": "query",
-            "description": "Filter by mobile number",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "twoFA",
-            "required": false,
-            "in": "query",
-            "description": "Filter by twoFA status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "expired",
-            "required": false,
-            "in": "query",
-            "description": "Filter by Expiration status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "session",
-            "required": false,
-            "in": "query",
-            "description": "Filter by session",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "firstName",
-            "required": false,
-            "in": "query",
-            "description": "Filter by first name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "lastName",
-            "required": false,
-            "in": "query",
-            "description": "Filter by last name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "username",
-            "required": false,
-            "in": "query",
-            "description": "Filter by username",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "channels",
-            "required": false,
-            "in": "query",
-            "description": "Filter by channels count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "personalChats",
-            "required": false,
-            "in": "query",
-            "description": "Filter by personal chats count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "demoGiven",
-            "required": false,
-            "in": "query",
-            "description": "Filter by demo given status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "msgs",
-            "required": false,
-            "in": "query",
-            "description": "Filter by messages count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "totalChats",
-            "required": false,
-            "in": "query",
-            "description": "Filter by total chats count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "lastActive",
-            "required": false,
-            "in": "query",
-            "description": "Filter by last active timestamp",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "movieCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by movie count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "photoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by photo count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "videoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by video count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "gender",
-            "required": false,
-            "in": "query",
-            "description": "Filter by gender",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "otherPhotoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by other photo count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "otherVideoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by other video count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "ownPhotoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by own photo count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "ownVideoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by own video count",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Search users based on various parameters",
-        "tags": [
-          "Telegram Users"
-        ]
-      }
-    },
-    "/user/{tgId}": {
-      "get": {
-        "operationId": "UsersController_findOne",
-        "parameters": [
-          {
-            "name": "tgId",
-            "required": true,
-            "in": "path",
-            "description": "The Telegram ID of the user",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get a user by tgId",
-        "tags": [
-          "Telegram Users"
-        ]
-      },
-      "patch": {
-        "operationId": "UsersController_update",
-        "parameters": [
-          {
-            "name": "tgId",
-            "required": true,
-            "in": "path",
-            "description": "The Telegram ID of the user",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update a user by tgId",
-        "tags": [
-          "Telegram Users"
-        ]
-      },
-      "delete": {
-        "operationId": "UsersController_remove",
-        "parameters": [
-          {
-            "name": "tgId",
-            "required": true,
-            "in": "path",
-            "description": "The Telegram ID of the user",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Delete a user by tgId",
-        "tags": [
-          "Telegram Users"
-        ]
-      }
-    },
-    "/user/query": {
-      "post": {
-        "operationId": "UsersController_executeQuery",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Execute a custom MongoDB query",
-        "tags": [
-          "Telegram Users"
-        ]
-      }
-    },
-    "/bufferclients": {
-      "post": {
-        "operationId": "BufferClientController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateBufferClientDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Create user data",
-        "tags": [
-          "Buffer Clients"
-        ]
-      },
-      "get": {
-        "operationId": "BufferClientController_findAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get all user data",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/search": {
-      "get": {
-        "operationId": "BufferClientController_search",
-        "parameters": [
-          {
-            "name": "tgId",
-            "required": false,
-            "in": "query",
-            "description": "Telegram ID of the client",
-            "schema": {
-              "example": "123456789",
-              "type": "string"
-            }
-          },
-          {
-            "name": "mobile",
-            "required": false,
-            "in": "query",
-            "description": "Mobile number of the client",
-            "schema": {
-              "example": "+1234567890",
-              "type": "string"
-            }
-          },
-          {
-            "name": "availableDate",
-            "required": false,
-            "in": "query",
-            "description": "availableDate of the bufferClient",
-            "schema": {
-              "example": "2023-06-22",
-              "type": "string"
-            }
-          },
-          {
-            "name": "session",
-            "required": false,
-            "in": "query",
-            "description": "Session identifier",
-            "schema": {
-              "example": "session123",
-              "type": "string"
-            }
-          },
-          {
-            "name": "channels",
-            "required": false,
-            "in": "query",
-            "description": "Channel Count",
-            "schema": {
-              "example": 23,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Search user data",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/joinChannelsForBufferClients": {
-      "get": {
-        "operationId": "BufferClientController_joinChannelsforBufferClients",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Join Channels for BufferClients",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/checkBufferClients": {
-      "get": {
-        "operationId": "BufferClientController_checkbufferClients",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Check Buffer Clients",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/addNewUserstoBufferClients": {
-      "post": {
-        "operationId": "BufferClientController_addNewUserstoBufferClients",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Add New Users to Buffer Clients",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/SetAsBufferClient/{mobile}": {
-      "get": {
-        "operationId": "BufferClientController_setAsBufferClient",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "User mobile number",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Set as Buffer Client",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/{mobile}": {
-      "get": {
-        "operationId": "BufferClientController_findOne",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get user data by ID",
-        "tags": [
-          "Buffer Clients"
-        ]
-      },
-      "patch": {
-        "operationId": "BufferClientController_update",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateBufferClientDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update user data by ID",
-        "tags": [
-          "Buffer Clients"
-        ]
-      },
-      "put": {
-        "operationId": "BufferClientController_createdOrupdate",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateBufferClientDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update user data by ID",
-        "tags": [
-          "Buffer Clients"
-        ]
-      },
-      "delete": {
-        "operationId": "BufferClientController_remove",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Delete user data by ID",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
-    "/bufferclients/query": {
-      "post": {
-        "operationId": "BufferClientController_executeQuery",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Execute a custom MongoDB query",
-        "tags": [
-          "Buffer Clients"
-        ]
-      }
-    },
     "/active-channels": {
       "post": {
         "operationId": "ActiveChannelsController_create",
@@ -3952,306 +3236,6 @@
         "summary": "Delete an active channel by channelId",
         "tags": [
           "Active Channels"
-        ]
-      }
-    },
-    "/promote-msgs": {
-      "get": {
-        "operationId": "PromoteMsgsController_findOne",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get promote-msgs data",
-        "tags": [
-          "Promote-msgs"
-        ]
-      },
-      "patch": {
-        "operationId": "PromoteMsgsController_update",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update promote-msgs",
-        "tags": [
-          "Promote-msgs"
-        ]
-      }
-    },
-    "/channels": {
-      "post": {
-        "operationId": "ChannelsController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateChannelDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Create a new  channel",
-        "tags": [
-          "Channels"
-        ]
-      },
-      "get": {
-        "operationId": "ChannelsController_findAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get all  channels",
-        "tags": [
-          "Channels"
-        ]
-      }
-    },
-    "/channels/createMultiple": {
-      "post": {
-        "operationId": "ChannelsController_createMultiple",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/CreateChannelDto"
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Create multiple channels",
-        "tags": [
-          "Channels"
-        ]
-      }
-    },
-    "/channels/search": {
-      "get": {
-        "operationId": "ChannelsController_search",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": false,
-            "in": "query",
-            "description": "Unique identifier for the channel",
-            "schema": {
-              "example": "803387987",
-              "type": "string"
-            }
-          },
-          {
-            "name": "title",
-            "required": false,
-            "in": "query",
-            "description": "Title of the channel",
-            "schema": {
-              "example": "Earn money with Ayesha",
-              "type": "string"
-            }
-          },
-          {
-            "name": "private",
-            "required": false,
-            "in": "query",
-            "description": "privacy of the channel",
-            "schema": {
-              "example": false,
-              "type": "string"
-            }
-          },
-          {
-            "name": "username",
-            "required": false,
-            "in": "query",
-            "description": "Username of the channel",
-            "schema": {
-              "example": "ayesha_channel",
-              "type": "string"
-            }
-          },
-          {
-            "name": "canSendMsgs",
-            "required": false,
-            "in": "query",
-            "description": "Indicates if the channel can send messages",
-            "schema": {
-              "example": true,
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "minParticipantsCount",
-            "required": false,
-            "in": "query",
-            "description": "Minimum number of participants in the channel",
-            "schema": {
-              "example": 10,
-              "type": "number"
-            }
-          },
-          {
-            "name": "maxParticipantsCount",
-            "required": false,
-            "in": "query",
-            "description": "Maximum number of participants in the channel",
-            "schema": {
-              "example": 100,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sendMessages",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "restricted",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "participantsCount",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "broadcast",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Search channels by filters",
-        "tags": [
-          "Channels"
-        ]
-      }
-    },
-    "/channels/{channelId}": {
-      "get": {
-        "operationId": "ChannelsController_findOne",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get an  channel by channelId",
-        "tags": [
-          "Channels"
-        ]
-      },
-      "patch": {
-        "operationId": "ChannelsController_update",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateChannelDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update an  channel by channelId",
-        "tags": [
-          "Channels"
-        ]
-      },
-      "delete": {
-        "operationId": "ChannelsController_remove",
-        "parameters": [
-          {
-            "name": "channelId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Delete an  channel by channelId",
-        "tags": [
-          "Channels"
         ]
       }
     },
@@ -4914,6 +3898,2074 @@
         "summary": "Get mobile numbers that need IP assignment",
         "tags": [
           "Clients"
+        ]
+      }
+    },
+    "/telegram/session/create": {
+      "post": {
+        "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
+        "operationId": "SessionController_createSession",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created or retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Session created successfully"
+                    },
+                    "session": {
+                      "type": "string",
+                      "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
+                    },
+                    "isNew": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - validation failed or session creation failed"
+          }
+        },
+        "summary": "Master session creation endpoint",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
+    "/telegram/session/audit/search": {
+      "get": {
+        "description": "Search and retrieve session audit records based on various criteria",
+        "operationId": "SessionController_searchAudit",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Phone number to search for",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter by session status",
+            "schema": {
+              "enum": [
+                "created",
+                "active",
+                "expired",
+                "revoked",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to return (default: 10)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Number of records to skip (default: 0)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit records retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "mobile": {
+                            "type": "string",
+                            "example": "916265240911"
+                          },
+                          "sessionString": {
+                            "type": "string",
+                            "example": "1BQANOTEuM==..."
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "active"
+                          },
+                          "creationMethod": {
+                            "type": "string",
+                            "example": "old_session"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "example": "2023-12-01T10:00:00Z"
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "example": "2023-12-01T15:30:00Z"
+                          },
+                          "usageCount": {
+                            "type": "number",
+                            "example": 5
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "number",
+                      "example": 25
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Audit records retrieved successfully"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search existing audit sessions",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
+    "/telegram/session/get-oldest-or-create": {
+      "post": {
+        "description": "Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.",
+        "operationId": "SessionController_getOldestSessionOrCreate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetOldestSessionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session retrieved or created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Oldest session retrieved successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "session": {
+                          "type": "string",
+                          "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
+                        },
+                        "sessionAge": {
+                          "type": "number",
+                          "example": 5,
+                          "description": "Age of session in days"
+                        },
+                        "isNew": {
+                          "type": "boolean",
+                          "example": false,
+                          "description": "Whether this is a newly created session"
+                        },
+                        "usageCount": {
+                          "type": "number",
+                          "example": 12,
+                          "description": "Number of times this session has been used"
+                        },
+                        "lastUsedAt": {
+                          "type": "string",
+                          "example": "2024-08-05T10:30:00Z",
+                          "description": "When the session was last used"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "example": "2024-08-01T14:20:00Z",
+                          "description": "When the session was created"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - validation failed or no session available"
+          },
+          "404": {
+            "description": "No valid session found and fallback disabled"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get oldest valid session or create new session as fallback",
+        "tags": [
+          "Telegram Session Management"
+        ]
+      }
+    },
+    "/ip-management/proxy-ips": {
+      "post": {
+        "operationId": "IpManagementController_createProxyIp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProxyIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proxy IP created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data"
+          },
+          "409": {
+            "description": "Proxy IP already exists"
+          }
+        },
+        "summary": "Create a new proxy IP",
+        "tags": [
+          "IP Management"
+        ]
+      },
+      "get": {
+        "operationId": "IpManagementController_getAllProxyIps",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Proxy IPs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProxyIp"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get all proxy IPs",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/proxy-ips/bulk": {
+      "post": {
+        "operationId": "IpManagementController_bulkCreateProxyIps",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateProxyIpDto"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk creation completed"
+          }
+        },
+        "summary": "Bulk create proxy IPs",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/proxy-ips/{ipAddress}/{port}": {
+      "put": {
+        "operationId": "IpManagementController_updateProxyIp",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "required": true,
+            "in": "path",
+            "description": "IP address",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "path",
+            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProxyIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proxy IP updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proxy IP not found"
+          }
+        },
+        "summary": "Update a proxy IP",
+        "tags": [
+          "IP Management"
+        ]
+      },
+      "delete": {
+        "operationId": "IpManagementController_deleteProxyIp",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "required": true,
+            "in": "path",
+            "description": "IP address",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "path",
+            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proxy IP deleted successfully"
+          },
+          "400": {
+            "description": "Cannot delete assigned IP"
+          },
+          "404": {
+            "description": "Proxy IP not found"
+          }
+        },
+        "summary": "Delete a proxy IP",
+        "tags": [
+          "IP Management"
+        ]
+      },
+      "get": {
+        "operationId": "IpManagementController_getProxyIpById",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "required": true,
+            "in": "path",
+            "description": "IP address",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "path",
+            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proxy IP found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proxy IP not found"
+          }
+        },
+        "summary": "Get a specific proxy IP",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/mappings/mobile/{mobile}/ip": {
+      "get": {
+        "operationId": "IpManagementController_getIpForMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP address found"
+          },
+          "404": {
+            "description": "No IP assigned to this mobile"
+          }
+        },
+        "summary": "Get IP address assigned to a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign": {
+      "post": {
+        "operationId": "IpManagementController_assignIpToMobile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignIpToMobileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP assigned successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpMobileMapping"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Assignment failed"
+          }
+        },
+        "summary": "Assign an IP to a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign/bulk": {
+      "post": {
+        "operationId": "IpManagementController_bulkAssignIps",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk assignment completed"
+          }
+        },
+        "summary": "Bulk assign IPs to multiple mobile numbers",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/assign/mobile/{mobile}": {
+      "delete": {
+        "operationId": "IpManagementController_releaseIpFromMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseIpFromMobileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP released successfully"
+          },
+          "404": {
+            "description": "No IP assignment found for mobile"
+          }
+        },
+        "summary": "Release IP from a mobile number",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/clients/{clientId}/mappings": {
+      "get": {
+        "operationId": "IpManagementController_getClientMappings",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client mappings retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IpMobileMapping"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get all mobile mappings for a client",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/statistics": {
+      "get": {
+        "operationId": "IpManagementController_getStatistics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Statistics retrieved successfully"
+          }
+        },
+        "summary": "Get IP management statistics",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/health": {
+      "get": {
+        "operationId": "IpManagementController_getHealthStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Health status retrieved successfully"
+          }
+        },
+        "summary": "Get IP management health status",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/clients/{clientId}/assigned-ips": {
+      "get": {
+        "operationId": "IpManagementController_getClientAssignedIps",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client assigned IPs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProxyIp"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get all IPs assigned to a client",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/ip-management/available-count": {
+      "get": {
+        "operationId": "IpManagementController_getAvailableIpCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Available IP count retrieved successfully"
+          }
+        },
+        "summary": "Get count of available IPs",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/auto-assign-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_autoAssignIpsToClient",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IPs assigned successfully"
+          }
+        },
+        "summary": "Auto-assign IPs to all client mobile numbers",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/mobile/{mobile}/ip": {
+      "get": {
+        "operationId": "ClientIpIntegrationController_getIpForMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Optional client ID for context",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "autoAssign",
+            "required": false,
+            "in": "query",
+            "description": "Auto-assign IP if not found and context available",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP address retrieved or assigned"
+          }
+        },
+        "summary": "Get IP assigned to a mobile number with smart assignment",
+        "tags": [
+          "Client IP Integration"
+        ]
+      },
+      "delete": {
+        "operationId": "ClientIpIntegrationController_releaseIpFromMobile",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Optional client ID for context",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP released successfully"
+          }
+        },
+        "summary": "Release IP from a mobile number",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/ip-summary": {
+      "get": {
+        "operationId": "ClientIpIntegrationController_getClientIpSummary",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client IP summary retrieved successfully"
+          }
+        },
+        "summary": "Get comprehensive IP information for a client",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/auto-assign-all-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_autoAssignAllIpsViaClientService",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IPs auto-assigned using ClientService"
+          }
+        },
+        "summary": "Auto-assign IPs to all client mobile numbers (alternative endpoint)",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/assign-main-mobile-ip": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_assignIpToMainMobile",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mobile": {
+                    "type": "string",
+                    "description": "Mobile number"
+                  },
+                  "preferredCountry": {
+                    "type": "string",
+                    "description": "Preferred country code"
+                  }
+                },
+                "required": [
+                  "mobile"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IP assigned to main mobile"
+          }
+        },
+        "summary": "Assign IP to client main mobile number",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/clients/{clientId}/assign-promote-mobiles-ips": {
+      "post": {
+        "operationId": "ClientIpIntegrationController_assignIpsToPromoteMobiles",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "promoteMobiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of promote mobile numbers"
+                  },
+                  "preferredCountry": {
+                    "type": "string",
+                    "description": "Preferred country code"
+                  }
+                },
+                "required": [
+                  "promoteMobiles"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "IPs assigned to promote mobiles"
+          }
+        },
+        "summary": "Assign IPs to client promote mobile numbers",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/client-ip-integration/mobile/{mobile}/status": {
+      "get": {
+        "operationId": "ClientIpIntegrationController_checkMobileIpStatus",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mobile IP status retrieved successfully"
+          }
+        },
+        "summary": "Check IP assignment status for a mobile number",
+        "tags": [
+          "Client IP Integration"
+        ]
+      }
+    },
+    "/userData": {
+      "post": {
+        "operationId": "UserDataController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create user data",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      },
+      "get": {
+        "operationId": "UserDataController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all user data",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/userData/search": {
+      "get": {
+        "operationId": "UserDataController_search",
+        "parameters": [
+          {
+            "name": "totalCount",
+            "required": false,
+            "in": "query",
+            "description": "Total count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "picCount",
+            "required": false,
+            "in": "query",
+            "description": "Picture count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "lastMsgTimeStamp",
+            "required": false,
+            "in": "query",
+            "description": "Last message timestamp",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limitTime",
+            "required": false,
+            "in": "query",
+            "description": "Limit time",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "paidCount",
+            "required": false,
+            "in": "query",
+            "description": "Paid count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "prfCount",
+            "required": false,
+            "in": "query",
+            "description": "Profile count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "canReply",
+            "required": false,
+            "in": "query",
+            "description": "Can reply",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "payAmount",
+            "required": false,
+            "in": "query",
+            "description": "Pay amount",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "username",
+            "required": false,
+            "in": "query",
+            "description": "Username",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accessHash",
+            "required": false,
+            "in": "query",
+            "description": "Access hash",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paidReply",
+            "required": false,
+            "in": "query",
+            "description": "Paid reply status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "demoGiven",
+            "required": false,
+            "in": "query",
+            "description": "Demo given status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "secondShow",
+            "required": false,
+            "in": "query",
+            "description": "Second show status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "profile",
+            "required": false,
+            "in": "query",
+            "description": "User profile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": false,
+            "in": "query",
+            "description": "Chat ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "picsSent",
+            "required": false,
+            "in": "query",
+            "description": "Pics Sent status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "banned",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "isTesting",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search user data",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/userData/updateAll/{chatId}": {
+      "patch": {
+        "operationId": "UserDataController_updateAll",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update user data by ID",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/userData/{profile}/{chatId}": {
+      "get": {
+        "operationId": "UserDataController_findOne",
+        "parameters": [
+          {
+            "name": "profile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get user data by ID",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      },
+      "patch": {
+        "operationId": "UserDataController_update",
+        "parameters": [
+          {
+            "name": "profile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update user data by ID",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      },
+      "delete": {
+        "operationId": "UserDataController_remove",
+        "parameters": [
+          {
+            "name": "profile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete user data by ID",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/userData/clear-count": {
+      "get": {
+        "operationId": "UserDataController_clearCount",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/userData/query": {
+      "post": {
+        "operationId": "UserDataController_executeQuery",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Execute a custom MongoDB query",
+        "tags": [
+          "UserData of TG clients"
+        ]
+      }
+    },
+    "/user": {
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a new user",
+        "tags": [
+          "Telegram Users"
+        ]
+      },
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all users",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/search": {
+      "get": {
+        "operationId": "UsersController_search",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Telegram ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Filter by mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "twoFA",
+            "required": false,
+            "in": "query",
+            "description": "Filter by twoFA status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "expired",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Expiration status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "session",
+            "required": false,
+            "in": "query",
+            "description": "Filter by session",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "firstName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by first name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "username",
+            "required": false,
+            "in": "query",
+            "description": "Filter by username",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channels",
+            "required": false,
+            "in": "query",
+            "description": "Filter by channels count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "personalChats",
+            "required": false,
+            "in": "query",
+            "description": "Filter by personal chats count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "demoGiven",
+            "required": false,
+            "in": "query",
+            "description": "Filter by demo given status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "msgs",
+            "required": false,
+            "in": "query",
+            "description": "Filter by messages count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "totalChats",
+            "required": false,
+            "in": "query",
+            "description": "Filter by total chats count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "lastActive",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last active timestamp",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "movieCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by movie count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "photoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by photo count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "videoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by video count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "gender",
+            "required": false,
+            "in": "query",
+            "description": "Filter by gender",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "otherPhotoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by other photo count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "otherVideoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by other video count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "ownPhotoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by own photo count",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "ownVideoCount",
+            "required": false,
+            "in": "query",
+            "description": "Filter by own video count",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search users based on various parameters",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/{tgId}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": true,
+            "in": "path",
+            "description": "The Telegram ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a user by tgId",
+        "tags": [
+          "Telegram Users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": true,
+            "in": "path",
+            "description": "The Telegram ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a user by tgId",
+        "tags": [
+          "Telegram Users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": true,
+            "in": "path",
+            "description": "The Telegram ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a user by tgId",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/query": {
+      "post": {
+        "operationId": "UsersController_executeQuery",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Execute a custom MongoDB query",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/bufferclients": {
+      "post": {
+        "operationId": "BufferClientController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBufferClientDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create user data",
+        "tags": [
+          "Buffer Clients"
+        ]
+      },
+      "get": {
+        "operationId": "BufferClientController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all user data",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/search": {
+      "get": {
+        "operationId": "BufferClientController_search",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": false,
+            "in": "query",
+            "description": "Telegram ID of the client",
+            "schema": {
+              "example": "123456789",
+              "type": "string"
+            }
+          },
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Mobile number of the client",
+            "schema": {
+              "example": "+1234567890",
+              "type": "string"
+            }
+          },
+          {
+            "name": "availableDate",
+            "required": false,
+            "in": "query",
+            "description": "availableDate of the bufferClient",
+            "schema": {
+              "example": "2023-06-22",
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "required": false,
+            "in": "query",
+            "description": "Session identifier",
+            "schema": {
+              "example": "session123",
+              "type": "string"
+            }
+          },
+          {
+            "name": "channels",
+            "required": false,
+            "in": "query",
+            "description": "Channel Count",
+            "schema": {
+              "example": 23,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search user data",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/updateInfo": {
+      "get": {
+        "operationId": "BufferClientController_updateInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update promote Clients Info",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/joinChannelsForBufferClients": {
+      "get": {
+        "operationId": "BufferClientController_joinChannelsforBufferClients",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Join Channels for BufferClients",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/checkBufferClients": {
+      "get": {
+        "operationId": "BufferClientController_checkbufferClients",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Check Buffer Clients",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/addNewUserstoBufferClients": {
+      "post": {
+        "operationId": "BufferClientController_addNewUserstoBufferClients",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Add New Users to Buffer Clients",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/SetAsBufferClient/{mobile}": {
+      "get": {
+        "operationId": "BufferClientController_setAsBufferClient",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "User mobile number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Set as Buffer Client",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/{mobile}": {
+      "get": {
+        "operationId": "BufferClientController_findOne",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get user data by ID",
+        "tags": [
+          "Buffer Clients"
+        ]
+      },
+      "patch": {
+        "operationId": "BufferClientController_update",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBufferClientDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update user data by ID",
+        "tags": [
+          "Buffer Clients"
+        ]
+      },
+      "put": {
+        "operationId": "BufferClientController_createdOrupdate",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBufferClientDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update user data by ID",
+        "tags": [
+          "Buffer Clients"
+        ]
+      },
+      "delete": {
+        "operationId": "BufferClientController_remove",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete user data by ID",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/query": {
+      "post": {
+        "operationId": "BufferClientController_executeQuery",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Execute a custom MongoDB query",
+        "tags": [
+          "Buffer Clients"
         ]
       }
     },
@@ -5697,304 +6749,47 @@
         ]
       }
     },
-    "/telegram/session/create": {
+    "/channels": {
       "post": {
-        "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
-        "operationId": "SessionController_createSession",
+        "operationId": "ChannelsController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateSessionDto"
+                "$ref": "#/components/schemas/CreateChannelDto"
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Session created or retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Session created successfully"
-                    },
-                    "session": {
-                      "type": "string",
-                      "example": "1BVtsOHIBu2iBJgvn6U6SfJTgN6z..."
-                    },
-                    "isNew": {
-                      "type": "boolean",
-                      "example": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request - validation failed or session creation failed"
-          }
-        },
-        "summary": "Master session creation endpoint",
-        "tags": [
-          "Telegram Session Management"
-        ]
-      }
-    },
-    "/telegram/session/audit/search": {
-      "get": {
-        "description": "Search and retrieve session audit records based on various criteria",
-        "operationId": "SessionController_searchAudit",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": false,
-            "in": "query",
-            "description": "Phone number to search for",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": false,
-            "in": "query",
-            "description": "Filter by session status",
-            "schema": {
-              "enum": [
-                "created",
-                "active",
-                "expired",
-                "revoked",
-                "failed"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "Number of records to return (default: 10)",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "offset",
-            "required": false,
-            "in": "query",
-            "description": "Number of records to skip (default: 0)",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Audit records retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "mobile": {
-                            "type": "string",
-                            "example": "916265240911"
-                          },
-                          "sessionString": {
-                            "type": "string",
-                            "example": "1BQANOTEuM==..."
-                          },
-                          "status": {
-                            "type": "string",
-                            "example": "active"
-                          },
-                          "creationMethod": {
-                            "type": "string",
-                            "example": "old_session"
-                          },
-                          "createdAt": {
-                            "type": "string",
-                            "example": "2023-12-01T10:00:00Z"
-                          },
-                          "lastUsedAt": {
-                            "type": "string",
-                            "example": "2023-12-01T15:30:00Z"
-                          },
-                          "usageCount": {
-                            "type": "number",
-                            "example": 5
-                          }
-                        }
-                      }
-                    },
-                    "total": {
-                      "type": "number",
-                      "example": 25
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Audit records retrieved successfully"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Search existing audit sessions",
-        "tags": [
-          "Telegram Session Management"
-        ]
-      }
-    },
-    "/timestamps": {
-      "get": {
-        "operationId": "TimestampController_findOne",
-        "parameters": [],
-        "responses": {
-          "200": {
+          "201": {
             "description": ""
           }
         },
-        "summary": "Get timestamp data",
+        "summary": "Create a new  channel",
         "tags": [
-          "Timestamps"
-        ]
-      },
-      "patch": {
-        "operationId": "TimestampController_update",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update timestamp data",
-        "tags": [
-          "Timestamps"
-        ]
-      }
-    },
-    "/timestamps/stalled": {
-      "get": {
-        "operationId": "TimestampController_getClientsWithTimeDifference",
-        "parameters": [
-          {
-            "name": "threshold",
-            "required": false,
-            "in": "query",
-            "description": "Minimum time difference in minutes (default: 3)",
-            "schema": {
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get clients with time differences greater than threshold",
-        "tags": [
-          "Timestamps"
-        ]
-      }
-    },
-    "/ip-management/proxy-ips": {
-      "post": {
-        "operationId": "IpManagementController_createProxyIp",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProxyIpDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Proxy IP created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProxyIp"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input data"
-          },
-          "409": {
-            "description": "Proxy IP already exists"
-          }
-        },
-        "summary": "Create a new proxy IP",
-        "tags": [
-          "IP Management"
+          "Channels"
         ]
       },
       "get": {
-        "operationId": "IpManagementController_getAllProxyIps",
+        "operationId": "ChannelsController_findAll",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Proxy IPs retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProxyIp"
-                  }
-                }
-              }
-            }
+            "description": ""
           }
         },
-        "summary": "Get all proxy IPs",
+        "summary": "Get all  channels",
         "tags": [
-          "IP Management"
+          "Channels"
         ]
       }
     },
-    "/ip-management/proxy-ips/bulk": {
+    "/channels/createMultiple": {
       "post": {
-        "operationId": "IpManagementController_bulkCreateProxyIps",
+        "operationId": "ChannelsController_createMultiple",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -6003,41 +6798,171 @@
               "schema": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/CreateProxyIpDto"
+                  "$ref": "#/components/schemas/CreateChannelDto"
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Bulk creation completed"
+          "201": {
+            "description": ""
           }
         },
-        "summary": "Bulk create proxy IPs",
+        "summary": "Create multiple channels",
         "tags": [
-          "IP Management"
+          "Channels"
         ]
       }
     },
-    "/ip-management/proxy-ips/{ipAddress}/{port}": {
-      "put": {
-        "operationId": "IpManagementController_updateProxyIp",
+    "/channels/search": {
+      "get": {
+        "operationId": "ChannelsController_search",
         "parameters": [
           {
-            "name": "ipAddress",
-            "required": true,
-            "in": "path",
-            "description": "IP address",
+            "name": "channelId",
+            "required": false,
+            "in": "query",
+            "description": "Unique identifier for the channel",
             "schema": {
+              "example": "803387987",
               "type": "string"
             }
           },
           {
-            "name": "port",
+            "name": "title",
+            "required": false,
+            "in": "query",
+            "description": "Title of the channel",
+            "schema": {
+              "example": "Earn money with Ayesha",
+              "type": "string"
+            }
+          },
+          {
+            "name": "private",
+            "required": false,
+            "in": "query",
+            "description": "privacy of the channel",
+            "schema": {
+              "example": false,
+              "type": "string"
+            }
+          },
+          {
+            "name": "username",
+            "required": false,
+            "in": "query",
+            "description": "Username of the channel",
+            "schema": {
+              "example": "ayesha_channel",
+              "type": "string"
+            }
+          },
+          {
+            "name": "canSendMsgs",
+            "required": false,
+            "in": "query",
+            "description": "Indicates if the channel can send messages",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "minParticipantsCount",
+            "required": false,
+            "in": "query",
+            "description": "Minimum number of participants in the channel",
+            "schema": {
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxParticipantsCount",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of participants in the channel",
+            "schema": {
+              "example": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sendMessages",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "restricted",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "participantsCount",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "broadcast",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search channels by filters",
+        "tags": [
+          "Channels"
+        ]
+      }
+    },
+    "/channels/{channelId}": {
+      "get": {
+        "operationId": "ChannelsController_findOne",
+        "parameters": [
+          {
+            "name": "channelId",
             "required": true,
             "in": "path",
-            "description": "Port number",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get an  channel by channelId",
+        "tags": [
+          "Channels"
+        ]
+      },
+      "patch": {
+        "operationId": "ChannelsController_update",
+        "parameters": [
+          {
+            "name": "channelId",
+            "required": true,
+            "in": "path",
             "schema": {
               "type": "string"
             }
@@ -6048,48 +6973,28 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProxyIpDto"
+                "$ref": "#/components/schemas/UpdateChannelDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Proxy IP updated successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProxyIp"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Proxy IP not found"
+            "description": ""
           }
         },
-        "summary": "Update a proxy IP",
+        "summary": "Update an  channel by channelId",
         "tags": [
-          "IP Management"
+          "Channels"
         ]
       },
       "delete": {
-        "operationId": "IpManagementController_deleteProxyIp",
+        "operationId": "ChannelsController_remove",
         "parameters": [
           {
-            "name": "ipAddress",
+            "name": "channelId",
             "required": true,
             "in": "path",
-            "description": "IP address",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "port",
-            "required": true,
-            "in": "path",
-            "description": "Port number",
             "schema": {
               "type": "string"
             }
@@ -6097,575 +7002,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Proxy IP deleted successfully"
-          },
-          "400": {
-            "description": "Cannot delete assigned IP"
-          },
-          "404": {
-            "description": "Proxy IP not found"
+            "description": ""
           }
         },
-        "summary": "Delete a proxy IP",
+        "summary": "Delete an  channel by channelId",
         "tags": [
-          "IP Management"
-        ]
-      },
-      "get": {
-        "operationId": "IpManagementController_getProxyIpById",
-        "parameters": [
-          {
-            "name": "ipAddress",
-            "required": true,
-            "in": "path",
-            "description": "IP address",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "port",
-            "required": true,
-            "in": "path",
-            "description": "Port number",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Proxy IP found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProxyIp"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Proxy IP not found"
-          }
-        },
-        "summary": "Get a specific proxy IP",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/mappings/mobile/{mobile}/ip": {
-      "get": {
-        "operationId": "IpManagementController_getIpForMobile",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "IP address found"
-          },
-          "404": {
-            "description": "No IP assigned to this mobile"
-          }
-        },
-        "summary": "Get IP address assigned to a mobile number",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/assign": {
-      "post": {
-        "operationId": "IpManagementController_assignIpToMobile",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignIpToMobileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "IP assigned successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IpMobileMapping"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Assignment failed"
-          }
-        },
-        "summary": "Assign an IP to a mobile number",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/assign/bulk": {
-      "post": {
-        "operationId": "IpManagementController_bulkAssignIps",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkAssignIpDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Bulk assignment completed"
-          }
-        },
-        "summary": "Bulk assign IPs to multiple mobile numbers",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/assign/mobile/{mobile}": {
-      "delete": {
-        "operationId": "IpManagementController_releaseIpFromMobile",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReleaseIpFromMobileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "IP released successfully"
-          },
-          "404": {
-            "description": "No IP assignment found for mobile"
-          }
-        },
-        "summary": "Release IP from a mobile number",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/clients/{clientId}/mappings": {
-      "get": {
-        "operationId": "IpManagementController_getClientMappings",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Client mappings retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/IpMobileMapping"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get all mobile mappings for a client",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/statistics": {
-      "get": {
-        "operationId": "IpManagementController_getStatistics",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Statistics retrieved successfully"
-          }
-        },
-        "summary": "Get IP management statistics",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/health": {
-      "get": {
-        "operationId": "IpManagementController_getHealthStatus",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Health status retrieved successfully"
-          }
-        },
-        "summary": "Get IP management health status",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/clients/{clientId}/assigned-ips": {
-      "get": {
-        "operationId": "IpManagementController_getClientAssignedIps",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Client assigned IPs retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProxyIp"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get all IPs assigned to a client",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/ip-management/available-count": {
-      "get": {
-        "operationId": "IpManagementController_getAvailableIpCount",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Available IP count retrieved successfully"
-          }
-        },
-        "summary": "Get count of available IPs",
-        "tags": [
-          "IP Management"
-        ]
-      }
-    },
-    "/client-ip-integration/clients/{clientId}/auto-assign-ips": {
-      "post": {
-        "operationId": "ClientIpIntegrationController_autoAssignIpsToClient",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "IPs assigned successfully"
-          }
-        },
-        "summary": "Auto-assign IPs to all client mobile numbers",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/mobile/{mobile}/ip": {
-      "get": {
-        "operationId": "ClientIpIntegrationController_getIpForMobile",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clientId",
-            "required": false,
-            "in": "query",
-            "description": "Optional client ID for context",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "autoAssign",
-            "required": false,
-            "in": "query",
-            "description": "Auto-assign IP if not found and context available",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "IP address retrieved or assigned"
-          }
-        },
-        "summary": "Get IP assigned to a mobile number with smart assignment",
-        "tags": [
-          "Client IP Integration"
-        ]
-      },
-      "delete": {
-        "operationId": "ClientIpIntegrationController_releaseIpFromMobile",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clientId",
-            "required": false,
-            "in": "query",
-            "description": "Optional client ID for context",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "IP released successfully"
-          }
-        },
-        "summary": "Release IP from a mobile number",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/clients/{clientId}/ip-summary": {
-      "get": {
-        "operationId": "ClientIpIntegrationController_getClientIpSummary",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Client IP summary retrieved successfully"
-          }
-        },
-        "summary": "Get comprehensive IP information for a client",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/clients/{clientId}/auto-assign-all-ips": {
-      "post": {
-        "operationId": "ClientIpIntegrationController_autoAssignAllIpsViaClientService",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "IPs auto-assigned using ClientService"
-          }
-        },
-        "summary": "Auto-assign IPs to all client mobile numbers (alternative endpoint)",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/clients/{clientId}/assign-main-mobile-ip": {
-      "post": {
-        "operationId": "ClientIpIntegrationController_assignIpToMainMobile",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "mobile": {
-                    "type": "string",
-                    "description": "Mobile number"
-                  },
-                  "preferredCountry": {
-                    "type": "string",
-                    "description": "Preferred country code"
-                  }
-                },
-                "required": [
-                  "mobile"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "IP assigned to main mobile"
-          }
-        },
-        "summary": "Assign IP to client main mobile number",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/clients/{clientId}/assign-promote-mobiles-ips": {
-      "post": {
-        "operationId": "ClientIpIntegrationController_assignIpsToPromoteMobiles",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "Client ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "promoteMobiles": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Array of promote mobile numbers"
-                  },
-                  "preferredCountry": {
-                    "type": "string",
-                    "description": "Preferred country code"
-                  }
-                },
-                "required": [
-                  "promoteMobiles"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "IPs assigned to promote mobiles"
-          }
-        },
-        "summary": "Assign IPs to client promote mobile numbers",
-        "tags": [
-          "Client IP Integration"
-        ]
-      }
-    },
-    "/client-ip-integration/mobile/{mobile}/status": {
-      "get": {
-        "operationId": "ClientIpIntegrationController_checkMobileIpStatus",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Mobile IP status retrieved successfully"
-          }
-        },
-        "summary": "Check IP assignment status for a mobile number",
-        "tags": [
-          "Client IP Integration"
+          "Channels"
         ]
       }
     },
@@ -6804,6 +7146,21 @@
           }
         },
         "summary": "Join Channels for PromoteClients",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/updateInfo": {
+      "get": {
+        "operationId": "PromoteClientController_updateInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update promote Clients Info",
         "tags": [
           "Promote Clients"
         ]
@@ -7401,510 +7758,6 @@
         ]
       }
     },
-    "/npoint/documents/{id}": {
-      "get": {
-        "operationId": "NpointController_fetchDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to fetch",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Document fetched successfully"
-          },
-          "404": {
-            "description": "Document not found"
-          }
-        },
-        "summary": "Fetch a document by ID",
-        "tags": [
-          "NPoint API"
-        ]
-      },
-      "put": {
-        "operationId": "NpointController_updateDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to update",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "description": "The updated document",
-          "content": {
-            "application/json": {
-              "schema": {
-                "example": {
-                  "title": "Updated Document",
-                  "content": "This is the updated content of the document."
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Document updated successfully"
-          },
-          "404": {
-            "description": "Document not found"
-          }
-        },
-        "summary": "Update a document by ID",
-        "tags": [
-          "NPoint API"
-        ]
-      }
-    },
-    "/npoint/documents": {
-      "post": {
-        "operationId": "NpointController_postDocument",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "description": "The document to post",
-          "content": {
-            "application/json": {
-              "schema": {
-                "example": {
-                  "title": "My Document",
-                  "content": "This is the content of the document."
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Document posted successfully"
-          },
-          "400": {
-            "description": "Invalid input"
-          }
-        },
-        "summary": "Post a new document",
-        "tags": [
-          "NPoint API"
-        ]
-      },
-      "get": {
-        "operationId": "NpointController_fetchAllDocuments",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "List of all documents fetched successfully"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Fetch all documents",
-        "tags": [
-          "NPoint API"
-        ]
-      }
-    },
-    "/userData": {
-      "post": {
-        "operationId": "UserDataController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateUserDataDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Create user data",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      },
-      "get": {
-        "operationId": "UserDataController_findAll",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get all user data",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
-    "/userData/search": {
-      "get": {
-        "operationId": "UserDataController_search",
-        "parameters": [
-          {
-            "name": "totalCount",
-            "required": false,
-            "in": "query",
-            "description": "Total count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "picCount",
-            "required": false,
-            "in": "query",
-            "description": "Picture count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "lastMsgTimeStamp",
-            "required": false,
-            "in": "query",
-            "description": "Last message timestamp",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "limitTime",
-            "required": false,
-            "in": "query",
-            "description": "Limit time",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "paidCount",
-            "required": false,
-            "in": "query",
-            "description": "Paid count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "prfCount",
-            "required": false,
-            "in": "query",
-            "description": "Profile count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "canReply",
-            "required": false,
-            "in": "query",
-            "description": "Can reply",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "payAmount",
-            "required": false,
-            "in": "query",
-            "description": "Pay amount",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "username",
-            "required": false,
-            "in": "query",
-            "description": "Username",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "accessHash",
-            "required": false,
-            "in": "query",
-            "description": "Access hash",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "paidReply",
-            "required": false,
-            "in": "query",
-            "description": "Paid reply status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "demoGiven",
-            "required": false,
-            "in": "query",
-            "description": "Demo given status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "secondShow",
-            "required": false,
-            "in": "query",
-            "description": "Second show status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "profile",
-            "required": false,
-            "in": "query",
-            "description": "User profile",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "chatId",
-            "required": false,
-            "in": "query",
-            "description": "Chat ID",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "picsSent",
-            "required": false,
-            "in": "query",
-            "description": "Pics Sent status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "banned",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "isTesting",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Search user data",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
-    "/userData/updateAll/{chatId}": {
-      "patch": {
-        "operationId": "UserDataController_updateAll",
-        "parameters": [
-          {
-            "name": "chatId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDataDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update user data by ID",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
-    "/userData/{profile}/{chatId}": {
-      "get": {
-        "operationId": "UserDataController_findOne",
-        "parameters": [
-          {
-            "name": "profile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "chatId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Get user data by ID",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      },
-      "patch": {
-        "operationId": "UserDataController_update",
-        "parameters": [
-          {
-            "name": "profile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "chatId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDataDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Update user data by ID",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      },
-      "delete": {
-        "operationId": "UserDataController_remove",
-        "parameters": [
-          {
-            "name": "profile",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "chatId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "summary": "Delete user data by ID",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
-    "/userData/clear-count": {
-      "get": {
-        "operationId": "UserDataController_clearCount",
-        "parameters": [
-          {
-            "name": "chatId",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
-    "/userData/query": {
-      "post": {
-        "operationId": "UserDataController_executeQuery",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "summary": "Execute a custom MongoDB query",
-        "tags": [
-          "UserData of TG clients"
-        ]
-      }
-    },
     "/builds": {
       "get": {
         "operationId": "BuildController_findOne",
@@ -7978,6 +7831,44 @@
         "summary": "Update Upi Ids",
         "tags": [
           "UPI Ids"
+        ]
+      }
+    },
+    "/promote-msgs": {
+      "get": {
+        "operationId": "PromoteMsgsController_findOne",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get promote-msgs data",
+        "tags": [
+          "Promote-msgs"
+        ]
+      },
+      "patch": {
+        "operationId": "PromoteMsgsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update promote-msgs",
+        "tags": [
+          "Promote-msgs"
         ]
       }
     },
@@ -8737,6 +8628,185 @@
         ]
       }
     },
+    "/npoint/documents/{id}": {
+      "get": {
+        "operationId": "NpointController_fetchDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The ID of the document to fetch",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document fetched successfully"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        },
+        "summary": "Fetch a document by ID",
+        "tags": [
+          "NPoint API"
+        ]
+      },
+      "put": {
+        "operationId": "NpointController_updateDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The ID of the document to update",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "The updated document",
+          "content": {
+            "application/json": {
+              "schema": {
+                "example": {
+                  "title": "Updated Document",
+                  "content": "This is the updated content of the document."
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document updated successfully"
+          },
+          "404": {
+            "description": "Document not found"
+          }
+        },
+        "summary": "Update a document by ID",
+        "tags": [
+          "NPoint API"
+        ]
+      }
+    },
+    "/npoint/documents": {
+      "post": {
+        "operationId": "NpointController_postDocument",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "The document to post",
+          "content": {
+            "application/json": {
+              "schema": {
+                "example": {
+                  "title": "My Document",
+                  "content": "This is the content of the document."
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document posted successfully"
+          },
+          "400": {
+            "description": "Invalid input"
+          }
+        },
+        "summary": "Post a new document",
+        "tags": [
+          "NPoint API"
+        ]
+      },
+      "get": {
+        "operationId": "NpointController_fetchAllDocuments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of all documents fetched successfully"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Fetch all documents",
+        "tags": [
+          "NPoint API"
+        ]
+      }
+    },
+    "/timestamps": {
+      "get": {
+        "operationId": "TimestampController_findOne",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get timestamp data",
+        "tags": [
+          "Timestamps"
+        ]
+      },
+      "patch": {
+        "operationId": "TimestampController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update timestamp data",
+        "tags": [
+          "Timestamps"
+        ]
+      }
+    },
+    "/timestamps/stalled": {
+      "get": {
+        "operationId": "TimestampController_getClientsWithTimeDifference",
+        "parameters": [
+          {
+            "name": "threshold",
+            "required": false,
+            "in": "query",
+            "description": "Minimum time difference in minutes (default: 3)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get clients with time differences greater than threshold",
+        "tags": [
+          "Timestamps"
+        ]
+      }
+    },
     "/dynamic-data": {
       "post": {
         "operationId": "DynamicDataController_create",
@@ -8908,6 +8978,55 @@
           "dynamic-data"
         ]
       }
+    },
+    "/": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/execute-request": {
+      "post": {
+        "description": "Makes an HTTP request to the specified URL with provided configuration and returns the response",
+        "operationId": "AppController_executeRequest",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Request executed successfully"
+          },
+          "400": {
+            "description": "Invalid request parameters"
+          },
+          "429": {
+            "description": "Too many requests"
+          },
+          "500": {
+            "description": "Internal server error or request execution failed"
+          }
+        },
+        "summary": "Execute an HTTP request with given details",
+        "tags": [
+          "App"
+        ]
+      }
     }
   },
   "info": {
@@ -8919,79 +9038,14 @@
   "tags": [],
   "servers": [],
   "components": {
+    "securitySchemes": {
+      "x-api-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      }
+    },
     "schemas": {
-      "ExecuteRequestDto": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "The URL to send the request to"
-          },
-          "method": {
-            "type": "string",
-            "enum": [
-              "GET",
-              "POST",
-              "PUT",
-              "DELETE",
-              "PATCH",
-              "HEAD",
-              "OPTIONS"
-            ],
-            "default": "GET"
-          },
-          "headers": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "data": {
-            "type": "object",
-            "description": "Request body data"
-          },
-          "params": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "responseType": {
-            "type": "string",
-            "enum": [
-              "json",
-              "text",
-              "stream",
-              "blob",
-              "document",
-              "arraybuffer"
-            ],
-            "default": "json"
-          },
-          "timeout": {
-            "type": "number",
-            "description": "Request timeout in milliseconds",
-            "default": 30000,
-            "minimum": 1000,
-            "maximum": 300000
-          },
-          "followRedirects": {
-            "type": "boolean",
-            "description": "Whether to follow redirects",
-            "default": true
-          },
-          "maxRedirects": {
-            "type": "number",
-            "description": "Maximum number of redirects to follow",
-            "default": 5,
-            "minimum": 0,
-            "maximum": 10
-          }
-        },
-        "required": [
-          "url"
-        ]
-      },
       "Object": {
         "type": "object",
         "properties": {}
@@ -9907,262 +9961,6 @@
           "username"
         ]
       },
-      "CreateUserDto": {
-        "type": "object",
-        "properties": {
-          "mobile": {
-            "type": "string",
-            "description": "Mobile number of the user",
-            "example": "917330803480"
-          },
-          "session": {
-            "type": "string",
-            "description": "Session information of the user",
-            "example": "string"
-          },
-          "firstName": {
-            "type": "string",
-            "description": "First name of the user",
-            "example": "Praveen"
-          },
-          "lastName": {
-            "type": "string",
-            "description": "Last name of the user",
-            "example": null
-          },
-          "username": {
-            "type": "string",
-            "description": "Username of the user",
-            "example": null
-          },
-          "channels": {
-            "type": "number",
-            "description": "Number of channels",
-            "example": 56
-          },
-          "personalChats": {
-            "type": "number",
-            "description": "Number of personal chats",
-            "example": 74
-          },
-          "msgs": {
-            "type": "number",
-            "description": "Number of messages",
-            "example": 0
-          },
-          "totalChats": {
-            "type": "number",
-            "description": "Total number of chats",
-            "example": 195
-          },
-          "lastActive": {
-            "type": "string",
-            "description": "Timestamp of last active",
-            "example": "2024-06-03"
-          },
-          "tgId": {
-            "type": "string",
-            "description": "Telegram ID of the user",
-            "example": "2022068676"
-          },
-          "twoFA": {
-            "type": "boolean",
-            "description": "TwoFA status",
-            "example": false
-          },
-          "expired": {
-            "type": "boolean",
-            "description": "Expiration status",
-            "example": false
-          },
-          "password": {
-            "type": "string",
-            "description": "password",
-            "example": "pass"
-          },
-          "movieCount": {
-            "type": "number",
-            "description": "Number of movies",
-            "example": 0
-          },
-          "photoCount": {
-            "type": "number",
-            "description": "Number of photos",
-            "example": 0
-          },
-          "videoCount": {
-            "type": "number",
-            "description": "Number of videos",
-            "example": 0
-          },
-          "gender": {
-            "type": "string",
-            "description": "Gender of the user",
-            "example": null
-          },
-          "otherPhotoCount": {
-            "type": "number",
-            "description": "Number of other photos",
-            "example": 0
-          },
-          "otherVideoCount": {
-            "type": "number",
-            "description": "Number of other videos",
-            "example": 0
-          },
-          "ownPhotoCount": {
-            "type": "number",
-            "description": "Number of own photos",
-            "example": 0
-          },
-          "ownVideoCount": {
-            "type": "number",
-            "description": "Number of own videos",
-            "example": 0
-          },
-          "contacts": {
-            "type": "number",
-            "description": "Number of contacts",
-            "example": 105
-          },
-          "calls": {
-            "type": "object",
-            "description": "Call details of the user",
-            "example": {
-              "outgoing": 1,
-              "incoming": 0,
-              "video": 1,
-              "chatCallCounts": [],
-              "totalCalls": 1
-            }
-          },
-          "recentUsers": {
-            "description": "Call details of the user",
-            "example": [],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "mobile",
-          "session",
-          "firstName",
-          "lastName",
-          "username",
-          "channels",
-          "personalChats",
-          "msgs",
-          "totalChats",
-          "lastActive",
-          "tgId",
-          "twoFA",
-          "expired",
-          "password",
-          "movieCount",
-          "photoCount",
-          "videoCount",
-          "gender",
-          "otherPhotoCount",
-          "otherVideoCount",
-          "ownPhotoCount",
-          "ownVideoCount",
-          "contacts",
-          "calls"
-        ]
-      },
-      "UpdateUserDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "CreateBufferClientDto": {
-        "type": "object",
-        "properties": {
-          "tgId": {
-            "type": "string",
-            "description": "Telegram ID of the client",
-            "example": "123456789"
-          },
-          "mobile": {
-            "type": "string",
-            "description": "Mobile number of the client",
-            "example": "+1234567890"
-          },
-          "availableDate": {
-            "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
-          },
-          "session": {
-            "type": "string",
-            "description": "Session identifier",
-            "example": "session123"
-          },
-          "channels": {
-            "type": "number",
-            "description": "Channel Count",
-            "example": 23
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the buffer client",
-            "example": "active",
-            "enum": [
-              "active",
-              "inactive"
-            ],
-            "default": "active"
-          }
-        },
-        "required": [
-          "tgId",
-          "mobile",
-          "availableDate",
-          "session",
-          "channels"
-        ]
-      },
-      "UpdateBufferClientDto": {
-        "type": "object",
-        "properties": {
-          "tgId": {
-            "type": "string",
-            "description": "Telegram ID of the client",
-            "example": "123456789"
-          },
-          "mobile": {
-            "type": "string",
-            "description": "Mobile number of the client",
-            "example": "+1234567890"
-          },
-          "availableDate": {
-            "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
-          },
-          "session": {
-            "type": "string",
-            "description": "Session identifier",
-            "example": "session123"
-          },
-          "channels": {
-            "type": "number",
-            "description": "Channel Count",
-            "example": 23
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the buffer client",
-            "example": "active",
-            "enum": [
-              "active",
-              "inactive"
-            ],
-            "default": "active"
-          }
-        }
-      },
       "CreateActiveChannelDto": {
         "type": "object",
         "properties": {
@@ -10312,132 +10110,6 @@
           "private": {
             "type": "boolean",
             "description": "Whether the channel is private",
-            "example": false
-          }
-        }
-      },
-      "CreateChannelDto": {
-        "type": "object",
-        "properties": {
-          "channelId": {
-            "type": "string",
-            "description": "Unique identifier for the channel",
-            "example": "803387987"
-          },
-          "broadcast": {
-            "type": "boolean",
-            "description": "Whether the channel is a broadcast channel",
-            "example": null
-          },
-          "canSendMsgs": {
-            "type": "boolean",
-            "description": "Indicates if the channel can send messages",
-            "example": true
-          },
-          "megagroup": {
-            "type": "boolean",
-            "description": "Whether the channel is a megagroup",
-            "example": null
-          },
-          "participantsCount": {
-            "type": "number",
-            "description": "Number of participants in the channel",
-            "example": 0
-          },
-          "restricted": {
-            "type": "boolean",
-            "description": "Whether the channel is restricted",
-            "example": null
-          },
-          "sendMessages": {
-            "type": "boolean",
-            "description": "Whether the channel can send messages",
-            "example": null
-          },
-          "title": {
-            "type": "string",
-            "description": "Title of the channel",
-            "example": "Earn money with Ayesha"
-          },
-          "username": {
-            "type": "string",
-            "description": "Username of the channel",
-            "example": null
-          },
-          "private": {
-            "type": "boolean",
-            "description": "Whether the channel is private",
-            "example": false
-          },
-          "forbidden": {
-            "type": "boolean",
-            "default": false,
-            "example": false
-          }
-        },
-        "required": [
-          "channelId",
-          "canSendMsgs",
-          "participantsCount",
-          "title"
-        ]
-      },
-      "UpdateChannelDto": {
-        "type": "object",
-        "properties": {
-          "channelId": {
-            "type": "string",
-            "description": "Unique identifier for the channel",
-            "example": "803387987"
-          },
-          "broadcast": {
-            "type": "boolean",
-            "description": "Whether the channel is a broadcast channel",
-            "example": null
-          },
-          "canSendMsgs": {
-            "type": "boolean",
-            "description": "Indicates if the channel can send messages",
-            "example": true
-          },
-          "megagroup": {
-            "type": "boolean",
-            "description": "Whether the channel is a megagroup",
-            "example": null
-          },
-          "participantsCount": {
-            "type": "number",
-            "description": "Number of participants in the channel",
-            "example": 0
-          },
-          "restricted": {
-            "type": "boolean",
-            "description": "Whether the channel is restricted",
-            "example": null
-          },
-          "sendMessages": {
-            "type": "boolean",
-            "description": "Whether the channel can send messages",
-            "example": null
-          },
-          "title": {
-            "type": "string",
-            "description": "Title of the channel",
-            "example": "Earn money with Ayesha"
-          },
-          "username": {
-            "type": "string",
-            "description": "Username of the channel",
-            "example": null
-          },
-          "private": {
-            "type": "boolean",
-            "description": "Whether the channel is private",
-            "example": false
-          },
-          "forbidden": {
-            "type": "boolean",
-            "default": false,
             "example": false
           }
         }
@@ -10670,189 +10342,6 @@
           }
         }
       },
-      "CreateArchivedClientDto": {
-        "type": "object",
-        "properties": {
-          "mobile": {
-            "type": "string",
-            "example": "+916265240911",
-            "description": "Phone number of the user"
-          },
-          "session": {
-            "type": "string",
-            "example": "1BQANOTEuMTA4LjUg==",
-            "description": "Current session token"
-          },
-          "oldSessions": {
-            "example": [
-              "1BQANOTEuM==",
-              "2CRANOTEuN=="
-            ],
-            "description": "Array of old session tokens",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "mobile",
-          "session"
-        ]
-      },
-      "ArchivedClient": {
-        "type": "object",
-        "properties": {
-          "mobile": {
-            "type": "string",
-            "example": "916265240911",
-            "description": "Mobile number of the archived user"
-          },
-          "session": {
-            "type": "string",
-            "example": "1BQANOTEuM==",
-            "description": "Current session token of the archived user"
-          },
-          "oldSessions": {
-            "example": [
-              "1BQANOTEuM==",
-              "2CRANOTEuN=="
-            ],
-            "description": "Array of old session tokens",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "lastUpdated": {
-            "format": "date-time",
-            "type": "string",
-            "description": "Last time the session was updated"
-          },
-          "lastCleanup": {
-            "format": "date-time",
-            "type": "string",
-            "description": "Last time sessions were cleaned up"
-          },
-          "sessionHistory": {
-            "description": "Session history for auditing purposes",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "mobile",
-          "session",
-          "oldSessions",
-          "lastUpdated",
-          "lastCleanup",
-          "sessionHistory"
-        ]
-      },
-      "SessionUpdateDto": {
-        "type": "object",
-        "properties": {
-          "newSession": {
-            "type": "string",
-            "example": "1BQANOTEuMTA4LjUg==",
-            "description": "New session token to set as primary session"
-          }
-        },
-        "required": [
-          "newSession"
-        ]
-      },
-      "CleanupSessionsDto": {
-        "type": "object",
-        "properties": {
-          "maxSessions": {
-            "type": "number",
-            "example": 5,
-            "description": "Maximum number of old sessions to keep",
-            "minimum": 0,
-            "maximum": 20,
-            "default": 5
-          }
-        }
-      },
-      "SessionHealthMetricsDto": {
-        "type": "object",
-        "properties": {
-          "activeOldSessions": {
-            "type": "number",
-            "example": 2,
-            "description": "Number of active old sessions available as backup"
-          },
-          "lastUpdated": {
-            "type": "string",
-            "example": "2024-01-15T08:30:00.000Z",
-            "description": "Timestamp when the session was last updated"
-          },
-          "sessionAge": {
-            "type": "string",
-            "example": "2 hours ago",
-            "description": "Human-readable session age"
-          },
-          "reliability": {
-            "type": "string",
-            "example": "high",
-            "description": "Session reliability rating based on availability",
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ]
-          }
-        },
-        "required": [
-          "activeOldSessions",
-          "lastUpdated",
-          "sessionAge",
-          "reliability"
-        ]
-      },
-      "SessionStatusDto": {
-        "type": "object",
-        "properties": {
-          "mobile": {
-            "type": "string",
-            "example": "916265240911",
-            "description": "Mobile number of the archived client"
-          },
-          "isMainSessionActive": {
-            "type": "boolean",
-            "example": true,
-            "description": "Whether the main session is currently active"
-          },
-          "totalOldSessions": {
-            "type": "number",
-            "example": 3,
-            "description": "Total number of old sessions stored"
-          },
-          "lastChecked": {
-            "type": "string",
-            "example": "2024-01-15T10:30:00.000Z",
-            "description": "Timestamp when the status was last checked"
-          },
-          "healthMetrics": {
-            "description": "Detailed health metrics for the session",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SessionHealthMetricsDto"
-              }
-            ]
-          }
-        },
-        "required": [
-          "mobile",
-          "isMainSessionActive",
-          "totalOldSessions",
-          "lastChecked",
-          "healthMetrics"
-        ]
-      },
       "CreateSessionDto": {
         "type": "object",
         "properties": {
@@ -10870,6 +10359,27 @@
             "type": "boolean",
             "description": "Force creation of new session even if active session exists",
             "default": false
+          }
+        }
+      },
+      "GetOldestSessionDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "description": "Phone number to get session for",
+            "example": "+1234567890"
+          },
+          "allowFallback": {
+            "type": "boolean",
+            "description": "Force creation of new session if no valid old session exists",
+            "default": true
+          },
+          "maxAgeDays": {
+            "type": "number",
+            "description": "Maximum age of session to consider (in days)",
+            "default": 3000,
+            "minimum": 1
           }
         }
       },
@@ -11137,119 +10647,6 @@
           "mobile"
         ]
       },
-      "CreatePromoteClientDto": {
-        "type": "object",
-        "properties": {
-          "tgId": {
-            "type": "string",
-            "description": "Telegram ID of the client",
-            "example": "123456789"
-          },
-          "mobile": {
-            "type": "string",
-            "description": "Mobile number of the client",
-            "example": "+1234567890"
-          },
-          "availableDate": {
-            "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
-          },
-          "lastActive": {
-            "type": "string",
-            "description": "lastActive identifier",
-            "example": "2023-06-22"
-          },
-          "channels": {
-            "type": "number",
-            "description": "Channel Count",
-            "example": 23
-          },
-          "clientId": {
-            "type": "string",
-            "description": "Client ID this promote mobile belongs to",
-            "example": "client123"
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the promote client",
-            "example": "active",
-            "default": "active"
-          },
-          "message": {
-            "type": "string",
-            "description": "Status message for the promote client",
-            "example": "Account is functioning properly",
-            "default": "Account is functioning properly"
-          },
-          "lastUsed": {
-            "format": "date-time",
-            "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
-          }
-        },
-        "required": [
-          "tgId",
-          "mobile",
-          "availableDate",
-          "lastActive",
-          "channels"
-        ]
-      },
-      "UpdatePromoteClientDto": {
-        "type": "object",
-        "properties": {
-          "tgId": {
-            "type": "string",
-            "description": "Telegram ID of the client",
-            "example": "123456789"
-          },
-          "mobile": {
-            "type": "string",
-            "description": "Mobile number of the client",
-            "example": "+1234567890"
-          },
-          "availableDate": {
-            "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
-          },
-          "lastActive": {
-            "type": "string",
-            "description": "lastActive identifier",
-            "example": "2023-06-22"
-          },
-          "channels": {
-            "type": "number",
-            "description": "Channel Count",
-            "example": 23
-          },
-          "clientId": {
-            "type": "string",
-            "description": "Client ID this promote mobile belongs to",
-            "example": "client123"
-          },
-          "status": {
-            "type": "string",
-            "description": "Status of the promote client",
-            "example": "active",
-            "default": "active"
-          },
-          "message": {
-            "type": "string",
-            "description": "Status message for the promote client",
-            "example": "Account is functioning properly",
-            "default": "Account is functioning properly"
-          },
-          "lastUsed": {
-            "format": "date-time",
-            "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
-          }
-        }
-      },
       "CreateUserDataDto": {
         "type": "object",
         "properties": {
@@ -11489,6 +10886,684 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number of the user",
+            "example": "917330803480"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session information of the user",
+            "example": "string"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "First name of the user",
+            "example": "Praveen"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Last name of the user",
+            "example": null
+          },
+          "username": {
+            "type": "string",
+            "description": "Username of the user",
+            "example": null
+          },
+          "channels": {
+            "type": "number",
+            "description": "Number of channels",
+            "example": 56
+          },
+          "personalChats": {
+            "type": "number",
+            "description": "Number of personal chats",
+            "example": 74
+          },
+          "msgs": {
+            "type": "number",
+            "description": "Number of messages",
+            "example": 0
+          },
+          "totalChats": {
+            "type": "number",
+            "description": "Total number of chats",
+            "example": 195
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "Timestamp of last active",
+            "example": "2024-06-03"
+          },
+          "tgId": {
+            "type": "string",
+            "description": "Telegram ID of the user",
+            "example": "2022068676"
+          },
+          "twoFA": {
+            "type": "boolean",
+            "description": "TwoFA status",
+            "example": false
+          },
+          "expired": {
+            "type": "boolean",
+            "description": "Expiration status",
+            "example": false
+          },
+          "password": {
+            "type": "string",
+            "description": "password",
+            "example": "pass"
+          },
+          "movieCount": {
+            "type": "number",
+            "description": "Number of movies",
+            "example": 0
+          },
+          "photoCount": {
+            "type": "number",
+            "description": "Number of photos",
+            "example": 0
+          },
+          "videoCount": {
+            "type": "number",
+            "description": "Number of videos",
+            "example": 0
+          },
+          "gender": {
+            "type": "string",
+            "description": "Gender of the user",
+            "example": null
+          },
+          "otherPhotoCount": {
+            "type": "number",
+            "description": "Number of other photos",
+            "example": 0
+          },
+          "otherVideoCount": {
+            "type": "number",
+            "description": "Number of other videos",
+            "example": 0
+          },
+          "ownPhotoCount": {
+            "type": "number",
+            "description": "Number of own photos",
+            "example": 0
+          },
+          "ownVideoCount": {
+            "type": "number",
+            "description": "Number of own videos",
+            "example": 0
+          },
+          "contacts": {
+            "type": "number",
+            "description": "Number of contacts",
+            "example": 105
+          },
+          "calls": {
+            "type": "object",
+            "description": "Call details of the user",
+            "example": {
+              "outgoing": 1,
+              "incoming": 0,
+              "video": 1,
+              "chatCallCounts": [],
+              "totalCalls": 1
+            }
+          },
+          "recentUsers": {
+            "description": "Call details of the user",
+            "example": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "mobile",
+          "session",
+          "firstName",
+          "lastName",
+          "username",
+          "channels",
+          "personalChats",
+          "msgs",
+          "totalChats",
+          "lastActive",
+          "tgId",
+          "twoFA",
+          "expired",
+          "password",
+          "movieCount",
+          "photoCount",
+          "videoCount",
+          "gender",
+          "otherPhotoCount",
+          "otherVideoCount",
+          "ownPhotoCount",
+          "ownVideoCount",
+          "contacts",
+          "calls"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBufferClientDto": {
+        "type": "object",
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram ID of the client",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number of the client",
+            "example": "+1234567890"
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date of the session",
+            "example": "2023-06-22"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session identifier",
+            "example": "session123"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Channel Count",
+            "example": 23
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the buffer client",
+            "example": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
+          }
+        },
+        "required": [
+          "tgId",
+          "mobile",
+          "availableDate",
+          "session",
+          "channels"
+        ]
+      },
+      "UpdateBufferClientDto": {
+        "type": "object",
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram ID of the client",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number of the client",
+            "example": "+1234567890"
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date of the session",
+            "example": "2023-06-22"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session identifier",
+            "example": "session123"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Channel Count",
+            "example": 23
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the buffer client",
+            "example": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
+          }
+        }
+      },
+      "CreateArchivedClientDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "+916265240911",
+            "description": "Phone number of the user"
+          },
+          "session": {
+            "type": "string",
+            "example": "1BQANOTEuMTA4LjUg==",
+            "description": "Current session token"
+          },
+          "oldSessions": {
+            "example": [
+              "1BQANOTEuM==",
+              "2CRANOTEuN=="
+            ],
+            "description": "Array of old session tokens",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "mobile",
+          "session"
+        ]
+      },
+      "ArchivedClient": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number of the archived user"
+          },
+          "session": {
+            "type": "string",
+            "example": "1BQANOTEuM==",
+            "description": "Current session token of the archived user"
+          },
+          "oldSessions": {
+            "example": [
+              "1BQANOTEuM==",
+              "2CRANOTEuN=="
+            ],
+            "description": "Array of old session tokens",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastUpdated": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time the session was updated"
+          },
+          "lastCleanup": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time sessions were cleaned up"
+          },
+          "sessionHistory": {
+            "description": "Session history for auditing purposes",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "mobile",
+          "session",
+          "oldSessions",
+          "lastUpdated",
+          "lastCleanup",
+          "sessionHistory"
+        ]
+      },
+      "SessionUpdateDto": {
+        "type": "object",
+        "properties": {
+          "newSession": {
+            "type": "string",
+            "example": "1BQANOTEuMTA4LjUg==",
+            "description": "New session token to set as primary session"
+          }
+        },
+        "required": [
+          "newSession"
+        ]
+      },
+      "CleanupSessionsDto": {
+        "type": "object",
+        "properties": {
+          "maxSessions": {
+            "type": "number",
+            "example": 5,
+            "description": "Maximum number of old sessions to keep",
+            "minimum": 0,
+            "maximum": 20,
+            "default": 5
+          }
+        }
+      },
+      "SessionHealthMetricsDto": {
+        "type": "object",
+        "properties": {
+          "activeOldSessions": {
+            "type": "number",
+            "example": 2,
+            "description": "Number of active old sessions available as backup"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "example": "2024-01-15T08:30:00.000Z",
+            "description": "Timestamp when the session was last updated"
+          },
+          "sessionAge": {
+            "type": "string",
+            "example": "2 hours ago",
+            "description": "Human-readable session age"
+          },
+          "reliability": {
+            "type": "string",
+            "example": "high",
+            "description": "Session reliability rating based on availability",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        },
+        "required": [
+          "activeOldSessions",
+          "lastUpdated",
+          "sessionAge",
+          "reliability"
+        ]
+      },
+      "SessionStatusDto": {
+        "type": "object",
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "Mobile number of the archived client"
+          },
+          "isMainSessionActive": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether the main session is currently active"
+          },
+          "totalOldSessions": {
+            "type": "number",
+            "example": 3,
+            "description": "Total number of old sessions stored"
+          },
+          "lastChecked": {
+            "type": "string",
+            "example": "2024-01-15T10:30:00.000Z",
+            "description": "Timestamp when the status was last checked"
+          },
+          "healthMetrics": {
+            "description": "Detailed health metrics for the session",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SessionHealthMetricsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mobile",
+          "isMainSessionActive",
+          "totalOldSessions",
+          "lastChecked",
+          "healthMetrics"
+        ]
+      },
+      "CreateChannelDto": {
+        "type": "object",
+        "properties": {
+          "channelId": {
+            "type": "string",
+            "description": "Unique identifier for the channel",
+            "example": "803387987"
+          },
+          "broadcast": {
+            "type": "boolean",
+            "description": "Whether the channel is a broadcast channel",
+            "example": null
+          },
+          "canSendMsgs": {
+            "type": "boolean",
+            "description": "Indicates if the channel can send messages",
+            "example": true
+          },
+          "megagroup": {
+            "type": "boolean",
+            "description": "Whether the channel is a megagroup",
+            "example": null
+          },
+          "participantsCount": {
+            "type": "number",
+            "description": "Number of participants in the channel",
+            "example": 0
+          },
+          "restricted": {
+            "type": "boolean",
+            "description": "Whether the channel is restricted",
+            "example": null
+          },
+          "sendMessages": {
+            "type": "boolean",
+            "description": "Whether the channel can send messages",
+            "example": null
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the channel",
+            "example": "Earn money with Ayesha"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username of the channel",
+            "example": null
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Whether the channel is private",
+            "example": false
+          },
+          "forbidden": {
+            "type": "boolean",
+            "default": false,
+            "example": false
+          }
+        },
+        "required": [
+          "channelId",
+          "canSendMsgs",
+          "participantsCount",
+          "title"
+        ]
+      },
+      "UpdateChannelDto": {
+        "type": "object",
+        "properties": {
+          "channelId": {
+            "type": "string",
+            "description": "Unique identifier for the channel",
+            "example": "803387987"
+          },
+          "broadcast": {
+            "type": "boolean",
+            "description": "Whether the channel is a broadcast channel",
+            "example": null
+          },
+          "canSendMsgs": {
+            "type": "boolean",
+            "description": "Indicates if the channel can send messages",
+            "example": true
+          },
+          "megagroup": {
+            "type": "boolean",
+            "description": "Whether the channel is a megagroup",
+            "example": null
+          },
+          "participantsCount": {
+            "type": "number",
+            "description": "Number of participants in the channel",
+            "example": 0
+          },
+          "restricted": {
+            "type": "boolean",
+            "description": "Whether the channel is restricted",
+            "example": null
+          },
+          "sendMessages": {
+            "type": "boolean",
+            "description": "Whether the channel can send messages",
+            "example": null
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the channel",
+            "example": "Earn money with Ayesha"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username of the channel",
+            "example": null
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Whether the channel is private",
+            "example": false
+          },
+          "forbidden": {
+            "type": "boolean",
+            "default": false,
+            "example": false
+          }
+        }
+      },
+      "CreatePromoteClientDto": {
+        "type": "object",
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram ID of the client",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number of the client",
+            "example": "+1234567890"
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date of the session",
+            "example": "2023-06-22"
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "lastActive identifier",
+            "example": "2023-06-22"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Channel Count",
+            "example": 23
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this promote mobile belongs to",
+            "example": "client123"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the promote client",
+            "example": "active",
+            "default": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Status message for the promote client",
+            "example": "Account is functioning properly",
+            "default": "Account is functioning properly"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last used timestamp for the promote client",
+            "example": "2023-06-22T10:30:00.000Z"
+          }
+        },
+        "required": [
+          "tgId",
+          "mobile",
+          "availableDate",
+          "lastActive",
+          "channels"
+        ]
+      },
+      "UpdatePromoteClientDto": {
+        "type": "object",
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram ID of the client",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number of the client",
+            "example": "+1234567890"
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date of the session",
+            "example": "2023-06-22"
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "lastActive identifier",
+            "example": "2023-06-22"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Channel Count",
+            "example": 23
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this promote mobile belongs to",
+            "example": "client123"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status of the promote client",
+            "example": "active",
+            "default": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Status message for the promote client",
+            "example": "Account is functioning properly",
+            "default": "Account is functioning properly"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last used timestamp for the promote client",
+            "example": "2023-06-22T10:30:00.000Z"
           }
         }
       },
@@ -12114,7 +12189,84 @@
         "required": [
           "value"
         ]
+      },
+      "ExecuteRequestDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL to send the request to"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "DELETE",
+              "PATCH",
+              "HEAD",
+              "OPTIONS"
+            ],
+            "default": "GET"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "data": {
+            "type": "object",
+            "description": "Request body data"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "responseType": {
+            "type": "string",
+            "enum": [
+              "json",
+              "text",
+              "stream",
+              "blob",
+              "document",
+              "arraybuffer"
+            ],
+            "default": "json"
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Request timeout in milliseconds",
+            "default": 30000,
+            "minimum": 1000,
+            "maximum": 300000
+          },
+          "followRedirects": {
+            "type": "boolean",
+            "description": "Whether to follow redirects",
+            "default": true
+          },
+          "maxRedirects": {
+            "type": "number",
+            "description": "Maximum number of redirects to follow",
+            "default": 5,
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "url"
+        ]
       }
     }
-  }
+  },
+  "security": [
+    {
+      "x-api-key": []
+    }
+  ]
 }

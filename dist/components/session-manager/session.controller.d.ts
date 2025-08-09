@@ -10,6 +10,11 @@ export declare class SearchAuditDto {
     limit?: number;
     offset?: number;
 }
+export declare class GetOldestSessionDto {
+    mobile: string;
+    allowFallback?: boolean;
+    maxAgeDays?: number;
+}
 export declare class SessionController {
     private readonly sessionService;
     constructor(sessionService: SessionService);
@@ -24,5 +29,13 @@ export declare class SessionController {
         data: any;
         total: any;
         message: string;
+    }>;
+    getOldestSessionOrCreate(body: GetOldestSessionDto): Promise<{
+        session: string;
+        sessionAge: number;
+        isNew: boolean;
+        usageCount: number;
+        lastUsedAt: string;
+        createdAt: string;
     }>;
 }

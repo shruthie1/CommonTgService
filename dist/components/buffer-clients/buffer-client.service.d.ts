@@ -29,6 +29,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
+    private readonly MAX_NEEDED;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService);
     onModuleDestroy(): Promise<void>;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClient>;

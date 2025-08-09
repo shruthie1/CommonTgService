@@ -33,6 +33,7 @@ export class BufferClientService implements OnModuleDestroy {
     private readonly JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000; // 4 minutes
     private readonly LEAVE_CHANNEL_INTERVAL = 60 * 1000; // 30 seconds
     private readonly LEAVE_CHANNEL_BATCH_SIZE = 10;
+    private readonly MAX_NEEDED = 160;
 
     constructor(@InjectModel('bufferClientModule') private bufferClientModel: Model<BufferClientDocument>,
         @Inject(forwardRef(() => TelegramService))
@@ -595,8 +596,8 @@ export class BufferClientService implements OnModuleDestroy {
         const badIds: string[] = [];
         let goodIds: string[] = [];
 
-        if (bufferclients.length < 80) {
-            for (let i = 0; i < 80 - bufferclients.length; i++) {
+        if (bufferclients.length < this.MAX_NEEDED) {
+            for (let i = 0; i < this.MAX_NEEDED - bufferclients.length; i++) {
                 badIds.push(i.toString());
             }
         }

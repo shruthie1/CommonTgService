@@ -797,4 +797,216 @@ export class SessionService {
             return { success: false, error: error.message || 'Failed to find valid session from this month' };
         }
     }
+
+    async getOldestSessionOrCreate(options: {
+        mobile: string;
+        allowFallback?: boolean;
+        maxAgeDays?: number;
+    }): Promise<{
+        success: boolean;
+        message?: string;
+        data?: {
+            session: string;
+            sessionAge: number;
+            isNew: boolean;
+            usageCount: number;
+            lastUsedAt: string;
+            createdAt: string;
+        };
+        code?: string;
+        retryable?: boolean;
+    }> {
+        const { mobile, allowFallback = true, maxAgeDays = 30 } = options;
+
+        try {
+            // Validate input parameters
+            if (!mobile || typeof mobile !== 'string') {
+                return {
+                    success: false,
+                    message: 'Mobile number is required and must be a valid string',
+                    code: 'INVALID_MOBILE'
+                };
+            }
+
+            this.logger.logOperation(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
+
+            // Check rate limiting first
+            const rateLimitCheck = this.checkRateLimit(mobile);
+            if (!rateLimitCheck.allowed) {
+                const resetTime = new Date(rateLimitCheck.resetTime || 0);
+                return {
+                    success: false,
+                    message: `Rate limit exceeded. Maximum ${this.MAX_SESSIONS_PER_HOUR} requests per hour. Try again after ${resetTime.toISOString()}`,
+                    code: 'RATE_LIMIT_EXCEEDED',
+                    retryable: true
+                };
+            }
+
+            // Step 1: Try to find the oldest valid session within the specified age limit
+            const oldestSessionResult = await this.findOldestValidSession(mobile, maxAgeDays);
+            
+            if (oldestSessionResult.success && oldestSessionResult.session) {
+                this.logger.logOperation(mobile, 'Oldest valid session found, updating usage and returning');
+
+                // Update usage statistics
+                try {
+                    await this.sessionAuditService.markSessionUsed(mobile, oldestSessionResult.session.sessionString);
+                } catch (updateError) {
+                    this.logger.logError(mobile, 'Warning: Failed to update session usage', updateError);
+                    // Continue execution even if usage update fails
+                }
+
+                const sessionAge = this.calculateSessionAge(oldestSessionResult.session.createdAt);
+
+                return {
+                    success: true,
+                    message: 'Oldest valid session retrieved successfully',
+                    data: {
+                        session: oldestSessionResult.session.sessionString!,
+                        sessionAge,
+                        isNew: false,
+                        usageCount: oldestSessionResult.session.usageCount,
+                        lastUsedAt: oldestSessionResult.session.lastUsedAt.toISOString(),
+                        createdAt: oldestSessionResult.session.createdAt.toISOString()
+                    }
+                };
+            }
+
+            // Step 2: No valid session found - check if fallback is allowed
+            if (!allowFallback) {
+                this.logger.logOperation(mobile, 'No valid session found and fallback is disabled');
+                return {
+                    success: false,
+                    message: `No valid session found within ${maxAgeDays} days and fallback creation is disabled`,
+                    code: 'FALLBACK_DISABLED'
+                };
+            }
+
+            // Step 3: Create new session as fallback
+            this.logger.logOperation(mobile, 'No valid session found, creating new session as fallback');
+
+            const createResult = await this.createSessionWithFallback(mobile);
+            
+            if (createResult.success && createResult.session) {
+                return {
+                    success: true,
+                    message: 'No existing session found, new session created as fallback',
+                    data: {
+                        session: createResult.session,
+                        sessionAge: 0, // Brand new session
+                        isNew: true,
+                        usageCount: 0,
+                        lastUsedAt: new Date().toISOString(),
+                        createdAt: new Date().toISOString()
+                    }
+                };
+            } else {
+                this.logger.logError(mobile, 'Failed to create fallback session', createResult.error);
+                return {
+                    success: false,
+                    message: `Failed to create fallback session: ${createResult.error}`,
+                    code: 'FALLBACK_CREATION_FAILED',
+                    retryable: createResult.retryable || false
+                };
+            }
+
+        } catch (error) {
+            this.logger.logError(mobile, 'Unexpected error in getOldestSessionOrCreate', error);
+            return {
+                success: false,
+                message: 'An unexpected error occurred while processing the request',
+                code: 'INTERNAL_ERROR',
+                retryable: false
+            };
+        }
+    }
+
+    /**
+     * Find the oldest valid session for a mobile within the specified age limit
+     */
+    private async findOldestValidSession(mobile: string, maxAgeDays: number): Promise<{
+        success: boolean;
+        session?: SessionAudit;
+        error?: string;
+    }> {
+        try {
+            // Calculate the cutoff date
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+
+            this.logger.logOperation(mobile, `Searching for sessions newer than ${cutoffDate.toISOString()}`);
+
+            // Get all sessions for the mobile within the age limit, sorted by creation date (oldest first)
+            const sessions = await this.sessionAuditService.querySessionAudits({
+                mobile,
+                isActive: true,
+                startDate: cutoffDate,
+                limit: 50, // Reasonable limit to prevent performance issues
+                offset: 0
+            });
+
+            if (!sessions.sessions || sessions.sessions.length === 0) {
+                this.logger.logOperation(mobile, 'No sessions found within the specified age limit');
+                return { success: false, error: 'No sessions found within age limit' };
+            }
+
+            // Filter and sort to get the oldest session that meets our criteria
+            const validSessions = sessions.sessions
+                .filter(session => 
+                    session.sessionString && 
+                    session.sessionString.trim().length > 0 &&
+                    (session.status === SessionStatus.ACTIVE || session.status === SessionStatus.CREATED)
+                )
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Sort oldest first
+
+            if (validSessions.length === 0) {
+                this.logger.logOperation(mobile, 'No valid sessions found (all sessions are invalid or empty)');
+                return { success: false, error: 'No valid sessions found' };
+            }
+
+            const oldestSession = validSessions[0];
+            this.logger.logOperation(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
+
+            // Optionally validate the session before returning (disabled for performance, can be enabled if needed)
+            // const validationResult = await this.sessionManager.validateSession(oldestSession.sessionString!, mobile);
+            // if (!validationResult.isValid) {
+            //     await this.sessionAuditService.revokeSession(mobile, oldestSession.sessionString!, `Validation failed: ${validationResult.error}`);
+            //     return { success: false, error: 'Session validation failed' };
+            // }
+
+            return { success: true, session: oldestSession };
+
+        } catch (error) {
+            this.logger.logError(mobile, 'Error finding oldest valid session', error);
+            return { success: false, error: error.message || 'Failed to find oldest valid session' };
+        }
+    }
+
+    /**
+     * Create a new session using existing session creation logic with all fallback strategies
+     */
+    private async createSessionWithFallback(mobile: string): Promise<SessionCreationResult> {
+        try {
+            // Use the existing createSession method which already implements all fallback strategies
+            return await this.createSession({ mobile });
+        } catch (error) {
+            this.logger.logError(mobile, 'Error in createSessionWithFallback', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to create session',
+                retryable: false
+            };
+        }
+    }
+
+    /**
+     * Calculate the age of a session in days
+     */
+    private calculateSessionAge(createdAt: Date): number {
+        const now = new Date();
+        const sessionDate = new Date(createdAt);
+        const diffTime = Math.abs(now.getTime() - sessionDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+    }
 }

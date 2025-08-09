@@ -25,6 +25,8 @@ import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module
 import { MemoryCleanerService } from './memory-cleanup.service';
 import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ApiKeyOrIpOrOriginGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
@@ -52,7 +54,12 @@ import { IpManagementModule } from './components/ip-management/ip-management.mod
     TimestampModule,
     DynamicDataModule,
   ],
-  providers: [MemoryCleanerService],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyOrIpOrOriginGuard,
+    },
+  ],
   controllers: [AppController],
   exports: [
     TelegramModule,

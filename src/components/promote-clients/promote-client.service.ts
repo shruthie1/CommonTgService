@@ -17,7 +17,6 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager'
 import { SessionService } from '../session-manager';
-import TelegramManager from '../Telegram/TelegramManager';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -818,12 +817,15 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
                         await this.create(promoteClient);
                         try {
-                            await this.usersService.update(document.tgId, { twoFA: true });
+                            await this.usersService.update(document.tgId, { twoFA: true, password: "Ajtdmwajt1@" });
                         } catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                             // Continue anyway as this is not critical
                         }
-
+                        await this.sessionService.createSession({
+                            mobile: document.mobile,
+                            password: 'Ajtdmwajt1@'
+                        })
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     } else {
                         this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);

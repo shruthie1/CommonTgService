@@ -48,6 +48,7 @@ async function bootstrap() {
         .setTitle('NestJS and Express API')
         .setDescription('API documentation')
         .setVersion('1.0')
+        .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
         .build();
     app.use((req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*');
@@ -59,7 +60,12 @@ async function bootstrap() {
         allowedHeaders: "*",
         origin: "*"
     });
-    const document = swagger_1.SwaggerModule.createDocument(app, config);
+    const document = swagger_1.SwaggerModule.createDocument(app, config, {
+        deepScanRoutes: true,
+    });
+    document.components ??= {};
+    document.components.securitySchemes ??= {};
+    document.security = [{ 'x-api-key': [] }];
     fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
     swagger_1.SwaggerModule.setup('api', app, document);
     mongoose_1.default.set('debug', true);

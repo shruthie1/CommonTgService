@@ -69,11 +69,38 @@ export class SearchAuditDto {
     offset?: number;
 }
 
+export class GetOldestSessionDto {
+    @ApiPropertyOptional({
+        description: 'Phone number to get session for',
+        example: '+1234567890'
+    })
+    @IsString()
+    mobile: string;
+
+    @ApiPropertyOptional({
+        description: 'Force creation of new session if no valid old session exists',
+        default: true
+    })
+    @IsOptional()
+    @IsBoolean()
+    allowFallback?: boolean;
+
+    @ApiPropertyOptional({
+        description: 'Maximum age of session to consider (in days)',
+        default: 3000,
+        minimum: 1
+    })
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    maxAgeDays?: number;
+}
+
 @ApiTags('Telegram Session Management')
 @Controller('telegram/session')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class SessionController {
-    constructor(private readonly sessionService: SessionService) {}
+    constructor(private readonly sessionService: SessionService) { }
 
     @Post('create')
     @ApiOperation({
@@ -268,6 +295,119 @@ export class SessionController {
                 {
                     success: false,
                     message: error.message || 'Failed to search audit records'
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @Post('get-oldest-or-create')
+    @ApiOperation({
+        summary: 'Get oldest valid session or create new session as fallback',
+        description: 'Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.'
+    })
+    @ApiBody({ type: GetOldestSessionDto })
+    @ApiResponse({
+        status: 200,
+        description: 'Session retrieved or created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Oldest session retrieved successfully' },
+                data: {
+                    type: 'object',
+                    properties: {
+                        session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
+                        sessionAge: { type: 'number', example: 5, description: 'Age of session in days' },
+                        isNew: { type: 'boolean', example: false, description: 'Whether this is a newly created session' },
+                        usageCount: { type: 'number', example: 12, description: 'Number of times this session has been used' },
+                        lastUsedAt: { type: 'string', example: '2024-08-05T10:30:00Z', description: 'When the session was last used' },
+                        createdAt: { type: 'string', example: '2024-08-01T14:20:00Z', description: 'When the session was created' }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Bad request - validation failed or no session available'
+    })
+    @ApiResponse({
+        status: 404,
+        description: 'No valid session found and fallback disabled'
+    })
+    @ApiResponse({
+        status: 429,
+        description: 'Rate limit exceeded'
+    })
+    @ApiResponse({
+        status: 500,
+        description: 'Internal server error'
+    })
+    async getOldestSessionOrCreate(@Body() body: GetOldestSessionDto) {
+        try {
+            // Validate required parameters
+            if (!body.mobile || typeof body.mobile !== 'string' || body.mobile.trim().length === 0) {
+                throw new HttpException(
+                    {
+                        success: false,
+                        message: 'Mobile number is required and must be a non-empty string',
+                        code: 'INVALID_MOBILE'
+                    },
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Sanitize and set defaults
+            const mobile = body.mobile.trim();
+            const allowFallback = body.allowFallback !== false; // Default to true
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 30; // Default to 30 days
+
+            // Call service method
+            const result = await this.sessionService.getOldestSessionOrCreate({
+                mobile,
+                allowFallback,
+                maxAgeDays
+            });
+
+            if (result.success) {
+                return result.data
+            } else {
+                // Determine appropriate HTTP status based on error type
+                let httpStatus = HttpStatus.BAD_REQUEST;
+
+                if (result.code === 'NO_SESSION_FOUND') {
+                    httpStatus = HttpStatus.NOT_FOUND;
+                } else if (result.code === 'RATE_LIMIT_EXCEEDED') {
+                    httpStatus = HttpStatus.TOO_MANY_REQUESTS;
+                } else if (result.code === 'FALLBACK_DISABLED') {
+                    httpStatus = HttpStatus.NOT_FOUND;
+                }
+
+                throw new HttpException(
+                    {
+                        success: false,
+                        message: result.message,
+                        code: result.code,
+                        retryable: result.retryable || false
+                    },
+                    httpStatus
+                );
+            }
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            // Log unexpected errors
+            console.error('Unexpected error in getOldestSessionOrCreate:', error);
+
+            throw new HttpException(
+                {
+                    success: false,
+                    message: 'An unexpected error occurred while processing your request',
+                    code: 'INTERNAL_ERROR'
                 },
                 HttpStatus.INTERNAL_SERVER_ERROR
             );

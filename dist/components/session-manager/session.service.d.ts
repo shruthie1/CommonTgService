@@ -97,4 +97,25 @@ export declare class SessionService {
         session?: SessionAudit;
         error?: string;
     }>;
+    getOldestSessionOrCreate(options: {
+        mobile: string;
+        allowFallback?: boolean;
+        maxAgeDays?: number;
+    }): Promise<{
+        success: boolean;
+        message?: string;
+        data?: {
+            session: string;
+            sessionAge: number;
+            isNew: boolean;
+            usageCount: number;
+            lastUsedAt: string;
+            createdAt: string;
+        };
+        code?: string;
+        retryable?: boolean;
+    }>;
+    private findOldestValidSession;
+    private createSessionWithFallback;
+    private calculateSessionAge;
 }

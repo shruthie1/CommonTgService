@@ -12,7 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SessionController = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
+exports.SessionController = exports.GetOldestSessionDto = exports.SearchAuditDto = exports.CreateSessionDto = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const session_service_1 = require("./session.service");
@@ -91,6 +91,37 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], SearchAuditDto.prototype, "offset", void 0);
+class GetOldestSessionDto {
+}
+exports.GetOldestSessionDto = GetOldestSessionDto;
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Phone number to get session for',
+        example: '+1234567890'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GetOldestSessionDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Force creation of new session if no valid old session exists',
+        default: true
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], GetOldestSessionDto.prototype, "allowFallback", void 0);
+__decorate([
+    (0, swagger_2.ApiPropertyOptional)({
+        description: 'Maximum age of session to consider (in days)',
+        default: 3000,
+        minimum: 1
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], GetOldestSessionDto.prototype, "maxAgeDays", void 0);
 let SessionController = class SessionController {
     constructor(sessionService) {
         this.sessionService = sessionService;
@@ -200,6 +231,57 @@ let SessionController = class SessionController {
             }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getOldestSessionOrCreate(body) {
+        try {
+            if (!body.mobile || typeof body.mobile !== 'string' || body.mobile.trim().length === 0) {
+                throw new common_1.HttpException({
+                    success: false,
+                    message: 'Mobile number is required and must be a non-empty string',
+                    code: 'INVALID_MOBILE'
+                }, common_1.HttpStatus.BAD_REQUEST);
+            }
+            const mobile = body.mobile.trim();
+            const allowFallback = body.allowFallback !== false;
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 30;
+            const result = await this.sessionService.getOldestSessionOrCreate({
+                mobile,
+                allowFallback,
+                maxAgeDays
+            });
+            if (result.success) {
+                return result.data;
+            }
+            else {
+                let httpStatus = common_1.HttpStatus.BAD_REQUEST;
+                if (result.code === 'NO_SESSION_FOUND') {
+                    httpStatus = common_1.HttpStatus.NOT_FOUND;
+                }
+                else if (result.code === 'RATE_LIMIT_EXCEEDED') {
+                    httpStatus = common_1.HttpStatus.TOO_MANY_REQUESTS;
+                }
+                else if (result.code === 'FALLBACK_DISABLED') {
+                    httpStatus = common_1.HttpStatus.NOT_FOUND;
+                }
+                throw new common_1.HttpException({
+                    success: false,
+                    message: result.message,
+                    code: result.code,
+                    retryable: result.retryable || false
+                }, httpStatus);
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            console.error('Unexpected error in getOldestSessionOrCreate:', error);
+            throw new common_1.HttpException({
+                success: false,
+                message: 'An unexpected error occurred while processing your request',
+                code: 'INTERNAL_ERROR'
+            }, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 };
 exports.SessionController = SessionController;
 __decorate([
@@ -276,6 +358,56 @@ __decorate([
     __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], SessionController.prototype, "searchAudit", null);
+__decorate([
+    (0, common_1.Post)('get-oldest-or-create'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get oldest valid session or create new session as fallback',
+        description: 'Returns the oldest valid session for the mobile number. If no valid session exists and allowFallback is true, creates a new session as fallback. This endpoint is optimized for stability and reliability.'
+    }),
+    (0, swagger_1.ApiBody)({ type: GetOldestSessionDto }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Session retrieved or created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: { type: 'string', example: 'Oldest session retrieved successfully' },
+                data: {
+                    type: 'object',
+                    properties: {
+                        session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
+                        sessionAge: { type: 'number', example: 5, description: 'Age of session in days' },
+                        isNew: { type: 'boolean', example: false, description: 'Whether this is a newly created session' },
+                        usageCount: { type: 'number', example: 12, description: 'Number of times this session has been used' },
+                        lastUsedAt: { type: 'string', example: '2024-08-05T10:30:00Z', description: 'When the session was last used' },
+                        createdAt: { type: 'string', example: '2024-08-01T14:20:00Z', description: 'When the session was created' }
+                    }
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Bad request - validation failed or no session available'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'No valid session found and fallback disabled'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 429,
+        description: 'Rate limit exceeded'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Internal server error'
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [GetOldestSessionDto]),
+    __metadata("design:returntype", Promise)
+], SessionController.prototype, "getOldestSessionOrCreate", null);
 exports.SessionController = SessionController = __decorate([
     (0, swagger_1.ApiTags)('Telegram Session Management'),
     (0, common_1.Controller)('telegram/session'),

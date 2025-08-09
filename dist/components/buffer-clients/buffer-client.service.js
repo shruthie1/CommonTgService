@@ -47,6 +47,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
+        this.MAX_NEEDED = 160;
     }
     async onModuleDestroy() {
         this.logger.log('Cleaning up BufferClientService resources');
@@ -313,7 +314,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                         this.logger.debug(`${mobile} attempting to join channel: @${currentChannel.username}`);
                         await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Outer Err ERR: `, false);
@@ -333,12 +333,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             this.removeFromBufferMap(mobile);
                             await this.remove(mobile);
                         }
-                        try {
-                            await connection_manager_1.connectionManager.unregisterClient(mobile);
-                        }
-                        catch (unregisterError) {
-                            this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
-                        }
+                    }
+                    finally {
+                        await connection_manager_1.connectionManager.unregisterClient(mobile);
                     }
                 }
             }
@@ -525,8 +522,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const bufferclients = await this.findAll('active');
         const badIds = [];
         let goodIds = [];
-        if (bufferclients.length < 80) {
-            for (let i = 0; i < 80 - bufferclients.length; i++) {
+        if (bufferclients.length < this.MAX_NEEDED) {
+            for (let i = 0; i < this.MAX_NEEDED - bufferclients.length; i++) {
                 badIds.push(i.toString());
             }
         }

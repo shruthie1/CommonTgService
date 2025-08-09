@@ -67,6 +67,7 @@ const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
 const ip_management_service_1 = require("../ip-management/ip-management.service");
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
+const obfuscateText_1 = require("../../utils/obfuscateText");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
@@ -474,7 +475,7 @@ let ClientService = ClientService_1 = class ClientService {
             }
             await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
-                await telegramClient.updateProfile(client.name, "Genuine Paid Girl🥰, Best Services❤️");
+                await telegramClient.updateProfile((0, obfuscateText_1.obfuscateText)(client.name), `${(0, obfuscateText_1.obfuscateText)("Genuine Paid Girl")}🥰, ${(0, obfuscateText_1.obfuscateText)("Best Services")}❤️`);
             }
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.deleteProfilePhotos();
