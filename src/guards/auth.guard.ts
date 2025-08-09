@@ -16,7 +16,7 @@ const ALLOWED_ORIGINS = [
 const IGNORE_PATHS: (string | RegExp)[] = [
     '/',
     '/favicon.ico',
-    '/userdata',
+    /^\/userdata(?:$|\/)/i,
     /^\/favicon(?:$|\/)/i,
     /^\/blockuserall(?:$|\/)/i,
     /^\/sendtoall(?:$|\/)/i,
