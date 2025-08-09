@@ -268,7 +268,7 @@ class TelegramManager {
             await this.destroy();
         }
         else {
-            (0, parseError_1.parseError)(error);
+            (0, parseError_1.parseError)(error, `${this.phoneNumber}:RPC Error`, true);
         }
     }
     async createClient(handler = true, handlerFn) {
