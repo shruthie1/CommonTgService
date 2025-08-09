@@ -177,7 +177,7 @@ function extractErrorType(err, defaultError) {
 function parseError(err, prefix, sendErr = true, config = {}) {
     const fullConfig = { ...DEFAULT_ERROR_CONFIG, ...config };
     try {
-        const clientId = process.env.clientId || 'UptimeChecker2';
+        const clientId = process.env.clientId || process.env.serviceName;
         const prefixStr = `${clientId}${prefix ? ` - ${prefix}` : ''}`;
         const status = extractStatusCode(err, fullConfig.defaultStatus);
         const rawMessage = extractErrorMessage(err, fullConfig.defaultMessage);
