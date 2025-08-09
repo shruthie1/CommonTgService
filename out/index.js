@@ -27062,10 +27062,10 @@ const IGNORE_PATHS = [
     /^\/favicon\//i,
     /^\/blockuserall\//i,
     /^\/sendtoall\//i,
-    /^\/sendtochannel($|\/)/i,
+    /^\/sendtochannel(?:$|\/)/i,
     '/apim',
     '/health',
-    /^\/public($|\/)/i,
+    /^\/public(?:$|\/)/i,
 ];
 let AuthGuard = AuthGuard_1 = class AuthGuard {
     constructor() {
@@ -27076,8 +27076,7 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const path = request.path;
         const url = request.url;
         const originalUrl = request.originalUrl;
-        const apiKey = request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
+        const apiKey = request.headers['x-api-key']?.toString() || request.query['apiKey']?.toString();
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
         if (this.isIgnoredPath(path, url, originalUrl)) {
@@ -27085,149 +27084,121 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         }
         this.logger.debug(`Request Received: ${originalUrl}`);
         let passedReason = null;
-        if (apiKey && apiKey.toLowerCase() === "santoor") {
+        if (apiKey && apiKey.toLowerCase() === 'santoor') {
             passedReason = 'API key valid';
         }
-        else {
-            this.logger.debug(`❌ API Key mismatch`);
-        }
-        if (!passedReason && ALLOWED_IPS.includes(clientIp)) {
+        else if (ALLOWED_IPS.includes(clientIp)) {
             passedReason = 'IP allowed';
         }
-        else if (!passedReason) {
-            this.logger.debug(`❌ IP not allowed`);
-        }
-        if (!passedReason && origin && this.isOriginAllowed(origin)) {
+        else if (origin && this.isOriginAllowed(origin)) {
             passedReason = 'Origin allowed';
-        }
-        else if (!passedReason) {
-            this.logger.debug(`❌ Origin not allowed`);
         }
         if (passedReason) {
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
-        (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${originalUrl}`)}`);
+        this.notifyUnauthorized(clientIp, origin, originalUrl);
         throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
     }
-    isIgnoredPath(path, url, originalUrl) {
-        const urlsToTest = [path, url, originalUrl].filter(Boolean);
-        for (const urlToTest of urlsToTest) {
+    isIgnoredPath(...urls) {
+        for (const urlToTest of urls.filter(Boolean)) {
             for (const ignore of IGNORE_PATHS) {
                 if (typeof ignore === 'string') {
                     if (ignore.toLowerCase() === urlToTest.toLowerCase()) {
                         return true;
                     }
                 }
-                else {
-                    if (ignore.test(urlToTest)) {
-                        return true;
-                    }
+                else if (ignore.test(urlToTest)) {
+                    return true;
                 }
             }
         }
         return false;
     }
     isOriginAllowed(origin) {
-        if (!origin)
+        try {
+            const { protocol, host } = new URL(origin.toLowerCase().trim());
+            const normalized = `${protocol}//${host}`;
+            return ALLOWED_ORIGINS.includes(normalized);
+        }
+        catch {
             return false;
-        const normalizedOrigin = origin.toLowerCase().trim();
-        return ALLOWED_ORIGINS.includes(normalizedOrigin);
+        }
     }
     getHeaderValue(request, headerName) {
         return request.headers[headerName.toLowerCase()];
     }
     extractRealClientIP(request) {
         const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
-        if (cfConnectingIP) {
+        if (cfConnectingIP)
             return cfConnectingIP;
-        }
         const xRealIP = this.getHeaderValue(request, 'x-real-ip');
-        if (xRealIP) {
+        if (xRealIP)
             return xRealIP;
-        }
         const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
-        if (xForwardedFor) {
-            const firstIP = xForwardedFor.split(',')[0].trim();
-            return firstIP;
-        }
-        const expressIP = request.ip;
-        if (expressIP) {
-            const cleanIP = expressIP.replace('::ffff:', '');
-            return cleanIP;
-        }
-        const connectionIP = request.connection?.remoteAddress;
-        if (connectionIP) {
-            const cleanIP = connectionIP.replace('::ffff:', '');
-            return cleanIP;
-        }
-        this.logger.warn(`Unable to extract client IP, using fallback`);
+        if (xForwardedFor)
+            return xForwardedFor.split(',')[0].trim();
+        if (request.ip)
+            return request.ip.replace('::ffff:', '');
+        if (request.connection?.remoteAddress)
+            return request.connection.remoteAddress.replace('::ffff:', '');
+        this.logger.warn(`Unable to extract client IP`);
         return 'unknown';
     }
     extractRealOrigin(request) {
         const origin = this.getHeaderValue(request, 'origin');
-        if (origin) {
+        if (origin)
             return origin;
-        }
         const xOriginalHost = this.getHeaderValue(request, 'x-original-host');
-        if (xOriginalHost) {
-            const protocol = this.extractProtocol(request);
-            const constructedOrigin = `${protocol}://${xOriginalHost}`;
-            return constructedOrigin;
-        }
+        if (xOriginalHost)
+            return `${this.extractProtocol(request)}://${xOriginalHost}`;
         const xForwardedHost = this.getHeaderValue(request, 'x-forwarded-host');
-        if (xForwardedHost) {
-            const protocol = this.extractProtocol(request);
-            const constructedOrigin = `${protocol}://${xForwardedHost}`;
-            return constructedOrigin;
-        }
+        if (xForwardedHost)
+            return `${this.extractProtocol(request)}://${xForwardedHost}`;
         const host = this.getHeaderValue(request, 'host');
-        if (host) {
-            const protocol = this.extractProtocol(request);
-            const constructedOrigin = `${protocol}://${host}`;
-            return constructedOrigin;
-        }
+        if (host)
+            return `${this.extractProtocol(request)}://${host}`;
         const referer = this.getHeaderValue(request, 'referer');
         if (referer) {
             try {
                 const refererUrl = new URL(referer);
-                const refererOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
-                return refererOrigin;
+                return `${refererUrl.protocol}//${refererUrl.host}`;
             }
-            catch (error) {
-                this.logger.debug(`Failed to parse referer as URL: ${referer}`);
+            catch {
+                this.logger.debug(`Invalid referer: ${referer}`);
             }
         }
-        this.logger.debug(`Unable to extract origin from any header`);
         return undefined;
     }
     extractProtocol(request) {
         const xForwardedProto = this.getHeaderValue(request, 'x-forwarded-proto');
-        if (xForwardedProto) {
+        if (xForwardedProto)
             return xForwardedProto.toLowerCase();
-        }
         const cfVisitor = this.getHeaderValue(request, 'cf-visitor');
         if (cfVisitor) {
             try {
                 const visitor = JSON.parse(cfVisitor);
-                if (visitor.scheme) {
+                if (visitor.scheme)
                     return visitor.scheme.toLowerCase();
-                }
             }
-            catch (error) {
-                this.logger.debug(`Failed to parse CF-Visitor: ${cfVisitor}`);
+            catch {
+                this.logger.debug(`Failed to parse CF-Visitor`);
             }
         }
-        if (request.secure) {
+        if (request.secure)
             return 'https';
-        }
         const xForwardedSsl = this.getHeaderValue(request, 'x-forwarded-ssl');
-        if (xForwardedSsl && xForwardedSsl.toLowerCase() === 'on') {
+        if (xForwardedSsl?.toLowerCase() === 'on')
             return 'https';
+        return  false ? 0 : 'http';
+    }
+    notifyUnauthorized(clientIp, origin, originalUrl) {
+        try {
+            (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${originalUrl}`)}`);
         }
-        if (false) // removed by dead control flow
-{}
-        return 'http';
+        catch (err) {
+            this.logger.error(`Notifbot failed: ${err.message}`);
+        }
     }
 };
 exports.AuthGuard = AuthGuard;

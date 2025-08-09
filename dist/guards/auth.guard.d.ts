@@ -8,4 +8,5 @@ export declare class AuthGuard implements CanActivate {
     private extractRealClientIP;
     private extractRealOrigin;
     private extractProtocol;
+    private notifyUnauthorized;
 }
