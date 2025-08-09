@@ -14,6 +14,7 @@ export * from './components';
 // Utility exports
 export * from './utils';
 export * from './middlewares';
+export * from './guards';
 
 // Type definitions
 export * from './interfaces/telegram';
