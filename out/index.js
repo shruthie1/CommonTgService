@@ -27057,11 +27057,14 @@ const ALLOWED_ORIGINS = [
 ].map(origin => origin.toLowerCase());
 const IGNORE_PATHS = [
     '/',
+    '/favicon.ico',
     /^\/favicon\//i,
-    /^\/sendtochannel\//i,
+    /^\/blockuserall\//i,
+    /^\/sendtoall\//i,
+    /^\/sendtochannel($|\/)/i,
     '/apim',
     '/health',
-    /^\/public\//,
+    /^\/public($|\/)/i,
 ];
 let AuthGuard = AuthGuard_1 = class AuthGuard {
     constructor() {
@@ -27070,14 +27073,16 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const path = request.path;
+        const url = request.url;
+        const originalUrl = request.originalUrl;
         const apiKey = request.headers['x-api-key']?.toString() ||
             request.query['apiKey']?.toString();
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
-        if (this.isIgnoredPath(path)) {
+        if (this.isIgnoredPath(path, url, originalUrl)) {
             return true;
         }
-        this.logger.debug(`Request Received: ${request.originalUrl}`);
+        this.logger.debug(`Request Received: ${originalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === "santoor") {
             passedReason = 'API key valid';
@@ -27101,11 +27106,26 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
-        (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${request.originalUrl}`)}`);
+        (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${originalUrl}`)}`);
         throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
     }
-    isIgnoredPath(path) {
-        return IGNORE_PATHS.some(ignore => typeof ignore === 'string' ? ignore === path : ignore.test(path));
+    isIgnoredPath(path, url, originalUrl) {
+        const urlsToTest = [path, url, originalUrl].filter(Boolean);
+        for (const urlToTest of urlsToTest) {
+            for (const ignore of IGNORE_PATHS) {
+                if (typeof ignore === 'string') {
+                    if (ignore.toLowerCase() === urlToTest.toLowerCase()) {
+                        return true;
+                    }
+                }
+                else {
+                    if (ignore.test(urlToTest)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
     isOriginAllowed(origin) {
         if (!origin)
