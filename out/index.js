@@ -27051,7 +27051,9 @@ const ALLOWED_IPS = ['31.97.59.2', '148.230.84.50', '13.228.225.19', '18.142.128
 const ALLOWED_ORIGINS = [
     'https://paidgirl.site',
     'https://zomcall.netlify.app',
-    'https://tgchats.netlify.app'
+    'https://tgchats.netlify.app',
+    'https://tg-chats.netlify.app',
+    'https://report-upi.netlify.app'
 ].map(origin => origin.toLowerCase());
 const IGNORE_PATHS = [
     '/',
