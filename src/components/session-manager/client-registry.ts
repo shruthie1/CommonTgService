@@ -54,16 +54,16 @@ export class ClientRegistry {
             // Check if lock is expired
             if (now.getTime() - existingLock.acquired.getTime() > this.LOCK_EXPIRY) {
                 this.locks.delete(mobile);
-                this.logger.logOperation(mobile, 'Removed expired lock');
+                this.logger.info(mobile, 'Removed expired lock');
             } else {
-                this.logger.logOperation(mobile, 'Lock already exists, waiting...');
+                this.logger.info(mobile, 'Lock already exists, waiting...');
                 return null;
             }
         }
 
         // Acquire lock
         this.locks.set(mobile, { acquired: now, lockId });
-        this.logger.logOperation(mobile, `Lock acquired: ${lockId}`);
+        this.logger.info(mobile, `Lock acquired: ${lockId}`);
         return lockId;
     }
 
@@ -74,7 +74,7 @@ export class ClientRegistry {
         const lock = this.locks.get(mobile);
         if (lock && lock.lockId === lockId) {
             this.locks.delete(mobile);
-            this.logger.logOperation(mobile, `Lock released: ${lockId}`);
+            this.logger.info(mobile, `Lock released: ${lockId}`);
             return true;
         }
         return false;
@@ -130,7 +130,7 @@ export class ClientRegistry {
 
         // Check if client already exists
         if (this.clients.has(mobile)) {
-            this.logger.logError(mobile, 'Client already exists, cannot register new one', new Error('Duplicate client'));
+            this.logger.error(mobile, 'Client already exists, cannot register new one', new Error('Duplicate client'));
             return false;
         }
 
@@ -145,7 +145,7 @@ export class ClientRegistry {
         };
 
         this.clients.set(mobile, clientInfo);
-        this.logger.logOperation(mobile, 'Client registered successfully');
+        this.logger.info(mobile, 'Client registered successfully');
         return true;
     }
 
@@ -203,7 +203,7 @@ export class ClientRegistry {
         if (lockId) {
             const lock = this.locks.get(mobile);
             if (!lock || lock.lockId !== lockId) {
-                this.logger.logError(mobile, 'Invalid lock for removing client', new Error('Invalid lock'));
+                this.logger.error(mobile, 'Invalid lock for removing client', new Error('Invalid lock'));
                 return false;
             }
         }
@@ -216,9 +216,9 @@ export class ClientRegistry {
                     try {
                         await tempClient.destroy();
                         tempClient._eventBuilders = [];
-                        this.logger.logOperation(mobile, 'Temporary client cleaned up');
+                        this.logger.info(mobile, 'Temporary client cleaned up');
                     } catch (cleanupError) {
-                        this.logger.logError(mobile, 'Failed to cleanup temporary client', cleanupError);
+                        this.logger.error(mobile, 'Failed to cleanup temporary client', cleanupError);
                     } finally {
                         if (tempClient) {
                             tempClient._destroyed = true;
@@ -228,14 +228,14 @@ export class ClientRegistry {
                             tempClient = null;
                         }
                     }
-                } this.logger.logOperation(mobile, 'Client disconnected during removal');
+                } this.logger.info(mobile, 'Client disconnected during removal');
             } catch (error) {
-                this.logger.logError(mobile, 'Error disconnecting client during removal', error);
+                this.logger.error(mobile, 'Error disconnecting client during removal', error);
             }
         }
 
         this.clients.delete(mobile);
-        this.logger.logOperation(mobile, 'Client removed from registry');
+        this.logger.info(mobile, 'Client removed from registry');
         return true;
     }
 
@@ -269,12 +269,12 @@ export class ClientRegistry {
         }
 
         for (const mobile of inactiveClients) {
-            this.logger.logOperation(mobile, 'Removing inactive client');
+            this.logger.info(mobile, 'Removing inactive client');
             await this.removeClient(mobile);
         }
 
         if (inactiveClients.length > 0) {
-            this.logger.logOperation('SYSTEM', `Cleaned up ${inactiveClients.length} inactive clients`);
+            this.logger.info('SYSTEM', `Cleaned up ${inactiveClients.length} inactive clients`);
         }
     }
 
@@ -295,11 +295,11 @@ export class ClientRegistry {
 
         for (const mobile of expiredLocks) {
             this.locks.delete(mobile);
-            this.logger.logOperation(mobile, 'Removed expired lock');
+            this.logger.info(mobile, 'Removed expired lock');
         }
 
         if (expiredLocks.length > 0) {
-            this.logger.logOperation('SYSTEM', `Cleaned up ${expiredLocks.length} expired locks`);
+            this.logger.info('SYSTEM', `Cleaned up ${expiredLocks.length} expired locks`);
         }
     }
 
@@ -320,7 +320,7 @@ export class ClientRegistry {
             cleanedCount++;
         }
 
-        this.logger.logOperation(mobile, `Force cleanup completed, removed ${cleanedCount} items`);
+        this.logger.info(mobile, `Force cleanup completed, removed ${cleanedCount} items`);
         return cleanedCount;
     }
 

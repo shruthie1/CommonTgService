@@ -26,12 +26,21 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private leaveChannelIntervalId;
     private isLeaveChannelProcessing;
     private isJoinChannelProcessing;
+    private activeTimeouts;
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_BATCH_SIZE;
     private readonly MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
     private readonly MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT;
+    private readonly MAX_MAP_SIZE;
+    private readonly CHANNEL_PROCESSING_DELAY;
+    private readonly CLEANUP_INTERVAL;
+    private cleanupIntervalId;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService);
+    private checkMemoryHealth;
+    private startMemoryCleanup;
+    private clearMemoryCleanup;
+    private performMemoryCleanup;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;
@@ -50,14 +59,20 @@ export declare class PromoteClientService implements OnModuleDestroy {
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     joinChannelQueue(): Promise<void>;
+    private processJoinChannelInterval;
+    private processJoinChannelSequentially;
     clearJoinChannelInterval(): void;
     removeFromLeaveMap(key: string): void;
     clearLeaveMap(): void;
     leaveChannelQueue(): Promise<void>;
+    private processLeaveChannelInterval;
+    private processLeaveChannelSequentially;
     clearLeaveChannelInterval(): void;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
+    private clearAllTimeouts;
+    private cleanup;
     onModuleDestroy(): Promise<void>;
     getPromoteClientDistribution(): Promise<{
         totalPromoteClients: number;
@@ -100,4 +115,5 @@ export declare class PromoteClientService implements OnModuleDestroy {
         usedInLastWeek: number;
         averageUsageGap: number;
     }>;
+    private createTimeout;
 }

@@ -25,7 +25,7 @@ let SessionAuditService = class SessionAuditService {
     }
     async createAuditRecord(createDto) {
         try {
-            this.logger.logOperation(createDto.mobile, 'Creating session audit record');
+            this.logger.info(createDto.mobile, 'Creating session audit record');
             const sessionAudit = new this.sessionAuditModel({
                 ...createDto,
                 status: sessions_schema_1.SessionStatus.CREATED,
@@ -35,17 +35,17 @@ let SessionAuditService = class SessionAuditService {
                 isActive: true
             });
             const savedRecord = await sessionAudit.save();
-            this.logger.logOperation(createDto.mobile, `Session audit record created with ID: ${savedRecord.id}`);
+            this.logger.info(createDto.mobile, `Session audit record created with ID: ${savedRecord.id}`);
             return savedRecord;
         }
         catch (error) {
-            this.logger.logError(createDto.mobile, 'Failed to create session audit record', error);
+            this.logger.error(createDto.mobile, 'Failed to create session audit record', error);
             throw error;
         }
     }
     async updateAuditRecord(mobile, sessionString, updateDto) {
         try {
-            this.logger.logOperation(mobile, 'Updating session audit record');
+            this.logger.info(mobile, 'Updating session audit record');
             const updateData = {
                 ...updateDto,
                 lastUsedAt: new Date()
@@ -56,15 +56,15 @@ let SessionAuditService = class SessionAuditService {
             }
             const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, { $set: updateData }, { new: true, sort: { createdAt: -1 } });
             if (updatedRecord) {
-                this.logger.logOperation(mobile, `Session audit record updated: ${updatedRecord.id}`);
+                this.logger.info(mobile, `Session audit record updated: ${updatedRecord.id}`);
             }
             else {
-                this.logger.logOperation(mobile, 'No active session audit record found to update');
+                this.logger.info(mobile, 'No active session audit record found to update');
             }
             return updatedRecord;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to update session audit record', error);
+            this.logger.error(mobile, 'Failed to update session audit record', error);
             throw error;
         }
     }
@@ -79,12 +79,12 @@ let SessionAuditService = class SessionAuditService {
                 $set: { lastUsedAt: new Date() }
             }, { new: true, sort: { createdAt: -1 } });
             if (updatedRecord) {
-                this.logger.logOperation(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
+                this.logger.info(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
             }
             return updatedRecord;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to mark session as used', error);
+            this.logger.error(mobile, 'Failed to mark session as used', error);
             throw error;
         }
     }
@@ -98,7 +98,7 @@ let SessionAuditService = class SessionAuditService {
             });
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to mark session as failed', error);
+            this.logger.error(mobile, 'Failed to mark session as failed', error);
             throw error;
         }
     }
@@ -112,7 +112,7 @@ let SessionAuditService = class SessionAuditService {
             });
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to revoke session', error);
+            this.logger.error(mobile, 'Failed to revoke session', error);
             throw error;
         }
     }
@@ -126,11 +126,11 @@ let SessionAuditService = class SessionAuditService {
                 .find(query)
                 .sort({ createdAt: -1 })
                 .exec();
-            this.logger.logOperation(mobile, `Retrieved ${sessions.length} session records`);
+            this.logger.info(mobile, `Retrieved ${sessions.length} session records`);
             return sessions;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to get sessions for phone number', error);
+            this.logger.error(mobile, 'Failed to get sessions for phone number', error);
             throw error;
         }
     }
@@ -141,12 +141,12 @@ let SessionAuditService = class SessionAuditService {
                 .sort({ createdAt: -1 })
                 .exec();
             if (session) {
-                this.logger.logOperation(mobile, `Latest active session found: ${session.id}`);
+                this.logger.info(mobile, `Latest active session found: ${session.id}`);
             }
             return session;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to get latest active session', error);
+            this.logger.error(mobile, 'Failed to get latest active session', error);
             throw error;
         }
     }
@@ -178,7 +178,7 @@ let SessionAuditService = class SessionAuditService {
                     .exec(),
                 this.sessionAuditModel.countDocuments(query)
             ]);
-            this.logger.logOperation('system', `Session audit query returned ${sessions.length} of ${total} records`);
+            this.logger.info('system', `Session audit query returned ${sessions.length} of ${total} records`);
             return {
                 sessions,
                 total,
@@ -187,7 +187,7 @@ let SessionAuditService = class SessionAuditService {
             };
         }
         catch (error) {
-            this.logger.logError('system', 'Failed to query session audits', error);
+            this.logger.error('system', 'Failed to query session audits', error);
             throw error;
         }
     }
@@ -248,11 +248,11 @@ let SessionAuditService = class SessionAuditService {
                     end: new Date()
                 }
             };
-            this.logger.logOperation(mobile || 'system', `Session stats retrieved: ${result.totalSessions} total sessions`);
+            this.logger.info(mobile || 'system', `Session stats retrieved: ${result.totalSessions} total sessions`);
             return result;
         }
         catch (error) {
-            this.logger.logError(mobile || 'system', 'Failed to get session stats', error);
+            this.logger.error(mobile || 'system', 'Failed to get session stats', error);
             throw error;
         }
     }
@@ -264,11 +264,11 @@ let SessionAuditService = class SessionAuditService {
                 createdAt: { $lt: cutoffDate },
                 isActive: false
             });
-            this.logger.logOperation('system', `Cleaned up ${result.deletedCount} old session records`);
+            this.logger.info('system', `Cleaned up ${result.deletedCount} old session records`);
             return { deletedCount: result.deletedCount };
         }
         catch (error) {
-            this.logger.logError('system', 'Failed to cleanup old sessions', error);
+            this.logger.error('system', 'Failed to cleanup old sessions', error);
             throw error;
         }
     }
@@ -295,7 +295,7 @@ let SessionAuditService = class SessionAuditService {
             return recentSessions;
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to find valid session from last 10 days', error);
+            this.logger.error(mobile, 'Failed to find valid session from last 10 days', error);
             throw error;
         }
     }
@@ -315,11 +315,11 @@ let SessionAuditService = class SessionAuditService {
                     revocationReason: 'auto_expired_due_to_inactivity'
                 }
             });
-            this.logger.logOperation('system', `Marked ${result.modifiedCount} sessions as expired`);
+            this.logger.info('system', `Marked ${result.modifiedCount} sessions as expired`);
             return { modifiedCount: result.modifiedCount };
         }
         catch (error) {
-            this.logger.logError('system', 'Failed to mark expired sessions', error);
+            this.logger.error('system', 'Failed to mark expired sessions', error);
             throw error;
         }
     }

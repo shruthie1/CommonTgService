@@ -54,25 +54,25 @@ class SessionManager {
         if (!mobile) {
             return { success: false, error: 'Mobile number is required', retryable: false };
         }
-        this.logger.logOperation(mobile, 'Starting session creation process with priority order');
+        this.logger.info(mobile, 'Starting session creation process with priority order');
         const existingCheck = this.checkExistingSession(mobile);
         if (!existingCheck.canProceed) {
             return existingCheck.result;
         }
         const strategies = this.getCreationStrategies(options);
-        this.logger.logOperation(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
+        this.logger.info(mobile, `Available strategies: ${strategies.map(s => s.strategyName).join(', ')}`);
         for (const strategy of strategies) {
             try {
-                this.logger.logOperation(mobile, `Attempting strategy: ${strategy.strategyName}`);
+                this.logger.info(mobile, `Attempting strategy: ${strategy.strategyName}`);
                 const result = await strategy();
                 if (result.success) {
-                    this.logger.logOperation(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
+                    this.logger.info(mobile, `✓ Session creation successful with ${strategy.strategyName}`);
                     return result;
                 }
-                this.logger.logOperation(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
+                this.logger.info(mobile, `✗ Strategy ${strategy.strategyName} failed: ${result.error}`);
             }
             catch (error) {
-                this.logger.logError(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
+                this.logger.error(mobile, `✗ Strategy ${strategy.strategyName} threw error`, error);
             }
         }
         return { success: false, error: 'All SessionManager strategies failed', retryable: false };
@@ -173,12 +173,12 @@ class SessionManager {
             if (!userInfo || userInfo.phone !== mobile) {
                 return { isValid: false, error: 'Phone number mismatch or invalid user info' };
             }
-            this.logger.logOperation(mobile, 'Session validation successful');
+            this.logger.info(mobile, 'Session validation successful');
             await this.cleanupClient(tempClient, mobile);
             return { isValid: true, userInfo };
         }
         catch (error) {
-            this.logger.logError(mobile, 'Session validation failed', error);
+            this.logger.error(mobile, 'Session validation failed', error);
             await this.cleanupClient(tempClient, mobile);
             return { isValid: false, error: error.message || error.toString() || error.errorMessage };
         }
@@ -212,7 +212,7 @@ class SessionManager {
     }
     async waitForOtp(oldClient, mobile, attempt) {
         const startTime = Date.now();
-        this.logger.logOperation(mobile, `Waiting for OTP (attempt ${attempt})`);
+        this.logger.info(mobile, `Waiting for OTP (attempt ${attempt})`);
         while (Date.now() - startTime < this.OTP_WAIT_TIME) {
             try {
                 const messages = await oldClient.getMessages('777000', { limit: 1 });
@@ -222,7 +222,7 @@ class SessionManager {
                     if (messageText) {
                         const code = this.extractOtpCode(messageText.toLowerCase());
                         if (code) {
-                            this.logger.logOperation(mobile, `OTP extracted: ${code}`);
+                            this.logger.info(mobile, `OTP extracted: ${code}`);
                             return code;
                         }
                     }
@@ -230,7 +230,7 @@ class SessionManager {
                 await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
             }
             catch (error) {
-                this.logger.logError(mobile, 'Error checking OTP messages', error);
+                this.logger.error(mobile, 'Error checking OTP messages', error);
                 await (0, utils_1.sleep)(this.OTP_CHECK_INTERVAL);
             }
         }
@@ -256,7 +256,7 @@ class SessionManager {
             return;
         try {
             if (client._destroyed) {
-                this.logger.logOperation(mobile, 'Client already destroyed, skipping cleanup');
+                this.logger.info(mobile, 'Client already destroyed, skipping cleanup');
                 return;
             }
             await client.destroy();
@@ -267,7 +267,7 @@ class SessionManager {
             await (0, utils_1.sleep)(1000);
         }
         catch (error) {
-            this.logger.logError(mobile, 'Client cleanup error', error);
+            this.logger.error(mobile, 'Client cleanup error', error);
         }
         finally {
             if (client) {
@@ -278,9 +278,9 @@ class SessionManager {
                     }
                 }
                 catch (finalCleanupError) {
-                    this.logger.logError(mobile, 'Final cleanup error', finalCleanupError);
+                    this.logger.error(mobile, 'Final cleanup error', finalCleanupError);
                 }
-                this.logger.logOperation(mobile, 'Client cleanup completed');
+                this.logger.info(mobile, 'Client cleanup completed');
             }
         }
     }
@@ -435,7 +435,7 @@ let SessionService = class SessionService {
                 return { success: false, error: `Error extracting mobile from session: ${error.message}`, retryable: false };
             }
         }
-        this.logger.logOperation(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
+        this.logger.info(mobile || 'unknown', 'Service: Creating session with priority order: 1.Old Session -> 2.Existing Manager -> 3.Audit Sessions');
         if (!mobile || typeof mobile !== 'string') {
             return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
         }
@@ -450,17 +450,17 @@ let SessionService = class SessionService {
         }
         try {
             if (options.oldSession) {
-                this.logger.logOperation(mobile, 'Trying with provided old session (Priority 1)');
+                this.logger.info(mobile, 'Trying with provided old session (Priority 1)');
                 const result = await this.sessionManager.createSession(options);
                 if (result.success && result.session) {
                     await this.updateAuditOnSuccess(mobile, result.session, sessions_schema_1.SessionCreationMethod.INPUT_SESSION);
                     return result;
                 }
                 else {
-                    this.logger.logOperation(mobile, `Old session failed: ${result.error}`);
+                    this.logger.info(mobile, `Old session failed: ${result.error}`);
                 }
             }
-            this.logger.logOperation(mobile, 'Trying with existing manager (Priority 2)');
+            this.logger.info(mobile, 'Trying with existing manager (Priority 2)');
             const managerResult = await this.sessionManager.createSession({
                 ...options,
                 oldSession: undefined
@@ -470,16 +470,16 @@ let SessionService = class SessionService {
                 return managerResult;
             }
             else {
-                this.logger.logOperation(mobile, `Existing manager failed: ${managerResult.error}`);
+                this.logger.info(mobile, `Existing manager failed: ${managerResult.error}`);
             }
-            this.logger.logOperation(mobile, 'Trying with audit sessions (Priority 3)');
+            this.logger.info(mobile, 'Trying with audit sessions (Priority 3)');
             const auditResult = await this.tryAuditSessions(mobile, options);
             if (auditResult.success) {
                 await this.updateAuditOnSuccess(mobile, auditResult.session, sessions_schema_1.SessionCreationMethod.OLD_SESSION);
                 return auditResult;
             }
             else {
-                this.logger.logOperation(mobile, `Audit sessions failed: ${auditResult.error}`);
+                this.logger.info(mobile, `Audit sessions failed: ${auditResult.error}`);
             }
             const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
             (0, utils_1.parseError)(finalError);
@@ -517,7 +517,7 @@ let SessionService = class SessionService {
                     }
                 }
                 catch (error) {
-                    this.logger.logError(mobile, `Audit session ${i + 1} failed`, error);
+                    this.logger.error(mobile, `Audit session ${i + 1} failed`, error);
                 }
             }
             return { success: false, error: 'All audit sessions failed', retryable: false };
@@ -536,7 +536,7 @@ let SessionService = class SessionService {
             });
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to create new audit record on success', error);
+            this.logger.error(mobile, 'Failed to create new audit record on success', error);
         }
     }
     async getSessionAuditHistory(mobile, options) {
@@ -566,7 +566,7 @@ let SessionService = class SessionService {
         try {
             const result = await this.sessionAuditService.markSessionUsed(mobile, sessionString);
             if (result) {
-                this.logger.logOperation(mobile, 'Session last used timestamp updated');
+                this.logger.info(mobile, 'Session last used timestamp updated');
                 return { success: true };
             }
             else {
@@ -583,9 +583,9 @@ let SessionService = class SessionService {
                 return { success: false, error: 'Invalid mobile number provided' };
             }
             const recentSessions = await this.sessionAuditService.findRecentSessions(mobile);
-            this.logger.logDebug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
+            this.logger.debug(mobile, `Found ${recentSessions?.length || 0} recent sessions for this month`);
             if (!recentSessions || recentSessions.length === 0) {
-                this.logger.logDebug(mobile, 'No recent sessions found for this month');
+                this.logger.debug(mobile, 'No recent sessions found for this month');
                 return { success: false, error: 'No recent sessions found for this month' };
             }
             for (const session of recentSessions) {
@@ -593,11 +593,11 @@ let SessionService = class SessionService {
                     return { success: true, session };
                 }
             }
-            this.logger.logDebug(mobile, 'No valid session found from this month');
+            this.logger.debug(mobile, 'No valid session found from this month');
             return { success: false, error: 'No valid session found from this month' };
         }
         catch (error) {
-            this.logger.logError(mobile, 'Failed to find valid session from this month', error);
+            this.logger.error(mobile, 'Failed to find valid session from this month', error);
             return { success: false, error: error.message || 'Failed to find valid session from this month' };
         }
     }
@@ -611,7 +611,7 @@ let SessionService = class SessionService {
                     code: 'INVALID_MOBILE'
                 };
             }
-            this.logger.logOperation(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
+            this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
             const rateLimitCheck = this.checkRateLimit(mobile);
             if (!rateLimitCheck.allowed) {
                 const resetTime = new Date(rateLimitCheck.resetTime || 0);
@@ -624,12 +624,12 @@ let SessionService = class SessionService {
             }
             const oldestSessionResult = await this.findOldestValidSession(mobile, maxAgeDays);
             if (oldestSessionResult.success && oldestSessionResult.session) {
-                this.logger.logOperation(mobile, 'Oldest valid session found, updating usage and returning');
+                this.logger.info(mobile, 'Oldest valid session found, updating usage and returning');
                 try {
                     await this.sessionAuditService.markSessionUsed(mobile, oldestSessionResult.session.sessionString);
                 }
                 catch (updateError) {
-                    this.logger.logError(mobile, 'Warning: Failed to update session usage', updateError);
+                    this.logger.error(mobile, 'Warning: Failed to update session usage', updateError);
                 }
                 const sessionAge = this.calculateSessionAge(oldestSessionResult.session.createdAt);
                 return {
@@ -646,14 +646,14 @@ let SessionService = class SessionService {
                 };
             }
             if (!allowFallback) {
-                this.logger.logOperation(mobile, 'No valid session found and fallback is disabled');
+                this.logger.info(mobile, 'No valid session found and fallback is disabled');
                 return {
                     success: false,
                     message: `No valid session found within ${maxAgeDays} days and fallback creation is disabled`,
                     code: 'FALLBACK_DISABLED'
                 };
             }
-            this.logger.logOperation(mobile, 'No valid session found, creating new session as fallback');
+            this.logger.info(mobile, 'No valid session found, creating new session as fallback');
             const createResult = await this.createSessionWithFallback(mobile);
             if (createResult.success && createResult.session) {
                 return {
@@ -670,7 +670,7 @@ let SessionService = class SessionService {
                 };
             }
             else {
-                this.logger.logError(mobile, 'Failed to create fallback session', createResult.error);
+                this.logger.error(mobile, 'Failed to create fallback session', createResult.error);
                 return {
                     success: false,
                     message: `Failed to create fallback session: ${createResult.error}`,
@@ -680,7 +680,7 @@ let SessionService = class SessionService {
             }
         }
         catch (error) {
-            this.logger.logError(mobile, 'Unexpected error in getOldestSessionOrCreate', error);
+            this.logger.error(mobile, 'Unexpected error in getOldestSessionOrCreate', error);
             return {
                 success: false,
                 message: 'An unexpected error occurred while processing the request',
@@ -693,7 +693,7 @@ let SessionService = class SessionService {
         try {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
-            this.logger.logOperation(mobile, `Searching for sessions newer than ${cutoffDate.toISOString()}`);
+            this.logger.info(mobile, `Searching for sessions newer than ${cutoffDate.toISOString()}`);
             const sessions = await this.sessionAuditService.querySessionAudits({
                 mobile,
                 isActive: true,
@@ -702,7 +702,7 @@ let SessionService = class SessionService {
                 offset: 0
             });
             if (!sessions.sessions || sessions.sessions.length === 0) {
-                this.logger.logOperation(mobile, 'No sessions found within the specified age limit');
+                this.logger.info(mobile, 'No sessions found within the specified age limit');
                 return { success: false, error: 'No sessions found within age limit' };
             }
             const validSessions = sessions.sessions
@@ -711,15 +711,15 @@ let SessionService = class SessionService {
                 (session.status === sessions_schema_1.SessionStatus.ACTIVE || session.status === sessions_schema_1.SessionStatus.CREATED))
                 .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             if (validSessions.length === 0) {
-                this.logger.logOperation(mobile, 'No valid sessions found (all sessions are invalid or empty)');
+                this.logger.info(mobile, 'No valid sessions found (all sessions are invalid or empty)');
                 return { success: false, error: 'No valid sessions found' };
             }
             const oldestSession = validSessions[0];
-            this.logger.logOperation(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
+            this.logger.info(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
             return { success: true, session: oldestSession };
         }
         catch (error) {
-            this.logger.logError(mobile, 'Error finding oldest valid session', error);
+            this.logger.error(mobile, 'Error finding oldest valid session', error);
             return { success: false, error: error.message || 'Failed to find oldest valid session' };
         }
     }
@@ -728,7 +728,7 @@ let SessionService = class SessionService {
             return await this.createSession({ mobile });
         }
         catch (error) {
-            this.logger.logError(mobile, 'Error in createSessionWithFallback', error);
+            this.logger.error(mobile, 'Error in createSessionWithFallback', error);
             return {
                 success: false,
                 error: error.message || 'Failed to create session',

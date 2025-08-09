@@ -5,8 +5,8 @@ export declare class TelegramLogger {
     static getInstance(): TelegramLogger;
     private shouldIncludeDetails;
     private formatMessage;
-    logOperation(mobile: string, operation: string, details?: any): void;
-    logError(mobile: string, operation: string, error: any): void;
-    logWarning(mobile: string, message: string, details?: any): void;
-    logDebug(mobile: string, message: string, details?: any): void;
+    info(mobile: string, operation: string, details?: any): void;
+    error(mobile: string, operation: string, error: any): void;
+    waning(mobile: string, message: string, details?: any): void;
+    debug(mobile: string, message: string, details?: any): void;
 }
