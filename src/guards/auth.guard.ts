@@ -41,6 +41,7 @@ const IGNORE_PATHS: (string | RegExp)[] = [
     '/refreshmap',
     '/markasread',
     '/checktghealth',
+    '/isRecentUser',
     '/joinchannel',
     '/leavechannel',
     '/channelinfo',
