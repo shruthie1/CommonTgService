@@ -40,7 +40,7 @@ const IGNORE_PATHS = [
     '/leavechannel',
     '/channelinfo',
     '/getme',
-    '/trytooconnect',
+    '/trytoconnect',
     '/chat',
     '/favicon.ico',
     /^\/userdata(?:$|\/)/i,
