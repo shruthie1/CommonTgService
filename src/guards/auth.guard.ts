@@ -45,7 +45,7 @@ const IGNORE_PATHS: (string | RegExp)[] = [
     '/leavechannel',
     '/channelinfo',
     '/getme',
-    '/trytooconnect',
+    '/trytoconnect',
     '/chat',
     '/favicon.ico',
     /^\/userdata(?:$|\/)/i,
