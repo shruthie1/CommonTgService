@@ -27074,6 +27074,7 @@ const IGNORE_PATHS = [
     '/refreshmap',
     '/markasread',
     '/checktghealth',
+    '/isRecentUser',
     '/joinchannel',
     '/leavechannel',
     '/channelinfo',
