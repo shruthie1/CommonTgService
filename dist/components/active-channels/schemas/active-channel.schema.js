@@ -56,20 +56,20 @@ __decorate([
     __metadata("design:type", String)
 ], ActiveChannel.prototype, "channelId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: false }),
-    (0, mongoose_1.Prop)({ default: false }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "broadcast", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "canSendMsgs", void 0);
+    (0, swagger_1.ApiProperty)({ required: true }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], ActiveChannel.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "participantsCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, default: null }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], ActiveChannel.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -79,17 +79,22 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "broadcast", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendMessages", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: true }),
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "title", void 0);
+    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "canSendMsgs", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: false, default: null }),
-    (0, mongoose_1.Prop)({ required: false, default: null }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "username", void 0);
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "megagroup", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
@@ -111,15 +116,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "banned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "megagroup", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "private", void 0);
+], ActiveChannel.prototype, "forbidden", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -129,7 +129,32 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "forbidden", void 0);
+], ActiveChannel.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "lastMessageTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "messageIndex", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "messageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "tempBan", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "deletedCount", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
     (0, mongoose_1.Schema)({ collection: 'activeChannels', versionKey: false, autoIndex: true,
         timestamps: true,

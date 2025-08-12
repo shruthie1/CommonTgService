@@ -6,8 +6,7 @@ import {
     Logger,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { fetchWithTimeout } from '../utils';
-import { notifbot } from '../utils/logbots';
+import { BotConfig, ChannelCategory } from '../utils/TelegramBots.config';
 
 const ALLOWED_IPS = [
     '31.97.59.2',
@@ -219,12 +218,11 @@ export class AuthGuard implements CanActivate {
         originalUrl: string,
     ) {
         try {
-            fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(
-                    `${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'
-                    } with origin ${origin || 'unknown origin'} for ${originalUrl}`,
-                )}`,
+            BotConfig.getInstance().sendMessage(
+                ChannelCategory.UNAUTH_CALLS,
+                `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`,
             );
+
         } catch (err) {
             this.logger.error(`Notifbot failed: ${err.message}`);
         }

@@ -20,17 +20,17 @@ export class ActiveChannel {
   @Prop({ required: true, unique: true })
   channelId: string;
 
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  broadcast: boolean;
-
-  @ApiProperty({ default: true })
-  @Prop({ default: true })
-  canSendMsgs: boolean;
+  @ApiProperty({ required: true })
+  @Prop({ required: true })
+  title: string;
 
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
   participantsCount: number;
+
+  @ApiProperty({ required: false, default: null })
+  @Prop({ required: false, default: null })
+  username: string;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
@@ -38,47 +38,69 @@ export class ActiveChannel {
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
-  sendMessages: boolean;
-
-  @ApiProperty({ required: true })
-  @Prop({ required: true })
-  title: string;
-
-  @ApiProperty({ required: false, default: null })
-  @Prop({ required: false, default: null })
-  username: string;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
-  wordRestriction: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
-  dMRestriction: number;
-
-  @ApiProperty({ type: [String], default:defaultMessages })
-  @Prop({ type: [String], default: defaultMessages })
-  availableMsgs: string[];
+  broadcast: boolean;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
-  banned: boolean;
+  sendMessages: boolean;
 
   @ApiProperty({ default: true })
   @Prop({ default: true })
-  megagroup: boolean;
-
-  @ApiProperty({ default: false})
-  @Prop({ default: false })
-  private: boolean;
+  canSendMsgs: boolean;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
-  reactRestricted: boolean
+  megagroup?: boolean;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  wordRestriction?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  dMRestriction?: number;
+
+  @ApiProperty({ type: [String], default: defaultMessages })
+  @Prop({ type: [String], default: defaultMessages })
+  availableMsgs?: string[];
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
-  forbidden: boolean
+  banned?: boolean;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  forbidden?: boolean;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  reactRestricted?: boolean;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  private?: boolean;
+
+  @ApiProperty({ type: Number, default: null, required: false })
+  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  lastMessageTime?: number;
+
+  @ApiProperty({ type: Number, default: null, required: false })
+  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  messageIndex?: number;
+
+  @ApiProperty({ type: Number, default: null, required: false })
+  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  messageId?: number;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  tempBan?: boolean;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  deletedCount?: number;
+
 }
+
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);

@@ -18,6 +18,7 @@ export enum ChannelCategory {
     UNVDS = 'UNVDS',
     PROM_LOGS1 = 'PROM_LOGS1',
     PROM_LOGS2 = 'PROM_LOGS2',
+    UNAUTH_CALLS = 'UNAUTH_CALLS',
 }
 
 export interface SendMessageOptions {
