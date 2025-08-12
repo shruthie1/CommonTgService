@@ -501,10 +501,10 @@ const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/times
 const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
 const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
 const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
-const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
-const auth_guard_1 = __webpack_require__(/*! ./guards/auth.guard */ "./src/guards/auth.guard.ts");
+const auth_middleware_1 = __webpack_require__(/*! ./middlewares/auth.middleware */ "./src/middlewares/auth.middleware.ts");
 let AppModule = class AppModule {
     configure(consumer) {
+        consumer.apply(auth_middleware_1.AuthMiddleware).forRoutes('*');
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
     }
 };
@@ -536,12 +536,7 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
         ],
-        providers: [
-            {
-                provide: core_1.APP_GUARD,
-                useClass: auth_guard_1.AuthGuard,
-            },
-        ],
+        providers: [],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,
@@ -9999,20 +9994,20 @@ __decorate([
     __metadata("design:type", String)
 ], ActiveChannel.prototype, "channelId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: false }),
-    (0, mongoose_1.Prop)({ default: false }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "broadcast", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "canSendMsgs", void 0);
+    (0, swagger_1.ApiProperty)({ required: true }),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], ActiveChannel.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "participantsCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, default: null }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], ActiveChannel.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -10022,17 +10017,22 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "broadcast", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendMessages", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: true }),
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "title", void 0);
+    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "canSendMsgs", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: false, default: null }),
-    (0, mongoose_1.Prop)({ required: false, default: null }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "username", void 0);
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "megagroup", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
@@ -10054,15 +10054,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "banned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
-    __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "megagroup", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "private", void 0);
+], ActiveChannel.prototype, "forbidden", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -10072,7 +10067,32 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
-], ActiveChannel.prototype, "forbidden", void 0);
+], ActiveChannel.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "lastMessageTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "messageIndex", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: null, required: false }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "messageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "tempBan", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "deletedCount", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
     (0, mongoose_1.Schema)({ collection: 'activeChannels', versionKey: false, autoIndex: true,
         timestamps: true,
@@ -27030,211 +27050,6 @@ exports.UsersService = UsersService = __decorate([
 
 /***/ }),
 
-/***/ "./src/guards/auth.guard.ts":
-/*!**********************************!*\
-  !*** ./src/guards/auth.guard.ts ***!
-  \**********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var AuthGuard_1;
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AuthGuard = void 0;
-const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
-const logbots_1 = __webpack_require__(/*! ../utils/logbots */ "./src/utils/logbots.ts");
-const ALLOWED_IPS = [
-    '31.97.59.2',
-    '148.230.84.50',
-    '13.228.225.19',
-    '18.142.128.26',
-    '54.254.162.138',
-];
-const ALLOWED_ORIGINS = [
-    'https://paidgirl.site',
-    'https://zomcall.netlify.app',
-    'https://tgchats.netlify.app',
-    'https://tg-chats.netlify.app',
-    'https://report-upi.netlify.app',
-].map((origin) => origin.toLowerCase());
-const IGNORE_PATHS = [
-    '/',
-    '/exit',
-    '/getProcessId',
-    '/executehs',
-    '/executehsl',
-    '/sendmessage',
-    '/asktopay',
-    '/refreshmap',
-    '/markasread',
-    '/checktghealth',
-    '/isRecentUser',
-    '/joinchannel',
-    '/leavechannel',
-    '/channelinfo',
-    '/getme',
-    '/trytoconnect',
-    '/chat',
-    '/favicon.ico',
-    /^\/userdata(?:$|\/)/i,
-    /^\/favicon(?:$|\/)/i,
-    /^\/favicon.ico(?:$|\/)/i,
-    /^\/blockuserall(?:$|\/)/i,
-    /^\/sendtoall(?:$|\/)/i,
-    /^\/sendtochannel(?:$|\/)/i,
-    '/apim',
-    '/health',
-    /^\/public(?:$|\/)/i,
-];
-let AuthGuard = AuthGuard_1 = class AuthGuard {
-    constructor() {
-        this.logger = new common_1.Logger(AuthGuard_1.name);
-    }
-    canActivate(context) {
-        const request = context.switchToHttp().getRequest();
-        const path = request.path;
-        const url = request.url;
-        const originalUrl = request.originalUrl;
-        if (this.isIgnoredPath(path, url, originalUrl)) {
-            return true;
-        }
-        const apiKey = request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
-        const clientIp = this.extractRealClientIP(request);
-        const origin = this.extractRealOrigin(request);
-        this.logger.debug(`Request Received: ${originalUrl}`);
-        let passedReason = null;
-        if (apiKey && apiKey.toLowerCase() === 'santoor') {
-            passedReason = 'API key valid';
-        }
-        else if (ALLOWED_IPS.includes(clientIp)) {
-            passedReason = 'IP allowed';
-        }
-        else if (origin && this.isOriginAllowed(origin)) {
-            passedReason = 'Origin allowed';
-        }
-        if (passedReason) {
-            return true;
-        }
-        this.logger.warn(`❌ Access denied — no condition satisfied`);
-        this.notifyUnauthorized(clientIp, origin, originalUrl);
-        throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
-    }
-    isIgnoredPath(...urls) {
-        for (const urlToTest of urls.filter(Boolean)) {
-            for (const ignore of IGNORE_PATHS) {
-                if (typeof ignore === 'string') {
-                    if (ignore.toLowerCase() === urlToTest.toLowerCase()) {
-                        return true;
-                    }
-                }
-                else if (ignore.test(urlToTest)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-    isOriginAllowed(origin) {
-        try {
-            const { protocol, host } = new URL(origin.toLowerCase().trim());
-            const normalized = `${protocol}//${host}`;
-            return ALLOWED_ORIGINS.includes(normalized);
-        }
-        catch {
-            return false;
-        }
-    }
-    getHeaderValue(request, headerName) {
-        return request.headers[headerName.toLowerCase()];
-    }
-    extractRealClientIP(request) {
-        const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
-        if (cfConnectingIP)
-            return cfConnectingIP;
-        const xRealIP = this.getHeaderValue(request, 'x-real-ip');
-        if (xRealIP)
-            return xRealIP;
-        const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
-        if (xForwardedFor)
-            return xForwardedFor.split(',')[0].trim();
-        if (request.ip)
-            return request.ip.replace('::ffff:', '');
-        if (request.connection?.remoteAddress)
-            return request.connection.remoteAddress.replace('::ffff:', '');
-        this.logger.warn(`Unable to extract client IP`);
-        return 'unknown';
-    }
-    extractRealOrigin(request) {
-        const origin = this.getHeaderValue(request, 'origin');
-        if (origin)
-            return origin;
-        const xOriginalHost = this.getHeaderValue(request, 'x-original-host');
-        if (xOriginalHost)
-            return `${this.extractProtocol(request)}://${xOriginalHost}`;
-        const xForwardedHost = this.getHeaderValue(request, 'x-forwarded-host');
-        if (xForwardedHost)
-            return `${this.extractProtocol(request)}://${xForwardedHost}`;
-        const host = this.getHeaderValue(request, 'host');
-        if (host)
-            return `${this.extractProtocol(request)}://${host}`;
-        const referer = this.getHeaderValue(request, 'referer');
-        if (referer) {
-            try {
-                const refererUrl = new URL(referer);
-                return `${refererUrl.protocol}//${refererUrl.host}`;
-            }
-            catch {
-                this.logger.debug(`Invalid referer: ${referer}`);
-            }
-        }
-        return undefined;
-    }
-    extractProtocol(request) {
-        const xForwardedProto = this.getHeaderValue(request, 'x-forwarded-proto');
-        if (xForwardedProto)
-            return xForwardedProto.toLowerCase();
-        const cfVisitor = this.getHeaderValue(request, 'cf-visitor');
-        if (cfVisitor) {
-            try {
-                const visitor = JSON.parse(cfVisitor);
-                if (visitor.scheme)
-                    return visitor.scheme.toLowerCase();
-            }
-            catch {
-                this.logger.debug(`Failed to parse CF-Visitor`);
-            }
-        }
-        if (request.secure)
-            return 'https';
-        const xForwardedSsl = this.getHeaderValue(request, 'x-forwarded-ssl');
-        if (xForwardedSsl?.toLowerCase() === 'on')
-            return 'https';
-        return  false ? 0 : 'http';
-    }
-    notifyUnauthorized(clientIp, origin, originalUrl) {
-        try {
-            (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${originalUrl}`)}`);
-        }
-        catch (err) {
-            this.logger.error(`Notifbot failed: ${err.message}`);
-        }
-    }
-};
-exports.AuthGuard = AuthGuard;
-exports.AuthGuard = AuthGuard = AuthGuard_1 = __decorate([
-    (0, common_1.Injectable)()
-], AuthGuard);
-
-
-/***/ }),
-
 /***/ "./src/interfaces/telegram.ts":
 /*!************************************!*\
   !*** ./src/interfaces/telegram.ts ***!
@@ -27390,6 +27205,209 @@ bootstrap();
 
 /***/ }),
 
+/***/ "./src/middlewares/auth.middleware.ts":
+/*!********************************************!*\
+  !*** ./src/middlewares/auth.middleware.ts ***!
+  \********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var AuthMiddleware_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AuthMiddleware = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
+const ALLOWED_IPS = [
+    '31.97.59.2',
+    '148.230.84.50',
+    '13.228.225.19',
+    '18.142.128.26',
+    '54.254.162.138',
+];
+const ALLOWED_ORIGINS = [
+    'https://paidgirl.site',
+    'https://zomcall.netlify.app',
+    'https://tgchats.netlify.app',
+    'https://tg-chats.netlify.app',
+    'https://report-upi.netlify.app',
+].map((origin) => origin.toLowerCase());
+const IGNORE_PATHS = [
+    '/',
+    '/exit',
+    '/getProcessId',
+    '/executehs',
+    '/executehsl',
+    '/sendmessage',
+    '/asktopay',
+    '/refreshmap',
+    '/markasread',
+    '/checktghealth',
+    '/isRecentUser',
+    '/joinchannel',
+    '/leavechannel',
+    '/channelinfo',
+    '/getme',
+    '/trytoconnect',
+    '/chat',
+    '/favicon.ico',
+    /^\/userdata(?:$|\/)/i,
+    /^\/favicon(?:$|\/)/i,
+    /^\/favicon.ico(?:$|\/)/i,
+    /^\/blockuserall(?:$|\/)/i,
+    /^\/sendtoall(?:$|\/)/i,
+    /^\/sendtochannel(?:$|\/)/i,
+    '/apim',
+    '/health',
+    /^\/public(?:$|\/)/i,
+];
+let AuthMiddleware = AuthMiddleware_1 = class AuthMiddleware {
+    constructor() {
+        this.logger = new common_1.Logger(AuthMiddleware_1.name);
+    }
+    use(req, res, next) {
+        const path = req.path;
+        const url = req.url;
+        const originalUrl = req.originalUrl;
+        if (this.isIgnoredPath(path, url, originalUrl)) {
+            return next();
+        }
+        const apiKey = req.headers['x-api-key']?.toString() ||
+            req.query['apiKey']?.toString();
+        const clientIp = this.extractRealClientIP(req);
+        const origin = this.extractRealOrigin(req);
+        this.logger.debug(`Request Received: ${originalUrl}`);
+        let passedReason = null;
+        if (apiKey && apiKey.toLowerCase() === 'santoor') {
+            passedReason = 'API key valid';
+        }
+        else if (ALLOWED_IPS.includes(clientIp)) {
+            passedReason = 'IP allowed';
+        }
+        else if (origin && this.isOriginAllowed(origin)) {
+            passedReason = 'Origin allowed';
+        }
+        if (passedReason) {
+            return next();
+        }
+        this.logger.warn(`❌ Access denied — no condition satisfied`);
+        this.notifyUnauthorized(clientIp, origin, originalUrl);
+        throw new common_1.UnauthorizedException('Access denied');
+    }
+    isIgnoredPath(...urls) {
+        for (const urlToTest of urls.filter(Boolean)) {
+            for (const ignore of IGNORE_PATHS) {
+                if (typeof ignore === 'string') {
+                    if (ignore.toLowerCase() === urlToTest.toLowerCase()) {
+                        return true;
+                    }
+                }
+                else if (ignore.test(urlToTest)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    isOriginAllowed(origin) {
+        try {
+            const { protocol, host } = new URL(origin.toLowerCase().trim());
+            const normalized = `${protocol}//${host}`;
+            return ALLOWED_ORIGINS.includes(normalized);
+        }
+        catch {
+            return false;
+        }
+    }
+    getHeaderValue(req, headerName) {
+        return req.headers[headerName.toLowerCase()];
+    }
+    extractRealClientIP(req) {
+        const cfConnectingIP = this.getHeaderValue(req, 'cf-connecting-ip');
+        if (cfConnectingIP)
+            return cfConnectingIP;
+        const xRealIP = this.getHeaderValue(req, 'x-real-ip');
+        if (xRealIP)
+            return xRealIP;
+        const xForwardedFor = this.getHeaderValue(req, 'x-forwarded-for');
+        if (xForwardedFor)
+            return xForwardedFor.split(',')[0].trim();
+        if (req.ip)
+            return req.ip.replace('::ffff:', '');
+        if (req.connection?.remoteAddress)
+            return req.connection.remoteAddress.replace('::ffff:', '');
+        this.logger.warn(`Unable to extract client IP`);
+        return 'unknown';
+    }
+    extractRealOrigin(req) {
+        const origin = this.getHeaderValue(req, 'origin');
+        if (origin)
+            return origin;
+        const xOriginalHost = this.getHeaderValue(req, 'x-original-host');
+        if (xOriginalHost)
+            return `${this.extractProtocol(req)}://${xOriginalHost}`;
+        const xForwardedHost = this.getHeaderValue(req, 'x-forwarded-host');
+        if (xForwardedHost)
+            return `${this.extractProtocol(req)}://${xForwardedHost}`;
+        const host = this.getHeaderValue(req, 'host');
+        if (host)
+            return `${this.extractProtocol(req)}://${host}`;
+        const referer = this.getHeaderValue(req, 'referer');
+        if (referer) {
+            try {
+                const refererUrl = new URL(referer);
+                return `${refererUrl.protocol}//${refererUrl.host}`;
+            }
+            catch {
+                this.logger.debug(`Invalid referer: ${referer}`);
+            }
+        }
+        return undefined;
+    }
+    extractProtocol(req) {
+        const xForwardedProto = this.getHeaderValue(req, 'x-forwarded-proto');
+        if (xForwardedProto)
+            return xForwardedProto.toLowerCase();
+        const cfVisitor = this.getHeaderValue(req, 'cf-visitor');
+        if (cfVisitor) {
+            try {
+                const visitor = JSON.parse(cfVisitor);
+                if (visitor.scheme)
+                    return visitor.scheme.toLowerCase();
+            }
+            catch {
+                this.logger.debug(`Failed to parse CF-Visitor`);
+            }
+        }
+        if (req.secure)
+            return 'https';
+        const xForwardedSsl = this.getHeaderValue(req, 'x-forwarded-ssl');
+        if (xForwardedSsl?.toLowerCase() === 'on')
+            return 'https';
+        return  false ? 0 : 'http';
+    }
+    notifyUnauthorized(clientIp, origin, originalUrl) {
+        try {
+            TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+        }
+        catch (err) {
+            this.logger.error(`Notifbot failed: ${err.message}`);
+        }
+    }
+};
+exports.AuthMiddleware = AuthMiddleware;
+exports.AuthMiddleware = AuthMiddleware = AuthMiddleware_1 = __decorate([
+    (0, common_1.Injectable)()
+], AuthMiddleware);
+
+
+/***/ }),
+
 /***/ "./src/middlewares/logger.middleware.ts":
 /*!**********************************************!*\
   !*** ./src/middlewares/logger.middleware.ts ***!
@@ -27496,6 +27514,7 @@ var ChannelCategory;
     ChannelCategory["UNVDS"] = "UNVDS";
     ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
     ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
+    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 class BotConfig {
     constructor() {
