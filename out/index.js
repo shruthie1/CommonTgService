@@ -27457,9 +27457,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.LoggerMiddleware = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const fetchWithTimeout_1 = __webpack_require__(/*! ../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
-const logbots_1 = __webpack_require__(/*! ../utils/logbots */ "./src/utils/logbots.ts");
+const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new common_1.Logger('HTTP');
@@ -27480,11 +27479,11 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const contentLength = res.get('content-length');
                 if (statusCode >= 500) {
-                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`);
+                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.error(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 400) {
-                    (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`);
+                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.warn(`${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`);
                 }
                 else if (statusCode >= 300) {
@@ -27496,7 +27495,7 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
             res.on('error', (error) => {
                 const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
-                (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId ? process.env.clientId : process.env.serviceName} Failed :: ${originalUrl} with ${errorDetails.message}`)}`);
+                TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
             });
         }
         else {
