@@ -1,8 +1,7 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { parseError } from '../utils/parseError';
-import { notifbot } from '../utils/logbots';
+import { BotConfig, ChannelCategory } from 'src/utils/TelegramBots.config';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -26,15 +25,15 @@ export class LoggerMiddleware implements NestMiddleware {
         const { statusCode } = res;
         const contentLength = res.get('content-length');
         if (statusCode >= 500) {
-          fetchWithTimeout(
-            `${notifbot()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`,
+          BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
+            `Threw Status ${statusCode} for ${originalUrl}`,
           );
           this.logger.error(
             `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
           );
         } else if (statusCode >= 400) {
-          fetchWithTimeout(
-            `${notifbot()}&text=${encodeURIComponent(`${process.env.clientId}\nService:${process.env.serviceName}\n\nFailed - ${originalUrl} with ${statusCode}`)}`,
+          BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
+            `Threw Status ${statusCode} for ${originalUrl}`,
           );
           this.logger.warn(
             `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
@@ -51,8 +50,8 @@ export class LoggerMiddleware implements NestMiddleware {
       });
       res.on('error', (error) => {
         const errorDetails = parseError(error, process.env.clientId);
-        fetchWithTimeout(
-          `${notifbot()}&text=${encodeURIComponent(`${process.env.clientId ? process.env.clientId : process.env.serviceName} Failed :: ${originalUrl} with ${errorDetails.message}`)}`,
+        BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
+          `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`,
         );
       });
     } else {
