@@ -96,7 +96,7 @@ export class AuthMiddleware implements NestMiddleware {
     this.notifyUnauthorized(clientIp, origin, originalUrl);
 
     throw new UnauthorizedException(
-      'Access denied: No valid API key, IP, or Origin',
+      'Access denied',
     );
   }
 
