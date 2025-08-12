@@ -348,7 +348,7 @@ let SessionService = class SessionService {
         this.logger = telegram_logger_1.TelegramLogger.getInstance();
         this.sessionManager = SessionManager.getInstance();
         this.rateLimitMap = new Map();
-        this.MAX_SESSIONS_PER_HOUR = 3;
+        this.MAX_SESSIONS_PER_HOUR = 20;
         this.RATE_LIMIT_WINDOW = 3600000;
         this.sessionAuditService = sessionAuditService;
     }
