@@ -106,7 +106,7 @@ export class AuthGuard implements CanActivate {
         this.logger.warn(`❌ Access denied — no condition satisfied`);
         this.notifyUnauthorized(clientIp, origin, originalUrl);
         throw new UnauthorizedException(
-            'Access denied: No valid API key, IP, or Origin',
+            'Access denied',
         );
     }
 

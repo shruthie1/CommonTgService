@@ -85,7 +85,7 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
         this.notifyUnauthorized(clientIp, origin, originalUrl);
-        throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
+        throw new common_1.UnauthorizedException('Access denied');
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
