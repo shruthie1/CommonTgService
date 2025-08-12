@@ -24,7 +24,9 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
-import { AuthMiddleware } from './middlewares/auth.middleware';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthGuard } from './guards';
+
 @Module({
   imports: [
     InitModule,
@@ -51,7 +53,12 @@ import { AuthMiddleware } from './middlewares/auth.middleware';
     TimestampModule,
     DynamicDataModule,
   ],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+  ],
   controllers: [AppController],
   exports: [
     TelegramModule,
@@ -70,7 +77,6 @@ import { AuthMiddleware } from './middlewares/auth.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AuthMiddleware).forRoutes('*');
     consumer.apply(LoggerMiddleware).forRoutes('*');
   }
 }
