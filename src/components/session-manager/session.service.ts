@@ -491,7 +491,7 @@ export class SessionService {
     private readonly sessionManager = SessionManager.getInstance();
     private readonly sessionAuditService: SessionAuditService;
     private readonly rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-    private readonly MAX_SESSIONS_PER_HOUR = 3;
+    private readonly MAX_SESSIONS_PER_HOUR = 20;
     private readonly RATE_LIMIT_WINDOW = 3600000; // 1 hour
 
     constructor(sessionAuditService: SessionAuditService) {
