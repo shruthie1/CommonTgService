@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { parseError } from '../utils/parseError';
-import { BotConfig, ChannelCategory } from 'src/utils/TelegramBots.config';
+import { BotConfig, ChannelCategory } from '../utils/TelegramBots.config';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
