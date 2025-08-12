@@ -22,6 +22,7 @@ import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { shouldMatch } from '../../utils';
 import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
+import { ActiveChannel } from '../active-channels';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -79,7 +80,7 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getLastActiveTime();
     }
 
-    async tryJoiningChannel(mobile: string, chatEntity: Channel) {
+    async tryJoiningChannel(mobile: string, chatEntity: Channel | ActiveChannel) {
         const telegramClient = await connectionManager.getClient(mobile)
         try {
             await telegramClient.joinChannel(chatEntity.username);

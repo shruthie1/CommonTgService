@@ -5,12 +5,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var AuthGuard_1;
+var AuthMiddleware_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthGuard = void 0;
+exports.AuthMiddleware = void 0;
 const common_1 = require("@nestjs/common");
-const utils_1 = require("../utils");
-const logbots_1 = require("../utils/logbots");
+const TelegramBots_config_1 = require("../utils/TelegramBots.config");
 const ALLOWED_IPS = [
     '31.97.59.2',
     '148.230.84.50',
@@ -54,22 +53,21 @@ const IGNORE_PATHS = [
     '/health',
     /^\/public(?:$|\/)/i,
 ];
-let AuthGuard = AuthGuard_1 = class AuthGuard {
+let AuthMiddleware = AuthMiddleware_1 = class AuthMiddleware {
     constructor() {
-        this.logger = new common_1.Logger(AuthGuard_1.name);
+        this.logger = new common_1.Logger(AuthMiddleware_1.name);
     }
-    canActivate(context) {
-        const request = context.switchToHttp().getRequest();
-        const path = request.path;
-        const url = request.url;
-        const originalUrl = request.originalUrl;
+    use(req, res, next) {
+        const path = req.path;
+        const url = req.url;
+        const originalUrl = req.originalUrl;
         if (this.isIgnoredPath(path, url, originalUrl)) {
-            return true;
+            return next();
         }
-        const apiKey = request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
-        const clientIp = this.extractRealClientIP(request);
-        const origin = this.extractRealOrigin(request);
+        const apiKey = req.headers['x-api-key']?.toString() ||
+            req.query['apiKey']?.toString();
+        const clientIp = this.extractRealClientIP(req);
+        const origin = this.extractRealOrigin(req);
         this.logger.debug(`Request Received: ${originalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === 'santoor') {
@@ -82,11 +80,11 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             passedReason = 'Origin allowed';
         }
         if (passedReason) {
-            return true;
+            return next();
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
         this.notifyUnauthorized(clientIp, origin, originalUrl);
-        throw new common_1.UnauthorizedException('Access denied: No valid API key, IP, or Origin');
+        throw new common_1.UnauthorizedException('Access denied');
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
@@ -113,40 +111,40 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             return false;
         }
     }
-    getHeaderValue(request, headerName) {
-        return request.headers[headerName.toLowerCase()];
+    getHeaderValue(req, headerName) {
+        return req.headers[headerName.toLowerCase()];
     }
-    extractRealClientIP(request) {
-        const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
+    extractRealClientIP(req) {
+        const cfConnectingIP = this.getHeaderValue(req, 'cf-connecting-ip');
         if (cfConnectingIP)
             return cfConnectingIP;
-        const xRealIP = this.getHeaderValue(request, 'x-real-ip');
+        const xRealIP = this.getHeaderValue(req, 'x-real-ip');
         if (xRealIP)
             return xRealIP;
-        const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
+        const xForwardedFor = this.getHeaderValue(req, 'x-forwarded-for');
         if (xForwardedFor)
             return xForwardedFor.split(',')[0].trim();
-        if (request.ip)
-            return request.ip.replace('::ffff:', '');
-        if (request.connection?.remoteAddress)
-            return request.connection.remoteAddress.replace('::ffff:', '');
+        if (req.ip)
+            return req.ip.replace('::ffff:', '');
+        if (req.connection?.remoteAddress)
+            return req.connection.remoteAddress.replace('::ffff:', '');
         this.logger.warn(`Unable to extract client IP`);
         return 'unknown';
     }
-    extractRealOrigin(request) {
-        const origin = this.getHeaderValue(request, 'origin');
+    extractRealOrigin(req) {
+        const origin = this.getHeaderValue(req, 'origin');
         if (origin)
             return origin;
-        const xOriginalHost = this.getHeaderValue(request, 'x-original-host');
+        const xOriginalHost = this.getHeaderValue(req, 'x-original-host');
         if (xOriginalHost)
-            return `${this.extractProtocol(request)}://${xOriginalHost}`;
-        const xForwardedHost = this.getHeaderValue(request, 'x-forwarded-host');
+            return `${this.extractProtocol(req)}://${xOriginalHost}`;
+        const xForwardedHost = this.getHeaderValue(req, 'x-forwarded-host');
         if (xForwardedHost)
-            return `${this.extractProtocol(request)}://${xForwardedHost}`;
-        const host = this.getHeaderValue(request, 'host');
+            return `${this.extractProtocol(req)}://${xForwardedHost}`;
+        const host = this.getHeaderValue(req, 'host');
         if (host)
-            return `${this.extractProtocol(request)}://${host}`;
-        const referer = this.getHeaderValue(request, 'referer');
+            return `${this.extractProtocol(req)}://${host}`;
+        const referer = this.getHeaderValue(req, 'referer');
         if (referer) {
             try {
                 const refererUrl = new URL(referer);
@@ -158,11 +156,11 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         }
         return undefined;
     }
-    extractProtocol(request) {
-        const xForwardedProto = this.getHeaderValue(request, 'x-forwarded-proto');
+    extractProtocol(req) {
+        const xForwardedProto = this.getHeaderValue(req, 'x-forwarded-proto');
         if (xForwardedProto)
             return xForwardedProto.toLowerCase();
-        const cfVisitor = this.getHeaderValue(request, 'cf-visitor');
+        const cfVisitor = this.getHeaderValue(req, 'cf-visitor');
         if (cfVisitor) {
             try {
                 const visitor = JSON.parse(cfVisitor);
@@ -173,24 +171,24 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
                 this.logger.debug(`Failed to parse CF-Visitor`);
             }
         }
-        if (request.secure)
+        if (req.secure)
             return 'https';
-        const xForwardedSsl = this.getHeaderValue(request, 'x-forwarded-ssl');
+        const xForwardedSsl = this.getHeaderValue(req, 'x-forwarded-ssl');
         if (xForwardedSsl?.toLowerCase() === 'on')
             return 'https';
         return process.env.NODE_ENV === 'production' ? 'https' : 'http';
     }
     notifyUnauthorized(clientIp, origin, originalUrl) {
         try {
-            (0, utils_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId || process.env.serviceName} Failed :: Unauthorized access attempt from ${clientIp || 'unknown IP'} with origin ${origin || 'unknown origin'} for ${originalUrl}`)}`);
+            TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
         }
         catch (err) {
             this.logger.error(`Notifbot failed: ${err.message}`);
         }
     }
 };
-exports.AuthGuard = AuthGuard;
-exports.AuthGuard = AuthGuard = AuthGuard_1 = __decorate([
+exports.AuthMiddleware = AuthMiddleware;
+exports.AuthMiddleware = AuthMiddleware = AuthMiddleware_1 = __decorate([
     (0, common_1.Injectable)()
-], AuthGuard);
-//# sourceMappingURL=auth.guard.js.map
+], AuthMiddleware);
+//# sourceMappingURL=auth.middleware.js.map

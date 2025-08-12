@@ -24,7 +24,6 @@ Object.defineProperty(exports, "MemoryCleanerService", { enumerable: true, get: 
 __exportStar(require("./components"), exports);
 __exportStar(require("./utils"), exports);
 __exportStar(require("./middlewares"), exports);
-__exportStar(require("./guards"), exports);
 __exportStar(require("./interfaces/telegram"), exports);
 __exportStar(require("./IMap/IMap"), exports);
 __exportStar(require("./features/clients"), exports);

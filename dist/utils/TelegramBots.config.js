@@ -24,6 +24,7 @@ var ChannelCategory;
     ChannelCategory["UNVDS"] = "UNVDS";
     ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
     ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
+    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 class BotConfig {
     constructor() {

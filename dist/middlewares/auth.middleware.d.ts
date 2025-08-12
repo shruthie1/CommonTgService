@@ -1,7 +1,8 @@
-import { CanActivate, ExecutionContext } from '@nestjs/common';
-export declare class AuthGuard implements CanActivate {
+import { NestMiddleware } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+export declare class AuthMiddleware implements NestMiddleware {
     private readonly logger;
-    canActivate(context: ExecutionContext): boolean;
+    use(req: Request, res: Response, next: NextFunction): void;
     private isIgnoredPath;
     private isOriginAllowed;
     private getHeaderValue;

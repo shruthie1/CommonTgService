@@ -32,10 +32,11 @@ import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager'
 import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
+import { ActiveChannel } from '../active-channels';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
-    private joinChannelMap: Map<string, Channel[]> = new Map();
+    private joinChannelMap: Map<string, Channel[] | ActiveChannel[]> = new Map();
     private joinChannelIntervalId: NodeJS.Timeout | null = null;
     private leaveChannelMap: Map<string, string[]> = new Map();
     private leaveChannelIntervalId: NodeJS.Timeout | null = null;
@@ -457,7 +458,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
                         // Add delay before channel retrieval
                         await sleep(1500);
-                        const result =
+                        const result: Channel[] | ActiveChannel[] =
                             channels.ids.length < 220
                                 ? await this.channelsService.getActiveChannels(
                                     channelLimit,
@@ -649,7 +650,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
-            let currentChannel: Channel | null = null;
+            let currentChannel: Channel | ActiveChannel | null = null;
 
             try {
                 const channels = this.joinChannelMap.get(mobile);

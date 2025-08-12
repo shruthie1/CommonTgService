@@ -32,11 +32,12 @@ import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
+import { ActiveChannel } from '../active-channels';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
     private readonly logger = new Logger(BufferClientService.name);
-    private joinChannelMap: Map<string, Channel[]> = new Map();
+    private joinChannelMap: Map<string, Channel[] | ActiveChannel[]> = new Map();
     private joinChannelIntervalId: NodeJS.Timeout | null = null;
     private leaveChannelMap: Map<string, string[]> = new Map();
     private leaveChannelIntervalId: NodeJS.Timeout | null = null;
@@ -357,7 +358,7 @@ export class BufferClientService implements OnModuleDestroy {
         this.joinChannelMap.delete(key);
     }
 
-    private safeSetJoinChannelMap(mobile: string, channels: Channel[]): boolean {
+    private safeSetJoinChannelMap(mobile: string, channels: Channel[] | ActiveChannel[]): boolean {
         if (
             this.joinChannelMap.size >= this.MAX_MAP_SIZE &&
             !this.joinChannelMap.has(mobile)
@@ -726,7 +727,7 @@ export class BufferClientService implements OnModuleDestroy {
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
-            let currentChannel: Channel | null = null;
+            let currentChannel: Channel | ActiveChannel | null = null;
 
             try {
                 const channels = this.joinChannelMap.get(mobile);

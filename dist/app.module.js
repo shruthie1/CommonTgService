@@ -33,10 +33,10 @@ const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const session_manager_1 = require("./components/session-manager");
 const ip_management_module_1 = require("./components/ip-management/ip-management.module");
-const core_1 = require("@nestjs/core");
-const auth_guard_1 = require("./guards/auth.guard");
+const auth_middleware_1 = require("./middlewares/auth.middleware");
 let AppModule = class AppModule {
     configure(consumer) {
+        consumer.apply(auth_middleware_1.AuthMiddleware).forRoutes('*');
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
     }
 };
@@ -68,12 +68,7 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
         ],
-        providers: [
-            {
-                provide: core_1.APP_GUARD,
-                useClass: auth_guard_1.AuthGuard,
-            },
-        ],
+        providers: [],
         controllers: [app_controller_1.AppController],
         exports: [
             Telegram_module_1.TelegramModule,

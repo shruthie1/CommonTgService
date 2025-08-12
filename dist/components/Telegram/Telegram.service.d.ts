@@ -12,6 +12,7 @@ import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
+import { ActiveChannel } from '../active-channels';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
@@ -41,7 +42,7 @@ export declare class TelegramService implements OnModuleDestroy {
     sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
     getChatId(mobile: string, username: string): Promise<any>;
     getLastActiveTime(mobile: string): Promise<string>;
-    tryJoiningChannel(mobile: string, chatEntity: Channel): Promise<void>;
+    tryJoiningChannel(mobile: string, chatEntity: Channel | ActiveChannel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string): Promise<void>;
     getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
     addContact(mobile: string, data: {
