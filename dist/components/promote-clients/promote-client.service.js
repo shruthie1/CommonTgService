@@ -183,7 +183,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             return this.create(createOrUpdateUserDto);
         }
     }
-    async remove(mobile) {
+    async remove(mobile, message) {
         try {
             this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
             const deleteResult = await this.promoteClientModel
@@ -192,7 +192,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             if (deleteResult.deletedCount === 0) {
                 throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}\n${message}`)}`);
         }
         catch (error) {
             if (error instanceof common_1.NotFoundException) {
@@ -367,7 +367,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
                         }
                         await (0, Helpers_1.sleep)(1000);
-                        await this.remove(mobile);
+                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                     }
                     else {
                         this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
@@ -497,7 +497,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromPromoteMap(mobile);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `ProcessJoinChannel:${errorDetails.message}`);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (removeError) {
@@ -635,7 +635,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (removeError) {

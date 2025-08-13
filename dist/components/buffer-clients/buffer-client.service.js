@@ -195,14 +195,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             });
         }
     }
-    async remove(mobile) {
+    async remove(mobile, message) {
         try {
             const bufferClient = await this.findOne(mobile, false);
             if (!bufferClient) {
                 throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
             this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\nsession: ${bufferClient.session}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`);
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         }
         catch (error) {
@@ -412,7 +412,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 ])) {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (removeErr) {
@@ -542,7 +542,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromBufferMap(mobile);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `Process JoinChannelError: ${errorDetails.message}`);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (removeError) {
@@ -679,7 +679,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 ])) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
                         await (0, Helpers_1.sleep)(2000);
                     }
                     catch (removeError) {
@@ -820,7 +820,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 this.logger.warn(`Number ${doc.mobile} is an Active Client`);
                 goodIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile);
+                    await this.remove(doc.mobile, `CheckPoint: Already ActiveClient`);
                     await (0, Helpers_1.sleep)(1000);
                 }
                 catch (removeError) {
@@ -864,7 +864,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
                 badIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile);
+                    await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
                     await (0, Helpers_1.sleep)(1500);
                 }
                 catch (removeError) {
@@ -886,7 +886,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             (0, parseError_1.parseError)(error);
             badIds.push(doc.mobile);
             try {
-                await this.remove(doc.mobile);
+                await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
                 await (0, Helpers_1.sleep)(1500);
             }
             catch (removeError) {

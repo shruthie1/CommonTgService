@@ -50,7 +50,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClient>;
     update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClient>;
-    remove(mobile: string): Promise<void>;
+    remove(mobile: string, message?: string): Promise<void>;
     search(filter: any): Promise<BufferClient[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClient[]>;
     removeFromBufferMap(key: string): void;
