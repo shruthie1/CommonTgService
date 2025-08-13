@@ -354,7 +354,7 @@ class TelegramManager {
         const { apiHash, apiId } = getRandomCredentials()
         this.client = new TelegramClient(this.session, apiId, apiHash, generateTGConfig());
         this.client.setLogLevel(LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler
+        this.client._errorHandler = this.errorHandler.bind(this)
         await this.client.connect();
         const me = <Api.User>await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
