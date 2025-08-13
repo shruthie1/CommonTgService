@@ -43,7 +43,7 @@ export declare class TelegramService implements OnModuleDestroy {
     getChatId(mobile: string, username: string): Promise<any>;
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel | ActiveChannel): Promise<void>;
-    removeChannels(error: any, channelId: string, username: string): Promise<void>;
+    removeChannels(error: any, channelId: string, username: string, mobile: string): Promise<void>;
     getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
     addContact(mobile: string, data: {
         mobile: string;
@@ -225,7 +225,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "photo" | "video";
+            type: "document" | "video" | "photo";
             thumb: any;
             caption: string;
             date: number;

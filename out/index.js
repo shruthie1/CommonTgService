@@ -2763,33 +2763,33 @@ let TelegramService = class TelegramService {
             else {
                 await this.channelsService.remove(chatEntity.channelId);
                 await this.activeChannelsService.remove(chatEntity.channelId);
-                this.logger.debug("Removed Channel- ", chatEntity.username);
+                this.logger.debug(mobile, "Removed Channel- ", chatEntity.username);
             }
         }
         catch (error) {
             this.logger.debug(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
-            this.removeChannels(error, chatEntity.channelId, chatEntity.username);
+            this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error;
         }
     }
     ;
-    async removeChannels(error, channelId, username) {
+    async removeChannels(error, channelId, username, mobile) {
         if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
             try {
                 if (channelId) {
                     await this.channelsService.remove(channelId);
                     await this.activeChannelsService.remove(channelId);
-                    this.logger.debug("Removed Channel- ", channelId);
+                    this.logger.debug(mobile, `Removed Channel-  ${channelId}`);
                 }
                 else {
                     const channelDetails = (await this.channelsService.search({ username: username }))[0];
                     await this.channelsService.remove(channelDetails.channelId);
                     await this.activeChannelsService.remove(channelDetails.channelId);
-                    this.logger.debug("Removed Channel - ", channelDetails.channelId);
+                    this.logger.debug(mobile, `Removed Channel-${channelDetails.channelId}`);
                 }
             }
             catch (searchError) {
-                this.logger.debug("Failed to search/remove channel: ", searchError);
+                this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
             }
         }
         else if (error.errorMessage === "CHANNEL_PRIVATE") {
@@ -2840,7 +2840,7 @@ let TelegramService = class TelegramService {
                 await this.leaveChannel(mobile, "2302868706");
             }
             catch (error) {
-                this.logger.debug("Error in forwardMedia: ", error);
+                this.logger.debug(mobile, "Error in forwardMedia: ", error);
             }
         }, 5 * 60000);
         return "Media forward initiated";
@@ -2944,7 +2944,7 @@ let TelegramService = class TelegramService {
             await cloudinary_1.CloudinaryService.getInstance(name);
             await (0, Helpers_1.sleep)(2000);
             const rootPath = process.cwd();
-            this.logger.debug("checking path", rootPath);
+            this.logger.debug(mobile, "checking path", rootPath);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
             await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
