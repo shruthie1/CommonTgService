@@ -19722,8 +19722,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             status: 'active',
         })
             .sort({ channels: 1 });
-        for (const client of clients) {
-            const mobile = client.mobile;
+        for (let i = 0; i < clients.length; i++) {
+            console.log(`Processing PromoteClient (${i}/${clients.length})`);
+            const client = clients[i];
+            const mobile = client?.mobile;
             try {
                 this.logger.debug(`Updating info for client: ${mobile}`);
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
@@ -19733,13 +19735,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 const channels = await telegramClient.channelInfo(true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
-                await connection_manager_1.connectionManager.unregisterClient(mobile);
-                await (0, Helpers_1.sleep)(2000);
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
                 await this.markAsInactive(mobile, `${errorDetails.message}`);
                 this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+            }
+            finally {
+                await connection_manager_1.connectionManager.unregisterClient(mobile);
+                await (0, Helpers_1.sleep)(2000);
             }
         }
     }
