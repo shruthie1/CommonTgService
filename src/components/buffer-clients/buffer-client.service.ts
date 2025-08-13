@@ -292,7 +292,7 @@ export class BufferClientService implements OnModuleDestroy {
         }
     }
 
-    async remove(mobile: string): Promise<void> {
+    async remove(mobile: string, message?: string): Promise<void> {
         try {
             const bufferClient = await this.findOne(mobile, false);
             if (!bufferClient) {
@@ -302,7 +302,7 @@ export class BufferClientService implements OnModuleDestroy {
             }
             this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\nsession: ${bufferClient.session}`)}`,
+                `${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`,
             );
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         } catch (error) {
@@ -609,7 +609,7 @@ export class BufferClientService implements OnModuleDestroy {
                         `Session invalid for ${mobile} due to ${errorMsg}, removing client`,
                     );
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                         await sleep(2000); // Delay after removal
                     } catch (removeErr) {
                         this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
@@ -791,7 +791,7 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromBufferMap(mobile);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `Process JoinChannelError: ${errorDetails.message}`);
                         await sleep(2000);
                     } catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
@@ -974,7 +974,7 @@ export class BufferClientService implements OnModuleDestroy {
                 ) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
                         await sleep(2000);
                     } catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
@@ -1175,7 +1175,7 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.warn(`Number ${doc.mobile} is an Active Client`);
                 goodIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile);
+                    await this.remove(doc.mobile, `CheckPoint: Already ActiveClient`);
                     await sleep(1000); // Delay after removal
                 } catch (removeError) {
                     this.logger.error(
@@ -1238,7 +1238,7 @@ export class BufferClientService implements OnModuleDestroy {
                 );
                 badIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile);
+                    await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
                     await sleep(1500); // Delay after removal
                 } catch (removeError) {
                     this.logger.error(
@@ -1263,7 +1263,7 @@ export class BufferClientService implements OnModuleDestroy {
             badIds.push(doc.mobile);
 
             try {
-                await this.remove(doc.mobile);
+                await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
                 await sleep(1500);
             } catch (removeError) {
                 this.logger.error(`Error removing client ${doc.mobile}:`, removeError);

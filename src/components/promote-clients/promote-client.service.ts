@@ -270,7 +270,7 @@ export class PromoteClientService implements OnModuleDestroy {
         }
     }
 
-    async remove(mobile: string): Promise<void> {
+    async remove(mobile: string, message?: string): Promise<void> {
         try {
             this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
 
@@ -285,7 +285,7 @@ export class PromoteClientService implements OnModuleDestroy {
             }
 
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}`)}`,
+                `${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}\n${message}`)}`,
             );
         } catch (error) {
             if (error instanceof NotFoundException) {
@@ -531,7 +531,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
 
                         await sleep(1000); // Delay before removal
-                        await this.remove(mobile);
+                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                     } else {
                         this.logger.warn(
                             `${mobile}: Non-fatal error encountered, will retry later`,
@@ -717,7 +717,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromPromoteMap(mobile);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `ProcessJoinChannel:${errorDetails.message}`);
                         await sleep(2000);
                     } catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
@@ -902,7 +902,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 ) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
-                        await this.remove(mobile);
+                        await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
                         await sleep(2000);
                     } catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
