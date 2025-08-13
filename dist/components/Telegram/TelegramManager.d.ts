@@ -19,6 +19,7 @@ interface MessageScheduleOptions {
     };
 }
 declare class TelegramManager {
+    private logger;
     private session;
     phoneNumber: string;
     client: TelegramClient | null;
@@ -311,7 +312,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

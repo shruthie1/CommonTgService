@@ -3,7 +3,6 @@ import { parseError } from '../../../utils/parseError';
 import { TelegramLogger } from './telegram-logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { UsersService } from '../../../components/users/users.service';
-import { TelegramClient } from 'telegram';
 import { contains, sleep } from '../../../utils';
 import { BotConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
@@ -76,7 +75,7 @@ class ConnectionManager {
 
     private constructor() {
         this.clients = new Map();
-        this.logger = TelegramLogger.getInstance();
+        this.logger = new TelegramLogger('Connection Manager');
         this.startCleanupInterval();
     }
 

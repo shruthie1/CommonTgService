@@ -4,15 +4,8 @@ export class TelegramLogger {
     private static instance: TelegramLogger;
     private logger: Logger;
 
-    private constructor() {
-        this.logger = new Logger('TelegramService');
-    }
-
-    static getInstance(): TelegramLogger {
-        if (!TelegramLogger.instance) {
-            TelegramLogger.instance = new TelegramLogger();
-        }
-        return TelegramLogger.instance;
+    constructor(serviceName:string = 'TelegramService') {
+        this.logger = new Logger(serviceName);
     }
 
     private shouldIncludeDetails(details?: any): boolean {

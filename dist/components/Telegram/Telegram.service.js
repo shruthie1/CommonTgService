@@ -68,7 +68,7 @@ let TelegramService = class TelegramService {
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('TgService');
         this.cleanupInterval = connection_manager_1.connectionManager.startCleanupInterval();
         connection_manager_1.connectionManager.setUsersService(this.usersService);
     }

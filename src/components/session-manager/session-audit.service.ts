@@ -12,7 +12,7 @@ export class SessionAuditService {
     constructor(
         @InjectModel(SessionAudit.name) private sessionAuditModel: Model<SessionAuditDocument>,
     ) {
-        this.logger = TelegramLogger.getInstance();
+        this.logger = new TelegramLogger('SessionAuditService');
     }
 
     /**

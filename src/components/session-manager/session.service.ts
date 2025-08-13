@@ -27,7 +27,7 @@ export interface SessionCreationResult {
 
 export class SessionManager {
     private static instance: SessionManager | null = null;
-    private readonly logger = TelegramLogger.getInstance();
+    private readonly logger = new TelegramLogger('SessionManager');
     private readonly clientRegistry = ClientRegistry.getInstance();
 
     // Constants
@@ -383,7 +383,7 @@ export class SessionManager {
                 try {
                     (client as any)._destroyed = true;
                     if ((client as any)._sender && typeof (client as any)._sender.disconnect === 'function') {
-                        await (client as any)._sender.disconnect().catch(() => {});
+                        await (client as any)._sender.disconnect().catch(() => { });
                     }
                 } catch (finalCleanupError) {
                     this.logger.error(mobile, 'Final cleanup error', finalCleanupError);
@@ -487,7 +487,7 @@ export class SessionManager {
 @Injectable()
 export class SessionService {
 
-    private readonly logger = TelegramLogger.getInstance();
+    private readonly logger = new TelegramLogger('SessionService');
     private readonly sessionManager = SessionManager.getInstance();
     private readonly sessionAuditService: SessionAuditService;
     private readonly rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -568,7 +568,7 @@ export class SessionService {
                     if (tempClient) {
                         tempClient._destroyed = true;
                         if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
-                            await tempClient._sender.disconnect().catch(() => {});
+                            await tempClient._sender.disconnect().catch(() => { });
                         }
                     }
                 }
@@ -844,7 +844,7 @@ export class SessionService {
 
             // Step 1: Try to find the oldest valid session within the specified age limit
             const oldestSessionResult = await this.findOldestValidSession(mobile, maxAgeDays);
-            
+
             if (oldestSessionResult.success && oldestSessionResult.session) {
                 this.logger.info(mobile, 'Oldest valid session found, updating usage and returning');
 
@@ -886,7 +886,7 @@ export class SessionService {
             this.logger.info(mobile, 'No valid session found, creating new session as fallback');
 
             const createResult = await this.createSessionWithFallback(mobile);
-            
+
             if (createResult.success && createResult.session) {
                 return {
                     success: true,
@@ -952,8 +952,8 @@ export class SessionService {
 
             // Filter and sort to get the oldest session that meets our criteria
             const validSessions = sessions.sessions
-                .filter(session => 
-                    session.sessionString && 
+                .filter(session =>
+                    session.sessionString &&
                     session.sessionString.trim().length > 0 &&
                     (session.status === SessionStatus.ACTIVE || session.status === SessionStatus.CREATED)
                 )

@@ -23,7 +23,7 @@ import { InitModule } from '../ConfigurationInit';
         TelegramValidationConfig,
         {
             provide: 'TELEGRAM_LOGGER',
-            useValue: TelegramLogger.getInstance()
+            useValue: new TelegramLogger('TELEGRAM_LOGGER')
         }
     ],
     exports: [TelegramService]

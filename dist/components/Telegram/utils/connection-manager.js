@@ -29,7 +29,7 @@ class ConnectionManager {
         this.CLEANUP_TIMEOUT = 15000;
         this.MAX_CLEANUP_ATTEMPTS = 3;
         this.clients = new Map();
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('Connection Manager');
         this.startCleanupInterval();
     }
     setUsersService(usersService) {

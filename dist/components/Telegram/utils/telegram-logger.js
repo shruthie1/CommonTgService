@@ -3,14 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramLogger = void 0;
 const common_1 = require("@nestjs/common");
 class TelegramLogger {
-    constructor() {
-        this.logger = new common_1.Logger('TelegramService');
-    }
-    static getInstance() {
-        if (!TelegramLogger.instance) {
-            TelegramLogger.instance = new TelegramLogger();
-        }
-        return TelegramLogger.instance;
+    constructor(serviceName = 'TelegramService') {
+        this.logger = new common_1.Logger(serviceName);
     }
     shouldIncludeDetails(details) {
         return details !== undefined

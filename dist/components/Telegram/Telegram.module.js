@@ -35,7 +35,7 @@ exports.TelegramModule = TelegramModule = __decorate([
             telegram_validation_config_1.TelegramValidationConfig,
             {
                 provide: 'TELEGRAM_LOGGER',
-                useValue: telegram_logger_1.TelegramLogger.getInstance()
+                useValue: new telegram_logger_1.TelegramLogger('TELEGRAM_LOGGER')
             }
         ],
         exports: [Telegram_service_1.TelegramService]

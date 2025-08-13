@@ -21,7 +21,7 @@ const telegram_logger_1 = require("../Telegram/utils/telegram-logger");
 let SessionAuditService = class SessionAuditService {
     constructor(sessionAuditModel) {
         this.sessionAuditModel = sessionAuditModel;
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('SessionAuditService');
     }
     async createAuditRecord(createDto) {
         try {

@@ -16,7 +16,7 @@ interface ClientInfo {
 export class ClientRegistry {
     private static instance: ClientRegistry | null = null;
     private readonly clients = new Map<string, ClientInfo>();
-    private readonly logger = TelegramLogger.getInstance();
+    private readonly logger = new TelegramLogger('clientRegistry');
     private readonly locks = new Map<string, { acquired: Date; lockId: string }>();
 
     // Maximum time to wait for a lock (in ms)

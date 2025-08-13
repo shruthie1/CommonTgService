@@ -21,7 +21,7 @@ const session_audit_service_1 = require("./session-audit.service");
 const sessions_schema_1 = require("./schemas/sessions.schema");
 class SessionManager {
     constructor() {
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('SessionManager');
         this.clientRegistry = client_registry_1.ClientRegistry.getInstance();
         this.DEFAULT_PASSWORD = "Ajtdmwajt1@";
         this.DEFAULT_MAX_RETRIES = 3;
@@ -345,7 +345,7 @@ exports.SessionManager = SessionManager;
 SessionManager.instance = null;
 let SessionService = class SessionService {
     constructor(sessionAuditService) {
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('SessionService');
         this.sessionManager = SessionManager.getInstance();
         this.rateLimitMap = new Map();
         this.MAX_SESSIONS_PER_HOUR = 20;

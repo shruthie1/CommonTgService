@@ -16,7 +16,7 @@ const telegram_logger_1 = require("../Telegram/utils/telegram-logger");
 let ClientRegistry = ClientRegistry_1 = class ClientRegistry {
     constructor() {
         this.clients = new Map();
-        this.logger = telegram_logger_1.TelegramLogger.getInstance();
+        this.logger = new telegram_logger_1.TelegramLogger('clientRegistry');
         this.locks = new Map();
         this.LOCK_TIMEOUT = 30000;
         this.LOCK_EXPIRY = 120000;

@@ -1,8 +1,7 @@
 export declare class TelegramLogger {
     private static instance;
     private logger;
-    private constructor();
-    static getInstance(): TelegramLogger;
+    constructor(serviceName?: string);
     private shouldIncludeDetails;
     private formatMessage;
     info(mobile: string, operation: string, details?: any): void;

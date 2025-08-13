@@ -37,7 +37,7 @@ export class TelegramService implements OnModuleDestroy {
         @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
     ) {
-        this.logger = TelegramLogger.getInstance();
+        this.logger = new TelegramLogger('TgService');
         this.cleanupInterval = connectionManager.startCleanupInterval();
         connectionManager.setUsersService(this.usersService);
     }
