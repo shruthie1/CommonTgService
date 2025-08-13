@@ -4785,24 +4785,28 @@ class TelegramManager {
         }
     }
     async createNewSession() {
-        const me = await this.client.getMe();
-        console.log("Phne:", me.phone);
-        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, {
-            connectionRetries: 1,
-        });
-        await newClient.start({
-            phoneNumber: me.phone,
-            password: async () => "Ajtdmwajt1@",
-            phoneCode: async () => {
-                console.log('Waiting for the OTP code from chat ID 777000...');
-                return await this.waitForOtp();
-            },
-            onError: (err) => { throw err; },
-        });
-        const session = newClient.session.save();
-        await newClient.destroy();
-        console.log("New Session: ", session);
-        return session;
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000));
+        const sessionPromise = (async () => {
+            const me = await this.client.getMe();
+            console.log("Creating new session for: ", me.phone);
+            const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
+            console.log("Starting Session Creation...");
+            await newClient.start({
+                phoneNumber: me.phone,
+                password: async () => "Ajtdmwajt1@",
+                phoneCode: async () => {
+                    console.log('Waiting for the OTP code from chat ID 777000...');
+                    return await this.waitForOtp();
+                },
+                onError: (err) => { throw err; },
+            });
+            console.log("Session Creation Completed");
+            const session = newClient.session.save();
+            await newClient.destroy();
+            console.log("New Session: ", session);
+            return session;
+        })();
+        return Promise.race([sessionPromise, timeoutPromise]);
     }
     async waitForOtp() {
         for (let i = 0; i < 3; i++) {
