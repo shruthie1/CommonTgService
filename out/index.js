@@ -3740,7 +3740,7 @@ class TelegramManager {
         const { apiHash, apiId } = (0, utils_1.getRandomCredentials)();
         this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, (0, generateTGConfig_1.generateTGConfig)());
         this.client.setLogLevel(Logger_1.LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler;
+        this.client._errorHandler = this.errorHandler.bind(this);
         await this.client.connect();
         const me = await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
