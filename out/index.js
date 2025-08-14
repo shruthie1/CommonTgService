@@ -883,6 +883,8 @@ exports.ConfigurationController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const init_service_1 = __webpack_require__(/*! ./init.service */ "./src/components/ConfigurationInit/init.service.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
+const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let ConfigurationController = class ConfigurationController {
     constructor(configurationService) {
         this.configurationService = configurationService;
@@ -897,6 +899,8 @@ let ConfigurationController = class ConfigurationController {
 exports.ConfigurationController = ConfigurationController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get configuration data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -13221,6 +13225,8 @@ exports.BuildController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const build_service_1 = __webpack_require__(/*! ./build.service */ "./src/components/builds/build.service.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
+const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let BuildController = class BuildController {
     constructor(buildService) {
         this.buildService = buildService;
@@ -13235,6 +13241,8 @@ let BuildController = class BuildController {
 exports.BuildController = BuildController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get build data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -14101,6 +14109,8 @@ const client_service_1 = __webpack_require__(/*! ./client.service */ "./src/comp
 const create_client_dto_1 = __webpack_require__(/*! ./dto/create-client.dto */ "./src/components/clients/dto/create-client.dto.ts");
 const search_client_dto_1 = __webpack_require__(/*! ./dto/search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
 const update_client_dto_1 = __webpack_require__(/*! ./dto/update-client.dto */ "./src/components/clients/dto/update-client.dto.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
+const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let ClientController = class ClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -14373,6 +14383,8 @@ __decorate([
 ], ClientController.prototype, "updateClient", null);
 __decorate([
     (0, common_1.Get)('maskedCls'),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __metadata("design:type", Function),
@@ -14381,6 +14393,8 @@ __decorate([
 ], ClientController.prototype, "findAllMasked", null);
 __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __param(0, (0, common_1.Param)('clientId')),
@@ -14390,6 +14404,8 @@ __decorate([
 ], ClientController.prototype, "findOneMasked", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __metadata("design:type", Function),
@@ -25263,6 +25279,8 @@ exports.UpiIdController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const upi_ids_service_1 = __webpack_require__(/*! ./upi-ids.service */ "./src/components/upi-ids/upi-ids.service.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
+const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let UpiIdController = class UpiIdController {
     constructor(UpiIdService) {
         this.UpiIdService = UpiIdService;
@@ -25277,6 +25295,8 @@ let UpiIdController = class UpiIdController {
 exports.UpiIdController = UpiIdController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get Upi Ids' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -27033,6 +27053,53 @@ exports.UsersService = UsersService = __decorate([
 
 /***/ }),
 
+/***/ "./src/decorators/cloudflare-cache.decorator.ts":
+/*!******************************************************!*\
+  !*** ./src/decorators/cloudflare-cache.decorator.ts ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CloudflareCache = exports.CLOUDFLARE_CACHE_KEY = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+exports.CLOUDFLARE_CACHE_KEY = 'cloudflare-cache-seconds';
+const CloudflareCache = (edgeSeconds, browserSeconds = 0) => (0, common_1.SetMetadata)(exports.CLOUDFLARE_CACHE_KEY, {
+    edge: edgeSeconds,
+    browser: browserSeconds,
+});
+exports.CloudflareCache = CloudflareCache;
+
+
+/***/ }),
+
+/***/ "./src/decorators/index.ts":
+/*!*********************************!*\
+  !*** ./src/decorators/index.ts ***!
+  \*********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./cloudflare-cache.decorator */ "./src/decorators/cloudflare-cache.decorator.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/guards/auth.guard.ts":
 /*!**********************************!*\
   !*** ./src/guards/auth.guard.ts ***!
@@ -27260,6 +27327,76 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./auth.guard */ "./src/guards/auth.guard.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/interceptors/cloudflare-cache.interceptor.ts":
+/*!**********************************************************!*\
+  !*** ./src/interceptors/cloudflare-cache.interceptor.ts ***!
+  \**********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CloudflareCacheInterceptor = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
+const decorators_1 = __webpack_require__(/*! ../decorators */ "./src/decorators/index.ts");
+let CloudflareCacheInterceptor = class CloudflareCacheInterceptor {
+    constructor(reflector) {
+        this.reflector = reflector;
+    }
+    intercept(context, next) {
+        const cacheConfig = this.reflector.get(decorators_1.CLOUDFLARE_CACHE_KEY, context.getHandler());
+        if (cacheConfig) {
+            const res = context.switchToHttp().getResponse();
+            res.setHeader('Cache-Control', `public, max-age=${cacheConfig.browser}, s-maxage=${cacheConfig.edge}`);
+        }
+        return next.handle();
+    }
+};
+exports.CloudflareCacheInterceptor = CloudflareCacheInterceptor;
+exports.CloudflareCacheInterceptor = CloudflareCacheInterceptor = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [core_1.Reflector])
+], CloudflareCacheInterceptor);
+
+
+/***/ }),
+
+/***/ "./src/interceptors/index.ts":
+/*!***********************************!*\
+  !*** ./src/interceptors/index.ts ***!
+  \***********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./cloudflare-cache.interceptor */ "./src/interceptors/cloudflare-cache.interceptor.ts"), exports);
 
 
 /***/ }),
