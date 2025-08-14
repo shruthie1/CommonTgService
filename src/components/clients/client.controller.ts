@@ -10,7 +10,7 @@ import { SetupClientQueryDto } from './dto/setup-client.dto';
 @ApiTags('Clients')
 @Controller('clients')
 export class ClientController {
-  constructor(private readonly clientService: ClientService) {}
+  constructor(private readonly clientService: ClientService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create user data' })
@@ -99,6 +99,17 @@ export class ClientController {
   async findAllMasked() {
     try {
       return await this.clientService.findAllMasked();
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+  
+  @Get('maskedCls/:clientId')
+  @ApiOperation({ summary: 'Get all user data with masked fields' })
+  @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
+  async findOneMasked(@Param('clientId') clientId: string) {
+    try {
+      return await this.clientService.findOneMasked(clientId);
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -226,56 +237,56 @@ export class ClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID' })
   @ApiResponse({ status: 200, description: 'IP information retrieved successfully' })
   async getClientIpInfo(@Param('clientId') clientId: string): Promise<{
-      clientId: string;
-      mobiles: {
-          mainMobile?: { mobile: string; hasIp: boolean; ipAddress?: string };
-          promoteMobiles: { mobile: string; hasIp: boolean; ipAddress?: string }[];
-      };
-      needingAssignment: {
-          mainMobile?: string;
-          promoteMobiles: string[];
-      };
+    clientId: string;
+    mobiles: {
+      mainMobile?: { mobile: string; hasIp: boolean; ipAddress?: string };
+      promoteMobiles: { mobile: string; hasIp: boolean; ipAddress?: string }[];
+    };
+    needingAssignment: {
+      mainMobile?: string;
+      promoteMobiles: string[];
+    };
   }> {
-      try {
-          const client = await this.clientService.findOne(clientId);
-          const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-          
-          const result = {
-              clientId,
-              mobiles: {
-                  mainMobile: undefined as any,
-                  promoteMobiles: [] as any[]
-              },
-              needingAssignment
-          };
+    try {
+      const client = await this.clientService.findOne(clientId);
+      const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
 
-          // Get main mobile info
-          if (client.mobile) {
-              const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
-              const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
-              result.mobiles.mainMobile = {
-                  mobile: client.mobile,
-                  hasIp,
-                  ipAddress: ipAddress || undefined
-              };
-          }
+      const result = {
+        clientId,
+        mobiles: {
+          mainMobile: undefined as any,
+          promoteMobiles: [] as any[]
+        },
+        needingAssignment
+      };
 
-          // Get promote mobiles info from PromoteClient collection
-          const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
-          for (const mobile of promoteMobiles) {
-              const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
-              const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
-              result.mobiles.promoteMobiles.push({
-                  mobile,
-                  hasIp,
-                  ipAddress: ipAddress || undefined
-              });
-          }
-
-          return result;
-      } catch (error) {
-          throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      // Get main mobile info
+      if (client.mobile) {
+        const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
+        const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
+        result.mobiles.mainMobile = {
+          mobile: client.mobile,
+          hasIp,
+          ipAddress: ipAddress || undefined
+        };
       }
+
+      // Get promote mobiles info from PromoteClient collection
+      const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
+      for (const mobile of promoteMobiles) {
+        const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
+        const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
+        result.mobiles.promoteMobiles.push({
+          mobile,
+          hasIp,
+          ipAddress: ipAddress || undefined
+        });
+      }
+
+      return result;
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
   }
 
   @Get('mobile/:mobile/ip')
@@ -284,19 +295,19 @@ export class ClientController {
   @ApiQuery({ name: 'clientId', required: false, description: 'Client ID for context' })
   @ApiResponse({ status: 200, description: 'IP address retrieved successfully' })
   async getIpForMobile(
-      @Param('mobile') mobile: string,
-      @Query('clientId') clientId?: string
+    @Param('mobile') mobile: string,
+    @Query('clientId') clientId?: string
   ): Promise<{ mobile: string; ipAddress: string | null; hasAssignment: boolean }> {
-      try {
-          const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
-          return {
-              mobile,
-              ipAddress,
-              hasAssignment: ipAddress !== null
-          };
-      } catch (error) {
-          throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-      }
+    try {
+      const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
+      return {
+        mobile,
+        ipAddress,
+        hasAssignment: ipAddress !== null
+      };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
   }
 
   // ==================== IP MANAGEMENT ENDPOINTS ====================
@@ -307,16 +318,16 @@ export class ClientController {
   @ApiResponse({ status: 200, description: 'IPs assigned successfully' })
   @ApiResponse({ status: 400, description: 'Assignment failed' })
   async autoAssignIpsToClient(@Param('clientId') clientId: string): Promise<any> {
-      try {
-          const result = await this.clientService.autoAssignIpsToClient(clientId);
-          return {
-              success: true,
-              message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
-              data: result
-          };
-      } catch (error) {
-          throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-      }
+    try {
+      const result = await this.clientService.autoAssignIpsToClient(clientId);
+      return {
+        success: true,
+        message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
+        data: result
+      };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
   }
 
   @Get(':clientId/mobiles-needing-ips')
@@ -324,33 +335,33 @@ export class ClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID' })
   @ApiResponse({ status: 200, description: 'Mobile numbers needing IP assignment' })
   async getMobilesNeedingIpAssignment(@Param('clientId') clientId: string): Promise<{
-      clientId: string;
-      mobilesNeedingIps: {
-          mainMobile?: string;
-          promoteMobiles: string[];
-      };
-      summary: {
-          totalNeedingAssignment: number;
-          mainMobileNeedsIp: boolean;
-          promoteMobilesNeedingIp: number;
-      };
+    clientId: string;
+    mobilesNeedingIps: {
+      mainMobile?: string;
+      promoteMobiles: string[];
+    };
+    summary: {
+      totalNeedingAssignment: number;
+      mainMobileNeedsIp: boolean;
+      promoteMobilesNeedingIp: number;
+    };
   }> {
-      try {
-          const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-          const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
-          
-          return {
-              clientId,
-              mobilesNeedingIps,
-              summary: {
-                  totalNeedingAssignment,
-                  mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
-                  promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
-              }
-          };
-      } catch (error) {
-          throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-      }
+    try {
+      const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+      const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
+
+      return {
+        clientId,
+        mobilesNeedingIps,
+        summary: {
+          totalNeedingAssignment,
+          mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
+          promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
+        }
+      };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
   }
 
   @Delete('mobile/:mobile/ip')
@@ -358,10 +369,10 @@ export class ClientController {
   @ApiParam({ name: 'mobile', description: 'Mobile number to release IP from' })
   @ApiResponse({ status: 200, description: 'IP released successfully' })
   async releaseIpFromMobile(@Param('mobile') mobile: string): Promise<{ success: boolean; message: string }> {
-      try {
-          return await this.clientService.releaseIpFromMobile(mobile);
-      } catch (error) {
-          throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-      }
+    try {
+      return await this.clientService.releaseIpFromMobile(mobile);
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
   }
 }

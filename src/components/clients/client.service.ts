@@ -163,6 +163,12 @@ export class ClientService implements OnModuleDestroy {
     return maskedClients;
   }
 
+  async findOneMasked(clientId: string): Promise<Partial<Client>> {
+    const client = await this.findOne(clientId, true);
+    const { session, mobile, password, ...maskedClient } = client;
+    return { ...maskedClient };
+  }
+
   async findAllObject(): Promise<Record<string, Client>> {
     this.logger.debug('Retrieving all client documents');
     try {
