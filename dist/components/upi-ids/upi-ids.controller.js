@@ -16,6 +16,8 @@ exports.UpiIdController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const upi_ids_service_1 = require("./upi-ids.service");
+const decorators_1 = require("../../decorators");
+const interceptors_1 = require("../../interceptors");
 let UpiIdController = class UpiIdController {
     constructor(UpiIdService) {
         this.UpiIdService = UpiIdService;
@@ -30,6 +32,8 @@ let UpiIdController = class UpiIdController {
 exports.UpiIdController = UpiIdController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get Upi Ids' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
