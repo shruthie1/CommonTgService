@@ -236,6 +236,7 @@ const execute_request_dto_1 = __webpack_require__(/*! ./components/shared/dto/ex
 const crypto_1 = __webpack_require__(/*! crypto */ "crypto");
 const https = __importStar(__webpack_require__(/*! https */ "https"));
 const url_1 = __webpack_require__(/*! url */ "url");
+const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 let AppController = AppController_1 = class AppController {
     constructor() {
         this.logger = new common_1.Logger(AppController_1.name);
@@ -262,21 +263,9 @@ let AppController = AppController_1 = class AppController {
             catch (error) {
                 throw new common_1.HttpException('Invalid URL format', common_1.HttpStatus.BAD_REQUEST);
             }
+            this.logger.log(`[${requestId}] Starting HTTP ${method} request to ${url}`);
             const httpsAgent = new https.Agent({
                 rejectUnauthorized: true
-            });
-            this.logger.log({
-                message: 'Executing HTTP request',
-                requestId,
-                details: {
-                    url,
-                    method,
-                    headers: this.sanitizeHeaders(headers),
-                    params,
-                    responseType,
-                    timeout,
-                    dataSize: data ? JSON.stringify(data).length : 0
-                }
             });
             const response = await (0, axios_1.default)({
                 url,
@@ -300,16 +289,7 @@ let AppController = AppController_1 = class AppController {
                 }
             });
             const executionTime = Date.now() - startTime;
-            this.logger.log({
-                message: 'Request completed',
-                requestId,
-                metrics: {
-                    executionTime,
-                    status: response.status,
-                    contentType: response.headers['content-type'],
-                    contentLength: response.headers['content-length']
-                }
-            });
+            this.logger.log(`[${requestId}] Completed in ${executionTime}ms with status ${response.status}`);
             Object.entries(response.headers).forEach(([key, value]) => {
                 if (key.toLowerCase() === 'transfer-encoding')
                     return;
@@ -326,18 +306,36 @@ let AppController = AppController_1 = class AppController {
                     res.setHeader('content-type', response.headers['content-type']);
                 }
                 res.send(Buffer.from(response.data));
-                return;
             }
-            res.send(response.data);
+            else {
+                res.send(response.data);
+            }
             return;
         }
         catch (error) {
-            const errorDetails = this.handleRequestError(error, requestId);
+            const executionTime = Date.now() - startTime;
+            (0, utils_1.parseError)(error, `Failed to Execute Request: ${req.url} | Method: ${req.method?.toUpperCase()}`);
             this.logger.error({
-                message: 'Request failed',
+                message: `[${requestId}] Request failed after ${executionTime}ms`,
                 requestId,
-                error: errorDetails
+                request: {
+                    url: req.url,
+                    method: req.method || 'GET',
+                    params: req.params,
+                    headers: this.sanitizeHeaders(req.headers || {}),
+                    timeout: req.timeout || this.DEFAULT_TIMEOUT,
+                    responseType: req.responseType || 'json'
+                },
+                error: {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    code: error.code,
+                    status: error.response?.status,
+                    responseData: error.response?.data
+                }
             });
+            const errorDetails = this.handleRequestError(error, requestId);
             res.status(errorDetails.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR);
             res.send(errorDetails);
             return;
