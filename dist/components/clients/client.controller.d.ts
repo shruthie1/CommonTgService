@@ -27,6 +27,7 @@ export declare class ClientController {
     }>;
     updateClient(clientId: string): Promise<string>;
     findAllMasked(): Promise<Partial<Client>[]>;
+    findOneMasked(clientId: string): Promise<Partial<Client>>;
     findAll(): Promise<Client[]>;
     syncNpoint(): Promise<void>;
     findOne(clientId: string): Promise<Client>;

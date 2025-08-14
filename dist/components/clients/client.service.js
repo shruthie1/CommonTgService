@@ -134,6 +134,11 @@ let ClientService = ClientService_1 = class ClientService {
         });
         return maskedClients;
     }
+    async findOneMasked(clientId) {
+        const client = await this.findOne(clientId, true);
+        const { session, mobile, password, ...maskedClient } = client;
+        return { ...maskedClient };
+    }
     async findAllObject() {
         this.logger.debug('Retrieving all client documents');
         try {

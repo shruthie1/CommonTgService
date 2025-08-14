@@ -33,6 +33,7 @@ export declare class ClientService implements OnModuleDestroy {
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findAllMasked(): Promise<Partial<Client>[]>;
+    findOneMasked(clientId: string): Promise<Partial<Client>>;
     findAllObject(): Promise<Record<string, Client>>;
     findAllMaskedObject(query?: SearchClientDto): Promise<{}>;
     refreshMap(): Promise<void>;

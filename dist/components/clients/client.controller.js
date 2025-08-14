@@ -78,6 +78,14 @@ let ClientController = class ClientController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async findOneMasked(clientId) {
+        try {
+            return await this.clientService.findOneMasked(clientId);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
     async findAll() {
         try {
             return await this.clientService.findAll();
@@ -289,6 +297,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAllMasked", null);
+__decorate([
+    (0, common_1.Get)('maskedCls/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "findOneMasked", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
