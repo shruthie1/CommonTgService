@@ -44,9 +44,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 var DynamicDataService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DynamicDataService = void 0;
@@ -59,8 +56,6 @@ const lodash_1 = require("lodash");
 const mongoose_3 = require("@nestjs/mongoose");
 const mongoose = __importStar(require("mongoose"));
 const utils_1 = require("../../utils");
-const axios_1 = __importDefault(require("axios"));
-const common_2 = require("../../utils/common");
 const npoint_service_1 = require("../n-point/npoint.service");
 let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
     constructor(dynamicDataModel, connection, npointService) {
@@ -286,25 +281,6 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
         }
     }
     async checkNpoint() {
-        this.logger.debug('Checking npoint data for updates');
-        try {
-            const response = await axios_1.default.get('https://api.npoint.io/6841a4c0c23bdc78333d');
-            const npointData = response.data;
-            this.logger.debug('Fetched npoint data successfully');
-            const existingData = await this.findAll();
-            if ((0, common_2.areJsonsNotSame)(existingData, npointData)) {
-                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
-                this.logger.debug('Npoint data updated successfully');
-            }
-            else {
-                this.logger.debug('No updates needed for npoint data');
-            }
-        }
-        catch (error) {
-            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
-            (0, utils_1.parseError)(error, 'Failed to check/update npoint data: ', true);
-            throw error;
-        }
     }
 };
 exports.DynamicDataService = DynamicDataService;

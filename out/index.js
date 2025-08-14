@@ -14681,20 +14681,6 @@ let ClientService = ClientService_1 = class ClientService {
         await connection_manager_1.connectionManager.handleShutdown();
     }
     async checkNpoint() {
-        const npointIdFull = '7c2682f37bb93ef486ba';
-        const npointIdMasked = 'f0d1e44d82893490bbde';
-        const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
-        const existingMaskedClients = await this.findAllMaskedObject();
-        if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
-            await this.npointSerive.updateDocument(npointIdMasked, existingMaskedClients);
-            this.logger.log('Updated Masked Clients from Npoint');
-        }
-        const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
-        const existingClients = await this.findAllObject();
-        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, existingClients);
-            this.logger.log('Updated Full Clients from Npoint');
-        }
     }
     async create(createClientDto) {
         const createdUser = new this.clientModel(createClientDto);
@@ -16309,9 +16295,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 var DynamicDataService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DynamicDataService = void 0;
@@ -16324,8 +16307,6 @@ const lodash_1 = __webpack_require__(/*! lodash */ "lodash");
 const mongoose_3 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const common_2 = __webpack_require__(/*! ../../utils/common */ "./src/utils/common.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
     constructor(dynamicDataModel, connection, npointService) {
@@ -16551,25 +16532,6 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
         }
     }
     async checkNpoint() {
-        this.logger.debug('Checking npoint data for updates');
-        try {
-            const response = await axios_1.default.get('https://api.npoint.io/6841a4c0c23bdc78333d');
-            const npointData = response.data;
-            this.logger.debug('Fetched npoint data successfully');
-            const existingData = await this.findAll();
-            if ((0, common_2.areJsonsNotSame)(existingData, npointData)) {
-                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
-                this.logger.debug('Npoint data updated successfully');
-            }
-            else {
-                this.logger.debug('No updates needed for npoint data');
-            }
-        }
-        catch (error) {
-            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
-            (0, utils_1.parseError)(error, 'Failed to check/update npoint data: ', true);
-            throw error;
-        }
     }
 };
 exports.DynamicDataService = DynamicDataService;
@@ -25420,16 +25382,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpiIdService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
@@ -25460,11 +25417,6 @@ let UpiIdService = class UpiIdService {
         }
     }
     async checkNpoint() {
-        const upiIds = (await axios_1.default.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
-        const existingUpiIds = await this.findOne();
-        if ((0, utils_1.areJsonsNotSame)(upiIds, existingUpiIds)) {
-            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds);
-        }
     }
     async findOne() {
         if (Object.keys(this.upiIds).length > 0) {

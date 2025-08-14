@@ -96,20 +96,6 @@ let ClientService = ClientService_1 = class ClientService {
         await connection_manager_1.connectionManager.handleShutdown();
     }
     async checkNpoint() {
-        const npointIdFull = '7c2682f37bb93ef486ba';
-        const npointIdMasked = 'f0d1e44d82893490bbde';
-        const { data: npointMaskedClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdMasked}`);
-        const existingMaskedClients = await this.findAllMaskedObject();
-        if ((0, utils_1.areJsonsNotSame)(npointMaskedClients, existingMaskedClients)) {
-            await this.npointSerive.updateDocument(npointIdMasked, existingMaskedClients);
-            this.logger.log('Updated Masked Clients from Npoint');
-        }
-        const { data: npointClients } = await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://api.npoint.io/${npointIdFull}`);
-        const existingClients = await this.findAllObject();
-        if ((0, utils_1.areJsonsNotSame)(npointClients, existingClients)) {
-            await this.npointSerive.updateDocument(npointIdFull, existingClients);
-            this.logger.log('Updated Full Clients from Npoint');
-        }
     }
     async create(createClientDto) {
         const createdUser = new this.clientModel(createClientDto);

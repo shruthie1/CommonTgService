@@ -11,16 +11,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpiIdService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
-const axios_1 = __importDefault(require("axios"));
-const utils_1 = require("../../utils");
 const npoint_service_1 = require("../n-point/npoint.service");
 let UpiIdService = class UpiIdService {
     constructor(UpiIdModel, npointSerive) {
@@ -51,11 +46,6 @@ let UpiIdService = class UpiIdService {
         }
     }
     async checkNpoint() {
-        const upiIds = (await axios_1.default.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
-        const existingUpiIds = await this.findOne();
-        if ((0, utils_1.areJsonsNotSame)(upiIds, existingUpiIds)) {
-            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds);
-        }
     }
     async findOne() {
         if (Object.keys(this.upiIds).length > 0) {
