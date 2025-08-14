@@ -260,22 +260,22 @@ export class DynamicDataService {
     }
 
     async checkNpoint(): Promise<void> {
-        this.logger.debug('Checking npoint data for updates');
-        try {
-            const response = await axios.get('https://api.npoint.io/6841a4c0c23bdc78333d');
-            const npointData = response.data;
-            this.logger.debug('Fetched npoint data successfully');
-            const existingData = await this.findAll();
-            if (areJsonsNotSame(existingData, npointData)) {
-                await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
-                this.logger.debug('Npoint data updated successfully');
-            } else {
-                this.logger.debug('No updates needed for npoint data');
-            }
-        } catch (error) {
-            this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
-            parseError(error, 'Failed to check/update npoint data: ', true);
-            throw error;
-        }
+        // this.logger.debug('Checking npoint data for updates');
+        // try {
+        //     const response = await axios.get('https://api.npoint.io/6841a4c0c23bdc78333d');
+        //     const npointData = response.data;
+        //     this.logger.debug('Fetched npoint data successfully');
+        //     const existingData = await this.findAll();
+        //     if (areJsonsNotSame(existingData, npointData)) {
+        //         await this.npointService.updateDocument('6841a4c0c23bdc78333d', existingData);
+        //         this.logger.debug('Npoint data updated successfully');
+        //     } else {
+        //         this.logger.debug('No updates needed for npoint data');
+        //     }
+        // } catch (error) {
+        //     this.logger.error(`Failed to check/update npoint data: ${error.message}`, error.stack);
+        //     parseError(error, 'Failed to check/update npoint data: ', true);
+        //     throw error;
+        // }
     }
 }

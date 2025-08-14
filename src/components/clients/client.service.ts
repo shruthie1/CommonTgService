@@ -43,7 +43,6 @@ import {
   PromoteClient,
   PromoteClientDocument,
 } from '../promote-clients/schemas/promote-client.schema';
-import { obfuscateText } from '../../utils/obfuscateText';
 
 /**
  * Enhanced Client Service with IP Management Integration
@@ -96,27 +95,27 @@ export class ClientService implements OnModuleDestroy {
   }
 
   async checkNpoint() {
-    const npointIdFull = '7c2682f37bb93ef486ba';
-    const npointIdMasked = 'f0d1e44d82893490bbde';
-    const { data: npointMaskedClients } = await fetchWithTimeout(
-      `https://api.npoint.io/${npointIdMasked}`,
-    );
-    const existingMaskedClients = await this.findAllMaskedObject();
-    if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
-      await this.npointSerive.updateDocument(
-        npointIdMasked,
-        existingMaskedClients,
-      );
-      this.logger.log('Updated Masked Clients from Npoint');
-    }
-    const { data: npointClients } = await fetchWithTimeout(
-      `https://api.npoint.io/${npointIdFull}`,
-    );
-    const existingClients = await this.findAllObject();
-    if (areJsonsNotSame(npointClients, existingClients)) {
-      await this.npointSerive.updateDocument(npointIdFull, existingClients);
-      this.logger.log('Updated Full Clients from Npoint');
-    }
+    // const npointIdFull = '7c2682f37bb93ef486ba';
+    // const npointIdMasked = 'f0d1e44d82893490bbde';
+    // const { data: npointMaskedClients } = await fetchWithTimeout(
+    //   `https://api.npoint.io/${npointIdMasked}`,
+    // );
+    // const existingMaskedClients = await this.findAllMaskedObject();
+    // if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
+    //   await this.npointSerive.updateDocument(
+    //     npointIdMasked,
+    //     existingMaskedClients,
+    //   );
+    //   this.logger.log('Updated Masked Clients from Npoint');
+    // }
+    // const { data: npointClients } = await fetchWithTimeout(
+    //   `https://api.npoint.io/${npointIdFull}`,
+    // );
+    // const existingClients = await this.findAllObject();
+    // if (areJsonsNotSame(npointClients, existingClients)) {
+    //   await this.npointSerive.updateDocument(npointIdFull, existingClients);
+    //   this.logger.log('Updated Full Clients from Npoint');
+    // }
   }
 
   async create(createClientDto: CreateClientDto): Promise<Client> {

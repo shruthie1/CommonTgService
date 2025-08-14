@@ -38,11 +38,11 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
     }
 
     async checkNpoint() {
-        const upiIds = (await axios.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
-        const existingUpiIds = await this.findOne();
-        if (areJsonsNotSame(upiIds, existingUpiIds)) {
-            await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds)
-        }
+        // const upiIds = (await axios.get('https://api.npoint.io/54baf762fd873c55c6b1')).data;
+        // const existingUpiIds = await this.findOne();
+        // if (areJsonsNotSame(upiIds, existingUpiIds)) {
+        //     await this.npointSerive.updateDocument("54baf762fd873c55c6b1", existingUpiIds)
+        // }
     }
 
     async findOne(): Promise<any> {
