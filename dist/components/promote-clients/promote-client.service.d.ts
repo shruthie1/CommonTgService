@@ -51,7 +51,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     markAsInactive(mobile: string, reason: string): Promise<PromoteClient>;
     markAsActive(mobile: string, message?: string): Promise<PromoteClient>;
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient>;
-    remove(mobile: string): Promise<void>;
+    remove(mobile: string, message?: string): Promise<void>;
     search(filter: any): Promise<PromoteClient[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
