@@ -3534,6 +3534,30 @@
         ]
       }
     },
+    "/clients/maskedCls/{clientId}": {
+      "get": {
+        "operationId": "ClientController_findOneMasked",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All user data returned successfully."
+          }
+        },
+        "summary": "Get all user data with masked fields",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
     "/clients/sync-npoint": {
       "get": {
         "operationId": "ClientController_syncNpoint",
