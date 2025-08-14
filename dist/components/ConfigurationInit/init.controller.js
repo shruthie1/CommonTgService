@@ -16,6 +16,8 @@ exports.ConfigurationController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const init_service_1 = require("./init.service");
+const decorators_1 = require("../../decorators");
+const interceptors_1 = require("../../interceptors");
 let ConfigurationController = class ConfigurationController {
     constructor(configurationService) {
         this.configurationService = configurationService;
@@ -30,6 +32,8 @@ let ConfigurationController = class ConfigurationController {
 exports.ConfigurationController = ConfigurationController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get configuration data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),

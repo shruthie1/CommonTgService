@@ -19,6 +19,8 @@ const client_service_1 = require("./client.service");
 const create_client_dto_1 = require("./dto/create-client.dto");
 const search_client_dto_1 = require("./dto/search-client.dto");
 const update_client_dto_1 = require("./dto/update-client.dto");
+const decorators_1 = require("../../decorators");
+const interceptors_1 = require("../../interceptors");
 let ClientController = class ClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -291,6 +293,8 @@ __decorate([
 ], ClientController.prototype, "updateClient", null);
 __decorate([
     (0, common_1.Get)('maskedCls'),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __metadata("design:type", Function),
@@ -299,6 +303,8 @@ __decorate([
 ], ClientController.prototype, "findAllMasked", null);
 __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __param(0, (0, common_1.Param)('clientId')),
@@ -308,6 +314,8 @@ __decorate([
 ], ClientController.prototype, "findOneMasked", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
     __metadata("design:type", Function),
