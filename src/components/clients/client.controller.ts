@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, HttpException, HttpStatus, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -6,6 +6,8 @@ import { Client } from './schemas/client.schema';
 import { SearchClientDto } from './dto/search-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
+import { CloudflareCache } from '../../decorators';
+import { CloudflareCacheInterceptor } from '../../interceptors';
 
 @ApiTags('Clients')
 @Controller('clients')
@@ -94,6 +96,8 @@ export class ClientController {
   }
 
   @Get('maskedCls')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get all user data with masked fields' })
   @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
   async findAllMasked() {
@@ -103,8 +107,10 @@ export class ClientController {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-  
+
   @Get('maskedCls/:clientId')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get all user data with masked fields' })
   @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
   async findOneMasked(@Param('clientId') clientId: string) {
@@ -116,6 +122,8 @@ export class ClientController {
   }
 
   @Get()
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get all user data' })
   @ApiResponse({ status: 200, description: 'All user data returned successfully.' })
   async findAll() {
