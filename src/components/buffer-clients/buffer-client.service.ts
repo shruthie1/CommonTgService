@@ -574,6 +574,9 @@ export class BufferClientService implements OnModuleDestroy {
                             `${mobile}: Already present in join map, skipping`,
                         );
                     }
+                    await this.sessionService.getOldestSessionOrCreate({
+                        mobile: document.mobile
+                    })
                 } else {
                     if (!this.leaveChannelMap.has(mobile)) {
                         if (
