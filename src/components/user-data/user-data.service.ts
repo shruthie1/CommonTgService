@@ -1,6 +1,11 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+    BadRequestException,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, FilterQuery, UpdateQuery } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
@@ -9,195 +14,188 @@ import { parseError } from '../../utils/parseError';
 @Injectable()
 export class UserDataService {
     private callCounts: Map<string, number> = new Map();
-    constructor(@InjectModel(UserData.name) private userDataModel: Model<UserDataDocument>) {}
 
-    async create(createUserDataDto: CreateUserDataDto): Promise<UserData> {
-        const createdUser = new this.userDataModel(createUserDataDto);
-        return createdUser.save();
+    constructor(
+        @InjectModel(UserData.name) private readonly userDataModel: Model<UserDataDocument>,
+    ) { }
+
+    async create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument> {
+        try {
+            return await this.userDataModel.create(createUserDataDto);
+        } catch (error) {
+            throw new InternalServerErrorException(parseError(error));
+        }
     }
 
-    async findAll(): Promise<UserData[]> {
-        return await this.userDataModel.find().exec();
+    async findAll(limit: number = 99): Promise<UserDataDocument[]> {
+        return this.userDataModel.find().limit(limit).lean().exec();
     }
 
-    async findOne(profile: string, chatId: string): Promise<UserData & { count?: number }> {
-        const user = (await this.userDataModel.findOne({ profile, chatId }).exec())?.toJSON();
+    async findOne(profile: string, chatId: string): Promise<UserDataDocument & { count?: number }> {
+        const user = await this.userDataModel.findOne({ profile, chatId }).lean().exec();
+
         if (!user) {
-            console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
-        const currentCount = this.callCounts.get(chatId) || 0;
-        this.callCounts.set(chatId, currentCount + 1);
-        if (user) {
-            return { ...user, count: this.callCounts.get(chatId) };
-        } else {
-            throw new NotFoundException("User not Found")
-        }
+
+        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
+        this.callCounts.set(chatId, currentCount);
+
+        return { ...user, count: currentCount };
     }
 
     clearCount(chatId?: string): string {
         if (chatId) {
             this.callCounts.delete(chatId);
             return `Count cleared for chatId: ${chatId}`;
-        } else {
-            this.callCounts.clear();
-            return 'All counts cleared.';
         }
+        this.callCounts.clear();
+        return 'All counts cleared.';
     }
 
-    async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserData> {
-        delete updateUserDataDto['_id']
-        console.log(updateUserDataDto)
-        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+    async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
+        delete (updateUserDataDto as any)._id;
+
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .lean()
+            .exec();
+
         if (!updatedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
+
         return updatedUser;
     }
 
-    async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<any> {
-        delete updateUserDataDto['_id']
-        const updatedUser = await this.userDataModel.updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
-        if (!updatedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
-        }
-        return updatedUser;
+    async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto) {
+        delete (updateUserDataDto as any)._id;
+
+        return this.userDataModel
+            .updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .exec();
     }
 
-    async remove(profile: string, chatId: string): Promise<UserData> {
-        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
+    async remove(profile: string, chatId: string): Promise<UserDataDocument> {
+        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
         return deletedUser;
     }
 
-    async search(filter: any): Promise<UserData[]> {
-        console.log(filter)
+    async search(filter: any): Promise<UserDataDocument[]> {
         if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') }
+            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter)
-        return this.userDataModel.find(filter).exec();
+        return this.userDataModel.find(filter).lean().exec();
     }
 
-    async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<UserData[]> {
+    async executeQuery(
+        query: FilterQuery<UserDataDocument>,
+        sort?: Record<string, 1 | -1>,
+        limit?: number,
+        skip?: number,
+    ): Promise<UserDataDocument[]> {
+        if (!query) {
+            throw new BadRequestException('Query is invalid.');
+        }
+
         try {
-            if (!query) {
-                throw new BadRequestException('Query is invalid.');
-            }
-            const queryExec = this.userDataModel.find(query);
+            let q = this.userDataModel.find(query);
 
-            if (sort) {
-                queryExec.sort(sort);
-            }
+            if (sort) q = q.sort(sort);
+            if (limit) q = q.limit(limit);
+            if (skip) q = q.skip(skip);
 
-            if (limit) {
-                queryExec.limit(limit);
-            }
-
-            if (skip) {
-                queryExec.skip(skip);
-            }
-
-            return await queryExec.exec();
-        } catch (error) {
-            throw new InternalServerErrorException(error.message);
-        }
-    }
-
-    async resetPaidUsers() {
-        try {
-            const entry = await this.userDataModel.updateMany({ $and: [{ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }] }, {
-                $set: {
-                    totalCount: 10,
-                    limitTime: Date.now(),
-                    paidReply: true
-                }
-            });
-        } catch (error) {
-            parseError(error)
-        }
-    }
-
-    async incrementTotalCount(profile: string, chatId: string, amount: number = 1): Promise<UserData> {
-        const updatedUser = await this.userDataModel.findOneAndUpdate(
-            { profile, chatId },
-            { $inc: { totalCount: amount } },
-            { new: true }
-        ).exec();
-
-        if (!updatedUser) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
-        }
-        return updatedUser;
-    }
-
-    async incrementPayAmount(profile: string, chatId: string, amount: number): Promise<UserData> {
-        const updatedUser = await this.userDataModel.findOneAndUpdate(
-            { profile, chatId },
-            { $inc: { payAmount: amount } },
-            { new: true }
-        ).exec();
-
-        if (!updatedUser) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
-        }
-        return updatedUser;
-    }
-
-    async updateLastActive(profile: string, chatId: string): Promise<UserData> {
-        return await this.userDataModel.findOneAndUpdate(
-            { profile, chatId },
-            { $set: { lastActiveTime: new Date() } },
-            { new: true }
-        ).exec();
-    }
-
-    async findInactiveSince(date: Date): Promise<UserData[]> {
-        return await this.userDataModel.find({
-            lastActiveTime: { $lt: date }
-        }).exec();
-    }
-
-    async findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserData[]> {
-        return await this.userDataModel.find({
-            payAmount: {
-                $gte: minAmount,
-                $lte: maxAmount
-            }
-        }).exec();
-    }
-
-    async bulkUpdateUsers(filter: any, update: any): Promise<any> {
-        try {
-            const result = await this.userDataModel.updateMany(
-                filter,
-                update,
-                { new: true }
-            ).exec();
-            return result;
+            return await q.lean().exec();
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }
     }
 
-    async findActiveUsers(threshold: number = 30): Promise<UserData[]> {
-        return await this.userDataModel.find({
-            totalCount: { $gt: threshold }
-        }).sort({ totalCount: -1 }).exec();
+    async resetPaidUsers() {
+        try {
+            return await this.userDataModel.updateMany(
+                { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
+                {
+                    $set: {
+                        totalCount: 10,
+                        limitTime: Date.now(),
+                        paidReply: true,
+                    },
+                },
+            ).exec();
+        } catch (error) {
+            throw new InternalServerErrorException(parseError(error));
+        }
     }
 
-    async resetUserCounts(profile: string, chatId: string): Promise<UserData> {
-        return await this.userDataModel.findOneAndUpdate(
-            { profile, chatId },
-            {
-                $set: {
-                    totalCount: 0,
-                    limitTime: new Date(),
-                    paidReply: false
-                }
-            },
-            { new: true }
-        ).exec();
+    async incrementTotalCount(profile: string, chatId: string, amount: number = 1): Promise<UserDataDocument> {
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true })
+            .lean()
+            .exec();
+
+        if (!updatedUser) {
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+
+    async incrementPayAmount(profile: string, chatId: string, amount: number): Promise<UserDataDocument> {
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true })
+            .lean()
+            .exec();
+
+        if (!updatedUser) {
+            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+        }
+        return updatedUser;
+    }
+
+    async updateLastActive(profile: string, chatId: string): Promise<UserDataDocument> {
+        return this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true })
+            .lean()
+            .exec();
+    }
+
+    async findInactiveSince(date: Date): Promise<UserDataDocument[]> {
+        return this.userDataModel.find({ lastActiveTime: { $lt: date } }).lean().exec();
+    }
+
+    async findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserDataDocument[]> {
+        return this.userDataModel.find({ payAmount: { $gte: minAmount, $lte: maxAmount } }).lean().exec();
+    }
+
+    async bulkUpdateUsers(filter: any, update: UpdateQuery<UserDataDocument>) {
+        try {
+            return await this.userDataModel.updateMany(filter, update, { new: true }).exec();
+        } catch (error) {
+            throw new InternalServerErrorException(parseError(error));
+        }
+    }
+
+    async findActiveUsers(threshold: number = 30): Promise<UserDataDocument[]> {
+        return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
+    }
+
+    async resetUserCounts(profile: string, chatId: string): Promise<UserDataDocument> {
+        return this.userDataModel
+            .findOneAndUpdate(
+                { profile, chatId },
+                {
+                    $set: {
+                        totalCount: 0,
+                        limitTime: new Date(),
+                        paidReply: false,
+                    },
+                },
+                { new: true },
+            )
+            .lean()
+            .exec();
     }
 }

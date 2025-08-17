@@ -41,6 +41,8 @@ const IGNORE_PATHS: (string | RegExp)[] = [
     '/markasread',
     '/checktghealth',
     '/isRecentUser',
+    '/paymentstats',
+    '/sendtochannel',
     '/joinchannel',
     '/leavechannel',
     '/channelinfo',
