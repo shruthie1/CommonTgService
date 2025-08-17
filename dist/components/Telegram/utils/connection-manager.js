@@ -274,7 +274,6 @@ class ConnectionManager {
     async cleanupInactiveConnections(maxIdleTime = 180000) {
         if (this.isShuttingDown)
             return;
-        this.logger.info('ConnectionManager', 'Perfroming Regular Cleanup');
         const now = Date.now();
         const cleanupResults = new Map();
         const cleanupPromises = [];
@@ -464,7 +463,6 @@ class ConnectionManager {
                 }
             }
         }
-        this.logger.info('ConnectionManager', `Health check completed - Active: ${leakReport.activeConnections.length}, Total: ${leakReport.mapSize}`, leakReport);
     }
     startCleanupInterval(intervalMs = 120000) {
         if (this.cleanupInterval) {
