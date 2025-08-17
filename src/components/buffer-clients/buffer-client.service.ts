@@ -1433,8 +1433,9 @@ export class BufferClientService implements OnModuleDestroy {
     async updateAllClientSessions() {
         const bufferClients = await this.findAll('active');
         for (let i = 0; i < bufferClients.length; i++) {
+            const bufferClient = bufferClients[i];
+
             try {
-                const bufferClient = bufferClients[i];
                 console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`)
                 await connectionManager.getClient(bufferClient.mobile, {
                     autoDisconnect: true,
@@ -1447,6 +1448,9 @@ export class BufferClientService implements OnModuleDestroy {
                 })
             } catch (e) {
                 console.error("Failed to Create new session", e)
+            } finally {
+                await connectionManager.unregisterClient(bufferClient.mobile);
+                await sleep(5000)
             }
         }
     }
