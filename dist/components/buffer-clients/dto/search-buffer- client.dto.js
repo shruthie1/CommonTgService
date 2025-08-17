@@ -60,4 +60,13 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchBufferClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'status identifier',
+        example: 'active',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "status", void 0);
 //# sourceMappingURL=search-buffer-%20client.dto.js.map

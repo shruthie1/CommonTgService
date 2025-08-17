@@ -4,4 +4,5 @@ export declare class SearchBufferClientDto {
     readonly availableDate?: string;
     readonly session?: string;
     readonly channels?: number;
+    readonly status?: string;
 }

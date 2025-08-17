@@ -12152,17 +12152,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        if (filter.firstName == "refresh") {
+        if (filter.tgId == "refresh") {
             this.updateAllClientSessions();
             return [];
         }
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
-        }
-        if (filter.status) {
-            filter.status = filter.status;
-        }
-        return this.bufferClientModel.find(filter).exec();
+        return await this.bufferClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         try {
@@ -13142,6 +13136,15 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchBufferClientDto.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'status identifier',
+        example: 'active',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "status", void 0);
 
 
 /***/ }),
