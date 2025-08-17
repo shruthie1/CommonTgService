@@ -213,6 +213,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
+        if (filter.firstName == "refresh") {
+            this.updateAllClientSessions();
+            return [];
+        }
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
@@ -740,7 +744,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     autoDisconnect: false,
                 });
                 await telegramClient.set2fa();
-                await (0, Helpers_1.sleep)(15000);
+                await (0, Helpers_1.sleep)(10000);
                 await telegramClient.updateUsername('');
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.updatePrivacyforDeletedAccount();
@@ -749,9 +753,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
+                const newSession = await this.telegramService.createNewSession(user.mobile);
                 const bufferClient = {
                     tgId: user.tgId,
-                    session: user.session,
+                    session: newSession,
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
@@ -947,9 +952,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true);
                         this.logger.debug(`Creating buffer client document for ${document.mobile}`);
+                        const newSession = await this.telegramService.createNewSession(document.mobile);
                         const bufferClient = {
                             tgId: document.tgId,
-                            session: document.session,
+                            session: newSession,
                             mobile: document.mobile,
                             availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
                                 .toISOString()
@@ -996,6 +1002,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.log('Starting next join channel process after adding new users');
             this.joinchannelForBufferClients();
         }, 5 * 60 * 1000);
+    }
+    async updateAllClientSessions() {
+        const bufferClients = await this.findAll('active');
+        for (let i = 0; i < bufferClients.length; i++) {
+            try {
+                const bufferClient = bufferClients[i];
+                console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
+                await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
+                    autoDisconnect: true,
+                    handler: true
+                });
+                await (0, Helpers_1.sleep)(3000);
+                const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                await this.update(bufferClient.mobile, {
+                    session: newSession
+                });
+            }
+            catch (e) {
+                console.error("Failed to Create new session", e);
+            }
+        }
     }
 };
 exports.BufferClientService = BufferClientService;

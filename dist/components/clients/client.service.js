@@ -224,7 +224,6 @@ let ClientService = ClientService_1 = class ClientService {
             .lean()
             .exec();
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
-        this.logger.log('Previous Client Values:', previousUser);
         const updatedUser = await this.clientModel
             .findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true })
             .lean()
@@ -239,17 +238,6 @@ let ClientService = ClientService_1 = class ClientService {
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         this.logger.log('Refreshed Maps');
         this.logger.log('Updated Client: ', updatedUser);
-        if (previousUser &&
-            (previousUser.mobile !== updatedUser.mobile ||
-                previousUser.session !== updatedUser.session)) {
-            setTimeout(async () => {
-                await this.sessionService.createSession({
-                    mobile: updatedUser.mobile,
-                    password: 'Ajtdmwajt1@',
-                    maxRetries: 5,
-                });
-            }, 60000);
-        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -352,8 +340,7 @@ let ClientService = ClientService_1 = class ClientService {
                         newMobile: newBufferClient.mobile,
                     });
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
-                    const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
-                    await this.updateClientSession(newSession);
+                    await this.updateClientSession(newBufferClient.session);
                 }
                 catch (error) {
                     (0, parseError_1.parseError)(error);
@@ -384,13 +371,13 @@ let ClientService = ClientService_1 = class ClientService {
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile, } = setup;
             await (0, Helpers_1.sleep)(2000);
-            const client = await this.findOne(clientId);
+            const existingClient = await this.findOne(clientId);
             await connection_manager_1.connectionManager.getClient(newMobile, {
                 handler: true,
                 autoDisconnect: false,
             });
-            const firstName = client.name.split(' ')[0];
-            const middleName = client.name.split(' ')[1];
+            const firstName = existingClient.name.split(' ')[0];
+            const middleName = existingClient.name.split(' ')[1];
             const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
             const middleNameCaps = middleName
                 ? middleName[0].toUpperCase() + middleName.slice(1)
@@ -406,7 +393,6 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-            const existingClient = await this.findOne(clientId);
             await this.update(clientId, {
                 mobile: newMobile,
                 username: updatedUsername,
@@ -444,7 +430,7 @@ let ClientService = ClientService_1 = class ClientService {
                             const bufferClientDto = {
                                 mobile: existingMobile,
                                 availableDate,
-                                session: existingClientUser.session,
+                                session: existingClient.session,
                                 tgId: existingClientUser.tgId,
                                 channels: 170,
                                 status: days > 35 ? 'inactive' : 'active',

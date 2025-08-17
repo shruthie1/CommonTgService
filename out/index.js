@@ -12153,6 +12153,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
+        if (filter.firstName == "refresh") {
+            this.updateAllClientSessions();
+            return [];
+        }
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
@@ -12680,7 +12684,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     autoDisconnect: false,
                 });
                 await telegramClient.set2fa();
-                await (0, Helpers_1.sleep)(15000);
+                await (0, Helpers_1.sleep)(10000);
                 await telegramClient.updateUsername('');
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.updatePrivacyforDeletedAccount();
@@ -12689,9 +12693,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 await (0, Helpers_1.sleep)(3000);
                 await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
+                const newSession = await this.telegramService.createNewSession(user.mobile);
                 const bufferClient = {
                     tgId: user.tgId,
-                    session: user.session,
+                    session: newSession,
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
@@ -12887,9 +12892,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await client.channelInfo(true);
                         this.logger.debug(`Creating buffer client document for ${document.mobile}`);
+                        const newSession = await this.telegramService.createNewSession(document.mobile);
                         const bufferClient = {
                             tgId: document.tgId,
-                            session: document.session,
+                            session: newSession,
                             mobile: document.mobile,
                             availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
                                 .toISOString()
@@ -12936,6 +12942,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.log('Starting next join channel process after adding new users');
             this.joinchannelForBufferClients();
         }, 5 * 60 * 1000);
+    }
+    async updateAllClientSessions() {
+        const bufferClients = await this.findAll('active');
+        for (let i = 0; i < bufferClients.length; i++) {
+            try {
+                const bufferClient = bufferClients[i];
+                console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
+                await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
+                    autoDisconnect: true,
+                    handler: true
+                });
+                await (0, Helpers_1.sleep)(3000);
+                const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                await this.update(bufferClient.mobile, {
+                    session: newSession
+                });
+            }
+            catch (e) {
+                console.error("Failed to Create new session", e);
+            }
+        }
     }
 };
 exports.BufferClientService = BufferClientService;
@@ -14840,7 +14867,6 @@ let ClientService = ClientService_1 = class ClientService {
             .lean()
             .exec();
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
-        this.logger.log('Previous Client Values:', previousUser);
         const updatedUser = await this.clientModel
             .findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true })
             .lean()
@@ -14855,17 +14881,6 @@ let ClientService = ClientService_1 = class ClientService {
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
         this.logger.log('Refreshed Maps');
         this.logger.log('Updated Client: ', updatedUser);
-        if (previousUser &&
-            (previousUser.mobile !== updatedUser.mobile ||
-                previousUser.session !== updatedUser.session)) {
-            setTimeout(async () => {
-                await this.sessionService.createSession({
-                    mobile: updatedUser.mobile,
-                    password: 'Ajtdmwajt1@',
-                    maxRetries: 5,
-                });
-            }, 60000);
-        }
         return updatedUser;
     }
     async remove(clientId) {
@@ -14968,8 +14983,7 @@ let ClientService = ClientService_1 = class ClientService {
                         newMobile: newBufferClient.mobile,
                     });
                     await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
-                    const newSession = await this.telegramService.createNewSession(newBufferClient.mobile);
-                    await this.updateClientSession(newSession);
+                    await this.updateClientSession(newBufferClient.session);
                 }
                 catch (error) {
                     (0, parseError_1.parseError)(error);
@@ -15000,13 +15014,13 @@ let ClientService = ClientService_1 = class ClientService {
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile, } = setup;
             await (0, Helpers_1.sleep)(2000);
-            const client = await this.findOne(clientId);
+            const existingClient = await this.findOne(clientId);
             await connection_manager_1.connectionManager.getClient(newMobile, {
                 handler: true,
                 autoDisconnect: false,
             });
-            const firstName = client.name.split(' ')[0];
-            const middleName = client.name.split(' ')[1];
+            const firstName = existingClient.name.split(' ')[0];
+            const middleName = existingClient.name.split(' ')[1];
             const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
             const middleNameCaps = middleName
                 ? middleName[0].toUpperCase() + middleName.slice(1)
@@ -15022,7 +15036,6 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-            const existingClient = await this.findOne(clientId);
             await this.update(clientId, {
                 mobile: newMobile,
                 username: updatedUsername,
@@ -15060,7 +15073,7 @@ let ClientService = ClientService_1 = class ClientService {
                             const bufferClientDto = {
                                 mobile: existingMobile,
                                 availableDate,
-                                session: existingClientUser.session,
+                                session: existingClient.session,
                                 tgId: existingClientUser.tgId,
                                 channels: 170,
                                 status: days > 35 ? 'inactive' : 'active',
