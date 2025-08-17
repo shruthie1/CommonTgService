@@ -75,4 +75,5 @@ export declare class BufferClientService implements OnModuleDestroy {
     checkBufferClients(): Promise<void>;
     private processBufferClient;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[]): Promise<void>;
+    updateAllClientSessions(): Promise<void>;
 }
