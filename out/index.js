@@ -12949,8 +12949,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     async updateAllClientSessions() {
         const bufferClients = await this.findAll('active');
         for (let i = 0; i < bufferClients.length; i++) {
+            const bufferClient = bufferClients[i];
             try {
-                const bufferClient = bufferClients[i];
                 console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
                 await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
                     autoDisconnect: true,
@@ -12964,6 +12964,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             catch (e) {
                 console.error("Failed to Create new session", e);
+            }
+            finally {
+                await connection_manager_1.connectionManager.unregisterClient(bufferClient.mobile);
+                await (0, Helpers_1.sleep)(5000);
             }
         }
     }
