@@ -5,6 +5,7 @@ import { UpdateUserDataDto } from './dto/update-user-data.dto';
 export declare class UserDataService {
     private readonly userDataModel;
     private callCounts;
+    private logger;
     constructor(userDataModel: Model<UserDataDocument>);
     create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument>;
     findAll(limit?: number): Promise<UserDataDocument[]>;
