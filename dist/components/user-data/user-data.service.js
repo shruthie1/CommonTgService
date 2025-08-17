@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var UserDataService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserDataService = void 0;
 const common_1 = require("@nestjs/common");
@@ -18,10 +19,12 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_data_schema_1 = require("./schemas/user-data.schema");
 const parseError_1 = require("../../utils/parseError");
-let UserDataService = class UserDataService {
+const common_2 = require("@nestjs/common");
+let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
         this.callCounts = new Map();
+        this.logger = new common_2.Logger(UserDataService_1.name);
     }
     async create(createUserDataDto) {
         try {
@@ -82,6 +85,7 @@ let UserDataService = class UserDataService {
         return this.userDataModel.find(filter).lean().exec();
     }
     async executeQuery(query, sort, limit, skip) {
+        const startTime = Date.now();
         if (!query) {
             throw new common_1.BadRequestException('Query is invalid.');
         }
@@ -93,7 +97,9 @@ let UserDataService = class UserDataService {
                 q = q.limit(limit);
             if (skip)
                 q = q.skip(skip);
-            return await q.lean().exec();
+            const result = await q.lean().exec();
+            this.logger.log(`Query Execution Duration: ${Date.now() - startTime}Ms`);
+            return result;
         }
         catch (error) {
             throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
@@ -182,7 +188,7 @@ let UserDataService = class UserDataService {
     }
 };
 exports.UserDataService = UserDataService;
-exports.UserDataService = UserDataService = __decorate([
+exports.UserDataService = UserDataService = UserDataService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(user_data_schema_1.UserData.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])
