@@ -169,9 +169,9 @@ export class BufferClientService implements OnModuleDestroy {
                 );
             }
 
-            this.logger.debug(
-                `Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`,
-            );
+            // this.logger.debug(
+            //     `Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`,
+            // );
         } catch (error) {
             this.logger.error('Error during memory cleanup:', error);
         }
