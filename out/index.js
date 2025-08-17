@@ -12326,6 +12326,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     else {
                         this.logger.debug(`${mobile}: Already present in join map, skipping`);
                     }
+                    await this.sessionService.getOldestSessionOrCreate({
+                        mobile: document.mobile
+                    });
                 }
                 else {
                     if (!this.leaveChannelMap.has(mobile)) {
