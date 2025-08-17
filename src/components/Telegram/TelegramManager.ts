@@ -311,7 +311,7 @@ class TelegramManager {
                 this.session?.delete();
                 this.channelArray = [];
                 await sleep(2000);
-                this.logger.info(this.phoneNumber, "Client Destroyed: ", this.phoneNumber);
+                this.logger.info(this.phoneNumber, "Client Disconnected Sucessfully");
             } catch (error) {
                 parseError(error, `${this.phoneNumber}: Error during client cleanup`);
             } finally {
@@ -319,6 +319,7 @@ class TelegramManager {
                     this.client._destroyed = true;
                     if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
                         await this.client._sender.disconnect();
+                        this.logger.info(this.phoneNumber, "Force CleanUp Done!");
                     }
                     this.client = null;
                 }
@@ -359,10 +360,11 @@ class TelegramManager {
         const me = <Api.User>await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
         if (handler && this.client) {
-            this.logger.info(this.phoneNumber, "Adding event Handler")
             if (handlerFn) {
+                this.logger.info(this.phoneNumber, "Adding Custom Event Handler")
                 this.client.addEventHandler(async (event) => { await handlerFn(event); }, new NewMessage());
             } else {
+                this.logger.info(this.phoneNumber, "Adding Default Event Handler")
                 this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
             }
         }

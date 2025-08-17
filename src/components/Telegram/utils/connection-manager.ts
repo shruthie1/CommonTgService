@@ -517,11 +517,11 @@ class ConnectionManager {
     public async unregisterClient(mobile: string, timeoutMs: number = this.CLEANUP_TIMEOUT): Promise<void> {
         const clientInfo = this.clients.get(mobile);
         if (!clientInfo) return;
-        this.logger.info(mobile, 'Unregistering client', {
-            state: clientInfo.state,
-            lastUsed: clientInfo.lastUsed,
-            autoDisconnect: clientInfo.autoDisconnect
-        });
+        // this.logger.info(mobile, 'Unregistering client', {
+        //     state: clientInfo.state,
+        //     lastUsed: clientInfo.lastUsed,
+        //     autoDisconnect: clientInfo.autoDisconnect
+        // });
         try {
             clientInfo.state = 'disconnecting';
             await clientInfo.client.destroy();
@@ -555,7 +555,7 @@ class ConnectionManager {
             this.logger.error(mobile, 'Reference cleanup in force mode failed', refError);
         }
         this.clients.delete(mobile);
-        this.logger.info(mobile, 'Client removed from map');
+        // this.logger.info(mobile, 'Client removed from map');
     }
 
     public getActiveConnectionCount(): number {
