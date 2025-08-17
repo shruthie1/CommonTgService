@@ -212,17 +212,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        if (filter.firstName == "refresh") {
+        if (filter.tgId == "refresh") {
             this.updateAllClientSessions();
             return [];
         }
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
-        }
-        if (filter.status) {
-            filter.status = filter.status;
-        }
-        return this.bufferClientModel.find(filter).exec();
+        return await this.bufferClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         try {

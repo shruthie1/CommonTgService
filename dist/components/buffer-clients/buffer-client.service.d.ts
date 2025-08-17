@@ -10,6 +10,7 @@ import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { SessionService } from '../session-manager';
+import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 export declare class BufferClientService implements OnModuleDestroy {
     private bufferClientModel;
     private telegramService;
@@ -51,7 +52,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClientDocument>;
     createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument>;
     remove(mobile: string, message?: string): Promise<void>;
-    search(filter: any): Promise<BufferClientDocument[]>;
+    search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<BufferClientDocument[]>;
     removeFromBufferMap(key: string): void;
     private safeSetJoinChannelMap;
