@@ -316,12 +316,19 @@ export class BufferClientService implements OnModuleDestroy {
     }
     async search(filter: any): Promise<BufferClient[]> {
         // Allow filtering by status
+
+        if (filter.firstName == "refresh") {
+            this.updateAllClientSessions();
+            return []
+        }
+
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
         if (filter.status) {
             filter.status = filter.status;
         }
+
         return this.bufferClientModel.find(filter).exec();
     }
 
@@ -1055,7 +1062,7 @@ export class BufferClientService implements OnModuleDestroy {
                     autoDisconnect: false,
                 });
                 await telegramClient.set2fa();
-                await sleep(15000);
+                await sleep(10000);
                 await telegramClient.updateUsername('');
                 await sleep(3000);
                 await telegramClient.updatePrivacyforDeletedAccount();
@@ -1070,9 +1077,10 @@ export class BufferClientService implements OnModuleDestroy {
                     mobile,
                     true,
                 );
+                const newSession = await this.telegramService.createNewSession(user.mobile)
                 const bufferClient = {
                     tgId: user.tgId,
-                    session: user.session,
+                    session: newSession,
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
@@ -1351,9 +1359,11 @@ export class BufferClientService implements OnModuleDestroy {
                         this.logger.debug(
                             `Creating buffer client document for ${document.mobile}`,
                         );
+
+                        const newSession = await this.telegramService.createNewSession(document.mobile);
                         const bufferClient: CreateBufferClientDto = {
                             tgId: document.tgId,
-                            session: document.session,
+                            session: newSession,
                             mobile: document.mobile,
                             availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
                                 .toISOString()
@@ -1415,5 +1425,26 @@ export class BufferClientService implements OnModuleDestroy {
             },
             5 * 60 * 1000,
         ); // 5 minutes delay
+    }
+
+    async updateAllClientSessions() {
+        const bufferClients = await this.findAll('active');
+        for (let i = 0; i < bufferClients.length; i++) {
+            try {
+                const bufferClient = bufferClients[i];
+                console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`)
+                await connectionManager.getClient(bufferClient.mobile, {
+                    autoDisconnect: true,
+                    handler: true
+                })
+                await sleep(3000);
+                const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                await this.update(bufferClient.mobile, {
+                    session: newSession
+                })
+            } catch (e) {
+                console.error("Failed to Create new session", e)
+            }
+        }
     }
 }

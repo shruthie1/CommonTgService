@@ -283,7 +283,6 @@ export class ClientService implements OnModuleDestroy {
     await fetchWithTimeout(
       `${notifbot()}&text=Updating the Existing client: ${clientId}`,
     );
-    this.logger.log('Previous Client Values:', previousUser);
     const updatedUser = await this.clientModel
       .findOneAndUpdate(
         { clientId },
@@ -303,21 +302,6 @@ export class ClientService implements OnModuleDestroy {
     await fetchWithTimeout(`${process.env.uptimebot}/refreshmap`);
     this.logger.log('Refreshed Maps');
     this.logger.log('Updated Client: ', updatedUser);
-    // Only trigger session creation if mobile or session has changed
-    if (
-      previousUser &&
-      (previousUser.mobile !== updatedUser.mobile ||
-        previousUser.session !== updatedUser.session)
-    ) {
-      setTimeout(async () => {
-        await this.sessionService.createSession({
-          mobile: updatedUser.mobile,
-          password: 'Ajtdmwajt1@',
-          maxRetries: 5,
-        });
-      }, 60000);
-    }
-
     // Session creation for new promote mobiles is now handled by addPromoteMobile method
     return updatedUser;
   }
@@ -484,10 +468,8 @@ export class ClientService implements OnModuleDestroy {
             newMobile: newBufferClient.mobile,
           });
           await connectionManager.getClient(newBufferClient.mobile);
-          const newSession = await this.telegramService.createNewSession(
-            newBufferClient.mobile,
-          );
-          await this.updateClientSession(newSession);
+
+          await this.updateClientSession(newBufferClient.session);
           // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
           // if (archivedClient) {
           //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
@@ -538,13 +520,13 @@ export class ClientService implements OnModuleDestroy {
         newMobile,
       } = setup;
       await sleep(2000);
-      const client = await this.findOne(clientId);
+      const existingClient = await this.findOne(clientId);
       await connectionManager.getClient(newMobile, {
         handler: true,
         autoDisconnect: false,
       });
-      const firstName = client.name.split(' ')[0];
-      const middleName = client.name.split(' ')[1];
+      const firstName = existingClient.name.split(' ')[0];
+      const middleName = existingClient.name.split(' ')[1];
       const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
       const middleNameCaps = middleName
         ? middleName[0].toUpperCase() + middleName.slice(1)
@@ -567,7 +549,6 @@ export class ClientService implements OnModuleDestroy {
       const existingClientUser = (
         await this.usersService.search({ mobile: existingMobile })
       )[0];
-      const existingClient = await this.findOne(clientId);
       await this.update(clientId, {
         mobile: newMobile,
         username: updatedUsername,
@@ -618,7 +599,7 @@ export class ClientService implements OnModuleDestroy {
                 | UpdateBufferClientDto = {
                 mobile: existingMobile,
                 availableDate,
-                session: existingClientUser.session,
+                session: existingClient.session,
                 tgId: existingClientUser.tgId,
                 channels: 170,
                 status: days > 35 ? 'inactive' : 'active',
