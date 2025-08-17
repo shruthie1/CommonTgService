@@ -97,7 +97,6 @@ let UsersService = class UsersService {
         if (filter.twoFA !== undefined) {
             filter.twoFA = filter.twoFA === 'true' || filter.twoFA === '1' || filter.twoFA === true;
         }
-        console.log(filter);
         return this.userModel.find(filter).sort({ updatedAt: -1 }).exec();
     }
     async executeQuery(query, sort, limit, skip) {
