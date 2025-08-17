@@ -95,13 +95,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         try {
             for (const [mobile, channels] of this.joinChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(`Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
+                    this.logger.log(`Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.joinChannelMap.delete(mobile);
                 }
             }
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
+                    this.logger.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.leaveChannelMap.delete(mobile);
                 }
             }
@@ -155,43 +155,42 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async create(bufferClient) {
-        const newUser = new this.bufferClientModel({
+        return await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
-        return newUser.save();
     }
     async findAll(status) {
         const filter = status ? { status } : {};
         return this.bufferClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
-        const user = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (!user && throwErr) {
+        const bufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        if (!bufferClient && throwErr) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
-        return user;
+        return bufferClient;
     }
     async update(mobile, updateClientDto) {
-        const updatedUser = await this.bufferClientModel
+        const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, upsert: true, returnDocument: 'after' })
             .exec();
-        if (!updatedUser) {
-            throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
+        if (!updatedBufferClient) {
+            throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
-        return updatedUser;
+        return updatedBufferClient;
     }
-    async createOrUpdate(mobile, createOrUpdateUserDto) {
-        const existingUser = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingUser) {
-            console.log('Updating');
-            return this.update(existingUser.mobile, createOrUpdateUserDto);
+    async createOrUpdate(mobile, createorUpdateBufferClientDto) {
+        const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        if (existingBufferClient) {
+            this.logger.log('Updating');
+            return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto);
         }
         else {
-            console.log('creating');
+            this.logger.log('creating');
             return this.create({
-                ...createOrUpdateUserDto,
-                status: createOrUpdateUserDto.status || 'active',
+                ...createorUpdateBufferClientDto,
+                status: createorUpdateBufferClientDto.status || 'active',
             });
         }
     }
@@ -566,11 +565,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 if (i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0) {
-                    console.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
+                    this.logger.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
                     await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
                 }
                 else {
-                    console.log(`Not Sleeping before continuing with next Mobile`);
+                    this.logger.log(`Not Sleeping before continuing with next Mobile`);
                 }
             }
         }
@@ -1011,7 +1010,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             try {
-                console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
+                this.logger.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
                 await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
                     autoDisconnect: true,
                     handler: true
@@ -1023,7 +1022,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 });
             }
             catch (e) {
-                console.error("Failed to Create new session", e);
+                this.logger.error("Failed to Create new session", e);
             }
             finally {
                 await connection_manager_1.connectionManager.unregisterClient(bufferClient.mobile);
