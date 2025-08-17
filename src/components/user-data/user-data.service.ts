@@ -10,11 +10,12 @@ import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class UserDataService {
     private callCounts: Map<string, number> = new Map();
-
+    private logger = new Logger(UserDataService.name)
     constructor(
         @InjectModel(UserData.name) private readonly userDataModel: Model<UserDataDocument>,
     ) { }
@@ -97,6 +98,7 @@ export class UserDataService {
         limit?: number,
         skip?: number,
     ): Promise<UserDataDocument[]> {
+        const startTime = Date.now();
         if (!query) {
             throw new BadRequestException('Query is invalid.');
         }
@@ -108,7 +110,9 @@ export class UserDataService {
             if (limit) q = q.limit(limit);
             if (skip) q = q.skip(skip);
 
-            return await q.lean().exec();
+            const result = await q.lean().exec();
+            this.logger.log(`Query Execution Duration: ${Date.now() - startTime}Ms`)
+            return result
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }
@@ -180,6 +184,21 @@ export class UserDataService {
 
     async findActiveUsers(threshold: number = 30): Promise<UserDataDocument[]> {
         return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
+    }
+
+    async removeOlderThanOneMonth(): Promise<{ deletedCount: number }> {
+        // 30 days in milliseconds
+        const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+        try {
+            const result = await this.userDataModel
+                .deleteMany({ lastMsgTimeStamp: { $lt: oneMonthAgo } })
+                .exec();
+
+            return { deletedCount: result.deletedCount ?? 0 };
+        } catch (error) {
+            throw new InternalServerErrorException(parseError(error));
+        }
     }
 
     async resetUserCounts(profile: string, chatId: string): Promise<UserDataDocument> {

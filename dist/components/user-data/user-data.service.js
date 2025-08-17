@@ -24,155 +24,161 @@ let UserDataService = class UserDataService {
         this.callCounts = new Map();
     }
     async create(createUserDataDto) {
-        const createdUser = new this.userDataModel(createUserDataDto);
-        return createdUser.save();
+        try {
+            return await this.userDataModel.create(createUserDataDto);
+        }
+        catch (error) {
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
+        }
     }
-    async findAll() {
-        return await this.userDataModel.find().exec();
+    async findAll(limit = 99) {
+        return this.userDataModel.find().limit(limit).lean().exec();
     }
     async findOne(profile, chatId) {
-        const user = (await this.userDataModel.findOne({ profile, chatId }).exec())?.toJSON();
+        const user = await this.userDataModel.findOne({ profile, chatId }).lean().exec();
         if (!user) {
-            console.warn(`UserData with ID "${profile} - ${chatId}" not found`);
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
-        const currentCount = this.callCounts.get(chatId) || 0;
-        this.callCounts.set(chatId, currentCount + 1);
-        if (user) {
-            return { ...user, count: this.callCounts.get(chatId) };
-        }
-        else {
-            throw new common_1.NotFoundException("User not Found");
-        }
+        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
+        this.callCounts.set(chatId, currentCount);
+        return { ...user, count: currentCount };
     }
     clearCount(chatId) {
         if (chatId) {
             this.callCounts.delete(chatId);
             return `Count cleared for chatId: ${chatId}`;
         }
-        else {
-            this.callCounts.clear();
-            return 'All counts cleared.';
-        }
+        this.callCounts.clear();
+        return 'All counts cleared.';
     }
     async update(profile, chatId, updateUserDataDto) {
-        delete updateUserDataDto['_id'];
-        console.log(updateUserDataDto);
-        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
+        delete updateUserDataDto._id;
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .lean()
+            .exec();
         if (!updatedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
         return updatedUser;
     }
     async updateAll(chatId, updateUserDataDto) {
-        delete updateUserDataDto['_id'];
-        const updatedUser = await this.userDataModel.updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true }).exec();
-        if (!updatedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
-        }
-        return updatedUser;
+        delete updateUserDataDto._id;
+        return this.userDataModel
+            .updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .exec();
     }
     async remove(profile, chatId) {
-        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).exec();
+        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
-            console.warn(`UserData with ID "${chatId}" not found`);
+            throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
         return deletedUser;
     }
     async search(filter) {
-        console.log(filter);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        console.log(filter);
-        return this.userDataModel.find(filter).exec();
+        return this.userDataModel.find(filter).lean().exec();
     }
     async executeQuery(query, sort, limit, skip) {
+        if (!query) {
+            throw new common_1.BadRequestException('Query is invalid.');
+        }
         try {
-            if (!query) {
-                throw new common_1.BadRequestException('Query is invalid.');
-            }
-            const queryExec = this.userDataModel.find(query);
-            if (sort) {
-                queryExec.sort(sort);
-            }
-            if (limit) {
-                queryExec.limit(limit);
-            }
-            if (skip) {
-                queryExec.skip(skip);
-            }
-            return await queryExec.exec();
+            let q = this.userDataModel.find(query);
+            if (sort)
+                q = q.sort(sort);
+            if (limit)
+                q = q.limit(limit);
+            if (skip)
+                q = q.skip(skip);
+            return await q.lean().exec();
         }
         catch (error) {
-            throw new common_1.InternalServerErrorException(error.message);
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
         }
     }
     async resetPaidUsers() {
         try {
-            const entry = await this.userDataModel.updateMany({ $and: [{ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }] }, {
+            return await this.userDataModel.updateMany({ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }, {
                 $set: {
                     totalCount: 10,
                     limitTime: Date.now(),
-                    paidReply: true
-                }
-            });
+                    paidReply: true,
+                },
+            }).exec();
         }
         catch (error) {
-            (0, parseError_1.parseError)(error);
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
         }
     }
     async incrementTotalCount(profile, chatId, amount = 1) {
-        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true }).exec();
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true })
+            .lean()
+            .exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
         return updatedUser;
     }
     async incrementPayAmount(profile, chatId, amount) {
-        const updatedUser = await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true }).exec();
+        const updatedUser = await this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true })
+            .lean()
+            .exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
         return updatedUser;
     }
     async updateLastActive(profile, chatId) {
-        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true }).exec();
+        return this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true })
+            .lean()
+            .exec();
     }
     async findInactiveSince(date) {
-        return await this.userDataModel.find({
-            lastActiveTime: { $lt: date }
-        }).exec();
+        return this.userDataModel.find({ lastActiveTime: { $lt: date } }).lean().exec();
     }
     async findByPaymentRange(minAmount, maxAmount) {
-        return await this.userDataModel.find({
-            payAmount: {
-                $gte: minAmount,
-                $lte: maxAmount
-            }
-        }).exec();
+        return this.userDataModel.find({ payAmount: { $gte: minAmount, $lte: maxAmount } }).lean().exec();
     }
     async bulkUpdateUsers(filter, update) {
         try {
-            const result = await this.userDataModel.updateMany(filter, update, { new: true }).exec();
-            return result;
+            return await this.userDataModel.updateMany(filter, update, { new: true }).exec();
         }
         catch (error) {
             throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
         }
     }
     async findActiveUsers(threshold = 30) {
-        return await this.userDataModel.find({
-            totalCount: { $gt: threshold }
-        }).sort({ totalCount: -1 }).exec();
+        return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
+    }
+    async removeOlderThanOneMonth() {
+        const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        try {
+            const result = await this.userDataModel
+                .deleteMany({ lastMsgTimeStamp: { $lt: oneMonthAgo } })
+                .exec();
+            return { deletedCount: result.deletedCount ?? 0 };
+        }
+        catch (error) {
+            throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
+        }
     }
     async resetUserCounts(profile, chatId) {
-        return await this.userDataModel.findOneAndUpdate({ profile, chatId }, {
+        return this.userDataModel
+            .findOneAndUpdate({ profile, chatId }, {
             $set: {
                 totalCount: 0,
                 limitTime: new Date(),
-                paidReply: false
-            }
-        }, { new: true }).exec();
+                paidReply: false,
+            },
+        }, { new: true })
+            .lean()
+            .exec();
     }
 };
 exports.UserDataService = UserDataService;

@@ -36,6 +36,8 @@ const IGNORE_PATHS = [
     '/markasread',
     '/checktghealth',
     '/isRecentUser',
+    '/paymentstats',
+    '/sendtochannel',
     '/joinchannel',
     '/leavechannel',
     '/channelinfo',

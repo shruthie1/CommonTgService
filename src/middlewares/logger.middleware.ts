@@ -8,8 +8,8 @@ export class LoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
   use(req: Request, res: Response, next: NextFunction): void {
-    const { method, originalUrl, baseUrl } = req;
-    const userAgent = req.get('user-agent') || '';
+    const { method, originalUrl } = req;
+    const startTime = Date.now(); // Capture start time
     const ip = req.ip;
 
     const excludedEndpoints = [
@@ -20,37 +20,45 @@ export class LoggerMiddleware implements NestMiddleware {
     ];
     const isExcluded = (url: string) =>
       excludedEndpoints.some((endpoint) => url.startsWith(endpoint));
+
     if (!isExcluded(originalUrl) && originalUrl !== '/') {
       res.on('finish', () => {
         const { statusCode } = res;
-        const contentLength = res.get('content-length');
+        const duration = Date.now() - startTime; // Duration in ms
+        const durationStr =
+          duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+
         if (statusCode >= 500) {
-          BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
-            `Threw Status ${statusCode} for ${originalUrl}`,
+          BotConfig.getInstance().sendMessage(
+            ChannelCategory.HTTP_FAILURES,
+            `Threw Status ${statusCode} for ${originalUrl}`
           );
           this.logger.error(
-            `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
+            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 400) {
-          BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
-            `Threw Status ${statusCode} for ${originalUrl}`,
+          BotConfig.getInstance().sendMessage(
+            ChannelCategory.HTTP_FAILURES,
+            `Threw Status ${statusCode} for ${originalUrl}`
           );
           this.logger.warn(
-            `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
+            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 300) {
           this.logger.verbose(
-            `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
+            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else {
           this.logger.log(
-            `${method} ${originalUrl} ${req.ip} || StatusCode : ${statusCode}`,
+            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         }
       });
+
       res.on('error', (error) => {
         const errorDetails = parseError(error, process.env.clientId);
-        BotConfig.getInstance().sendMessage(ChannelCategory.HTTP_FAILURES,
+        BotConfig.getInstance().sendMessage(
+          ChannelCategory.HTTP_FAILURES,
           `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`,
         );
       });
