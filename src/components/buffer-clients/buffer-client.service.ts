@@ -130,7 +130,7 @@ export class BufferClientService implements OnModuleDestroy {
             // Clean up empty entries in joinChannelMap
             for (const [mobile, channels] of this.joinChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(
+                    this.logger.log(
                         `Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`,
                     );
                     this.joinChannelMap.delete(mobile);
@@ -140,7 +140,7 @@ export class BufferClientService implements OnModuleDestroy {
             // Clean up empty entries in leaveChannelMap
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(
+                    this.logger.log(
                         `Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`,
                     );
                     this.leaveChannelMap.delete(mobile);
@@ -220,16 +220,15 @@ export class BufferClientService implements OnModuleDestroy {
         }
     }
 
-    async create(bufferClient: CreateBufferClientDto): Promise<BufferClient> {
+    async create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument> {
         // Ensure status is set to 'active' by default if not provided
-        const newUser = new this.bufferClientModel({
+        return await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
-        return newUser.save();
     }
 
-    async findAll(status?: 'active' | 'inactive'): Promise<BufferClient[]> {
+    async findAll(status?: 'active' | 'inactive'): Promise<BufferClientDocument[]> {
         const filter = status ? { status } : {};
         return this.bufferClientModel.find(filter).exec();
     }
@@ -237,24 +236,24 @@ export class BufferClientService implements OnModuleDestroy {
     async findOne(
         mobile: string,
         throwErr: boolean = true,
-    ): Promise<BufferClient> {
-        const user = (
+    ): Promise<BufferClientDocument> {
+        const bufferClient = (
             await this.bufferClientModel.findOne({ mobile }).exec()
         )?.toJSON();
-        if (!user && throwErr) {
+        if (!bufferClient && throwErr) {
             throw new NotFoundException(
                 `BufferClient with mobile ${mobile} not found`,
             );
         }
-        return user;
+        return bufferClient;
     }
 
     async update(
         mobile: string,
         updateClientDto: UpdateBufferClientDto,
-    ): Promise<BufferClient> {
+    ): Promise<BufferClientDocument> {
         // Allow updating status as well
-        const updatedUser = await this.bufferClientModel
+        const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate(
                 { mobile },
                 { $set: updateClientDto },
@@ -262,32 +261,32 @@ export class BufferClientService implements OnModuleDestroy {
             )
             .exec();
 
-        if (!updatedUser) {
-            throw new NotFoundException(`User with mobile ${mobile} not found`);
+        if (!updatedBufferClient) {
+            throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
 
-        return updatedUser;
+        return updatedBufferClient;
     }
 
     async createOrUpdate(
         mobile: string,
-        createOrUpdateUserDto: CreateBufferClientDto | UpdateBufferClientDto,
-    ): Promise<BufferClient> {
-        const existingUser = (
+        createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto,
+    ): Promise<BufferClientDocument> {
+        const existingBufferClient = (
             await this.bufferClientModel.findOne({ mobile }).exec()
         )?.toJSON();
-        if (existingUser) {
-            console.log('Updating');
+        if (existingBufferClient) {
+            this.logger.log('Updating');
             return this.update(
-                existingUser.mobile,
-                createOrUpdateUserDto as UpdateBufferClientDto,
+                existingBufferClient.mobile,
+                createorUpdateBufferClientDto as UpdateBufferClientDto,
             );
         } else {
-            console.log('creating');
+            this.logger.log('creating');
             // Ensure status is set to 'active' by default if not provided
             return this.create({
-                ...createOrUpdateUserDto,
-                status: (createOrUpdateUserDto as any).status || 'active',
+                ...createorUpdateBufferClientDto,
+                status: (createorUpdateBufferClientDto as any).status || 'active',
             } as CreateBufferClientDto);
         }
     }
@@ -314,7 +313,7 @@ export class BufferClientService implements OnModuleDestroy {
         }
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
-    async search(filter: any): Promise<BufferClient[]> {
+    async search(filter: any): Promise<BufferClientDocument[]> {
         // Allow filtering by status
 
         if (filter.firstName == "refresh") {
@@ -337,7 +336,7 @@ export class BufferClientService implements OnModuleDestroy {
         sort?: any,
         limit?: number,
         skip?: number,
-    ): Promise<BufferClient[]> {
+    ): Promise<BufferClientDocument[]> {
         try {
             if (!query) {
                 throw new BadRequestException('Query is invalid.');
@@ -404,7 +403,7 @@ export class BufferClientService implements OnModuleDestroy {
         mobile: string,
         status: string,
         message?: string,
-    ): Promise<BufferClient> {
+    ): Promise<BufferClientDocument> {
         const updateData: any = { status };
         if (message) {
             updateData.message = message;
@@ -413,7 +412,7 @@ export class BufferClientService implements OnModuleDestroy {
         return this.update(mobile, updateData);
     }
 
-    async markAsInactive(mobile: string, reason: string): Promise<BufferClient> {
+    async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument> {
         return this.updateStatus(mobile, 'inactive', reason);
     }
 
@@ -822,12 +821,12 @@ export class BufferClientService implements OnModuleDestroy {
                     i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0
                 ) {
-                    console.log(
+                    this.logger.log(
                         `Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`,
                     );
                     await sleep(this.CHANNEL_PROCESSING_DELAY);
                 } else {
-                    console.log(`Not Sleeping before continuing with next Mobile`);
+                    this.logger.log(`Not Sleeping before continuing with next Mobile`);
                 }
             }
         }
@@ -1436,7 +1435,7 @@ export class BufferClientService implements OnModuleDestroy {
             const bufferClient = bufferClients[i];
 
             try {
-                console.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`)
+                this.logger.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`)
                 await connectionManager.getClient(bufferClient.mobile, {
                     autoDisconnect: true,
                     handler: true
@@ -1447,7 +1446,7 @@ export class BufferClientService implements OnModuleDestroy {
                     session: newSession
                 })
             } catch (e) {
-                console.error("Failed to Create new session", e)
+                this.logger.error("Failed to Create new session", e)
             } finally {
                 await connectionManager.unregisterClient(bufferClient.mobile);
                 await sleep(5000)
