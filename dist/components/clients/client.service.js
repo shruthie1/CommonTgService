@@ -69,7 +69,7 @@ const ip_management_service_1 = require("../ip-management/ip-management.service"
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointSerive) {
+    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointService) {
         this.clientModel = clientModel;
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
@@ -78,61 +78,184 @@ let ClientService = ClientService_1 = class ClientService {
         this.archivedClientService = archivedClientService;
         this.sessionService = sessionService;
         this.ipManagementService = ipManagementService;
-        this.npointSerive = npointSerive;
+        this.npointService = npointService;
         this.logger = new common_1.Logger(ClientService_1.name);
-        this.clientsMap = new Map();
         this.lastUpdateMap = new Map();
+        this.clientsMap = new Map();
+        this.cacheMetadata = {
+            lastUpdated: 0,
+            isStale: true
+        };
         this.checkInterval = null;
-        this.checkInterval = setInterval(async () => {
-            await this.refreshMap();
-            await this.checkNpoint();
-        }, 5 * 60 * 1000);
+        this.refreshInterval = null;
+        this.isInitialized = false;
+        this.isShuttingDown = false;
+        this.REFRESH_INTERVAL = 5 * 60 * 1000;
+        this.CACHE_TTL = 10 * 60 * 1000;
+        this.MAX_RETRIES = 3;
+        this.RETRY_DELAY = 1000;
+        this.CACHE_WARMUP_THRESHOLD = 20;
+        this.refreshPromise = null;
+    }
+    async onModuleInit() {
+        try {
+            await this.initializeService();
+        }
+        catch (error) {
+            this.logger.error('Failed to initialize Client Service', error.stack);
+            throw error;
+        }
     }
     async onModuleDestroy() {
-        this.logger.log('Module is being Destroyed, Disconnecting all clients');
-        if (this.checkInterval) {
-            clearInterval(this.checkInterval);
-        }
-        await connection_manager_1.connectionManager.handleShutdown();
-    }
-    async checkNpoint() {
-    }
-    async create(createClientDto) {
-        const createdUser = new this.clientModel(createClientDto);
-        return createdUser.save();
-    }
-    async findAll() {
-        this.logger.debug('Retrieving all client documents');
+        this.logger.log('Client Service shutting down...');
+        this.isShuttingDown = true;
         try {
-            if (this.clientsMap.size < 20) {
-                const documents = await this.clientModel
+            if (this.checkInterval) {
+                clearInterval(this.checkInterval);
+                this.checkInterval = null;
+            }
+            if (this.refreshInterval) {
+                clearInterval(this.refreshInterval);
+                this.refreshInterval = null;
+            }
+            if (this.refreshPromise) {
+                await this.refreshPromise;
+            }
+            await connection_manager_1.connectionManager.handleShutdown();
+            this.clientsMap.clear();
+        }
+        catch (error) {
+            this.logger.error('Error during service shutdown', error.stack);
+        }
+    }
+    async initializeService() {
+        try {
+            await this.warmupCache();
+            this.startPeriodicTasks();
+            this.isInitialized = true;
+        }
+        catch (error) {
+            this.logger.error('Service initialization failed', error.stack);
+            throw new Error('Client Service initialization failed');
+        }
+    }
+    async warmupCache() {
+        try {
+            await this.refreshCacheFromDatabase();
+        }
+        catch (error) {
+            this.logger.error('Cache warmup failed', error.stack);
+            throw error;
+        }
+    }
+    startPeriodicTasks() {
+        this.checkInterval = setInterval(async () => {
+            if (this.isShuttingDown)
+                return;
+            try {
+                await Promise.allSettled([
+                    this.performPeriodicRefresh(),
+                    this.checkNpoint()
+                ]);
+            }
+            catch (error) {
+                this.logger.error('Error during periodic tasks', error.stack);
+            }
+        }, this.REFRESH_INTERVAL);
+        this.refreshInterval = setInterval(() => {
+            if (this.isShuttingDown)
+                return;
+            this.updateCacheMetadata();
+        }, 60000);
+    }
+    async performPeriodicRefresh() {
+        if (this.refreshPromise) {
+            this.logger.debug('Refresh already in progress, skipping...');
+            return;
+        }
+        this.refreshPromise = this.refreshCacheFromDatabase();
+        try {
+            await this.refreshPromise;
+        }
+        finally {
+            this.refreshPromise = null;
+        }
+    }
+    updateCacheMetadata() {
+        const now = Date.now();
+        this.cacheMetadata.isStale = (now - this.cacheMetadata.lastUpdated) > this.CACHE_TTL;
+    }
+    async refreshCacheFromDatabase() {
+        try {
+            const documents = await this.executeWithRetry(async () => {
+                return await this.clientModel
                     .find({}, { _id: 0, updatedAt: 0 })
                     .lean()
                     .exec();
-                documents.forEach((client) => {
-                    this.clientsMap.set(client.clientId, client);
-                });
-                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
-                return Array.from(this.clientsMap.values());
+            });
+            const newClientsMap = new Map();
+            documents.forEach((client) => {
+                newClientsMap.set(client.clientId, client);
+            });
+            this.clientsMap = newClientsMap;
+            this.cacheMetadata = {
+                lastUpdated: Date.now(),
+                isStale: false
+            };
+        }
+        catch (error) {
+            this.logger.error('Failed to refresh cache from database', error.stack);
+            throw error;
+        }
+    }
+    async checkNpoint() {
+        try {
+        }
+        catch (error) {
+            this.logger.error('Error checking npoint', error.stack);
+        }
+    }
+    async create(createClientDto) {
+        try {
+            const createdUser = await this.executeWithRetry(async () => {
+                const client = new this.clientModel(createClientDto);
+                return await client.save();
+            });
+            if (createdUser) {
+                this.clientsMap.set(createdUser.clientId, createdUser.toObject());
+                this.logger.log(`Client created: ${createdUser.clientId}`);
             }
-            else {
+            return createdUser;
+        }
+        catch (error) {
+            this.logger.error('Error creating client', error.stack);
+            throw error;
+        }
+    }
+    async findAll() {
+        this.ensureInitialized();
+        try {
+            if (this.clientsMap.size >= this.CACHE_WARMUP_THRESHOLD && !this.cacheMetadata.isStale) {
                 this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
                 return Array.from(this.clientsMap.values());
             }
+            if (this.cacheMetadata.isStale || this.clientsMap.size === 0) {
+                await this.refreshCacheFromDatabase();
+            }
+            return Array.from(this.clientsMap.values());
         }
         catch (error) {
+            this.logger.error('Failed to retrieve all clients', error.stack);
             (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
-            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
             throw error;
         }
     }
     async findAllMasked() {
         const clients = await this.findAll();
-        const maskedClients = clients.map((client) => {
+        return clients.map((client) => {
             const { session, mobile, password, ...maskedClient } = client;
             return { ...maskedClient };
         });
-        return maskedClients;
     }
     async findOneMasked(clientId) {
         const client = await this.findOne(clientId, true);
@@ -140,36 +263,11 @@ let ClientService = ClientService_1 = class ClientService {
         return { ...maskedClient };
     }
     async findAllObject() {
-        this.logger.debug('Retrieving all client documents');
-        try {
-            if (this.clientsMap.size < 20) {
-                const documents = await this.clientModel
-                    .find({}, { _id: 0, updatedAt: 0 })
-                    .lean()
-                    .exec();
-                const result = documents.reduce((acc, client) => {
-                    this.clientsMap.set(client.clientId, client);
-                    acc[client.clientId] = client;
-                    return acc;
-                }, {});
-                this.logger.debug(`Successfully retrieved ${documents.length} client documents`);
-                this.logger.log('Refreshed Clients');
-                return result;
-            }
-            else {
-                const result = Array.from(this.clientsMap.entries()).reduce((acc, [clientId, client]) => {
-                    acc[clientId] = client;
-                    return acc;
-                }, {});
-                this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
-                return result;
-            }
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, 'Failed to retrieve all clients: ', true);
-            this.logger.error(`Failed to retrieve all clients: ${error.message}`, error.stack);
-            throw error;
-        }
+        const clients = await this.findAll();
+        return clients.reduce((acc, client) => {
+            acc[client.clientId] = client;
+            return acc;
+        }, {});
     }
     async findAllMaskedObject(query) {
         let filteredClients;
@@ -178,33 +276,31 @@ let ClientService = ClientService_1 = class ClientService {
             filteredClients = searchResult.clients;
         }
         else {
-            const allClients = await this.findAll();
-            filteredClients = Array.isArray(allClients)
-                ? allClients
-                : Object.values(allClients);
+            filteredClients = await this.findAll();
         }
-        const results = filteredClients.reduce((acc, client) => {
+        return filteredClients.reduce((acc, client) => {
             const { session, mobile, password, ...maskedClient } = client;
             acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
             return acc;
         }, {});
-        return results;
     }
     async refreshMap() {
-        this.logger.log('Refreshed Clients');
-        const tempMap = new Map();
-        this.clientsMap = tempMap;
+        this.logger.log('Manual cache refresh requested');
+        await this.refreshCacheFromDatabase();
     }
     async findOne(clientId, throwErr = true) {
-        const client = this.clientsMap.get(clientId);
-        if (client) {
-            return client;
-        }
-        else {
-            const user = await this.clientModel
-                .findOne({ clientId }, { _id: 0, updatedAt: 0 })
-                .lean()
-                .exec();
+        this.ensureInitialized();
+        try {
+            const cachedClient = this.clientsMap.get(clientId);
+            if (cachedClient) {
+                return cachedClient;
+            }
+            const user = await this.executeWithRetry(async () => {
+                return await this.clientModel
+                    .findOne({ clientId }, { _id: 0, updatedAt: 0 })
+                    .lean()
+                    .exec();
+            });
             if (!user && throwErr) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
             }
@@ -213,110 +309,254 @@ let ClientService = ClientService_1 = class ClientService {
             }
             return user;
         }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            this.logger.error(`Error finding client ${clientId}`, error.stack);
+            throw error;
+        }
     }
     async update(clientId, updateClientDto) {
-        delete updateClientDto['_id'];
-        if (updateClientDto._doc) {
-            delete updateClientDto._doc['_id'];
+        this.ensureInitialized();
+        try {
+            const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
+            await this.notifyClientUpdate(clientId);
+            const updatedUser = await this.executeWithRetry(async () => {
+                return await this.clientModel
+                    .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, upsert: true, runValidators: true })
+                    .lean()
+                    .exec();
+            });
+            if (!updatedUser) {
+                throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            this.clientsMap.set(clientId, updatedUser);
+            this.performPostUpdateTasks(updatedUser);
+            this.logger.log(`Client updated: ${clientId}`);
+            return updatedUser;
         }
-        const previousUser = await this.clientModel
-            .findOne({ clientId })
-            .lean()
-            .exec();
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`);
-        const updatedUser = await this.clientModel
-            .findOneAndUpdate({ clientId }, { $set: updateClientDto }, { new: true, upsert: true })
-            .lean()
-            .exec();
-        if (!updatedUser) {
-            throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+        catch (error) {
+            this.logger.error(`Error updating client ${clientId}`, error.stack);
+            throw error;
         }
-        await this.checkNpoint();
-        this.clientsMap.set(clientId, updatedUser);
-        this.logger.log('Updated Client Values:', updatedUser);
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`);
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`);
-        this.logger.log('Refreshed Maps');
-        this.logger.log('Updated Client: ', updatedUser);
-        return updatedUser;
     }
     async remove(clientId) {
-        const deletedUser = await this.clientModel
-            .findOneAndDelete({ clientId })
-            .exec();
-        if (!deletedUser) {
-            throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+        this.ensureInitialized();
+        try {
+            const deletedUser = await this.executeWithRetry(async () => {
+                return await this.clientModel
+                    .findOneAndDelete({ clientId })
+                    .lean()
+                    .exec();
+            });
+            if (!deletedUser) {
+                throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
+            }
+            this.clientsMap.delete(clientId);
+            this.logger.log(`Client removed: ${clientId}`);
+            return deletedUser;
         }
-        return deletedUser;
+        catch (error) {
+            this.logger.error(`Error removing client ${clientId}`, error.stack);
+            throw error;
+        }
     }
     async search(filter) {
-        this.logger.log('Original filter:', filter);
-        if (filter.hasPromoteMobiles !== undefined) {
-            const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
-            delete filter.hasPromoteMobiles;
-            if (hasPromoteMobiles) {
-                const clientsWithPromoteMobiles = await this.promoteClientModel
-                    .find({ clientId: { $exists: true } })
-                    .distinct('clientId')
-                    .lean();
-                filter.clientId = { $in: clientsWithPromoteMobiles };
+        try {
+            this.logger.debug('Search filter:', JSON.stringify(filter, null, 2));
+            if (filter.hasPromoteMobiles !== undefined) {
+                filter = await this.processPromoteMobileFilter(filter);
             }
-            else {
-                const clientsWithPromoteMobiles = await this.promoteClientModel
-                    .find({ clientId: { $exists: true } })
-                    .distinct('clientId')
-                    .lean();
-                filter.clientId = { $nin: clientsWithPromoteMobiles };
-            }
+            filter = this.processTextSearchFields(filter);
+            this.logger.debug('Processed filter:', JSON.stringify(filter, null, 2));
+            return await this.executeWithRetry(async () => {
+                return await this.clientModel.find(filter).lean().exec();
+            });
         }
-        if (filter.firstName) {
-            const escapedFirstName = filter.firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            filter.firstName = { $regex: new RegExp(escapedFirstName, 'i') };
+        catch (error) {
+            this.logger.error('Error in search', error.stack);
+            throw error;
         }
-        if (filter.name) {
-            const escapedName = filter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            filter.name = { $regex: new RegExp(escapedName, 'i') };
-        }
-        this.logger.log('Final filter:', filter);
-        return this.clientModel.find(filter).exec();
     }
     async searchClientsByPromoteMobile(mobileNumbers) {
-        const promoteClients = await this.promoteClientModel
-            .find({
-            mobile: { $in: mobileNumbers },
-            clientId: { $exists: true },
-        })
-            .lean();
-        const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
-        return this.clientModel.find({ clientId: { $in: clientIds } }).exec();
+        try {
+            if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0) {
+                return [];
+            }
+            const promoteClients = await this.executeWithRetry(async () => {
+                return await this.promoteClientModel
+                    .find({
+                    mobile: { $in: mobileNumbers },
+                    clientId: { $exists: true },
+                })
+                    .lean()
+                    .exec();
+            });
+            const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
+            return await this.executeWithRetry(async () => {
+                return await this.clientModel
+                    .find({ clientId: { $in: clientIds } })
+                    .lean()
+                    .exec();
+            });
+        }
+        catch (error) {
+            this.logger.error('Error searching by promote mobile', error.stack);
+            throw error;
+        }
     }
     async enhancedSearch(filter) {
-        let searchType = 'direct';
-        let promoteMobileMatches = [];
-        if (filter.promoteMobileNumber) {
-            searchType = 'promoteMobile';
-            const mobileNumber = filter.promoteMobileNumber;
-            delete filter.promoteMobileNumber;
-            const promoteClients = await this.promoteClientModel
-                .find({
-                mobile: {
-                    $regex: new RegExp(mobileNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
-                },
-                clientId: { $exists: true },
-            })
-                .lean();
-            promoteMobileMatches = promoteClients.map((pc) => ({
-                clientId: pc.clientId,
-                mobile: pc.mobile,
-            }));
-            const clientIds = promoteClients.map((pc) => pc.clientId);
-            filter.clientId = { $in: clientIds };
+        try {
+            let searchType = 'direct';
+            let promoteMobileMatches = [];
+            if (filter.promoteMobileNumber) {
+                searchType = 'promoteMobile';
+                const mobileNumber = filter.promoteMobileNumber;
+                delete filter.promoteMobileNumber;
+                const promoteClients = await this.executeWithRetry(async () => {
+                    return await this.promoteClientModel
+                        .find({
+                        mobile: {
+                            $regex: new RegExp(this.escapeRegex(mobileNumber), 'i'),
+                        },
+                        clientId: { $exists: true },
+                    })
+                        .lean()
+                        .exec();
+                });
+                promoteMobileMatches = promoteClients.map((pc) => ({
+                    clientId: pc.clientId,
+                    mobile: pc.mobile,
+                }));
+                const clientIds = promoteClients.map((pc) => pc.clientId);
+                filter.clientId = { $in: clientIds };
+            }
+            const clients = await this.search(filter);
+            return {
+                clients,
+                searchType,
+                promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
+            };
         }
-        const clients = await this.search(filter);
+        catch (error) {
+            this.logger.error('Error in enhanced search', error.stack);
+            throw error;
+        }
+    }
+    ensureInitialized() {
+        if (!this.isInitialized) {
+            throw new Error('Service not initialized. Please wait for initialization to complete.');
+        }
+    }
+    cleanUpdateObject(updateDto) {
+        const cleaned = { ...updateDto };
+        delete cleaned._id;
+        if (cleaned._doc) {
+            delete cleaned._doc._id;
+            delete cleaned._doc;
+        }
+        return cleaned;
+    }
+    async notifyClientUpdate(clientId) {
+        try {
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updating the Existing client: ${clientId}`, { timeout: 5000 });
+        }
+        catch (error) {
+            this.logger.warn('Failed to send update notification', error.message);
+        }
+    }
+    performPostUpdateTasks(updatedUser) {
+        setImmediate(async () => {
+            try {
+                await Promise.allSettled([
+                    this.checkNpoint(),
+                    this.refreshExternalMaps()
+                ]);
+            }
+            catch (error) {
+                this.logger.error('Error in post-update tasks', error.stack);
+            }
+        });
+    }
+    async refreshExternalMaps() {
+        try {
+            await Promise.allSettled([
+                (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimeChecker}/refreshmap`, { timeout: 5000 }),
+                (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 })
+            ]);
+            this.logger.debug('External maps refreshed');
+        }
+        catch (error) {
+            this.logger.warn('Failed to refresh external maps', error.message);
+        }
+    }
+    async processPromoteMobileFilter(filter) {
+        const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
+        delete filter.hasPromoteMobiles;
+        const clientsWithPromoteMobiles = await this.executeWithRetry(async () => {
+            return await this.promoteClientModel
+                .find({ clientId: { $exists: true } })
+                .distinct('clientId')
+                .lean();
+        });
+        if (hasPromoteMobiles) {
+            filter.clientId = { $in: clientsWithPromoteMobiles };
+        }
+        else {
+            filter.clientId = { $nin: clientsWithPromoteMobiles };
+        }
+        return filter;
+    }
+    processTextSearchFields(filter) {
+        const textFields = ['firstName', 'name'];
+        textFields.forEach(field => {
+            if (filter[field]) {
+                filter[field] = {
+                    $regex: new RegExp(this.escapeRegex(filter[field]), 'i')
+                };
+            }
+        });
+        return filter;
+    }
+    escapeRegex(text) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    async executeWithRetry(operation, retries = this.MAX_RETRIES) {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                return await operation();
+            }
+            catch (error) {
+                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
+                if (attempt === retries) {
+                    throw error;
+                }
+                const delay = this.RETRY_DELAY * Math.pow(2, attempt - 1);
+                await this.sleep(delay);
+            }
+        }
+        throw new Error('All retry attempts failed');
+    }
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    getServiceStatus() {
         return {
-            clients,
-            searchType,
-            promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
+            isInitialized: this.isInitialized,
+            cacheSize: this.clientsMap.size,
+            lastCacheUpdate: new Date(this.cacheMetadata.lastUpdated),
+            isCacheStale: this.cacheMetadata.isStale,
+            isShuttingDown: this.isShuttingDown,
+        };
+    }
+    async getCacheStatistics() {
+        const totalClients = await this.clientModel.countDocuments().exec();
+        return {
+            totalClients,
+            cacheHitRate: this.clientsMap.size > 0 ? (this.clientsMap.size / totalClients) * 100 : 0,
+            lastRefresh: new Date(this.cacheMetadata.lastUpdated),
+            memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
         };
     }
     async setupClient(clientId, setupClientQueryDto) {

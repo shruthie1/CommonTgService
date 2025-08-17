@@ -1,5 +1,5 @@
 import { TelegramService } from './../Telegram/Telegram.service';
-import { OnModuleDestroy } from '@nestjs/common';
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -13,42 +13,83 @@ import { NpointService } from '../n-point/npoint.service';
 import { SessionService } from '../session-manager';
 import { IpManagementService } from '../ip-management/ip-management.service';
 import { PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
-export declare class ClientService implements OnModuleDestroy {
-    private clientModel;
-    private promoteClientModel;
-    private telegramService;
-    private bufferClientService;
-    private usersService;
-    private archivedClientService;
-    private sessionService;
-    private ipManagementService;
-    private npointSerive;
+interface SearchResult {
+    clients: Client[];
+    searchType: 'direct' | 'promoteMobile' | 'mixed';
+    promoteMobileMatches?: Array<{
+        clientId: string;
+        mobile: string;
+    }>;
+}
+export declare class ClientService implements OnModuleDestroy, OnModuleInit {
+    private readonly clientModel;
+    private readonly promoteClientModel;
+    private readonly telegramService;
+    private readonly bufferClientService;
+    private readonly usersService;
+    private readonly archivedClientService;
+    private readonly sessionService;
+    private readonly ipManagementService;
+    private readonly npointService;
     private readonly logger;
-    private clientsMap;
     private lastUpdateMap;
+    private clientsMap;
+    private cacheMetadata;
     private checkInterval;
-    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, ipManagementService: IpManagementService, npointSerive: NpointService);
+    private refreshInterval;
+    private isInitialized;
+    private isShuttingDown;
+    private readonly REFRESH_INTERVAL;
+    private readonly CACHE_TTL;
+    private readonly MAX_RETRIES;
+    private readonly RETRY_DELAY;
+    private readonly CACHE_WARMUP_THRESHOLD;
+    private refreshPromise;
+    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, ipManagementService: IpManagementService, npointService: NpointService);
+    onModuleInit(): Promise<void>;
     onModuleDestroy(): Promise<void>;
+    private initializeService;
+    private warmupCache;
+    private startPeriodicTasks;
+    private performPeriodicRefresh;
+    private updateCacheMetadata;
+    private refreshCacheFromDatabase;
     checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findAllMasked(): Promise<Partial<Client>[]>;
     findOneMasked(clientId: string): Promise<Partial<Client>>;
     findAllObject(): Promise<Record<string, Client>>;
-    findAllMaskedObject(query?: SearchClientDto): Promise<{}>;
+    findAllMaskedObject(query?: SearchClientDto): Promise<Record<string, Partial<Client>>>;
     refreshMap(): Promise<void>;
-    findOne(clientId: string, throwErr?: boolean): Promise<Client>;
+    findOne(clientId: string, throwErr?: boolean): Promise<Client | null>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     search(filter: any): Promise<Client[]>;
     searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]>;
-    enhancedSearch(filter: any): Promise<{
-        clients: Client[];
-        searchType: 'direct' | 'promoteMobile' | 'mixed';
-        promoteMobileMatches?: Array<{
-            clientId: string;
-            mobile: string;
-        }>;
+    enhancedSearch(filter: any): Promise<SearchResult>;
+    private ensureInitialized;
+    private cleanUpdateObject;
+    private notifyClientUpdate;
+    private performPostUpdateTasks;
+    private refreshExternalMaps;
+    private processPromoteMobileFilter;
+    private processTextSearchFields;
+    private escapeRegex;
+    private executeWithRetry;
+    private sleep;
+    getServiceStatus(): {
+        isInitialized: boolean;
+        cacheSize: number;
+        lastCacheUpdate: Date;
+        isCacheStale: boolean;
+        isShuttingDown: boolean;
+    };
+    getCacheStatistics(): Promise<{
+        totalClients: number;
+        cacheHitRate: number;
+        lastRefresh: Date;
+        memoryUsage: number;
     }>;
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;
     updateClientSession(newSession: string): Promise<void>;
@@ -114,3 +155,4 @@ export declare class ClientService implements OnModuleDestroy {
         message: string;
     }>;
 }
+export {};
