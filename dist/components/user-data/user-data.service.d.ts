@@ -26,7 +26,7 @@ export declare class UserDataService {
     findByPaymentRange(minAmount: number, maxAmount: number): Promise<UserDataDocument[]>;
     bulkUpdateUsers(filter: any, update: UpdateQuery<UserDataDocument>): Promise<import("mongoose").UpdateWriteOpResult>;
     findActiveUsers(threshold?: number): Promise<UserDataDocument[]>;
-    removeOlderThanOneMonth(): Promise<{
+    removeRedundantData(): Promise<{
         deletedCount: number;
     }>;
     resetUserCounts(profile: string, chatId: string): Promise<UserDataDocument>;
