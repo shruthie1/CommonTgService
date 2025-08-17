@@ -162,11 +162,11 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async findActiveUsers(threshold = 30) {
         return this.userDataModel.find({ totalCount: { $gt: threshold } }).sort({ totalCount: -1 }).lean().exec();
     }
-    async removeOlderThanOneMonth() {
+    async removeRedundantData() {
         const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
         try {
             const result = await this.userDataModel
-                .deleteMany({ lastMsgTimeStamp: { $lt: oneMonthAgo } })
+                .deleteMany({ lastMsgTimeStamp: { $lt: oneMonthAgo }, payAmount: 0, canReply: 1 })
                 .exec();
             return { deletedCount: result.deletedCount ?? 0 };
         }
