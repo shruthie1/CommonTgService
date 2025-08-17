@@ -33,6 +33,7 @@ import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
 import { ActiveChannel } from '../active-channels';
+import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -313,22 +314,12 @@ export class BufferClientService implements OnModuleDestroy {
         }
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
-    async search(filter: any): Promise<BufferClientDocument[]> {
-        // Allow filtering by status
-
-        if (filter.firstName == "refresh") {
+    async search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]> {
+        if (filter.tgId == "refresh") {
             this.updateAllClientSessions();
             return []
         }
-
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
-        }
-        if (filter.status) {
-            filter.status = filter.status;
-        }
-
-        return this.bufferClientModel.find(filter).exec();
+        return await this.bufferClientModel.find(filter).exec();
     }
 
     async executeQuery(

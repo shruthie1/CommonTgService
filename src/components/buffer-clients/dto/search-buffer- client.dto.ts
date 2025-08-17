@@ -41,4 +41,13 @@ export class SearchBufferClientDto {
   })
   @IsNumber()
   readonly channels?: number;
+
+  @ApiPropertyOptional({
+    description: 'status identifier',
+    example: 'active',
+  })
+  @IsOptional()
+  @IsString()
+  readonly status?: string;
+
 }
