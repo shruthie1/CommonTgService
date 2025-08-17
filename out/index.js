@@ -8422,7 +8422,6 @@ class ConnectionManager {
     async cleanupInactiveConnections(maxIdleTime = 180000) {
         if (this.isShuttingDown)
             return;
-        this.logger.info('ConnectionManager', 'Perfroming Regular Cleanup');
         const now = Date.now();
         const cleanupResults = new Map();
         const cleanupPromises = [];
@@ -8612,7 +8611,6 @@ class ConnectionManager {
                 }
             }
         }
-        this.logger.info('ConnectionManager', `Health check completed - Active: ${leakReport.activeConnections.length}, Total: ${leakReport.mapSize}`, leakReport);
     }
     startCleanupInterval(intervalMs = 120000) {
         if (this.cleanupInterval) {
@@ -12055,7 +12053,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
-            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
         }
         catch (error) {
             this.logger.error('Error during memory cleanup:', error);

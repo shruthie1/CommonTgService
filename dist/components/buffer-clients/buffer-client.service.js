@@ -115,7 +115,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
-            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
         }
         catch (error) {
             this.logger.error('Error during memory cleanup:', error);
