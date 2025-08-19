@@ -11,6 +11,7 @@ import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
 import { Logger } from '@nestjs/common';
+import { BotConfig, ChannelCategory } from '../../utils/TelegramBots.config';
 
 @Injectable()
 export class UserDataService {
@@ -78,6 +79,7 @@ export class UserDataService {
     }
 
     async remove(profile: string, chatId: string): Promise<UserDataDocument> {
+        BotConfig.getInstance().sendMessage(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`)
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
             throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
