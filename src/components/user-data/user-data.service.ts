@@ -188,11 +188,11 @@ export class UserDataService {
 
     async removeRedundantData(): Promise<{ deletedCount: number }> {
         // 30 days in milliseconds
-        const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const twoMonths = Date.now() - 60 * 24 * 60 * 60 * 1000;
 
         try {
             const result = await this.userDataModel
-                .deleteMany({ lastMsgTimeStamp: { $lt: oneMonthAgo }, payAmount: 0, canReply: 1 })
+                .deleteMany({ lastMsgTimeStamp: { $lt: twoMonths }, payAmount: 0, canReply: 1 })
                 .exec();
 
             return { deletedCount: result.deletedCount ?? 0 };
