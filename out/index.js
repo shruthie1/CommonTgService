@@ -26421,6 +26421,7 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const user_data_schema_1 = __webpack_require__(/*! ./schemas/user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const common_2 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
@@ -26473,6 +26474,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
             .exec();
     }
     async remove(profile, chatId) {
+        TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);

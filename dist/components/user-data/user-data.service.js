@@ -20,6 +20,7 @@ const mongoose_2 = require("mongoose");
 const user_data_schema_1 = require("./schemas/user-data.schema");
 const parseError_1 = require("../../utils/parseError");
 const common_2 = require("@nestjs/common");
+const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
@@ -72,6 +73,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
             .exec();
     }
     async remove(profile, chatId) {
+        TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
