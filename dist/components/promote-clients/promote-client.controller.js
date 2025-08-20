@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const promote_client_service_1 = require("./promote-client.service");
 const create_promote_client_dto_1 = require("./dto/create-promote-client.dto");
 const search_promote_client_dto_1 = require("./dto/search-promote-client.dto");
+const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const update_promote_client_dto_1 = require("./dto/update-promote-client.dto");
 let PromoteClientController = class PromoteClientController {
     constructor(clientService) {
@@ -33,16 +34,12 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async updateInfo() {
-        this.clientService.updateInfo().catch(error => {
-            console.error('Error in checkPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.updateInfo();
+        return 'initiated Checking';
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients().catch(error => {
-            console.error('Error in checkPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.checkPromoteClients();
+        return 'initiated Checking';
     }
     async addNewUserstoPromoteClients(body) {
         if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
@@ -51,16 +48,14 @@ let PromoteClientController = class PromoteClientController {
         if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
             throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
         }
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch(error => {
-            console.error('Error in addNewUserstoPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined);
+        return 'initiated Checking';
     }
     async findAll(status) {
         return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
-        return await this.clientService.setAsPromoteClient(mobile);
+        return this.clientService.setAsPromoteClient(mobile);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -75,12 +70,7 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.remove(mobile);
     }
     async executeQuery(query) {
-        try {
-            return await this.clientService.executeQuery(query);
-        }
-        catch (error) {
-            throw error;
-        }
+        return this.clientService.executeQuery(query);
     }
     async getPromoteClientDistribution() {
         return this.clientService.getPromoteClientDistribution();
@@ -123,6 +113,8 @@ exports.PromoteClientController = PromoteClientController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiBody)({ type: create_promote_client_dto_1.CreatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_promote_client_dto_1.CreatePromoteClientDto]),
@@ -135,6 +127,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name' }),
     (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_promote_client_dto_1.SearchPromoteClientDto]),
@@ -143,6 +136,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('joinChannelsForPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for PromoteClients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -150,6 +144,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -157,6 +152,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -174,6 +170,7 @@ __decorate([
             }
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -183,6 +180,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -192,6 +190,7 @@ __decorate([
     (0, common_1.Get)('SetAsPromoteClient/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Set as Promote Client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -200,6 +199,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -208,6 +209,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -217,6 +221,9 @@ __decorate([
 __decorate([
     (0, common_1.Put)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -226,6 +233,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: null }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -235,6 +244,7 @@ __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -243,6 +253,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -251,6 +262,7 @@ __decorate([
     (0, common_1.Get)('status/:status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -277,6 +289,7 @@ __decorate([
             required: ['status']
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -295,6 +308,7 @@ __decorate([
             }
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -314,6 +328,7 @@ __decorate([
             required: ['reason']
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -342,6 +357,7 @@ __decorate([
     (0, common_1.Patch)('update-last-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -352,6 +368,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
@@ -362,6 +379,7 @@ __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -369,9 +387,10 @@ __decorate([
 ], PromoteClientController.prototype, "getNextAvailable", null);
 __decorate([
     (0, common_1.Get)('unused'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiOperation)({ summary: "Get promote clients that haven't been used for a specified time period" }),
     (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('hoursAgo')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -382,6 +401,18 @@ __decorate([
     (0, common_1.Get)('usage-stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    (0, swagger_1.ApiResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                totalClients: { type: 'number' },
+                neverUsed: { type: 'number' },
+                usedInLast24Hours: { type: 'number' },
+                usedInLastWeek: { type: 'number' },
+                averageUsageGap: { type: 'number' }
+            }
+        }
+    }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile, Patch } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes, ApiBadRequestResponse, ApiNotFoundResponse, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
@@ -41,7 +41,7 @@ import { SendMessageDto } from './dto/send-message.dto';
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
-    constructor(private readonly telegramService: TelegramService) { }
+    constructor(private readonly telegramService: TelegramService) {}
 
     @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
@@ -49,19 +49,14 @@ export class TelegramController {
     @ApiQuery({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true })
     @ApiQuery({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true })
     @ApiQuery({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 })
-    @ApiResponse({ status: 200, description: 'Successfully connected' })
-    @ApiResponse({ status: 400, description: 'Connection failed' })
+    @ApiResponse({ type: Object, schema: { properties: { message: { type: 'string' } } } })
     async connect(
         @Param('mobile') mobile: string,
         @Query('autoDisconnect') autoDisconnect?: boolean,
         @Query('handler') handler?: boolean,
         @Query('timeout') timeout?: number
     ): Promise<{ message: string }> {
-        const options: GetClientOptionsDto = {
-            autoDisconnect,
-            handler,
-            timeout
-        };
+        const options: GetClientOptionsDto = { autoDisconnect, handler, timeout };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
@@ -69,7 +64,7 @@ export class TelegramController {
     @Get('disconnect/:mobile')
     @ApiOperation({ summary: 'Disconnect from Telegram' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Successfully disconnected' })
+    @ApiResponse({ type: Object, schema: { properties: { message: { type: 'string' } } } })
     async disconnect(@Param('mobile') mobile: string): Promise<{ message: string }> {
         await this.telegramService.disconnect(mobile);
         return { message: 'Disconnected successfully' };
@@ -77,7 +72,7 @@ export class TelegramController {
 
     @Get('disconnect-all')
     @ApiOperation({ summary: 'Disconnect all clients' })
-    @ApiResponse({ status: 200, description: 'All clients disconnected successfully' })
+    @ApiResponse({ type: Object, schema: { properties: { message: { type: 'string' } } } })
     async disconnectAll(): Promise<{ message: string }> {
         await this.telegramService.disconnectAll();
         return { message: 'All clients disconnected successfully' };
@@ -85,7 +80,7 @@ export class TelegramController {
 
     @Get('connection/stats')
     @ApiOperation({ summary: 'Get connection statistics' })
-    @ApiResponse({ status: 200, type: ConnectionStatsDto })
+    @ApiResponse({ type: ConnectionStatsDto })
     getConnectionStats(): ConnectionStatsDto {
         return this.telegramService.getConnectionStats();
     }
@@ -93,15 +88,14 @@ export class TelegramController {
     @Get('connection/state/:mobile')
     @ApiOperation({ summary: 'Get connection state for a client' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, type: ConnectionStatusDto })
-    @ApiResponse({ status: 404, description: 'Client not found' })
+    @ApiResponse({ type: ConnectionStatusDto })
     getClientState(@Param('mobile') mobile: string): ConnectionStatusDto | undefined {
         return this.telegramService.getClientState(mobile);
     }
 
     @Get('connection/count')
     @ApiOperation({ summary: 'Get active connection count' })
-    @ApiResponse({ status: 200, description: 'Number of active connections' })
+    @ApiResponse({ type: Number })
     getActiveConnectionCount(): number {
         return this.telegramService.getActiveConnectionCount();
     }
@@ -109,7 +103,7 @@ export class TelegramController {
     @Get('me/:mobile')
     @ApiOperation({ summary: 'Get current user profile' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getMe(@Param('mobile') mobile: string) {
         return this.telegramService.getMe(mobile);
     }
@@ -118,7 +112,7 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get Entity profile' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiParam({ name: 'entity', description: 'Entity identifier', required: true })
-    @ApiResponse({ status: 200, description: 'Entity retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getEntity(@Param('mobile') mobile: string, @Param('entity') entity: string) {
         return this.telegramService.getEntity(mobile, entity);
     }
@@ -127,62 +121,44 @@ export class TelegramController {
     @ApiOperation({ summary: 'Update profile information' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: UpdateProfileDto })
-    async updateProfile(
-        @Param('mobile') mobile: string,
-        @Body() updateProfileDto: UpdateProfileDto
-    ) {
-        return this.telegramService.updateNameandBio(
-            mobile,
-            updateProfileDto.firstName,
-            updateProfileDto.about
-        );
+    @ApiResponse({ type: Object })
+    async updateProfile(@Param('mobile') mobile: string, @Body() updateProfileDto: UpdateProfileDto) {
+        return this.telegramService.updateNameandBio(mobile, updateProfileDto.firstName, updateProfileDto.about);
     }
 
     @Post('profile/photo/:mobile')
     @ApiOperation({ summary: 'Set profile photo' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ProfilePhotoDto })
-    async setProfilePhoto(
-        @Param('mobile') mobile: string,
-        @Body() photoDto: ProfilePhotoDto
-    ) {
+    @ApiResponse({ type: Object })
+    async setProfilePhoto(@Param('mobile') mobile: string, @Body() photoDto: ProfilePhotoDto) {
         return this.telegramService.setProfilePic(mobile, photoDto.name);
     }
 
     @Delete('profile/photos/:mobile')
     @ApiOperation({ summary: 'Delete all profile photos' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async deleteProfilePhotos(@Param('mobile') mobile: string) {
         return this.telegramService.deleteProfilePhotos(mobile);
     }
 
-    // Message Operations
     @Get('messages/:mobile')
     @ApiOperation({ summary: 'Get chat messages' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
     @ApiQuery({ name: 'limit', required: false, type: Number })
-    async getMessages(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('limit') limit?: number
-    ) {
+    @ApiResponse({ type: Object })
+    async getMessages(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('limit') limit?: number) {
         return this.telegramService.getMessages(mobile, chatId, limit);
     }
 
-
     @Post('message/:mobile')
     @ApiOperation({ summary: 'Send a Telegram message as a user' })
-    @ApiParam({
-        name: 'mobile',
-        description: 'Mobile number of the user account to send the message from',
-        required: true,
-        example: '1234567890',
-    })
-    async sendMessage(
-        @Param('mobile') mobile: string,
-        @Body() dto: SendMessageDto,
-    ) {
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true })
+    @ApiBody({ type: SendMessageDto })
+    @ApiResponse({ type: Object })
+    async sendMessage(@Param('mobile') mobile: string, @Body() dto: SendMessageDto) {
         return this.telegramService.sendMessage(mobile, dto);
     }
 
@@ -190,26 +166,17 @@ export class TelegramController {
     @ApiOperation({ summary: 'Forward messages' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ForwardBatchDto })
-    async forwardMessage(
-        @Param('mobile') mobile: string,
-        @Body() forwardDto: ForwardBatchDto
-    ) {
-        return this.telegramService.forwardBulkMessages(
-            mobile,
-            forwardDto.fromChatId,
-            forwardDto.toChatId,
-            forwardDto.messageIds
-        );
+    @ApiResponse({ type: Object })
+    async forwardMessage(@Param('mobile') mobile: string, @Body() forwardDto: ForwardBatchDto) {
+        return this.telegramService.forwardBulkMessages(mobile, forwardDto.fromChatId, forwardDto.toChatId, forwardDto.messageIds);
     }
 
     @Post('batch-process/:mobile')
     @ApiOperation({ summary: 'Process operations in batches' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: BatchProcessDto })
-    async processBatchMessages(
-        @Param('mobile') mobile: string,
-        @Body() batchOp: BatchProcessDto
-    ) {
+    @ApiResponse({ type: Object })
+    async processBatchMessages(@Param('mobile') mobile: string, @Body() batchOp: BatchProcessDto) {
         return this.telegramService.processBatch(
             batchOp.items,
             batchOp.batchSize || 20,
@@ -218,12 +185,7 @@ export class TelegramController {
                     case BatchOperationType.FORWARD:
                         for (const item of batch) {
                             if ('messageId' in item && item.fromChatId && item.toChatId) {
-                                await this.telegramService.forwardMessage(
-                                    mobile,
-                                    item.toChatId,
-                                    item.fromChatId,
-                                    item.messageId
-                                );
+                                await this.telegramService.forwardMessage(mobile, item.toChatId, item.fromChatId, item.messageId);
                             }
                         }
                         break;
@@ -241,33 +203,20 @@ export class TelegramController {
     }
 
     @Get('messages/search/:mobile')
-    @ApiOperation({
-        summary: 'Search messages in Telegram',
-        description: 'Search for messages in a specific chat or globally across all chats'
-    })
-    @ApiOkResponse({
-        description: 'Messages successfully found',
-        type: SearchMessagesResponseDto
-    })
-    @ApiBadRequestResponse({ description: 'Invalid request parameters' })
-    @ApiNotFoundResponse({ description: 'Mobile number not registered' })
-    @ApiUnauthorizedResponse({ description: 'Unauthorized access' })
-    async searchMessages(
-        @Param('mobile') mobile: string,
-        @Query() queryParams: SearchMessagesDto
-    ): Promise<SearchMessagesResponseDto> {
+    @ApiOperation({ summary: 'Search messages in Telegram', description: 'Search for messages in a specific chat or globally across all chats' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ type: SearchMessagesDto })
+    @ApiResponse({ type: SearchMessagesResponseDto })
+    async searchMessages(@Param('mobile') mobile: string, @Query() queryParams: SearchMessagesDto): Promise<SearchMessagesResponseDto> {
         return this.telegramService.searchMessages(mobile, queryParams);
     }
 
-    // Channel Operations
     @Get('channels/:mobile')
     @ApiOperation({ summary: 'Get channel information' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'includeIds', required: false, type: Boolean })
-    async getChannelInfo(
-        @Param('mobile') mobile: string,
-        @Query('includeIds') includeIds?: boolean
-    ) {
+    @ApiResponse({ type: Object })
+    async getChannelInfo(@Param('mobile') mobile: string, @Query('includeIds') includeIds?: boolean) {
         return this.telegramService.getChannelInfo(mobile, includeIds);
     }
 
@@ -276,49 +225,34 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'channel', description: 'Channel username or ID', required: false })
     @ApiQuery({ name: 'fromChatId', description: 'Source chat ID to forward messages from', required: false })
-    async forwardMedia(
-        @Param('mobile') mobile: string,
-        @Query('channel') channel?: string,
-        @Query('fromChatId') fromChatId?: string
-    ) {
+    @ApiResponse({ type: Object })
+    async forwardMedia(@Param('mobile') mobile: string, @Query('channel') channel?: string, @Query('fromChatId') fromChatId?: string) {
         await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-        return this.telegramService.forwardMedia(
-            mobile,
-            channel,
-            fromChatId
-        );
+        return this.telegramService.forwardMedia(mobile, channel, fromChatId);
     }
 
     @Post('channels/leave/:mobile')
     @ApiOperation({ summary: 'Leave channel' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'channel', description: 'Channel ID/username', required: true })
-    async leaveChannel(
-        @Param('mobile') mobile: string,
-        @Query('channel') channel: string
-    ) {
+    @ApiResponse({ type: Object })
+    async leaveChannel(@Param('mobile') mobile: string, @Query('channel') channel: string) {
         return this.telegramService.leaveChannel(mobile, channel);
     }
 
     @Patch('username/:mobile')
     @ApiOperation({ summary: 'Update the Telegram username of a user' })
-    @ApiParam({
-        name: 'mobile',
-        description: 'Mobile number of the user whose username should be updated',
-        required: true,
-        example: '1234567890',
-    })
-    async updateUsername(
-        @Param('mobile') mobile: string,
-        @Body() updateUsernameDto: UpdateUsernameDto,
-    ) {
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the user whose username should be updated', required: true })
+    @ApiBody({ type: UpdateUsernameDto })
+    @ApiResponse({ type: Object })
+    async updateUsername(@Param('mobile') mobile: string, @Body() updateUsernameDto: UpdateUsernameDto) {
         return this.telegramService.updateUsername(mobile, updateUsernameDto.newUsername);
     }
 
-    // Security & Privacy
     @Post('2fa/:mobile')
     @ApiOperation({ summary: 'Setup two-factor authentication' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async setup2FA(@Param('mobile') mobile: string) {
         return this.telegramService.set2Fa(mobile);
     }
@@ -326,6 +260,7 @@ export class TelegramController {
     @Post('privacy/:mobile')
     @ApiOperation({ summary: 'Update privacy settings' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async updatePrivacy(@Param('mobile') mobile: string) {
         return this.telegramService.updatePrivacy(mobile);
     }
@@ -334,18 +269,15 @@ export class TelegramController {
     @ApiOperation({ summary: 'Update multiple privacy settings' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: PrivacySettingsDto })
-    async updatePrivacyBatch(
-        @Param('mobile') mobile: string,
-        @Body() settings: PrivacySettingsDto
-    ) {
+    @ApiResponse({ type: Object })
+    async updatePrivacyBatch(@Param('mobile') mobile: string, @Body() settings: PrivacySettingsDto) {
         return this.telegramService.updatePrivacyBatch(mobile, settings);
     }
 
-    // Session Management
     @Get('sessions/:mobile')
     @ApiOperation({ summary: 'Get active sessions' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Active sessions retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getActiveSessions(@Param('mobile') mobile: string) {
         return this.telegramService.getAuths(mobile);
     }
@@ -353,7 +285,7 @@ export class TelegramController {
     @Delete('sessions/:mobile')
     @ApiOperation({ summary: 'Terminate other sessions' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Other sessions terminated successfully' })
+    @ApiResponse({ type: Object })
     async terminateOtherSessions(@Param('mobile') mobile: string) {
         return this.telegramService.removeOtherAuths(mobile);
     }
@@ -361,7 +293,7 @@ export class TelegramController {
     @Post('sessions/new/:mobile')
     @ApiOperation({ summary: 'Create new session' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'New session created successfully' })
+    @ApiResponse({ type: Object })
     async createNewSession(@Param('mobile') mobile: string) {
         return this.telegramService.createNewSession(mobile);
     }
@@ -369,6 +301,7 @@ export class TelegramController {
     @Get('session/info/:mobile')
     @ApiOperation({ summary: 'Get session information' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async getSessionInfo(@Param('mobile') mobile: string) {
         return this.telegramService.getSessionInfo(mobile);
     }
@@ -376,83 +309,55 @@ export class TelegramController {
     @Post('session/terminate/:mobile')
     @ApiOperation({ summary: 'Terminate specific session' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async terminateSession(
-        @Param('mobile') mobile: string,
-        @Body() data: {
-            hash: string;
-            type: 'app' | 'web';
-            exceptCurrent?: boolean;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { hash: { type: 'string' }, type: { type: 'string', enum: ['app', 'web'] }, exceptCurrent: { type: 'boolean' } } } })
+    @ApiResponse({ type: Object })
+    async terminateSession(@Param('mobile') mobile: string, @Body() data: { hash: string; type: 'app' | 'web'; exceptCurrent?: boolean }) {
         return this.telegramService.terminateSession(mobile, data);
     }
 
-    // Monitoring & Health
     @Get('monitoring/status')
     @ApiOperation({ summary: 'Get service health and connection status' })
-    @ApiResponse({ status: 200, type: ConnectionStatusDto })
+    @ApiResponse({ type: ConnectionStatusDto })
     async getConnectionStatus() {
-        return {
-            status: await this.telegramService.getConnectionStatus()
-        };
+        return { status: await this.telegramService.getConnectionStatus() };
     }
 
     @Get('monitoring/calllog/:mobile')
     @ApiOperation({ summary: 'Get call log statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async getCallLogStats(@Param('mobile') mobile: string) {
         return this.telegramService.getCallLog(mobile);
     }
 
-    // Contact Management
     @Post('contacts/add-bulk/:mobile')
     @ApiOperation({ summary: 'Add multiple contacts in bulk' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: AddContactsDto })
-    @ApiResponse({ status: 200, description: 'Contacts added successfully' })
-    async addContactsBulk(
-        @Param('mobile') mobile: string,
-        @Body() contactsDto: AddContactsDto
-    ) {
-        return this.telegramService.addContacts(
-            mobile,
-            contactsDto.phoneNumbers,
-            contactsDto.prefix
-        );
+    @ApiResponse({ type: Object })
+    async addContactsBulk(@Param('mobile') mobile: string, @Body() contactsDto: AddContactsDto) {
+        return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
     }
 
     @Get('contacts/:mobile')
     @ApiOperation({ summary: 'Get all contacts' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Contacts retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getContacts(@Param('mobile') mobile: string) {
-        return await this.telegramService.getContacts(mobile);
+        return this.telegramService.getContacts(mobile);
     }
 
-    //To Cleanup
     @Post('media/send/:mobile')
     @ApiOperation({ summary: 'Send media message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: SendMediaDto })
-    async sendMedia(
-        @Param('mobile') mobile: string,
-        @Body() sendMediaDto: SendMediaDto
-    ) {
+    @ApiResponse({ type: Object })
+    async sendMedia(@Param('mobile') mobile: string, @Body() sendMediaDto: SendMediaDto) {
         const client = await connectionManager.getClient(mobile);
         if (sendMediaDto.type === MediaType.PHOTO) {
-            return client.sendPhotoChat(
-                sendMediaDto.chatId,
-                sendMediaDto.url,
-                sendMediaDto.caption,
-                sendMediaDto.filename
-            );
+            return client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
         }
-        return client.sendFileChat(
-            sendMediaDto.chatId,
-            sendMediaDto.url,
-            sendMediaDto.caption,
-            sendMediaDto.filename
-        );
+        return client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
     }
 
     @Get('media/download/:mobile')
@@ -460,12 +365,8 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
     @ApiQuery({ name: 'messageId', required: true })
-    async downloadMedia(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('messageId') messageId: number,
-        @Res() res: Response
-    ) {
+    @ApiResponse({ type: Object })
+    async downloadMedia(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('messageId') messageId: number, @Res() res: Response) {
         return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
 
@@ -473,10 +374,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Send media album (multiple photos/videos)' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: SendMediaAlbumDto })
-    async sendMediaAlbum(
-        @Param('mobile') mobile: string,
-        @Body() albumDto: MediaAlbumOptions
-    ) {
+    @ApiResponse({ type: Object })
+    async sendMediaAlbum(@Param('mobile') mobile: string, @Body() albumDto: MediaAlbumOptions) {
         return this.telegramService.sendMediaAlbum(mobile, albumDto);
     }
 
@@ -490,6 +389,8 @@ export class TelegramController {
     @ApiQuery({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number })
     @ApiQuery({ name: 'minId', required: false, type: Number })
     @ApiQuery({ name: 'maxId', required: false, type: Number })
+    @ApiQuery({ name: 'all', required: false, type: Boolean })
+    @ApiResponse({ type: Object })
     async getMediaMetadata(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
@@ -523,7 +424,7 @@ export class TelegramController {
     @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of media items to fetch' })
     @ApiQuery({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' })
     @ApiQuery({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' })
-    @ApiResponse({ status: 200, type: [MediaMetadataDto] })
+    @ApiResponse({ type: [MediaMetadataDto] })
     async getFilteredMedia(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
@@ -549,10 +450,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get group members' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
-    async getGroupMembers(
-        @Param('mobile') mobile: string,
-        @Query('groupId') groupId: string
-    ) {
+    @ApiResponse({ type: Object })
+    async getGroupMembers(@Param('mobile') mobile: string, @Query('groupId') groupId: string) {
         return this.telegramService.getGrpMembers(mobile, groupId);
     }
 
@@ -560,88 +459,61 @@ export class TelegramController {
     @ApiOperation({ summary: 'Block a chat/user' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', description: 'Chat/User ID to block', required: true })
-    async blockChat(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string
-    ) {
+    @ApiResponse({ type: Object })
+    async blockChat(@Param('mobile') mobile: string, @Query('chatId') chatId: string) {
         return this.telegramService.blockUser(mobile, chatId);
     }
 
     @Delete('chat/:mobile')
     @ApiOperation({ summary: 'Delete or clear a chat history for a user' })
-    @ApiParam({
-        name: 'mobile',
-        description: 'Mobile number of the user whose chat should be deleted',
-        required: true,
-        example: '1234567890',
-    })
-    @ApiQuery({
-        name: 'peer',
-        description: 'Username or Peer ID of the chat to delete',
-        required: true,
-        example: 'someusername',
-    })
-    @ApiQuery({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId', example: 100000 })
-    @ApiQuery({ name: 'justClear', required: false, description: 'Only clear history for this user', example: false })
-    @ApiQuery({ name: 'revoke', required: false, description: 'Delete for everyone if possible', example: true })
-    @ApiQuery({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)', example: 1609459200 })
-    @ApiQuery({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)', example: 1612137600 })
-    async deleteChatHistory(
-        @Param('mobile') mobile: string,
-        @Query() deleteHistoryDto: DeleteHistoryDto,
-    ) {
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the user whose chat should be deleted', required: true })
+    @ApiQuery({ name: 'peer', description: 'Username or Peer ID of the chat to delete', required: true })
+    @ApiQuery({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId' })
+    @ApiQuery({ name: 'justClear', required: false, description: 'Only clear history for this user', type: Boolean })
+    @ApiQuery({ name: 'revoke', required: false, description: 'Delete for everyone if possible', type: Boolean })
+    @ApiQuery({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)' })
+    @ApiQuery({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)' })
+    @ApiResponse({ type: Object })
+    async deleteChatHistory(@Param('mobile') mobile: string, @Query() deleteHistoryDto: DeleteHistoryDto) {
         return this.telegramService.deleteChat(mobile, deleteHistoryDto);
     }
 
-    // Additional Message Operations
     @Get('messages/inline/:mobile')
     @ApiOperation({ summary: 'Send message with inline button' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
     @ApiQuery({ name: 'message', required: true })
     @ApiQuery({ name: 'url', required: true })
-    async sendMessageWithInlineButton(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('message') message: string,
-        @Query('url') url: string
-    ) {
+    @ApiResponse({ type: Object })
+    async sendMessageWithInlineButton(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('message') message: string, @Query('url') url: string) {
         return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
 
-    // Dialog Management
     @Get('dialogs/:mobile')
     @ApiOperation({ summary: 'Get all dialogs' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 })
     @ApiQuery({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 })
     @ApiQuery({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false })
-    async getAllDialogs(
-        @Param('mobile') mobile: string,
-        @Query('limit') limit: number = 500,
-        @Query('offsetId') offsetId: number = 0,
-        @Query('archived') archived: boolean = false
-    ) {
+    @ApiResponse({ type: Object })
+    async getAllDialogs(@Param('mobile') mobile: string, @Query('limit') limit: number = 500, @Query('offsetId') offsetId: number = 0, @Query('archived') archived: boolean = false) {
         return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
     }
 
     @Get('last-active/:mobile')
     @ApiOperation({ summary: 'Get last active time' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Last active time retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getLastActiveTime(@Param('mobile') mobile: string) {
         return this.telegramService.getLastActiveTime(mobile);
     }
 
-    // Enhanced Group Management
     @Post('group/create/:mobile')
     @ApiOperation({ summary: 'Create a new group with advanced options' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: createGroupDto })
-    async createGroupWithOptions(
-        @Param('mobile') mobile: string,
-        @Body() options: createGroupDto
-    ) {
+    @ApiResponse({ type: Object })
+    async createGroupWithOptions(@Param('mobile') mobile: string, @Body() options: createGroupDto) {
         return this.telegramService.createGroupWithOptions(mobile, options);
     }
 
@@ -649,10 +521,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Update group settings' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: GroupSettingsDto })
-    async updateGroupSettings(
-        @Param('mobile') mobile: string,
-        @Body() settings: GroupSettingsDto
-    ) {
+    @ApiResponse({ type: Object })
+    async updateGroupSettings(@Param('mobile') mobile: string, @Body() settings: GroupSettingsDto) {
         return this.telegramService.updateGroupSettings(mobile, settings);
     }
 
@@ -660,54 +530,30 @@ export class TelegramController {
     @ApiOperation({ summary: 'Add members to a group' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: GroupMemberOperationDto })
-    async addGroupMembers(
-        @Body() memberOp: GroupMemberOperationDto,
-        @Param('mobile') mobile: string,
-    ) {
-        return this.telegramService.addGroupMembers(
-            mobile,
-            memberOp.groupId,
-            memberOp.members
-        );
+    @ApiResponse({ type: Object })
+    async addGroupMembers(@Body() memberOp: GroupMemberOperationDto, @Param('mobile') mobile: string) {
+        return this.telegramService.addGroupMembers(mobile, memberOp.groupId, memberOp.members);
     }
 
     @Delete('group/members/:mobile')
     @ApiOperation({ summary: 'Remove members from a group' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: GroupMemberOperationDto })
-    async removeGroupMembers(
-        @Body() memberOp: GroupMemberOperationDto,
-        @Param('mobile') mobile: string,
-    ) {
-        return this.telegramService.removeGroupMembers(
-            mobile,
-            memberOp.groupId,
-            memberOp.members
-        );
+    @ApiResponse({ type: Object })
+    async removeGroupMembers(@Body() memberOp: GroupMemberOperationDto, @Param('mobile') mobile: string) {
+        return this.telegramService.removeGroupMembers(mobile, memberOp.groupId, memberOp.members);
     }
 
     @Post('group/admin/:mobile')
     @ApiOperation({ summary: 'Promote or demote group admins' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: AdminOperationDto })
-    async handleAdminOperation(
-        @Body() adminOp: AdminOperationDto,
-        @Param('mobile') mobile: string
-    ) {
+    @ApiResponse({ type: Object })
+    async handleAdminOperation(@Body() adminOp: AdminOperationDto, @Param('mobile') mobile: string) {
         if (adminOp.isPromote) {
-            return this.telegramService.promoteToAdmin(
-                mobile,
-                adminOp.groupId,
-                adminOp.userId,
-                adminOp.permissions,
-                adminOp.rank
-            );
+            return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
         } else {
-            return this.telegramService.demoteAdmin(
-                mobile,
-                adminOp.groupId,
-                adminOp.userId
-            );
+            return this.telegramService.demoteAdmin(mobile, adminOp.groupId, adminOp.userId);
         }
     }
 
@@ -715,10 +561,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Clean up chat history' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ChatCleanupDto })
-    async cleanupChat(
-        @Param('mobile') mobile: string,
-        @Body() cleanup: ChatCleanupDto
-    ) {
+    @ApiResponse({ type: Object })
+    async cleanupChat(@Param('mobile') mobile: string, @Body() cleanup: ChatCleanupDto) {
         return this.telegramService.cleanupChat(mobile, {
             chatId: cleanup.chatId,
             beforeDate: cleanup.beforeDate ? new Date(cleanup.beforeDate) : undefined,
@@ -732,23 +576,16 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', description: 'Chat ID', required: true })
     @ApiQuery({ name: 'period', enum: ['day', 'week', 'month'], description: 'Statistics period', required: false })
-    async getChatStatistics(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('period') period: 'day' | 'week' | 'month' = 'week'
-    ): Promise<ChatStatistics> {
+    async getChatStatistics(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('period') period: 'day' | 'week' | 'month' = 'week'): Promise<ChatStatistics> {
         return this.telegramService.getChatStatistics(mobile, chatId, period);
     }
 
-    // Message Scheduling
     @Post('messages/schedule/:mobile')
     @ApiOperation({ summary: 'Schedule a message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ScheduleMessageDto })
-    async scheduleMessage(
-        @Param('mobile') mobile: string,
-        @Body() schedule: ScheduleMessageDto
-    ) {
+    @ApiResponse({ type: Object })
+    async scheduleMessage(@Param('mobile') mobile: string, @Body() schedule: ScheduleMessageDto) {
         return this.telegramService.scheduleMessage(mobile, {
             chatId: schedule.chatId,
             message: schedule.message,
@@ -762,26 +599,17 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get scheduled messages' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', description: 'Chat ID', required: true })
-    async getScheduledMessages(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string
-    ) {
+    @ApiResponse({ type: Object })
+    async getScheduledMessages(@Param('mobile') mobile: string, @Query('chatId') chatId: string) {
         return this.telegramService.getScheduledMessages(mobile, chatId);
     }
 
-    // Enhanced Media Operations
     @Post('media/voice/:mobile')
     @ApiOperation({ summary: 'Send voice message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async sendVoiceMessage(
-        @Param('mobile') mobile: string,
-        @Body() voice: {
-            chatId: string;
-            url: string;
-            duration?: number;
-            caption?: string;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { chatId: { type: 'string' }, url: { type: 'string' }, duration: { type: 'number' }, caption: { type: 'string' } } } })
+    @ApiResponse({ type: Object })
+    async sendVoiceMessage(@Param('mobile') mobile: string, @Body() voice: { chatId: string; url: string; duration?: number; caption?: string }) {
         return this.telegramService.sendVoiceMessage(mobile, voice);
     }
 
@@ -804,18 +632,9 @@ export class TelegramController {
             required: ['chatId', 'sourceType']
         }
     })
-    @UseInterceptors(FileInterceptor('binaryData', {
-        storage: multer.memoryStorage()
-    }))
-    @ApiResponse({ status: 200, description: 'View once media sent successfully' })
-    @ApiResponse({ status: 400, description: 'Failed to send view once media' })
-    async sendViewOnceMedia(
-        @Param('mobile') mobile: string,
-        @UploadedFile() file: Express.Multer.File,
-        @Body() viewOnceDto: ViewOnceMediaDto
-    ) {
-
-        // Handle file upload case
+    @UseInterceptors(FileInterceptor('binaryData', { storage: multer.memoryStorage() }))
+    @ApiResponse({ type: Object })
+    async sendViewOnceMedia(@Param('mobile') mobile: string, @UploadedFile() file: Express.Multer.File, @Body() viewOnceDto: ViewOnceMediaDto) {
         if (viewOnceDto.sourceType === MediaSourceType.BINARY && file) {
             return this.telegramService.sendViewOnceMedia(mobile, {
                 chatId: viewOnceDto.chatId,
@@ -825,8 +644,6 @@ export class TelegramController {
                 filename: viewOnceDto.filename || file.originalname
             });
         }
-
-        // Handle JSON payload case (URL or base64)
         return this.telegramService.sendViewOnceMedia(mobile, {
             chatId: viewOnceDto.chatId,
             sourceType: viewOnceDto.sourceType,
@@ -837,19 +654,14 @@ export class TelegramController {
         });
     }
 
-    // Advanced Chat Operations
     @Get('chat/history/:mobile')
     @ApiOperation({ summary: 'Get chat history with metadata' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
     @ApiQuery({ name: 'offset', required: false, type: Number })
     @ApiQuery({ name: 'limit', required: false, type: Number })
-    async getChatHistory(
-        @Param('mobile') mobile: string,
-        @Query('chatId') chatId: string,
-        @Query('offset') offset?: number,
-        @Query('limit') limit?: number
-    ) {
+    @ApiResponse({ type: Object })
+    async getChatHistory(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('offset') offset?: number, @Query('limit') limit?: number) {
         return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
     }
 
@@ -857,44 +669,26 @@ export class TelegramController {
     @ApiOperation({ summary: 'Promote members to admin' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: AdminOperationDto })
-    async promoteToAdmin(
-        @Param('mobile') mobile: string,
-        @Body() adminOp: AdminOperationDto
-    ) {
-        return this.telegramService.promoteToAdmin(
-            mobile,
-            adminOp.groupId,
-            adminOp.userId,
-            adminOp.permissions,
-            adminOp.rank
-        );
+    @ApiResponse({ type: Object })
+    async promoteToAdmin(@Param('mobile') mobile: string, @Body() adminOp: AdminOperationDto) {
+        return this.telegramService.promoteToAdmin(mobile, adminOp.groupId, adminOp.userId, adminOp.permissions, adminOp.rank);
     }
 
     @Post('group/admin/demote/:mobile')
     @ApiOperation({ summary: 'Demote admin to regular member' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: GroupMemberOperationDto })
-    async demoteAdmin(
-        @Param('mobile') mobile: string,
-        @Body() memberOp: GroupMemberOperationDto
-    ) {
-        return this.telegramService.demoteAdmin(
-            mobile,
-            memberOp.groupId,
-            memberOp.members[0]
-        );
+    @ApiResponse({ type: Object })
+    async demoteAdmin(@Param('mobile') mobile: string, @Body() memberOp: GroupMemberOperationDto) {
+        return this.telegramService.demoteAdmin(mobile, memberOp.groupId, memberOp.members[0]);
     }
 
     @Post('group/unblock/:mobile')
     @ApiOperation({ summary: 'Unblock a user in a group' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async unblockGroupUser(
-        @Param('mobile') mobile: string,
-        @Body() data: {
-            groupId: string;
-            userId: string;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { groupId: { type: 'string' }, userId: { type: 'string' } } } })
+    @ApiResponse({ type: Object })
+    async unblockGroupUser(@Param('mobile') mobile: string, @Body() data: { groupId: string; userId: string }) {
         return this.telegramService.unblockGroupUser(mobile, data.groupId, data.userId);
     }
 
@@ -902,10 +696,8 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get list of group admins' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
-    async getGroupAdmins(
-        @Param('mobile') mobile: string,
-        @Query('groupId') groupId: string
-    ) {
+    @ApiResponse({ type: Object })
+    async getGroupAdmins(@Param('mobile') mobile: string, @Query('groupId') groupId: string) {
         return this.telegramService.getGroupAdmins(mobile, groupId);
     }
 
@@ -913,29 +705,18 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get list of banned users in a group' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
-    async getGroupBannedUsers(
-        @Param('mobile') mobile: string,
-        @Query('groupId') groupId: string
-    ) {
+    @ApiResponse({ type: Object })
+    async getGroupBannedUsers(@Param('mobile') mobile: string, @Query('groupId') groupId: string) {
         return this.telegramService.getGroupBannedUsers(mobile, groupId);
     }
 
-    // Advanced Contact Management
     @Post('contacts/export/:mobile')
     @ApiOperation({ summary: 'Export contacts in vCard or CSV format' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ContactExportImportDto })
-    async exportContacts(
-        @Param('mobile') mobile: string,
-        @Body() exportDto: ContactExportImportDto,
-        @Res() res: Response
-    ) {
-        const data = await this.telegramService.exportContacts(
-            mobile,
-            exportDto.format,
-            exportDto.includeBlocked
-        );
-
+    @ApiResponse({ type: Object })
+    async exportContacts(@Param('mobile') mobile: string, @Body() exportDto: ContactExportImportDto, @Res() res: Response) {
+        const data = await this.telegramService.exportContacts(mobile, exportDto.format, exportDto.includeBlocked);
         const filename = `contacts_${mobile}_${new Date().toISOString()}.${exportDto.format}`;
         res.setHeader('Content-Type', exportDto.format === 'vcard' ? 'text/vcard' : 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -945,10 +726,9 @@ export class TelegramController {
     @Post('contacts/import/:mobile')
     @ApiOperation({ summary: 'Import contacts from a list' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async importContacts(
-        @Param('mobile') mobile: string,
-        @Body() contacts: { firstName: string; lastName?: string; phone: string }[]
-    ) {
+    @ApiBody({ schema: { type: 'array', items: { type: 'object', properties: { firstName: { type: 'string' }, lastName: { type: 'string' }, phone: { type: 'string' } } } } })
+    @ApiResponse({ type: Object })
+    async importContacts(@Param('mobile') mobile: string, @Body() contacts: { firstName: string; lastName?: string; phone: string }[]) {
         return this.telegramService.importContacts(mobile, contacts);
     }
 
@@ -956,40 +736,32 @@ export class TelegramController {
     @ApiOperation({ summary: 'Manage blocked contacts' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: ContactBlockListDto })
-    async manageBlockList(
-        @Param('mobile') mobile: string,
-        @Body() blockList: ContactBlockListDto
-    ) {
-        return this.telegramService.manageBlockList(
-            mobile,
-            blockList.userIds,
-            blockList.block
-        );
+    @ApiResponse({ type: Object })
+    async manageBlockList(@Param('mobile') mobile: string, @Body() blockList: ContactBlockListDto) {
+        return this.telegramService.manageBlockList(mobile, blockList.userIds, blockList.block);
     }
 
     @Get('contacts/statistics/:mobile')
     @ApiOperation({ summary: 'Get contact activity statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ status: 200, description: 'Contact statistics retrieved successfully' })
+    @ApiResponse({ type: Object })
     async getContactStatistics(@Param('mobile') mobile: string) {
         return this.telegramService.getContactStatistics(mobile);
     }
 
-    // Chat Folder Management
     @Post('folders/create/:mobile')
     @ApiOperation({ summary: 'Create a new chat folder' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: CreateChatFolderDto })
-    async createChatFolder(
-        @Param('mobile') mobile: string,
-        @Body() folder: CreateChatFolderDto
-    ) {
+    @ApiResponse({ type: Object })
+    async createChatFolder(@Param('mobile') mobile: string, @Body() folder: CreateChatFolderDto) {
         return this.telegramService.createChatFolder(mobile, folder);
     }
 
     @Get('folders/:mobile')
     @ApiOperation({ summary: 'Get all chat folders' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async getChatFolders(@Param('mobile') mobile: string) {
         return this.telegramService.getChatFolders(mobile);
     }
@@ -997,63 +769,34 @@ export class TelegramController {
     @Put('messages/:mobile')
     @ApiOperation({ summary: 'Edit message' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async editMessage(
-        @Param('mobile') mobile: string,
-        @Body() options: {
-            chatId: string;
-            messageId: number;
-            text?: string;
-            media?: {
-                type: 'photo' | 'video' | 'document';
-                url: string;
-            };
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { chatId: { type: 'string' }, messageId: { type: 'number' }, text: { type: 'string' }, media: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' } } } } } })
+    @ApiResponse({ type: Object })
+    async editMessage(@Param('mobile') mobile: string, @Body() options: { chatId: string; messageId: number; text?: string; media?: { type: 'photo' | 'video' | 'document'; url: string } }) {
         return this.telegramService.editMessage(mobile, options);
     }
 
     @Post('chat/settings/:mobile')
     @ApiOperation({ summary: 'Update chat settings' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async updateChatSettings(
-        @Param('mobile') mobile: string,
-        @Body() settings: {
-            chatId: string;
-            title?: string;
-            about?: string;
-            photo?: string;
-            slowMode?: number;
-            linkedChat?: string;
-            defaultSendAs?: string;
-            username?: string;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { chatId: { type: 'string' }, title: { type: 'string' }, about: { type: 'string' }, photo: { type: 'string' }, slowMode: { type: 'number' }, linkedChat: { type: 'string' }, defaultSendAs: { type: 'string' }, username: { type: 'string' } } } })
+    @ApiResponse({ type: Object })
+    async updateChatSettings(@Param('mobile') mobile: string, @Body() settings: { chatId: string; title?: string; about?: string; photo?: string; slowMode?: number; linkedChat?: string; defaultSendAs?: string; username?: string }) {
         return this.telegramService.updateChatSettings(mobile, settings);
     }
 
     @Post('media/batch/:mobile')
     @ApiOperation({ summary: 'Send multiple media files in batch' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async sendMediaBatch(
-        @Param('mobile') mobile: string,
-        @Body() options: {
-            chatId: string;
-            media: Array<{
-                type: 'photo' | 'video' | 'document';
-                url: string;
-                caption?: string;
-                fileName?: string;
-            }>;
-            silent?: boolean;
-            scheduleDate?: number;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { chatId: { type: 'string' }, media: { type: 'array', items: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' }, caption: { type: 'string' }, fileName: { type: 'string' } } } }, silent: { type: 'boolean' }, scheduleDate: { type: 'number' } } } })
+    @ApiResponse({ type: Object })
+    async sendMediaBatch(@Param('mobile') mobile: string, @Body() options: { chatId: string; media: Array<{ type: 'photo' | 'video' | 'document'; url: string; caption?: string; fileName?: string }>; silent?: boolean; scheduleDate?: number }) {
         return this.telegramService.sendMediaBatch(mobile, options);
     }
 
     @Get('security/2fa-status/:mobile')
     @ApiOperation({ summary: 'Check if 2FA password is set' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async hasPassword(@Param('mobile') mobile: string) {
         return this.telegramService.hasPassword(mobile);
     }
@@ -1061,51 +804,39 @@ export class TelegramController {
     @Get('chats/:mobile')
     @ApiOperation({ summary: 'Get chats with advanced filtering' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async getChats(
-        @Param('mobile') mobile: string,
-        @Query('limit') limit?: number,
-        @Query('offsetDate') offsetDate?: number,
-        @Query('offsetId') offsetId?: number,
-        @Query('offsetPeer') offsetPeer?: string,
-        @Query('folderId') folderId?: number
-    ) {
-        return this.telegramService.getChats(mobile, {
-            limit,
-            offsetDate,
-            offsetId,
-            offsetPeer,
-            folderId
-        });
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'offsetDate', required: false, type: Number })
+    @ApiQuery({ name: 'offsetId', required: false, type: Number })
+    @ApiQuery({ name: 'offsetPeer', required: false, type: String })
+    @ApiQuery({ name: 'folderId', required: false, type: Number })
+    @ApiResponse({ type: Object })
+    async getChats(@Param('mobile') mobile: string, @Query('limit') limit?: number, @Query('offsetDate') offsetDate?: number, @Query('offsetId') offsetId?: number, @Query('offsetPeer') offsetPeer?: string, @Query('folderId') folderId?: number) {
+        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId });
     }
 
     @Get('file/url/:mobile')
     @ApiOperation({ summary: 'Get downloadable URL for a file' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async getFileUrl(
-        @Param('mobile') mobile: string,
-        @Query('url') url: string,
-        @Query('filename') filename: string
-    ): Promise<string> {
+    @ApiQuery({ name: 'url', required: true })
+    @ApiQuery({ name: 'filename', required: true })
+    @ApiResponse({ type: String })
+    async getFileUrl(@Param('mobile') mobile: string, @Query('url') url: string, @Query('filename') filename: string): Promise<string> {
         return this.telegramService.getFileUrl(mobile, url, filename);
     }
 
     @Get('messages/stats/:mobile')
     @ApiOperation({ summary: 'Get message statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    async getMessageStats(
-        @Param('mobile') mobile: string,
-        @Body() options: {
-            chatId: string;
-            period: 'day' | 'week' | 'month';
-            fromDate?: Date;
-        }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { chatId: { type: 'string' }, period: { type: 'string', enum: ['day', 'week', 'month'] }, fromDate: { type: 'string', format: 'date-time' } } } })
+    @ApiResponse({ type: Object })
+    async getMessageStats(@Param('mobile') mobile: string, @Body() options: { chatId: string; period: 'day' | 'week' | 'month'; fromDate?: Date }) {
         return this.telegramService.getMessageStats(mobile, options);
     }
 
     @Get('chats/top-private/:mobile')
     @ApiOperation({ summary: 'Get top 5 private chats with detailed statistics' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiResponse({ type: Object })
     async getTopPrivateChats(@Param('mobile') mobile: string) {
         return this.telegramService.getTopPrivateChats(mobile);
     }
@@ -1113,50 +844,18 @@ export class TelegramController {
     @Post('bots/add-to-channel/:mobile')
     @ApiOperation({ summary: 'Add bots to channel with admin privileges' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                channelIds: {
-                    type: 'array',
-                    items: {
-                        type: 'string'
-                    },
-                    description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.'
-                }
-            }
-        }
-    })
-    @ApiResponse({ status: 200, description: 'Bots added to channels successfully' })
-    async addBotsToChannel(
-        @Param('mobile') mobile: string,
-        @Body() body: { channelIds?: string[] }
-    ) {
+    @ApiBody({ schema: { type: 'object', properties: { channelIds: { type: 'array', items: { type: 'string' }, description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.' } } } })
+    @ApiResponse({ type: Object })
+    async addBotsToChannel(@Param('mobile') mobile: string, @Body() body: { channelIds?: string[] }) {
         return this.telegramService.addBotsToChannel(mobile, body.channelIds);
     }
 
-    //Create bot endpoints
     @Post('bot/create/:mobile')
     @ApiOperation({ summary: 'Create a new bot using BotFather' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiBody({ type: CreateBotDto })
-    @ApiResponse({
-        status: 201,
-        description: 'Bot created successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                botToken: { type: 'string', description: 'The token to access HTTP Bot API' },
-                username: { type: 'string', description: 'The username of the created bot' }
-            }
-        }
-    })
-    @ApiResponse({ status: 400, description: 'Bad Request - Invalid bot details' })
-    @ApiResponse({ status: 401, description: 'Unauthorized - Client not connected' })
-    async createBot(
-        @Param('mobile') mobile: string,
-        @Body() createBotDto: CreateBotDto
-    ) {
+    @ApiResponse({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } })
+    async createBot(@Param('mobile') mobile: string, @Body() createBotDto: CreateBotDto) {
         return this.telegramService.createBot(mobile, createBotDto);
     }
 }

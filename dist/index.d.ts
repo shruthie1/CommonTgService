@@ -5,6 +5,8 @@ export * from './components';
 export * from './utils';
 export * from './middlewares';
 export * from './guards';
+export * from './interceptors';
+export * from './decorators';
 export * from './interfaces/telegram';
 export * from './IMap/IMap';
 export * from './features/clients';

@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const client_service_1 = require("./client.service");
 const create_client_dto_1 = require("./dto/create-client.dto");
+const client_schema_1 = require("./schemas/client.schema");
 const search_client_dto_1 = require("./dto/search-client.dto");
 const update_client_dto_1 = require("./dto/update-client.dto");
 const decorators_1 = require("../../decorators");
@@ -26,224 +27,134 @@ let ClientController = class ClientController {
         this.clientService = clientService;
     }
     async create(createClientDto) {
-        try {
-            return await this.clientService.create(createClientDto);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.create(createClientDto);
     }
     async search(query) {
-        try {
-            return await this.clientService.search(query);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.search(query);
     }
     async searchByPromoteMobile(mobile) {
-        try {
-            const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
-            return {
-                clients: result.clients,
-                matches: result.promoteMobileMatches || [],
-                searchedMobile: mobile
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+        return {
+            clients: result.clients,
+            matches: result.promoteMobileMatches || [],
+            searchedMobile: mobile,
+        };
     }
     async enhancedSearch(query) {
-        try {
-            const result = await this.clientService.enhancedSearch(query);
-            return {
-                clients: result.clients,
-                searchType: result.searchType,
-                promoteMobileMatches: result.promoteMobileMatches,
-                totalResults: result.clients.length
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.enhancedSearch(query);
+        return {
+            clients: result.clients,
+            searchType: result.searchType,
+            promoteMobileMatches: result.promoteMobileMatches,
+            totalResults: result.clients.length,
+        };
     }
     async updateClient(clientId) {
         this.clientService.updateClient(clientId);
-        return "Update client initiated";
+        return 'Update client initiated';
     }
     async findAllMasked() {
-        try {
-            return await this.clientService.findAllMasked();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findAllMasked();
     }
     async findOneMasked(clientId) {
-        try {
-            return await this.clientService.findOneMasked(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findOneMasked(clientId);
     }
     async findAll() {
-        try {
-            return await this.clientService.findAll();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findAll();
     }
     async syncNpoint() {
-        try {
-            await this.clientService.checkNpoint();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        await this.clientService.checkNpoint();
     }
     async findOne(clientId) {
-        try {
-            return await this.clientService.findOne(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.findOne(clientId);
     }
     async update(clientId, updateClientDto) {
-        try {
-            return await this.clientService.update(clientId, updateClientDto);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.update(clientId, updateClientDto);
     }
     async remove(clientId) {
-        try {
-            return await this.clientService.remove(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.remove(clientId);
     }
     async executeQuery(requestBody) {
         const { query, sort, limit, skip } = requestBody;
-        try {
-            return await this.clientService.executeQuery(query, sort, limit, skip);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.executeQuery(query, sort, limit, skip);
     }
     async addPromoteMobile(clientId, body) {
         return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
     }
     async removePromoteMobile(clientId, body) {
-        try {
-            return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
     }
     async getClientIpInfo(clientId) {
-        try {
-            const client = await this.clientService.findOne(clientId);
-            const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-            const result = {
-                clientId,
-                mobiles: {
-                    mainMobile: undefined,
-                    promoteMobiles: []
-                },
-                needingAssignment
+        const client = await this.clientService.findOne(clientId);
+        const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+        const result = {
+            clientId,
+            mobiles: {
+                mainMobile: undefined,
+                promoteMobiles: [],
+            },
+            needingAssignment,
+        };
+        if (client.mobile) {
+            const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
+            const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
+            result.mobiles.mainMobile = {
+                mobile: client.mobile,
+                hasIp,
+                ipAddress: ipAddress || undefined,
             };
-            if (client.mobile) {
-                const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
-                const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
-                result.mobiles.mainMobile = {
-                    mobile: client.mobile,
-                    hasIp,
-                    ipAddress: ipAddress || undefined
-                };
-            }
-            const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
-            for (const mobile of promoteMobiles) {
-                const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
-                const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
-                result.mobiles.promoteMobiles.push({
-                    mobile,
-                    hasIp,
-                    ipAddress: ipAddress || undefined
-                });
-            }
-            return result;
         }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
+            const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
+            result.mobiles.promoteMobiles.push({
+                mobile,
+                hasIp,
+                ipAddress: ipAddress || undefined,
+            });
         }
+        return result;
     }
     async getIpForMobile(mobile, clientId) {
-        try {
-            const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
-            return {
-                mobile,
-                ipAddress,
-                hasAssignment: ipAddress !== null
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
+        return {
+            mobile,
+            ipAddress,
+            hasAssignment: ipAddress !== null,
+        };
     }
     async autoAssignIpsToClient(clientId) {
-        try {
-            const result = await this.clientService.autoAssignIpsToClient(clientId);
-            return {
-                success: true,
-                message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
-                data: result
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.autoAssignIpsToClient(clientId);
+        return {
+            success: true,
+            message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
+            data: result,
+        };
     }
     async getMobilesNeedingIpAssignment(clientId) {
-        try {
-            const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-            const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
-            return {
-                clientId,
-                mobilesNeedingIps,
-                summary: {
-                    totalNeedingAssignment,
-                    mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
-                    promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
-                }
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+        const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
+        return {
+            clientId,
+            mobilesNeedingIps,
+            summary: {
+                totalNeedingAssignment,
+                mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
+                promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length,
+            },
+        };
     }
     async releaseIpFromMobile(mobile) {
-        try {
-            return await this.clientService.releaseIpFromMobile(mobile);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.releaseIpFromMobile(mobile);
     }
 };
 exports.ClientController = ClientController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'The user data has been successfully created.' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
+    (0, swagger_1.ApiBody)({ type: create_client_dto_1.CreateClientDto }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully created.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
@@ -256,7 +167,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
     (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
     (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Matching user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'Matching user data returned successfully.', type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
@@ -266,7 +177,17 @@ __decorate([
     (0, common_1.Get)('search/promote-mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients with matching promote mobiles returned successfully.' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Clients with matching promote mobiles returned successfully.',
+        type: Object,
+        schema: {
+            properties: {
+                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
+                matches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
+                searchedMobile: { type: 'string' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Query)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -277,7 +198,18 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
     (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
     (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Enhanced search results with promote mobile context.' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Enhanced search results with promote mobile context.',
+        type: Object,
+        schema: {
+            properties: {
+                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
+                searchType: { type: 'string' },
+                promoteMobileMatches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
+                totalResults: { type: 'number' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -286,6 +218,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateClient/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'Return the user data.', type: String }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -296,7 +230,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -305,8 +239,9 @@ __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data with masked fields by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -317,7 +252,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -325,8 +260,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('sync-npoint'),
     (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients synchronized successfully with npoint.' }),
-    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error during synchronization.' }),
+    (0, swagger_1.ApiResponse)({ description: 'Clients synchronized successfully with npoint.' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -334,8 +268,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data returned successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -344,8 +278,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'The user data has been successfully updated.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({ type: update_client_dto_1.UpdateClientDto }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully updated.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -355,8 +290,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'The user data has been successfully deleted.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully deleted.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -365,9 +300,17 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Query executed successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query.' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { query: { type: 'object' }, sort: { type: 'object' }, limit: { type: 'number' }, skip: { type: 'number' } } } }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                query: { type: 'object' },
+                sort: { type: 'object' },
+                limit: { type: 'number' },
+                skip: { type: 'number' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -377,9 +320,14 @@ __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/add'),
     (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number assigned as promote mobile successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                mobileNumber: { type: 'string', example: '916265240911' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Mobile number assigned as promote mobile successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -390,9 +338,14 @@ __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/remove'),
     (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Promote mobile assignment removed successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                mobileNumber: { type: 'string', example: '916265240911' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Promote mobile assignment removed successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -403,7 +356,46 @@ __decorate([
     (0, common_1.Get)(':clientId/ip-info'),
     (0, swagger_1.ApiOperation)({ summary: 'Get IP assignment information for a client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP information retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP information retrieved successfully',
+        type: Object,
+        schema: {
+            properties: {
+                clientId: { type: 'string' },
+                mobiles: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: {
+                            type: 'object',
+                            properties: {
+                                mobile: { type: 'string' },
+                                hasIp: { type: 'boolean' },
+                                ipAddress: { type: 'string' },
+                            },
+                        },
+                        promoteMobiles: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    mobile: { type: 'string' },
+                                    hasIp: { type: 'boolean' },
+                                    ipAddress: { type: 'string' },
+                                },
+                            },
+                        },
+                    },
+                },
+                needingAssignment: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: { type: 'string' },
+                        promoteMobiles: { type: 'array', items: { type: 'string' } },
+                    },
+                },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -414,7 +406,17 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get IP address for a specific mobile number' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID for context' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP address retrieved successfully',
+        type: Object,
+        schema: {
+            properties: {
+                mobile: { type: 'string' },
+                ipAddress: { type: 'string', nullable: true },
+                hasAssignment: { type: 'boolean' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -425,8 +427,17 @@ __decorate([
     (0, common_1.Post)(':clientId/auto-assign-ips'),
     (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (Simplified System)' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Assignment failed' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IPs assigned successfully',
+        type: Object,
+        schema: {
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                data: { type: 'object' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -436,7 +447,30 @@ __decorate([
     (0, common_1.Get)(':clientId/mobiles-needing-ips'),
     (0, swagger_1.ApiOperation)({ summary: 'Get mobile numbers that need IP assignment' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile numbers needing IP assignment' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Mobile numbers needing IP assignment',
+        type: Object,
+        schema: {
+            properties: {
+                clientId: { type: 'string' },
+                mobilesNeedingIps: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: { type: 'string' },
+                        promoteMobiles: { type: 'array', items: { type: 'string' } },
+                    },
+                },
+                summary: {
+                    type: 'object',
+                    properties: {
+                        totalNeedingAssignment: { type: 'number' },
+                        mainMobileNeedsIp: { type: 'boolean' },
+                        promoteMobilesNeedingIp: { type: 'number' },
+                    },
+                },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -446,7 +480,16 @@ __decorate([
     (0, common_1.Delete)('mobile/:mobile/ip'),
     (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number to release IP from' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP released successfully',
+        type: Object,
+        schema: {
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),

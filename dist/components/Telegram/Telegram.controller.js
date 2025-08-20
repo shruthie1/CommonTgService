@@ -65,11 +65,7 @@ let TelegramController = class TelegramController {
         this.telegramService = telegramService;
     }
     async connect(mobile, autoDisconnect, handler, timeout) {
-        const options = {
-            autoDisconnect,
-            handler,
-            timeout
-        };
+        const options = { autoDisconnect, handler, timeout };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
@@ -175,9 +171,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.terminateSession(mobile, data);
     }
     async getConnectionStatus() {
-        return {
-            status: await this.telegramService.getConnectionStatus()
-        };
+        return { status: await this.telegramService.getConnectionStatus() };
     }
     async getCallLogStats(mobile) {
         return this.telegramService.getCallLog(mobile);
@@ -186,7 +180,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
     }
     async getContacts(mobile) {
-        return await this.telegramService.getContacts(mobile);
+        return this.telegramService.getContacts(mobile);
     }
     async sendMedia(mobile, sendMediaDto) {
         const client = await connection_manager_1.connectionManager.getClient(mobile);
@@ -360,13 +354,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.hasPassword(mobile);
     }
     async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId) {
-        return this.telegramService.getChats(mobile, {
-            limit,
-            offsetDate,
-            offsetId,
-            offsetPeer,
-            folderId
-        });
+        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId });
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -392,8 +380,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully connected' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Connection failed' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('autoDisconnect')),
     __param(2, (0, common_1.Query)('handler')),
@@ -406,7 +393,7 @@ __decorate([
     (0, common_1.Get)('disconnect/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect from Telegram' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully disconnected' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -415,7 +402,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('disconnect-all'),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect all clients' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All clients disconnected successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -423,7 +410,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('connection/stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get connection statistics' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatsDto }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatsDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", connection_management_dto_1.ConnectionStatsDto)
@@ -432,8 +419,7 @@ __decorate([
     (0, common_1.Get)('connection/state/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get connection state for a client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found' }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatusDto }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -442,7 +428,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('connection/count'),
     (0, swagger_1.ApiOperation)({ summary: 'Get active connection count' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Number of active connections' }),
+    (0, swagger_1.ApiResponse)({ type: Number }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Number)
@@ -451,7 +437,7 @@ __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Profile retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -462,7 +448,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get Entity profile' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiParam)({ name: 'entity', description: 'Entity identifier', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Entity retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Param)('entity')),
     __metadata("design:type", Function),
@@ -474,6 +460,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.UpdateProfileDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -485,6 +472,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Set profile photo' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ProfilePhotoDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -495,6 +483,7 @@ __decorate([
     (0, common_1.Delete)('profile/photos/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete all profile photos' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -506,6 +495,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('limit')),
@@ -516,12 +506,9 @@ __decorate([
 __decorate([
     (0, common_1.Post)('message/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send a Telegram message as a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user account to send the message from',
-        required: true,
-        example: '1234567890',
-    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true }),
+    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendMessageDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -533,6 +520,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Forward messages' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ForwardBatchDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -544,6 +532,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Process operations in batches' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.BatchProcessDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -552,17 +541,10 @@ __decorate([
 ], TelegramController.prototype, "processBatchMessages", null);
 __decorate([
     (0, common_1.Get)('messages/search/:mobile'),
-    (0, swagger_1.ApiOperation)({
-        summary: 'Search messages in Telegram',
-        description: 'Search for messages in a specific chat or globally across all chats'
-    }),
-    (0, swagger_1.ApiOkResponse)({
-        description: 'Messages successfully found',
-        type: message_search_dto_1.SearchMessagesResponseDto
-    }),
-    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid request parameters' }),
-    (0, swagger_1.ApiNotFoundResponse)({ description: 'Mobile number not registered' }),
-    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Unauthorized access' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search messages in Telegram', description: 'Search for messages in a specific chat or globally across all chats' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ type: message_search_dto_1.SearchMessagesDto }),
+    (0, swagger_1.ApiResponse)({ type: message_search_dto_1.SearchMessagesResponseDto }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -574,6 +556,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get channel information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'includeIds', required: false, type: Boolean }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('includeIds')),
     __metadata("design:type", Function),
@@ -586,6 +569,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'channel', description: 'Channel username or ID', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'fromChatId', description: 'Source chat ID to forward messages from', required: false }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('channel')),
     __param(2, (0, common_1.Query)('fromChatId')),
@@ -598,6 +582,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Leave channel' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'channel', description: 'Channel ID/username', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('channel')),
     __metadata("design:type", Function),
@@ -607,12 +592,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('username/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update the Telegram username of a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user whose username should be updated',
-        required: true,
-        example: '1234567890',
-    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user whose username should be updated', required: true }),
+    (0, swagger_1.ApiBody)({ type: update_username_dto_1.UpdateUsernameDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -623,6 +605,7 @@ __decorate([
     (0, common_1.Post)('2fa/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Setup two-factor authentication' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -632,6 +615,7 @@ __decorate([
     (0, common_1.Post)('privacy/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update privacy settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -642,6 +626,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update multiple privacy settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.PrivacySettingsDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -652,7 +637,7 @@ __decorate([
     (0, common_1.Get)('sessions/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get active sessions' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Active sessions retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -662,7 +647,7 @@ __decorate([
     (0, common_1.Delete)('sessions/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Terminate other sessions' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Other sessions terminated successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -672,7 +657,7 @@ __decorate([
     (0, common_1.Post)('sessions/new/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'New session created successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -682,6 +667,7 @@ __decorate([
     (0, common_1.Get)('session/info/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get session information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -691,6 +677,8 @@ __decorate([
     (0, common_1.Post)('session/terminate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Terminate specific session' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { hash: { type: 'string' }, type: { type: 'string', enum: ['app', 'web'] }, exceptCurrent: { type: 'boolean' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -700,7 +688,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('monitoring/status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get service health and connection status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatusDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -709,6 +697,7 @@ __decorate([
     (0, common_1.Get)('monitoring/calllog/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get call log statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -719,7 +708,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Add multiple contacts in bulk' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AddContactsDto }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contacts added successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -730,7 +719,7 @@ __decorate([
     (0, common_1.Get)('contacts/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all contacts' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contacts retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -741,6 +730,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Send media message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -753,6 +743,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'messageId', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('messageId')),
@@ -766,6 +757,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Send media album (multiple photos/videos)' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaAlbumDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -783,6 +775,8 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'all', required: false, type: Boolean }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('types')),
@@ -807,7 +801,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of media items to fetch' }),
     (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' }),
     (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: [metadata_operations_dto_1.MediaMetadataDto] }),
+    (0, swagger_1.ApiResponse)({ type: [metadata_operations_dto_1.MediaMetadataDto] }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('types')),
@@ -825,6 +819,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get group members' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -836,6 +831,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Block a chat/user' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat/User ID to block', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __metadata("design:type", Function),
@@ -845,23 +841,14 @@ __decorate([
 __decorate([
     (0, common_1.Delete)('chat/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete or clear a chat history for a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user whose chat should be deleted',
-        required: true,
-        example: '1234567890',
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'peer',
-        description: 'Username or Peer ID of the chat to delete',
-        required: true,
-        example: 'someusername',
-    }),
-    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId', example: 100000 }),
-    (0, swagger_1.ApiQuery)({ name: 'justClear', required: false, description: 'Only clear history for this user', example: false }),
-    (0, swagger_1.ApiQuery)({ name: 'revoke', required: false, description: 'Delete for everyone if possible', example: true }),
-    (0, swagger_1.ApiQuery)({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)', example: 1609459200 }),
-    (0, swagger_1.ApiQuery)({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)', example: 1612137600 }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user whose chat should be deleted', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'peer', description: 'Username or Peer ID of the chat to delete', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId' }),
+    (0, swagger_1.ApiQuery)({ name: 'justClear', required: false, description: 'Only clear history for this user', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'revoke', required: false, description: 'Delete for everyone if possible', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)' }),
+    (0, swagger_1.ApiQuery)({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -875,6 +862,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'message', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'url', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('message')),
@@ -890,6 +878,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 }),
     (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 }),
     (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('offsetId')),
@@ -902,7 +891,7 @@ __decorate([
     (0, common_1.Get)('last-active/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get last active time' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Last active time retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -913,6 +902,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new group with advanced options' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.createGroupDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -924,6 +914,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update group settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupSettingsDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -935,6 +926,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Add members to a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -946,6 +938,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remove members from a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -957,6 +950,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Promote or demote group admins' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AdminOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -968,6 +962,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Clean up chat history' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ChatCleanupDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -992,6 +987,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Schedule a message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ScheduleMessageDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1003,6 +999,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get scheduled messages' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __metadata("design:type", Function),
@@ -1013,6 +1010,8 @@ __decorate([
     (0, common_1.Post)('media/voice/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send voice message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, url: { type: 'string' }, duration: { type: 'number' }, caption: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1039,11 +1038,8 @@ __decorate([
             required: ['chatId', 'sourceType']
         }
     }),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('binaryData', {
-        storage: multer.memoryStorage()
-    })),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'View once media sent successfully' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Failed to send view once media' }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('binaryData', { storage: multer.memoryStorage() })),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.UploadedFile)()),
     __param(2, (0, common_1.Body)()),
@@ -1058,6 +1054,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('offset')),
@@ -1071,6 +1068,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Promote members to admin' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AdminOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1082,6 +1080,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Demote admin to regular member' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1092,6 +1091,8 @@ __decorate([
     (0, common_1.Post)('group/unblock/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Unblock a user in a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { groupId: { type: 'string' }, userId: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1103,6 +1104,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get list of group admins' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -1114,6 +1116,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get list of banned users in a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -1125,6 +1128,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Export contacts in vCard or CSV format' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ContactExportImportDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Res)()),
@@ -1136,6 +1140,8 @@ __decorate([
     (0, common_1.Post)('contacts/import/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Import contacts from a list' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'array', items: { type: 'object', properties: { firstName: { type: 'string' }, lastName: { type: 'string' }, phone: { type: 'string' } } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1147,6 +1153,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Manage blocked contacts' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ContactBlockListDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1157,7 +1164,7 @@ __decorate([
     (0, common_1.Get)('contacts/statistics/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get contact activity statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contact statistics retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1168,6 +1175,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new chat folder' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: create_chat_folder_dto_1.CreateChatFolderDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1178,6 +1186,7 @@ __decorate([
     (0, common_1.Get)('folders/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all chat folders' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1187,6 +1196,8 @@ __decorate([
     (0, common_1.Put)('messages/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Edit message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, messageId: { type: 'number' }, text: { type: 'string' }, media: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' } } } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1197,6 +1208,8 @@ __decorate([
     (0, common_1.Post)('chat/settings/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update chat settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, title: { type: 'string' }, about: { type: 'string' }, photo: { type: 'string' }, slowMode: { type: 'number' }, linkedChat: { type: 'string' }, defaultSendAs: { type: 'string' }, username: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1207,6 +1220,8 @@ __decorate([
     (0, common_1.Post)('media/batch/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send multiple media files in batch' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, media: { type: 'array', items: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' }, caption: { type: 'string' }, fileName: { type: 'string' } } } }, silent: { type: 'boolean' }, scheduleDate: { type: 'number' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1217,6 +1232,7 @@ __decorate([
     (0, common_1.Get)('security/2fa-status/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Check if 2FA password is set' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1226,6 +1242,12 @@ __decorate([
     (0, common_1.Get)('chats/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get chats with advanced filtering' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetPeer', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('offsetDate')),
@@ -1240,6 +1262,9 @@ __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'url', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'filename', required: true }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('url')),
     __param(2, (0, common_1.Query)('filename')),
@@ -1251,6 +1276,8 @@ __decorate([
     (0, common_1.Get)('messages/stats/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get message statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, period: { type: 'string', enum: ['day', 'week', 'month'] }, fromDate: { type: 'string', format: 'date-time' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1261,6 +1288,7 @@ __decorate([
     (0, common_1.Get)('chats/top-private/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get top 5 private chats with detailed statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1270,21 +1298,8 @@ __decorate([
     (0, common_1.Post)('bots/add-to-channel/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Add bots to channel with admin privileges' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                channelIds: {
-                    type: 'array',
-                    items: {
-                        type: 'string'
-                    },
-                    description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.'
-                }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bots added to channels successfully' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { channelIds: { type: 'array', items: { type: 'string' }, description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1296,19 +1311,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new bot using BotFather' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.CreateBotDto }),
-    (0, swagger_1.ApiResponse)({
-        status: 201,
-        description: 'Bot created successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                botToken: { type: 'string', description: 'The token to access HTTP Bot API' },
-                username: { type: 'string', description: 'The username of the created bot' }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - Invalid bot details' }),
-    (0, swagger_1.ApiResponse)({ status: 401, description: 'Unauthorized - Client not connected' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),

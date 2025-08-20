@@ -84,11 +84,22 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successfully connected"
-          },
-          "400": {
-            "description": "Connection failed"
+          "default": {
+            "schema": {
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Connect to Telegram",
@@ -112,8 +123,22 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successfully disconnected"
+          "default": {
+            "schema": {
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Disconnect from Telegram",
@@ -127,8 +152,22 @@
         "operationId": "TelegramController_disconnectAll",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "All clients disconnected successfully"
+          "default": {
+            "schema": {
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Disconnect all clients",
@@ -142,7 +181,7 @@
         "operationId": "TelegramController_getConnectionStats",
         "parameters": [],
         "responses": {
-          "200": {
+          "default": {
             "description": "",
             "content": {
               "application/json": {
@@ -174,7 +213,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "default": {
             "description": "",
             "content": {
               "application/json": {
@@ -183,9 +222,6 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "Client not found"
           }
         },
         "summary": "Get connection state for a client",
@@ -199,8 +235,15 @@
         "operationId": "TelegramController_getActiveConnectionCount",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "Number of active connections"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "number"
+                }
+              }
+            }
           }
         },
         "summary": "Get active connection count",
@@ -224,8 +267,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Profile retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get current user profile",
@@ -258,8 +308,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Entity retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get Entity profile",
@@ -293,8 +350,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update profile information",
@@ -328,8 +392,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Set profile photo",
@@ -353,8 +424,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Delete all profile photos",
@@ -394,8 +472,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get chat messages",
@@ -416,9 +501,53 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "messageId": {
+                    "type": "number"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "media": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "photo",
+                          "video",
+                          "document"
+                        ]
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Edit message",
@@ -437,7 +566,6 @@
             "in": "path",
             "description": "Mobile number of the user account to send the message from",
             "schema": {
-              "example": "1234567890",
               "type": "string"
             }
           }
@@ -453,8 +581,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send a Telegram message as a user",
@@ -488,8 +623,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Forward messages",
@@ -523,8 +665,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Process operations in batches",
@@ -542,6 +691,7 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "Mobile number",
             "schema": {
               "type": "string"
             }
@@ -676,11 +826,142 @@
               "format": "date-time",
               "type": "string"
             }
+          },
+          {
+            "description": "Chat ID to search in (required for chat-specific search)",
+            "required": false,
+            "name": "chatId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Search query string",
+            "required": false,
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by multiple types options",
+            "required": false,
+            "name": "types",
+            "in": "query",
+            "schema": {
+              "default": [
+                "all",
+                "text",
+                "photo",
+                "video",
+                "voice",
+                "document",
+                "roundVideo",
+                "roundVoice",
+                "sticker",
+                "animation",
+                "contact",
+                "music",
+                "chatPhoto"
+              ],
+              "example": [
+                "text",
+                "photo"
+              ],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "text",
+                  "photo",
+                  "video",
+                  "voice",
+                  "document",
+                  "roundVideo",
+                  "roundVoice",
+                  "sticker",
+                  "animation",
+                  "contact",
+                  "music",
+                  "chatPhoto"
+                ]
+              }
+            }
+          },
+          {
+            "description": "Minimum message ID for filtering",
+            "required": false,
+            "name": "minId",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "Maximum message ID for filtering",
+            "required": false,
+            "name": "maxId",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "Maximum number of messages to retrieve",
+            "required": false,
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Offset ID for pagination",
+            "required": false,
+            "name": "offsetId",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "Offset date as Unix timestamp",
+            "required": false,
+            "name": "offsetDate",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "description": "Start date for filtering messages by date range",
+            "required": false,
+            "name": "startDate",
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "End date for filtering messages by date range",
+            "required": false,
+            "name": "endDate",
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
           }
         ],
         "responses": {
-          "200": {
-            "description": "Messages successfully found",
+          "default": {
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -688,15 +969,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid request parameters"
-          },
-          "401": {
-            "description": "Unauthorized access"
-          },
-          "404": {
-            "description": "Mobile number not registered"
           }
         },
         "summary": "Search messages in Telegram",
@@ -728,8 +1000,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get channel information",
@@ -771,8 +1050,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Forward media messages to me",
@@ -805,8 +1091,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Leave channel",
@@ -825,7 +1118,6 @@
             "in": "path",
             "description": "Mobile number of the user whose username should be updated",
             "schema": {
-              "example": "1234567890",
               "type": "string"
             }
           }
@@ -841,8 +1133,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update the Telegram username of a user",
@@ -866,8 +1165,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Setup two-factor authentication",
@@ -891,8 +1197,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update privacy settings",
@@ -926,8 +1239,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update multiple privacy settings",
@@ -951,8 +1271,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Active sessions retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get active sessions",
@@ -974,8 +1301,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Other sessions terminated successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Terminate other sessions",
@@ -999,8 +1333,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "New session created successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Create new session",
@@ -1024,8 +1365,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get session information",
@@ -1048,9 +1396,41 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hash": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "app",
+                      "web"
+                    ]
+                  },
+                  "exceptCurrent": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Terminate specific session",
@@ -1064,7 +1444,7 @@
         "operationId": "TelegramController_getConnectionStatus",
         "parameters": [],
         "responses": {
-          "200": {
+          "default": {
             "description": "",
             "content": {
               "application/json": {
@@ -1096,8 +1476,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get call log statistics",
@@ -1131,8 +1518,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Contacts added successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Add multiple contacts in bulk",
@@ -1156,8 +1550,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Contacts retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get all contacts",
@@ -1191,8 +1592,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send media message",
@@ -1232,8 +1640,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Download media from a message",
@@ -1267,8 +1682,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send media album (multiple photos/videos)",
@@ -1352,7 +1774,7 @@
           },
           {
             "name": "all",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "boolean"
@@ -1360,8 +1782,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get media metadata from a chat",
@@ -1450,7 +1879,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "default": {
             "description": "",
             "content": {
               "application/json": {
@@ -1494,8 +1923,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get group members",
@@ -1527,8 +1963,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Add members to a group",
@@ -1560,8 +2003,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Remove members from a group",
@@ -1594,8 +2044,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Block a chat/user",
@@ -1614,7 +2071,6 @@
             "in": "path",
             "description": "Mobile number of the user whose chat should be deleted",
             "schema": {
-              "example": "1234567890",
               "type": "string"
             }
           },
@@ -1624,7 +2080,6 @@
             "in": "query",
             "description": "Username or Peer ID of the chat to delete",
             "schema": {
-              "example": "someusername",
               "type": "string"
             }
           },
@@ -1634,7 +2089,6 @@
             "in": "query",
             "description": "Delete messages with ID ≤ maxId",
             "schema": {
-              "example": 100000,
               "type": "number"
             }
           },
@@ -1645,7 +2099,6 @@
             "description": "Only clear history for this user",
             "schema": {
               "default": true,
-              "example": false,
               "type": "boolean"
             }
           },
@@ -1656,7 +2109,6 @@
             "description": "Delete for everyone if possible",
             "schema": {
               "default": false,
-              "example": true,
               "type": "boolean"
             }
           },
@@ -1666,7 +2118,6 @@
             "in": "query",
             "description": "Minimum date (UNIX timestamp)",
             "schema": {
-              "example": 1609459200,
               "type": "number"
             }
           },
@@ -1676,14 +2127,20 @@
             "in": "query",
             "description": "Maximum date (UNIX timestamp)",
             "schema": {
-              "example": 1612137600,
               "type": "number"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Delete or clear a chat history for a user",
@@ -1731,8 +2188,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send message with inline button",
@@ -1786,8 +2250,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get all dialogs",
@@ -1811,8 +2282,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Last active time retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get last active time",
@@ -1846,8 +2324,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Create a new group with advanced options",
@@ -1881,8 +2366,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update group settings",
@@ -1916,8 +2408,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Promote or demote group admins",
@@ -1951,8 +2450,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Clean up chat history",
@@ -2034,8 +2540,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Schedule a message",
@@ -2068,8 +2581,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get scheduled messages",
@@ -2092,9 +2612,40 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "duration": {
+                    "type": "number"
+                  },
+                  "caption": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send voice message",
@@ -2213,11 +2764,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "View once media sent successfully"
-          },
-          "400": {
-            "description": "Failed to send view once media"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send a view once (disappearing) media message",
@@ -2265,8 +2820,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get chat history with metadata",
@@ -2300,8 +2862,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Promote members to admin",
@@ -2335,8 +2904,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Demote admin to regular member",
@@ -2359,9 +2935,34 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "groupId": {
+                    "type": "string"
+                  },
+                  "userId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Unblock a user in a group",
@@ -2394,8 +2995,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get list of group admins",
@@ -2428,8 +3036,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get list of banned users in a group",
@@ -2463,8 +3078,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Export contacts in vCard or CSV format",
@@ -2494,15 +3116,33 @@
               "schema": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "type": "object",
+                  "properties": {
+                    "firstName": {
+                      "type": "string"
+                    },
+                    "lastName": {
+                      "type": "string"
+                    },
+                    "phone": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Import contacts from a list",
@@ -2536,8 +3176,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Manage blocked contacts",
@@ -2561,8 +3208,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Contact statistics retrieved successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get contact activity statistics",
@@ -2596,8 +3250,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Create a new chat folder",
@@ -2621,8 +3282,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get all chat folders",
@@ -2645,9 +3313,52 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "about": {
+                    "type": "string"
+                  },
+                  "photo": {
+                    "type": "string"
+                  },
+                  "slowMode": {
+                    "type": "number"
+                  },
+                  "linkedChat": {
+                    "type": "string"
+                  },
+                  "defaultSendAs": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Update chat settings",
@@ -2670,9 +3381,62 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "media": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "photo",
+                            "video",
+                            "document"
+                          ]
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "caption": {
+                          "type": "string"
+                        },
+                        "fileName": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "silent": {
+                    "type": "boolean"
+                  },
+                  "scheduleDate": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Send multiple media files in batch",
@@ -2696,8 +3460,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Check if 2FA password is set",
@@ -2721,7 +3492,7 @@
           },
           {
             "name": "limit",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -2729,7 +3500,7 @@
           },
           {
             "name": "offsetDate",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -2737,7 +3508,7 @@
           },
           {
             "name": "offsetId",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -2745,7 +3516,7 @@
           },
           {
             "name": "offsetPeer",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "string"
@@ -2753,7 +3524,7 @@
           },
           {
             "name": "folderId",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -2761,8 +3532,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get chats with advanced filtering",
@@ -2802,8 +3580,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Get downloadable URL for a file",
@@ -2826,9 +3611,43 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chatId": {
+                    "type": "string"
+                  },
+                  "period": {
+                    "type": "string",
+                    "enum": [
+                      "day",
+                      "week",
+                      "month"
+                    ]
+                  },
+                  "fromDate": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get message statistics",
@@ -2852,8 +3671,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get top 5 private chats with detailed statistics",
@@ -2896,8 +3722,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Bots added to channels successfully"
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Add bots to channel with admin privileges",
@@ -2931,31 +3764,27 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Bot created successfully",
+          "default": {
+            "schema": {
+              "properties": {
+                "botToken": {
+                  "type": "string",
+                  "description": "The token to access HTTP Bot API"
+                },
+                "username": {
+                  "type": "string",
+                  "description": "The username of the created bot"
+                }
+              }
+            },
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "botToken": {
-                      "type": "string",
-                      "description": "The token to access HTTP Bot API"
-                    },
-                    "username": {
-                      "type": "string",
-                      "description": "The username of the created bot"
-                    }
-                  }
+                  "type": "object"
                 }
               }
             }
-          },
-          "400": {
-            "description": "Bad Request - Invalid bot details"
-          },
-          "401": {
-            "description": "Unauthorized - Client not connected"
           }
         },
         "summary": "Create a new bot using BotFather",
@@ -3254,11 +4083,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "The user data has been successfully created."
-          },
-          "400": {
-            "description": "Invalid input data."
+          "default": {
+            "description": "The user data has been successfully created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Create user data",
@@ -3270,8 +4103,18 @@
         "operationId": "ClientController_findAll",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "All user data returned successfully."
+          "default": {
+            "description": "All user data returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get all user data",
@@ -3430,8 +4273,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Matching user data returned successfully."
+          "default": {
+            "description": "Matching user data returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Search user data",
@@ -3455,8 +4308,42 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Clients with matching promote mobiles returned successfully."
+          "default": {
+            "description": "Clients with matching promote mobiles returned successfully.",
+            "schema": {
+              "properties": {
+                "clients": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                },
+                "matches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "clientId": {
+                        "type": "string"
+                      },
+                      "mobile": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "searchedMobile": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Search clients by promote mobile numbers",
@@ -3485,8 +4372,45 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Enhanced search results with promote mobile context."
+          "default": {
+            "description": "Enhanced search results with promote mobile context.",
+            "schema": {
+              "properties": {
+                "clients": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                },
+                "searchType": {
+                  "type": "string"
+                },
+                "promoteMobileMatches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "clientId": {
+                        "type": "string"
+                      },
+                      "mobile": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "totalResults": {
+                  "type": "number"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Enhanced search with promote mobile support",
@@ -3503,14 +4427,22 @@
             "name": "clientId",
             "required": true,
             "in": "path",
+            "description": "Client ID",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "Return the user data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Get user data by ID",
@@ -3524,8 +4456,18 @@
         "operationId": "ClientController_findAllMasked",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "All user data returned successfully."
+          "default": {
+            "description": "All user data returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get all user data with masked fields",
@@ -3542,17 +4484,25 @@
             "name": "clientId",
             "required": true,
             "in": "path",
+            "description": "Client ID",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "All user data returned successfully."
+          "default": {
+            "description": "User data returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
-        "summary": "Get all user data with masked fields",
+        "summary": "Get user data with masked fields by ID",
         "tags": [
           "Clients"
         ]
@@ -3563,11 +4513,8 @@
         "operationId": "ClientController_syncNpoint",
         "parameters": [],
         "responses": {
-          "200": {
+          "default": {
             "description": "Clients synchronized successfully with npoint."
-          },
-          "500": {
-            "description": "Internal server error during synchronization."
           }
         },
         "summary": "Sync clients with npoint service",
@@ -3584,17 +4531,22 @@
             "name": "clientId",
             "required": true,
             "in": "path",
+            "description": "Client ID",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "User data returned successfully."
-          },
-          "404": {
-            "description": "User data not found."
+          "default": {
+            "description": "User data returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Get user data by ID",
@@ -3609,6 +4561,7 @@
             "name": "clientId",
             "required": true,
             "in": "path",
+            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -3625,11 +4578,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "The user data has been successfully updated."
-          },
-          "404": {
-            "description": "User data not found."
+          "default": {
+            "description": "The user data has been successfully updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Update user data by ID",
@@ -3644,17 +4601,22 @@
             "name": "clientId",
             "required": true,
             "in": "path",
+            "description": "Client ID",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "The user data has been successfully deleted."
-          },
-          "404": {
-            "description": "User data not found."
+          "default": {
+            "description": "The user data has been successfully deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Delete user data by ID",
@@ -3691,11 +4653,8 @@
           }
         },
         "responses": {
-          "200": {
+          "default": {
             "description": "Query executed successfully."
-          },
-          "400": {
-            "description": "Invalid query."
           }
         },
         "summary": "Execute a custom MongoDB query",
@@ -3734,11 +4693,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Mobile number assigned as promote mobile successfully."
-          },
-          "404": {
-            "description": "Client not found."
+          "default": {
+            "description": "Mobile number assigned as promote mobile successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Add a mobile number as a promote mobile for a specific client",
@@ -3777,11 +4740,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Promote mobile assignment removed successfully."
-          },
-          "404": {
-            "description": "Client not found."
+          "default": {
+            "description": "Promote mobile assignment removed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
           }
         },
         "summary": "Remove a promote mobile assignment from a specific client",
@@ -3805,8 +4772,72 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "IP information retrieved successfully"
+          "default": {
+            "description": "IP information retrieved successfully",
+            "schema": {
+              "properties": {
+                "clientId": {
+                  "type": "string"
+                },
+                "mobiles": {
+                  "type": "object",
+                  "properties": {
+                    "mainMobile": {
+                      "type": "object",
+                      "properties": {
+                        "mobile": {
+                          "type": "string"
+                        },
+                        "hasIp": {
+                          "type": "boolean"
+                        },
+                        "ipAddress": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "promoteMobiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "mobile": {
+                            "type": "string"
+                          },
+                          "hasIp": {
+                            "type": "boolean"
+                          },
+                          "ipAddress": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "needingAssignment": {
+                  "type": "object",
+                  "properties": {
+                    "mainMobile": {
+                      "type": "string"
+                    },
+                    "promoteMobiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get IP assignment information for a client",
@@ -3839,8 +4870,29 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "IP address retrieved successfully"
+          "default": {
+            "description": "IP address retrieved successfully",
+            "schema": {
+              "properties": {
+                "mobile": {
+                  "type": "string"
+                },
+                "ipAddress": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "hasAssignment": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get IP address for a specific mobile number",
@@ -3862,8 +4914,25 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "IP released successfully"
+          "default": {
+            "description": "IP released successfully",
+            "schema": {
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Release IP from a mobile number",
@@ -3887,11 +4956,28 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "IPs assigned successfully"
-          },
-          "400": {
-            "description": "Assignment failed"
+          "default": {
+            "description": "IPs assigned successfully",
+            "schema": {
+              "properties": {
+                "success": {
+                  "type": "boolean"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "object"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Auto-assign IPs to all client mobile numbers (Simplified System)",
@@ -3915,8 +5001,50 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Mobile numbers needing IP assignment"
+          "default": {
+            "description": "Mobile numbers needing IP assignment",
+            "schema": {
+              "properties": {
+                "clientId": {
+                  "type": "string"
+                },
+                "mobilesNeedingIps": {
+                  "type": "object",
+                  "properties": {
+                    "mainMobile": {
+                      "type": "string"
+                    },
+                    "promoteMobiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "summary": {
+                  "type": "object",
+                  "properties": {
+                    "totalNeedingAssignment": {
+                      "type": "number"
+                    },
+                    "mainMobileNeedsIp": {
+                      "type": "boolean"
+                    },
+                    "promoteMobilesNeedingIp": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get mobile numbers that need IP assignment",
@@ -4925,10 +6053,12 @@
     },
     "/userData": {
       "post": {
+        "description": "Creates a new user data entry in the database.",
         "operationId": "UserDataController_create",
         "parameters": [],
         "requestBody": {
           "required": true,
+          "description": "User data to create",
           "content": {
             "application/json": {
               "schema": {
@@ -4939,7 +6069,17 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "User data successfully created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data."
           }
         },
         "summary": "Create user data",
@@ -4948,11 +6088,22 @@
         ]
       },
       "get": {
+        "description": "Retrieves all user data entries from the database.",
         "operationId": "UserDataController_findAll",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "List of all user data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserData"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get all user data",
@@ -4963,6 +6114,7 @@
     },
     "/userData/search": {
       "get": {
+        "description": "Searches user data based on provided query parameters.",
         "operationId": "UserDataController_search",
         "parameters": [
           {
@@ -5086,8 +6238,9 @@
             "name": "profile",
             "required": false,
             "in": "query",
-            "description": "User profile",
+            "description": "User profile identifier",
             "schema": {
+              "example": "user123",
               "type": "string"
             }
           },
@@ -5095,8 +6248,9 @@
             "name": "chatId",
             "required": false,
             "in": "query",
-            "description": "Chat ID",
+            "description": "Chat ID associated with the user",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           },
@@ -5113,7 +6267,9 @@
             "name": "banned",
             "required": false,
             "in": "query",
+            "description": "Filter for banned users",
             "schema": {
+              "example": false,
               "type": "boolean"
             }
           },
@@ -5121,14 +6277,29 @@
             "name": "isTesting",
             "required": false,
             "in": "query",
+            "description": "Filter for testing users",
             "schema": {
+              "example": true,
               "type": "boolean"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "List of matching user data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserData"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters."
           }
         },
         "summary": "Search user data",
@@ -5139,19 +6310,23 @@
     },
     "/userData/updateAll/{chatId}": {
       "patch": {
+        "description": "Updates all user data entries associated with a specific chat ID.",
         "operationId": "UserDataController_updateAll",
         "parameters": [
           {
             "name": "chatId",
             "required": true,
             "in": "path",
+            "description": "Chat ID to update user data for",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           }
         ],
         "requestBody": {
           "required": true,
+          "description": "User data fields to update",
           "content": {
             "application/json": {
               "schema": {
@@ -5162,10 +6337,23 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "User data successfully updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data."
+          },
+          "404": {
+            "description": "No user data found for the given chat ID."
           }
         },
-        "summary": "Update user data by ID",
+        "summary": "Update all user data by chat ID",
         "tags": [
           "UserData of TG clients"
         ]
@@ -5173,13 +6361,16 @@
     },
     "/userData/{profile}/{chatId}": {
       "get": {
+        "description": "Retrieves a specific user data entry by profile and chat ID.",
         "operationId": "UserDataController_findOne",
         "parameters": [
           {
             "name": "profile",
             "required": true,
             "in": "path",
+            "description": "User profile identifier",
             "schema": {
+              "example": "user123",
               "type": "string"
             }
           },
@@ -5187,29 +6378,44 @@
             "name": "chatId",
             "required": true,
             "in": "path",
+            "description": "Chat ID associated with the user",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "User data found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserData"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User data not found."
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Get user data by profile and chat ID",
         "tags": [
           "UserData of TG clients"
         ]
       },
       "patch": {
+        "description": "Updates a specific user data entry identified by profile and chat ID.",
         "operationId": "UserDataController_update",
         "parameters": [
           {
             "name": "profile",
             "required": true,
             "in": "path",
+            "description": "User profile identifier",
             "schema": {
+              "example": "user123",
               "type": "string"
             }
           },
@@ -5217,13 +6423,16 @@
             "name": "chatId",
             "required": true,
             "in": "path",
+            "description": "Chat ID associated with the user",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           }
         ],
         "requestBody": {
           "required": true,
+          "description": "User data fields to update",
           "content": {
             "application/json": {
               "schema": {
@@ -5234,22 +6443,38 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "User data successfully updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input data."
+          },
+          "404": {
+            "description": "User data not found."
           }
         },
-        "summary": "Update user data by ID",
+        "summary": "Update user data by profile and chat ID",
         "tags": [
           "UserData of TG clients"
         ]
       },
       "delete": {
+        "description": "Deletes a specific user data entry identified by profile and chat ID.",
         "operationId": "UserDataController_remove",
         "parameters": [
           {
             "name": "profile",
             "required": true,
             "in": "path",
+            "description": "User profile identifier",
             "schema": {
+              "example": "user123",
               "type": "string"
             }
           },
@@ -5257,17 +6482,29 @@
             "name": "chatId",
             "required": true,
             "in": "path",
+            "description": "Chat ID associated with the user",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "User data successfully deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserData"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User data not found."
           }
         },
-        "summary": "Delete user data by ID",
+        "summary": "Delete user data by profile and chat ID",
         "tags": [
           "UserData of TG clients"
         ]
@@ -5275,22 +6512,29 @@
     },
     "/userData/clear-count": {
       "get": {
+        "description": "Clears the count for user data, optionally filtered by chat ID.",
         "operationId": "UserDataController_clearCount",
         "parameters": [
           {
             "name": "chatId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Chat ID to clear count for",
             "schema": {
+              "example": "chat456",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Count cleared successfully."
+          },
+          "400": {
+            "description": "Invalid chat ID."
           }
         },
+        "summary": "Clear count for user data",
         "tags": [
           "UserData of TG clients"
         ]
@@ -5298,11 +6542,59 @@
     },
     "/userData/query": {
       "post": {
+        "description": "Executes a custom MongoDB query with optional sorting, limiting, and skipping.",
         "operationId": "UserDataController_executeQuery",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "MongoDB query parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "object",
+                    "description": "MongoDB query object",
+                    "example": {
+                      "profile": "user123"
+                    }
+                  },
+                  "sort": {
+                    "type": "object",
+                    "description": "Sort criteria",
+                    "example": {
+                      "createdAt": -1
+                    }
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Maximum number of results",
+                    "example": 10
+                  },
+                  "skip": {
+                    "type": "number",
+                    "description": "Number of results to skip",
+                    "example": 0
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "Query executed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters."
           }
         },
         "summary": "Execute a custom MongoDB query",
@@ -5674,8 +6966,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Create user data",
@@ -5687,8 +6986,18 @@
         "operationId": "BufferClientController_findAll",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BufferClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get all user data",
@@ -5702,69 +7011,82 @@
         "operationId": "BufferClientController_search",
         "parameters": [
           {
-            "name": "tgId",
-            "required": false,
-            "in": "query",
-            "description": "Telegram ID of the client",
-            "schema": {
-              "example": "123456789",
-              "type": "string"
-            }
-          },
-          {
             "name": "mobile",
             "required": false,
             "in": "query",
-            "description": "Mobile number of the client",
+            "description": "Mobile number to search for",
             "schema": {
-              "example": "+1234567890",
               "type": "string"
             }
           },
           {
-            "name": "availableDate",
+            "name": "clientId",
             "required": false,
             "in": "query",
-            "description": "availableDate of the bufferClient",
+            "description": "Client ID to search for",
             "schema": {
-              "example": "2023-06-22",
               "type": "string"
             }
           },
           {
-            "name": "session",
+            "name": "username",
             "required": false,
             "in": "query",
-            "description": "Session identifier",
+            "description": "Username to search for",
             "schema": {
-              "example": "session123",
               "type": "string"
             }
           },
           {
-            "name": "channels",
+            "name": "name",
             "required": false,
             "in": "query",
-            "description": "Channel Count",
+            "description": "Name to search for",
             "schema": {
-              "example": 23,
-              "type": "number"
+              "type": "string"
             }
           },
           {
-            "name": "status",
+            "name": "channelLink",
             "required": false,
             "in": "query",
-            "description": "status identifier",
+            "description": "Channel link to search for",
             "schema": {
-              "example": "active",
               "type": "string"
+            }
+          },
+          {
+            "name": "repl",
+            "required": false,
+            "in": "query",
+            "description": "Repl link to search for",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isActive",
+            "required": false,
+            "in": "query",
+            "description": "Filter by active status",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BufferClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Search user data",
@@ -5778,8 +7100,15 @@
         "operationId": "BufferClientController_updateInfo",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Update promote Clients Info",
@@ -5793,8 +7122,15 @@
         "operationId": "BufferClientController_joinChannelsforBufferClients",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Join Channels for BufferClients",
@@ -5808,8 +7144,15 @@
         "operationId": "BufferClientController_checkbufferClients",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Check Buffer Clients",
@@ -5827,14 +7170,36 @@
           "content": {
             "application/json": {
               "schema": {
+                "type": "object",
+                "properties": {
+                  "goodIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "badIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
                 "$ref": "#/components/schemas/Object"
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Add New Users to Buffer Clients",
@@ -5858,8 +7223,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Set as Buffer Client",
@@ -5876,14 +7248,22 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Get user data by ID",
@@ -5898,6 +7278,7 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
@@ -5914,8 +7295,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update user data by ID",
@@ -5930,6 +7318,7 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
@@ -5946,8 +7335,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update user data by ID",
@@ -5962,13 +7358,14 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
+          "default": {
             "description": ""
           }
         },
@@ -5993,8 +7390,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Execute a custom MongoDB query",
@@ -7060,8 +8464,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Create user data",
@@ -7083,8 +8494,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get all user data",
@@ -7160,8 +8581,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Search user data",
@@ -7175,8 +8606,15 @@
         "operationId": "PromoteClientController_joinChannelsforPromoteClients",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Join Channels for PromoteClients",
@@ -7190,8 +8628,15 @@
         "operationId": "PromoteClientController_updateInfo",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Update promote Clients Info",
@@ -7205,8 +8650,15 @@
         "operationId": "PromoteClientController_checkpromoteClients",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Check Promote Clients",
@@ -7250,8 +8702,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "summary": "Add New Users to Promote Clients",
@@ -7275,8 +8734,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Set as Promote Client",
@@ -7293,14 +8759,22 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Get user data by ID",
@@ -7315,6 +8789,7 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
@@ -7331,8 +8806,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update user data by ID",
@@ -7347,6 +8829,7 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
@@ -7363,8 +8846,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update user data by ID",
@@ -7379,13 +8869,14 @@
             "name": "mobile",
             "required": true,
             "in": "path",
+            "description": "User mobile number",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "200": {
+          "default": {
             "description": ""
           }
         },
@@ -7410,8 +8901,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Execute a custom MongoDB query",
@@ -7425,8 +8923,15 @@
         "operationId": "PromoteClientController_getPromoteClientDistribution",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "summary": "Get promote client distribution per client",
@@ -7450,8 +8955,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get promote clients by status",
@@ -7513,8 +9028,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update status of a promote client",
@@ -7554,8 +9076,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Mark a promote client as active",
@@ -7598,8 +9127,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Mark a promote client as inactive",
@@ -7664,8 +9200,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Update last used timestamp for a promote client",
@@ -7698,8 +9241,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get least recently used promote clients for a specific client",
@@ -7723,8 +9276,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Get next available promote client for a specific client",
@@ -7757,8 +9317,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get promote clients that haven't been used for a specified time period",
@@ -7782,8 +9352,32 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalClients": {
+                      "type": "number"
+                    },
+                    "neverUsed": {
+                      "type": "number"
+                    },
+                    "usedInLast24Hours": {
+                      "type": "number"
+                    },
+                    "usedInLastWeek": {
+                      "type": "number"
+                    },
+                    "averageUsageGap": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Get usage statistics for promote clients",
@@ -10270,6 +11864,121 @@
           "product"
         ]
       },
+      "Client": {
+        "type": "object",
+        "properties": {
+          "channelLink": {
+            "type": "string",
+            "example": "paid_giirl_shruthiee",
+            "description": "Channel link of the user"
+          },
+          "dbcoll": {
+            "type": "string",
+            "example": "shruthi",
+            "description": "Database collection name"
+          },
+          "link": {
+            "type": "string",
+            "example": "PaidGirl.netlify.app/Shruthi1",
+            "description": "Link of the user"
+          },
+          "name": {
+            "type": "string",
+            "example": "Shruthi Reddy",
+            "description": "Name of the user"
+          },
+          "mobile": {
+            "type": "string",
+            "example": "916265240911",
+            "description": "mobile number of the user"
+          },
+          "password": {
+            "type": "string",
+            "example": "Ajtdmwajt1@",
+            "description": "Password of the user"
+          },
+          "repl": {
+            "type": "string",
+            "example": "https://shruthi1.glitch.me",
+            "description": "Repl link of the user"
+          },
+          "promoteRepl": {
+            "type": "string",
+            "example": "https://shruthiprom0101.glitch.me",
+            "description": "Promotion Repl link of the user"
+          },
+          "session": {
+            "type": "string",
+            "example": "1BQANOTEuM==",
+            "description": "Session token"
+          },
+          "username": {
+            "type": "string",
+            "example": "ShruthiRedd2",
+            "description": "Username of the user"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "shruthi1",
+            "description": "Client ID of the user"
+          },
+          "deployKey": {
+            "type": "string",
+            "example": "https://shruthi1.glitch.me/exit",
+            "description": "Deployment key URL"
+          },
+          "mainAccount": {
+            "type": "string",
+            "example": "ShruthiRedd2",
+            "description": "Main account of the user"
+          },
+          "product": {
+            "type": "string",
+            "example": "booklet_10",
+            "description": "Product associated with the user"
+          },
+          "qrId": {
+            "type": "string",
+            "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
+            "description": "Paytm QR ID of the user"
+          },
+          "gpayId": {
+            "type": "string",
+            "example": "myred1808@postbank",
+            "description": "Google Pay ID of the user"
+          },
+          "dedicatedIps": {
+            "example": [
+              "192.168.1.100:8080",
+              "192.168.1.101:8080"
+            ],
+            "description": "Dedicated proxy IPs assigned to this client",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "channelLink",
+          "dbcoll",
+          "link",
+          "name",
+          "mobile",
+          "password",
+          "repl",
+          "promoteRepl",
+          "session",
+          "username",
+          "clientId",
+          "deployKey",
+          "mainAccount",
+          "product",
+          "qrId",
+          "gpayId",
+          "dedicatedIps"
+        ]
+      },
       "UpdateClientDto": {
         "type": "object",
         "properties": {
@@ -10813,6 +12522,10 @@
           "videos"
         ]
       },
+      "UserData": {
+        "type": "object",
+        "properties": {}
+      },
       "UpdateUserDataDto": {
         "type": "object",
         "properties": {
@@ -11138,6 +12851,10 @@
           "session",
           "channels"
         ]
+      },
+      "BufferClient": {
+        "type": "object",
+        "properties": {}
       },
       "UpdateBufferClientDto": {
         "type": "object",
@@ -11547,6 +13264,10 @@
           "lastActive",
           "channels"
         ]
+      },
+      "PromoteClient": {
+        "type": "object",
+        "properties": {}
       },
       "UpdatePromoteClientDto": {
         "type": "object",

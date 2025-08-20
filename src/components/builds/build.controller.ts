@@ -1,8 +1,8 @@
-import { Controller, Get, Body, Param, Patch, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Body, Patch, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { BuildService } from './build.service';
-import { CloudflareCache } from '../../decorators';
 import { CloudflareCacheInterceptor } from '../../interceptors';
+import { NoCache } from '../../decorators';
 
 @ApiTags('Build')
 @Controller('builds')
@@ -11,7 +11,7 @@ export class BuildController {
 
   @Get()
   @UseInterceptors(CloudflareCacheInterceptor)
-  @CloudflareCache(3600, 60)
+  @NoCache()
   @ApiOperation({ summary: 'Get build data' })
   async findOne(): Promise<any> {
     return this.buildService.findOne();
