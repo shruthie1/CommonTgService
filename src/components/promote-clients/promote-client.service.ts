@@ -286,7 +286,7 @@ export class PromoteClientService implements OnModuleDestroy {
             }
 
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client : ${mobile}\n${message}`)}`,
+                `${notifbot()}&text=${encodeURIComponent(`${process.env.serviceName || process.env.clientId} Deleting Promote Client : ${mobile}\n${message}`)}`,
             );
         } catch (error) {
             if (error instanceof NotFoundException) {
