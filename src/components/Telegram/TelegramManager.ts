@@ -487,41 +487,6 @@ class TelegramManager {
 
         return ({ total: messageHistory.total, photoCount, videoCount, movieCount, ownPhotoCount, otherPhotoCount, ownVideoCount, otherVideoCount })
     }
-    async channelInfo(sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[], canSendFalseChats: string[] }> {
-        if (!this.client) throw new Error('Client is not initialized');
-        const chats = await this.client.getDialogs({ limit: 1500 });
-        let canSendTrueCount = 0;
-        let canSendFalseCount = 0;
-        let totalCount = 0;
-        this.channelArray.length = 0;
-        const canSendFalseChats = [];
-        this.logger.info(this.phoneNumber, "TotalChats:", chats.total);
-        for (const chat of chats) {
-            if (chat.isChannel || chat.isGroup) {
-                try {
-                    const chatEntity = <Api.Channel>chat.entity.toJSON();
-                    const { broadcast, defaultBannedRights, id } = chatEntity;
-                    totalCount++;
-                    if (!broadcast && !defaultBannedRights?.sendMessages) {
-                        canSendTrueCount++;
-                        this.channelArray.push(id.toString()?.replace(/^-100/, ""));
-                    } else {
-                        canSendFalseCount++;
-                        canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
-                    }
-                } catch (error) {
-                    parseError(error);
-                }
-            }
-        };
-        return {
-            chatsArrayLength: totalCount,
-            canSendTrueCount,
-            canSendFalseCount,
-            ids: sendIds ? this.channelArray : [],
-            canSendFalseChats
-        };
-    }
 
     async addContact(data: { mobile: string, tgId: string }[], namePrefix: string) {
         try {

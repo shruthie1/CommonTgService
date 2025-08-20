@@ -70,13 +70,6 @@ declare class TelegramManager {
         ownVideoCount: number;
         otherVideoCount: number;
     }>;
-    channelInfo(sendIds?: boolean): Promise<{
-        chatsArrayLength: number;
-        canSendTrueCount: number;
-        canSendFalseCount: number;
-        ids: string[];
-        canSendFalseChats: string[];
-    }>;
     addContact(data: {
         mobile: string;
         tgId: string;
@@ -312,7 +305,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
