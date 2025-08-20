@@ -278,28 +278,33 @@ class ConnectionManager {
         const cleanupResults = new Map();
         const cleanupPromises = [];
         for (const [mobile, connection] of this.clients.entries()) {
-            const shouldCleanup = ((connection.autoDisconnect && connection.lastUsed <= now - 100000) || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
-                (now - connection.lastUsed > maxIdleTime ||
-                    connection.state === 'error' ||
-                    connection.consecutiveFailures >= connection.retryConfig.maxAttempts ||
-                    (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2) ||
-                    (connection.cleanupAttempts && connection.cleanupAttempts >= this.MAX_CLEANUP_ATTEMPTS));
-            if (shouldCleanup) {
-                this.logger.info(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}, cleanup attempts: ${connection.cleanupAttempts || 0}`);
-                const cleanupPromise = this.unregisterClient(mobile)
-                    .then(() => {
-                    cleanupResults.set(mobile, true);
-                })
-                    .catch((error) => {
-                    this.logger.error(mobile, 'Cleanup failed', error);
-                    cleanupResults.set(mobile, false);
-                    const clientInfo = this.clients.get(mobile);
-                    if (clientInfo) {
-                        clientInfo.cleanupAttempts = (clientInfo.cleanupAttempts || 0) + 1;
-                        this.clients.set(mobile, clientInfo);
-                    }
-                });
-                cleanupPromises.push(cleanupPromise);
+            if (connection.client && connection.client.client) {
+                const shouldCleanup = ((connection.autoDisconnect && connection.lastUsed <= now - 100000) || connection.lastUsed <= now - this.COOLDOWN_PERIOD) &&
+                    (now - connection.lastUsed > maxIdleTime ||
+                        connection.state === 'error' ||
+                        connection.consecutiveFailures >= connection.retryConfig.maxAttempts ||
+                        (connection.state === 'connecting' && now - connection.lastUsed > this.CONNECTION_TIMEOUT * 2) ||
+                        (connection.cleanupAttempts && connection.cleanupAttempts >= this.MAX_CLEANUP_ATTEMPTS));
+                if (shouldCleanup) {
+                    this.logger.info(mobile, `Cleaning up connection - state: ${connection.state}, failures: ${connection.consecutiveFailures}, cleanup attempts: ${connection.cleanupAttempts || 0}`);
+                    const cleanupPromise = this.unregisterClient(mobile)
+                        .then(() => {
+                        cleanupResults.set(mobile, true);
+                    })
+                        .catch((error) => {
+                        this.logger.error(mobile, 'Cleanup failed', error);
+                        cleanupResults.set(mobile, false);
+                        const clientInfo = this.clients.get(mobile);
+                        if (clientInfo) {
+                            clientInfo.cleanupAttempts = (clientInfo.cleanupAttempts || 0) + 1;
+                            this.clients.set(mobile, clientInfo);
+                        }
+                    });
+                    cleanupPromises.push(cleanupPromise);
+                }
+            }
+            else {
+                this.clients.delete(mobile);
             }
         }
         if (cleanupPromises.length > 0) {
