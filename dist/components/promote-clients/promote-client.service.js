@@ -31,6 +31,7 @@ const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
 const utils_1 = require("../../utils");
+const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -260,7 +261,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
             }
@@ -313,7 +314,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         handler: false,
                     });
                     await (0, Helpers_1.sleep)(2000);
-                    const channels = await client.channelInfo(true);
+                    const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                     await this.update(mobile, { channels: channels.ids.length });
                     if (channels.canSendFalseCount < 10) {
@@ -885,7 +886,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await client.updateProfile('Deleted Account', 'Deleted Account');
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
-                        const channels = await client.channelInfo(true);
+                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,

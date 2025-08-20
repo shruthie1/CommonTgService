@@ -33,6 +33,7 @@ import { connectionManager } from '../Telegram/utils/connection-manager'
 import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
 import { ActiveChannel } from '../active-channels';
+import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -370,7 +371,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     autoDisconnect: false,
                     handler: false,
                 });
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(
                     `${mobile}: Found ${channels.ids.length} existing channels`,
                 );
@@ -449,7 +450,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
                     // Add delay before channel info retrieval
                     await sleep(2000);
-                    const channels = await client.channelInfo(true);
+                    const channels = await channelInfo(client.client, true);
                     this.logger.debug(
                         `${mobile}: Found ${channels.ids.length} existing channels`,
                     );
@@ -1272,7 +1273,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         await client.updateProfile('Deleted Account', 'Deleted Account');
                         await sleep(3000);
                         await client.deleteProfilePhotos();
-                        const channels = await client.channelInfo(true);
+                        const channels = await channelInfo(client.client, true);
                         this.logger.debug(
                             `Inserting Document for client ${targetClientId}`,
                         );

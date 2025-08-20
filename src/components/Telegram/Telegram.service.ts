@@ -23,6 +23,7 @@ import { Api } from 'telegram';
 import { shouldMatch } from '../../utils';
 import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
+import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -245,7 +246,8 @@ export class TelegramService implements OnModuleDestroy {
 
     async getChannelInfo(mobile: string, sendIds: boolean = false): Promise<ChannelInfo> {
         const telegramClient = await connectionManager.getClient(mobile)
-        return await telegramClient.channelInfo(sendIds);
+        const channels = await channelInfo(telegramClient.client, sendIds);
+        return channels
     }
 
     async getMe(mobile: string) {
@@ -379,7 +381,7 @@ export class TelegramService implements OnModuleDestroy {
 
     async leaveChannels(mobile: string) {
         const telegramClient = await connectionManager.getClient(mobile)
-        const channelinfo = await telegramClient.channelInfo(false);
+        const channelinfo = await channelInfo(telegramClient.client, false);
         const leaveChannelIds = channelinfo.canSendFalseChats
         telegramClient.leaveChannels(leaveChannelIds);
         return "Left channels initiated";

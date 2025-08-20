@@ -34,6 +34,7 @@ import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
+import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -433,7 +434,7 @@ export class BufferClientService implements OnModuleDestroy {
                 });
 
                 await sleep(1500); // Delay before channel info call
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(
                     `${mobile}: Found ${channels.ids.length} existing channels`,
                 );
@@ -527,7 +528,7 @@ export class BufferClientService implements OnModuleDestroy {
 
                 // Add delay before channel info call
                 await sleep(2000);
-                const channels = await client.channelInfo(true);
+                const channels = await channelInfo(client.client, true);
                 this.logger.debug(
                     `Client ${mobile} has ${channels.ids.length} existing channels`,
                 );
@@ -1347,7 +1348,7 @@ export class BufferClientService implements OnModuleDestroy {
                         await sleep(2000);
 
                         await this.telegramService.removeOtherAuths(document.mobile);
-                        const channels = await client.channelInfo(true);
+                        const channels = await channelInfo(client.client, true);
 
                         this.logger.debug(
                             `Creating buffer client document for ${document.mobile}`,

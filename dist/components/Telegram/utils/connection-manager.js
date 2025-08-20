@@ -409,7 +409,7 @@ class ConnectionManager {
         const staleConnections = [];
         const now = Date.now();
         for (const [mobile, clientInfo] of this.clients.entries()) {
-            if (clientInfo.client) {
+            if (clientInfo.client && clientInfo.client.client) {
                 const isClientConnected = clientInfo.client.connected();
                 const stateConnected = clientInfo.state === 'connected';
                 const isStale = now - clientInfo.lastUsed > this.COOLDOWN_PERIOD * 2;
@@ -422,6 +422,9 @@ class ConnectionManager {
                 else if (isStale && clientInfo.state !== 'disconnected') {
                     staleConnections.push(mobile);
                 }
+            }
+            else {
+                this.clients.delete(mobile);
             }
         }
         return {

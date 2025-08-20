@@ -5750,6 +5750,16 @@
               "example": 23,
               "type": "number"
             }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "status identifier",
+            "schema": {
+              "example": "active",
+              "type": "string"
+            }
           }
         ],
         "responses": {

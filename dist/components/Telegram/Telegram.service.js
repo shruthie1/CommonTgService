@@ -63,6 +63,7 @@ const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const utils_1 = require("../../utils");
+const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 let TelegramService = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -253,7 +254,8 @@ let TelegramService = class TelegramService {
     }
     async getChannelInfo(mobile, sendIds = false) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.channelInfo(sendIds);
+        const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, sendIds);
+        return channels;
     }
     async getMe(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -362,7 +364,7 @@ let TelegramService = class TelegramService {
     }
     async leaveChannels(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        const channelinfo = await telegramClient.channelInfo(false);
+        const channelinfo = await (0, channelinfo_1.channelInfo)(telegramClient.client, false);
         const leaveChannelIds = channelinfo.canSendFalseChats;
         telegramClient.leaveChannels(leaveChannelIds);
         return "Left channels initiated";

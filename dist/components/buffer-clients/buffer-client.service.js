@@ -30,6 +30,7 @@ const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
 const utils_1 = require("../../utils");
+const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -293,7 +294,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     handler: false,
                 });
                 await (0, Helpers_1.sleep)(1500);
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await (0, Helpers_1.sleep)(1000);
                 await this.update(mobile, { channels: channels.ids.length });
@@ -358,7 +359,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     handler: false,
                 });
                 await (0, Helpers_1.sleep)(2000);
-                const channels = await client.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
                 if (channels.canSendFalseCount < 10) {
@@ -945,7 +946,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await client.deleteProfilePhotos();
                         await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
-                        const channels = await client.channelInfo(true);
+                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Creating buffer client document for ${document.mobile}`);
                         const newSession = await this.telegramService.createNewSession(document.mobile);
                         const bufferClient = {
