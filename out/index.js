@@ -27451,6 +27451,24 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./cloudflare-cache.decorator */ "./src/decorators/cloudflare-cache.decorator.ts"), exports);
+__exportStar(__webpack_require__(/*! ./no-cache.decorator */ "./src/decorators/no-cache.decorator.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/decorators/no-cache.decorator.ts":
+/*!**********************************************!*\
+  !*** ./src/decorators/no-cache.decorator.ts ***!
+  \**********************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.NoCache = exports.NO_CACHE_KEY = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+exports.NO_CACHE_KEY = 'NO_CACHE';
+const NoCache = () => (0, common_1.SetMetadata)(exports.NO_CACHE_KEY, true);
+exports.NoCache = NoCache;
 
 
 /***/ }),
@@ -27709,14 +27727,22 @@ exports.CloudflareCacheInterceptor = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const decorators_1 = __webpack_require__(/*! ../decorators */ "./src/decorators/index.ts");
+const decorators_2 = __webpack_require__(/*! ../decorators */ "./src/decorators/index.ts");
 let CloudflareCacheInterceptor = class CloudflareCacheInterceptor {
     constructor(reflector) {
         this.reflector = reflector;
     }
     intercept(context, next) {
+        const res = context.switchToHttp().getResponse();
+        const noCache = this.reflector.get(decorators_2.NO_CACHE_KEY, context.getHandler());
+        if (noCache) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            return next.handle();
+        }
         const cacheConfig = this.reflector.get(decorators_1.CLOUDFLARE_CACHE_KEY, context.getHandler());
         if (cacheConfig) {
-            const res = context.switchToHttp().getResponse();
             res.setHeader('Cache-Control', `public, max-age=${cacheConfig.browser}, s-maxage=${cacheConfig.edge}`);
         }
         return next.handle();

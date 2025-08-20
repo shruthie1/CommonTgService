@@ -13,14 +13,22 @@ exports.CloudflareCacheInterceptor = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const decorators_1 = require("../decorators");
+const decorators_2 = require("../decorators");
 let CloudflareCacheInterceptor = class CloudflareCacheInterceptor {
     constructor(reflector) {
         this.reflector = reflector;
     }
     intercept(context, next) {
+        const res = context.switchToHttp().getResponse();
+        const noCache = this.reflector.get(decorators_2.NO_CACHE_KEY, context.getHandler());
+        if (noCache) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            return next.handle();
+        }
         const cacheConfig = this.reflector.get(decorators_1.CLOUDFLARE_CACHE_KEY, context.getHandler());
         if (cacheConfig) {
-            const res = context.switchToHttp().getResponse();
             res.setHeader('Cache-Control', `public, max-age=${cacheConfig.browser}, s-maxage=${cacheConfig.edge}`);
         }
         return next.handle();
