@@ -2716,6 +2716,7 @@ const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
 let TelegramService = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService) {
         this.usersService = usersService;
@@ -2906,7 +2907,8 @@ let TelegramService = class TelegramService {
     }
     async getChannelInfo(mobile, sendIds = false) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.channelInfo(sendIds);
+        const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, sendIds);
+        return channels;
     }
     async getMe(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -3015,7 +3017,7 @@ let TelegramService = class TelegramService {
     }
     async leaveChannels(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        const channelinfo = await telegramClient.channelInfo(false);
+        const channelinfo = await (0, channelinfo_1.channelInfo)(telegramClient.client, false);
         const leaveChannelIds = channelinfo.canSendFalseChats;
         telegramClient.leaveChannels(leaveChannelIds);
         return "Left channels initiated";
@@ -8559,7 +8561,7 @@ class ConnectionManager {
         const staleConnections = [];
         const now = Date.now();
         for (const [mobile, clientInfo] of this.clients.entries()) {
-            if (clientInfo.client) {
+            if (clientInfo.client && clientInfo.client.client) {
                 const isClientConnected = clientInfo.client.connected();
                 const stateConnected = clientInfo.state === 'connected';
                 const isStale = now - clientInfo.lastUsed > this.COOLDOWN_PERIOD * 2;
@@ -8572,6 +8574,9 @@ class ConnectionManager {
                 else if (isStale && clientInfo.state !== 'disconnected') {
                     staleConnections.push(mobile);
                 }
+            }
+            else {
+                this.clients.delete(mobile);
             }
         }
         return {
@@ -11964,6 +11969,7 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -12227,7 +12233,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     handler: false,
                 });
                 await (0, Helpers_1.sleep)(1500);
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await (0, Helpers_1.sleep)(1000);
                 await this.update(mobile, { channels: channels.ids.length });
@@ -12292,7 +12298,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     handler: false,
                 });
                 await (0, Helpers_1.sleep)(2000);
-                const channels = await client.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
                 if (channels.canSendFalseCount < 10) {
@@ -12879,7 +12885,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await client.deleteProfilePhotos();
                         await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
-                        const channels = await client.channelInfo(true);
+                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Creating buffer client document for ${document.mobile}`);
                         const newSession = await this.telegramService.createNewSession(document.mobile);
                         const bufferClient = {
@@ -19752,6 +19758,7 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -19981,7 +19988,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
-                const channels = await telegramClient.channelInfo(true);
+                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
             }
@@ -20034,7 +20041,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         handler: false,
                     });
                     await (0, Helpers_1.sleep)(2000);
-                    const channels = await client.channelInfo(true);
+                    const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                     await this.update(mobile, { channels: channels.ids.length });
                     if (channels.canSendFalseCount < 10) {
@@ -20606,7 +20613,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await client.updateProfile('Deleted Account', 'Deleted Account');
                         await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
-                        const channels = await client.channelInfo(true);
+                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
@@ -29055,6 +29062,7 @@ var parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseErr
 Object.defineProperty(exports, "parseError", ({ enumerable: true, get: function () { return parseError_1.parseError; } }));
 __exportStar(__webpack_require__(/*! ./obfuscateText */ "./src/utils/obfuscateText.ts"), exports);
 __exportStar(__webpack_require__(/*! ./tg-apps */ "./src/utils/tg-apps.ts"), exports);
+__exportStar(__webpack_require__(/*! ./telegram-utils */ "./src/utils/telegram-utils/index.ts"), exports);
 
 
 /***/ }),
@@ -29731,6 +29739,84 @@ exports.ErrorUtils = {
     createError,
     isAxiosError
 };
+
+
+/***/ }),
+
+/***/ "./src/utils/telegram-utils/channelinfo.ts":
+/*!*************************************************!*\
+  !*** ./src/utils/telegram-utils/channelinfo.ts ***!
+  \*************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.channelInfo = channelInfo;
+const parseError_1 = __webpack_require__(/*! ../parseError */ "./src/utils/parseError.ts");
+async function channelInfo(client, sendIds = false) {
+    if (!client)
+        throw new Error('Client is not initialized');
+    let canSendTrueCount = 0;
+    let canSendFalseCount = 0;
+    let totalCount = 0;
+    let channelArray = [];
+    const canSendFalseChats = [];
+    for await (const dialog of client.iterDialogs({ limit: 1500 })) {
+        if (dialog.isChannel || dialog.isGroup) {
+            try {
+                const chatEntity = dialog.entity.toJSON();
+                const { broadcast, defaultBannedRights, id } = chatEntity;
+                totalCount++;
+                if (!broadcast && !defaultBannedRights?.sendMessages) {
+                    canSendTrueCount++;
+                    channelArray.push(id.toString()?.replace(/^-100/, ""));
+                }
+                else {
+                    canSendFalseCount++;
+                    canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
+                }
+            }
+            catch (error) {
+                (0, parseError_1.parseError)(error);
+            }
+        }
+    }
+    console.info("TotalChats:", totalCount);
+    return {
+        chatsArrayLength: totalCount,
+        canSendTrueCount,
+        canSendFalseCount,
+        ids: sendIds ? channelArray : [],
+        canSendFalseChats
+    };
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/telegram-utils/index.ts":
+/*!*******************************************!*\
+  !*** ./src/utils/telegram-utils/index.ts ***!
+  \*******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./channelinfo */ "./src/utils/telegram-utils/channelinfo.ts"), exports);
 
 
 /***/ }),
