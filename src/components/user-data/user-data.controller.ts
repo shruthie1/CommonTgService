@@ -5,7 +5,7 @@ import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UserData } from './schemas/user-data.schema';
 import { SearchDto } from './dto/search-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
-import { NoCache } from 'src/decorators';
+import { NoCache } from '../../decorators';
 import { CloudflareCacheInterceptor } from '../../interceptors';
 
 @ApiTags('UserData of TG clients')
