@@ -321,9 +321,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
                         await (0, Helpers_1.sleep)(1500);
-                        const result = channels.ids.length < 220
-                            ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
-                            : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        let result = [];
+                        if (document.createdAt > new Date("2025-08-22T00:00:00.000Z")) {
+                            result = channels.ids.length < 220 ? await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
+                        else {
+                            result = channels.ids.length < 220 ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
                         if (!this.joinChannelMap.has(mobile)) {
                             this.joinChannelMap.set(mobile, result);
                             joinSet.add(mobile);

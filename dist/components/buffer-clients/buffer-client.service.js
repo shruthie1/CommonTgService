@@ -365,8 +365,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
                     const result = channels.ids.length < 220
-                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
-                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+                        ? await this.activeChannelsService.getActiveChannels(150, 0, excludedIds)
+                        : await this.channelsService.getActiveChannels(150, 0, excludedIds);
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {
                             joinSet.add(mobile);

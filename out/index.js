@@ -1333,11 +1333,7 @@ let TelegramController = class TelegramController {
         this.telegramService = telegramService;
     }
     async connect(mobile, autoDisconnect, handler, timeout) {
-        const options = {
-            autoDisconnect,
-            handler,
-            timeout
-        };
+        const options = { autoDisconnect, handler, timeout };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
@@ -1443,9 +1439,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.terminateSession(mobile, data);
     }
     async getConnectionStatus() {
-        return {
-            status: await this.telegramService.getConnectionStatus()
-        };
+        return { status: await this.telegramService.getConnectionStatus() };
     }
     async getCallLogStats(mobile) {
         return this.telegramService.getCallLog(mobile);
@@ -1454,7 +1448,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
     }
     async getContacts(mobile) {
-        return await this.telegramService.getContacts(mobile);
+        return this.telegramService.getContacts(mobile);
     }
     async sendMedia(mobile, sendMediaDto) {
         const client = await connection_manager_1.connectionManager.getClient(mobile);
@@ -1628,13 +1622,7 @@ let TelegramController = class TelegramController {
         return this.telegramService.hasPassword(mobile);
     }
     async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId) {
-        return this.telegramService.getChats(mobile, {
-            limit,
-            offsetDate,
-            offsetId,
-            offsetPeer,
-            folderId
-        });
+        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId });
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -1660,8 +1648,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully connected' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Connection failed' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('autoDisconnect')),
     __param(2, (0, common_1.Query)('handler')),
@@ -1674,7 +1661,7 @@ __decorate([
     (0, common_1.Get)('disconnect/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect from Telegram' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Successfully disconnected' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1683,7 +1670,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('disconnect-all'),
     (0, swagger_1.ApiOperation)({ summary: 'Disconnect all clients' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All clients disconnected successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -1691,7 +1678,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('connection/stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get connection statistics' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatsDto }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatsDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", connection_management_dto_1.ConnectionStatsDto)
@@ -1700,8 +1687,7 @@ __decorate([
     (0, common_1.Get)('connection/state/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get connection state for a client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found' }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatusDto }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1710,7 +1696,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('connection/count'),
     (0, swagger_1.ApiOperation)({ summary: 'Get active connection count' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Number of active connections' }),
+    (0, swagger_1.ApiResponse)({ type: Number }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Number)
@@ -1719,7 +1705,7 @@ __decorate([
     (0, common_1.Get)('me/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Profile retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1730,7 +1716,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get Entity profile' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiParam)({ name: 'entity', description: 'Entity identifier', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Entity retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Param)('entity')),
     __metadata("design:type", Function),
@@ -1742,6 +1728,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.UpdateProfileDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1753,6 +1740,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Set profile photo' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ProfilePhotoDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1763,6 +1751,7 @@ __decorate([
     (0, common_1.Delete)('profile/photos/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete all profile photos' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1774,6 +1763,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('limit')),
@@ -1784,12 +1774,9 @@ __decorate([
 __decorate([
     (0, common_1.Post)('message/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send a Telegram message as a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user account to send the message from',
-        required: true,
-        example: '1234567890',
-    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true }),
+    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendMessageDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1801,6 +1788,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Forward messages' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ForwardBatchDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1812,6 +1800,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Process operations in batches' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.BatchProcessDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1820,17 +1809,10 @@ __decorate([
 ], TelegramController.prototype, "processBatchMessages", null);
 __decorate([
     (0, common_1.Get)('messages/search/:mobile'),
-    (0, swagger_1.ApiOperation)({
-        summary: 'Search messages in Telegram',
-        description: 'Search for messages in a specific chat or globally across all chats'
-    }),
-    (0, swagger_1.ApiOkResponse)({
-        description: 'Messages successfully found',
-        type: message_search_dto_1.SearchMessagesResponseDto
-    }),
-    (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid request parameters' }),
-    (0, swagger_1.ApiNotFoundResponse)({ description: 'Mobile number not registered' }),
-    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Unauthorized access' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search messages in Telegram', description: 'Search for messages in a specific chat or globally across all chats' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ type: message_search_dto_1.SearchMessagesDto }),
+    (0, swagger_1.ApiResponse)({ type: message_search_dto_1.SearchMessagesResponseDto }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -1842,6 +1824,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get channel information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'includeIds', required: false, type: Boolean }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('includeIds')),
     __metadata("design:type", Function),
@@ -1854,6 +1837,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'channel', description: 'Channel username or ID', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'fromChatId', description: 'Source chat ID to forward messages from', required: false }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('channel')),
     __param(2, (0, common_1.Query)('fromChatId')),
@@ -1866,6 +1850,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Leave channel' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'channel', description: 'Channel ID/username', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('channel')),
     __metadata("design:type", Function),
@@ -1875,12 +1860,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('username/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update the Telegram username of a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user whose username should be updated',
-        required: true,
-        example: '1234567890',
-    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user whose username should be updated', required: true }),
+    (0, swagger_1.ApiBody)({ type: update_username_dto_1.UpdateUsernameDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1891,6 +1873,7 @@ __decorate([
     (0, common_1.Post)('2fa/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Setup two-factor authentication' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1900,6 +1883,7 @@ __decorate([
     (0, common_1.Post)('privacy/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update privacy settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1910,6 +1894,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update multiple privacy settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.PrivacySettingsDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1920,7 +1905,7 @@ __decorate([
     (0, common_1.Get)('sessions/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get active sessions' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Active sessions retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1930,7 +1915,7 @@ __decorate([
     (0, common_1.Delete)('sessions/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Terminate other sessions' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Other sessions terminated successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1940,7 +1925,7 @@ __decorate([
     (0, common_1.Post)('sessions/new/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Create new session' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'New session created successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1950,6 +1935,7 @@ __decorate([
     (0, common_1.Get)('session/info/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get session information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1959,6 +1945,8 @@ __decorate([
     (0, common_1.Post)('session/terminate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Terminate specific session' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { hash: { type: 'string' }, type: { type: 'string', enum: ['app', 'web'] }, exceptCurrent: { type: 'boolean' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1968,7 +1956,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('monitoring/status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get service health and connection status' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: connection_management_dto_1.ConnectionStatusDto }),
+    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatusDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -1977,6 +1965,7 @@ __decorate([
     (0, common_1.Get)('monitoring/calllog/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get call log statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -1987,7 +1976,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Add multiple contacts in bulk' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AddContactsDto }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contacts added successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1998,7 +1987,7 @@ __decorate([
     (0, common_1.Get)('contacts/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all contacts' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contacts retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2009,6 +1998,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Send media message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2021,6 +2011,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'messageId', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('messageId')),
@@ -2034,6 +2025,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Send media album (multiple photos/videos)' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaAlbumDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2051,6 +2043,8 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'all', required: false, type: Boolean }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('types')),
@@ -2075,7 +2069,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of media items to fetch' }),
     (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' }),
     (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, type: [metadata_operations_dto_1.MediaMetadataDto] }),
+    (0, swagger_1.ApiResponse)({ type: [metadata_operations_dto_1.MediaMetadataDto] }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('types')),
@@ -2093,6 +2087,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get group members' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -2104,6 +2099,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Block a chat/user' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat/User ID to block', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __metadata("design:type", Function),
@@ -2113,23 +2109,14 @@ __decorate([
 __decorate([
     (0, common_1.Delete)('chat/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete or clear a chat history for a user' }),
-    (0, swagger_1.ApiParam)({
-        name: 'mobile',
-        description: 'Mobile number of the user whose chat should be deleted',
-        required: true,
-        example: '1234567890',
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'peer',
-        description: 'Username or Peer ID of the chat to delete',
-        required: true,
-        example: 'someusername',
-    }),
-    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId', example: 100000 }),
-    (0, swagger_1.ApiQuery)({ name: 'justClear', required: false, description: 'Only clear history for this user', example: false }),
-    (0, swagger_1.ApiQuery)({ name: 'revoke', required: false, description: 'Delete for everyone if possible', example: true }),
-    (0, swagger_1.ApiQuery)({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)', example: 1609459200 }),
-    (0, swagger_1.ApiQuery)({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)', example: 1612137600 }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user whose chat should be deleted', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'peer', description: 'Username or Peer ID of the chat to delete', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, description: 'Delete messages with ID ≤ maxId' }),
+    (0, swagger_1.ApiQuery)({ name: 'justClear', required: false, description: 'Only clear history for this user', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'revoke', required: false, description: 'Delete for everyone if possible', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'minDate', required: false, description: 'Minimum date (UNIX timestamp)' }),
+    (0, swagger_1.ApiQuery)({ name: 'maxDate', required: false, description: 'Maximum date (UNIX timestamp)' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -2143,6 +2130,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'message', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'url', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('message')),
@@ -2158,6 +2146,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 }),
     (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 }),
     (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('offsetId')),
@@ -2170,7 +2159,7 @@ __decorate([
     (0, common_1.Get)('last-active/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get last active time' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Last active time retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2181,6 +2170,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new group with advanced options' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.createGroupDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2192,6 +2182,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update group settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupSettingsDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2203,6 +2194,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Add members to a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -2214,6 +2206,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Remove members from a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -2225,6 +2218,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Promote or demote group admins' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AdminOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
@@ -2236,6 +2230,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Clean up chat history' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ChatCleanupDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2260,6 +2255,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Schedule a message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ScheduleMessageDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2271,6 +2267,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get scheduled messages' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __metadata("design:type", Function),
@@ -2281,6 +2278,8 @@ __decorate([
     (0, common_1.Post)('media/voice/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send voice message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, url: { type: 'string' }, duration: { type: 'number' }, caption: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2307,11 +2306,8 @@ __decorate([
             required: ['chatId', 'sourceType']
         }
     }),
-    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('binaryData', {
-        storage: multer.memoryStorage()
-    })),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'View once media sent successfully' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Failed to send view once media' }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('binaryData', { storage: multer.memoryStorage() })),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.UploadedFile)()),
     __param(2, (0, common_1.Body)()),
@@ -2326,6 +2322,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('offset')),
@@ -2339,6 +2336,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Promote members to admin' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.AdminOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2350,6 +2348,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Demote admin to regular member' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.GroupMemberOperationDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2360,6 +2359,8 @@ __decorate([
     (0, common_1.Post)('group/unblock/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Unblock a user in a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { groupId: { type: 'string' }, userId: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2371,6 +2372,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get list of group admins' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -2382,6 +2384,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get list of banned users in a group' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
     __metadata("design:type", Function),
@@ -2393,6 +2396,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Export contacts in vCard or CSV format' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ContactExportImportDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, common_1.Res)()),
@@ -2404,6 +2408,8 @@ __decorate([
     (0, common_1.Post)('contacts/import/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Import contacts from a list' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'array', items: { type: 'object', properties: { firstName: { type: 'string' }, lastName: { type: 'string' }, phone: { type: 'string' } } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2415,6 +2421,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Manage blocked contacts' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.ContactBlockListDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2425,7 +2432,7 @@ __decorate([
     (0, common_1.Get)('contacts/statistics/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get contact activity statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Contact statistics retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2436,6 +2443,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new chat folder' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: create_chat_folder_dto_1.CreateChatFolderDto }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2446,6 +2454,7 @@ __decorate([
     (0, common_1.Get)('folders/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get all chat folders' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2455,6 +2464,8 @@ __decorate([
     (0, common_1.Put)('messages/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Edit message' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, messageId: { type: 'number' }, text: { type: 'string' }, media: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' } } } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2465,6 +2476,8 @@ __decorate([
     (0, common_1.Post)('chat/settings/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update chat settings' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, title: { type: 'string' }, about: { type: 'string' }, photo: { type: 'string' }, slowMode: { type: 'number' }, linkedChat: { type: 'string' }, defaultSendAs: { type: 'string' }, username: { type: 'string' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2475,6 +2488,8 @@ __decorate([
     (0, common_1.Post)('media/batch/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send multiple media files in batch' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, media: { type: 'array', items: { type: 'object', properties: { type: { type: 'string', enum: ['photo', 'video', 'document'] }, url: { type: 'string' }, caption: { type: 'string' }, fileName: { type: 'string' } } } }, silent: { type: 'boolean' }, scheduleDate: { type: 'number' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2485,6 +2500,7 @@ __decorate([
     (0, common_1.Get)('security/2fa-status/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Check if 2FA password is set' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2494,6 +2510,12 @@ __decorate([
     (0, common_1.Get)('chats/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get chats with advanced filtering' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetPeer', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('offsetDate')),
@@ -2508,6 +2530,9 @@ __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'url', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'filename', required: true }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('url')),
     __param(2, (0, common_1.Query)('filename')),
@@ -2519,6 +2544,8 @@ __decorate([
     (0, common_1.Get)('messages/stats/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get message statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, period: { type: 'string', enum: ['day', 'week', 'month'] }, fromDate: { type: 'string', format: 'date-time' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2529,6 +2556,7 @@ __decorate([
     (0, common_1.Get)('chats/top-private/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get top 5 private chats with detailed statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -2538,21 +2566,8 @@ __decorate([
     (0, common_1.Post)('bots/add-to-channel/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Add bots to channel with admin privileges' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                channelIds: {
-                    type: 'array',
-                    items: {
-                        type: 'string'
-                    },
-                    description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.'
-                }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bots added to channels successfully' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { channelIds: { type: 'array', items: { type: 'string' }, description: 'Array of channel IDs to add bots to. If not provided, will use default channels from environment variables.' } } } }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -2564,19 +2579,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new bot using BotFather' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.CreateBotDto }),
-    (0, swagger_1.ApiResponse)({
-        status: 201,
-        description: 'Bot created successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                botToken: { type: 'string', description: 'The token to access HTTP Bot API' },
-                username: { type: 'string', description: 'The username of the created bot' }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - Invalid bot details' }),
-    (0, swagger_1.ApiResponse)({ status: 401, description: 'Unauthorized - Client not connected' }),
+    (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -9679,6 +9682,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                     username: { $ne: null },
                     canSendMsgs: true,
                     restricted: false,
+                    banned: false,
                     forbidden: false
                 }
             ]
@@ -11673,7 +11677,8 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const buffer_client_service_1 = __webpack_require__(/*! ./buffer-client.service */ "./src/components/buffer-clients/buffer-client.service.ts");
 const create_buffer_client_dto_1 = __webpack_require__(/*! ./dto/create-buffer-client.dto */ "./src/components/buffer-clients/dto/create-buffer-client.dto.ts");
-const search_buffer__client_dto_1 = __webpack_require__(/*! ./dto/search-buffer- client.dto */ "./src/components/buffer-clients/dto/search-buffer- client.dto.ts");
+const search_buffer_client_dto_1 = __webpack_require__(/*! ./dto/search-buffer-client.dto */ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts");
+const buffer_client_schema_1 = __webpack_require__(/*! ./schemas/buffer-client.schema */ "./src/components/buffer-clients/schemas/buffer-client.schema.ts");
 const update_buffer_client_dto_1 = __webpack_require__(/*! ./dto/update-buffer-client.dto */ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts");
 let BufferClientController = class BufferClientController {
     constructor(clientService) {
@@ -11686,27 +11691,25 @@ let BufferClientController = class BufferClientController {
         return this.clientService.search(query);
     }
     async updateInfo() {
-        this.clientService.updateInfo().catch(error => {
-            console.error('Error in checkPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.updateInfo();
+        return 'initiated Checking';
     }
     async joinChannelsforBufferClients() {
         return this.clientService.joinchannelForBufferClients();
     }
     async checkbufferClients() {
         this.clientService.checkBufferClients();
-        return "initiated Checking";
+        return 'initiated Checking';
     }
     async addNewUserstoBufferClients(body) {
         this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds);
-        return "initiated Checking";
+        return 'initiated Checking';
     }
     async findAll() {
         return this.clientService.findAll();
     }
     async setAsBufferClient(mobile) {
-        return await this.clientService.setAsBufferClient(mobile);
+        return this.clientService.setAsBufferClient(mobile);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -11721,18 +11724,15 @@ let BufferClientController = class BufferClientController {
         return this.clientService.remove(mobile);
     }
     async executeQuery(query) {
-        try {
-            return await this.clientService.executeQuery(query);
-        }
-        catch (error) {
-            throw error;
-        }
+        return this.clientService.executeQuery(query);
     }
 };
 exports.BufferClientController = BufferClientController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiBody)({ type: create_buffer_client_dto_1.CreateBufferClientDto }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_buffer_client_dto_1.CreateBufferClientDto]),
@@ -11741,14 +11741,16 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [search_buffer__client_dto_1.SearchBufferClientDto]),
+    __metadata("design:paramtypes", [search_buffer_client_dto_1.SearchBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -11756,6 +11758,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -11763,6 +11766,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Buffer Clients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -11770,7 +11774,8 @@ __decorate([
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Buffer Clients' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiBody)({ type: Object, schema: { type: 'object', properties: { goodIds: { type: 'array', items: { type: 'string' } }, badIds: { type: 'array', items: { type: 'string' } } } } }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -11779,6 +11784,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -11787,6 +11793,7 @@ __decorate([
     (0, common_1.Get)('SetAsBufferClient/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Set as Buffer Client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -11795,6 +11802,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -11803,6 +11812,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -11812,6 +11824,9 @@ __decorate([
 __decorate([
     (0, common_1.Put)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -11821,6 +11836,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: null }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -11830,6 +11847,7 @@ __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -12270,8 +12288,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
                     const result = channels.ids.length < 220
-                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
-                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+                        ? await this.activeChannelsService.getActiveChannels(150, 0, excludedIds)
+                        : await this.channelsService.getActiveChannels(150, 0, excludedIds);
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {
                             joinSet.add(mobile);
@@ -13033,10 +13051,10 @@ __decorate([
 
 /***/ }),
 
-/***/ "./src/components/buffer-clients/dto/search-buffer- client.dto.ts":
-/*!************************************************************************!*\
-  !*** ./src/components/buffer-clients/dto/search-buffer- client.dto.ts ***!
-  \************************************************************************/
+/***/ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts":
+/*!***********************************************************************!*\
+  !*** ./src/components/buffer-clients/dto/search-buffer-client.dto.ts ***!
+  \***********************************************************************/
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -13052,64 +13070,54 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SearchBufferClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Telegram ID of the client',
-        example: '123456789',
-    }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "tgId", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Mobile number of the client',
-        example: '+1234567890',
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'availableDate of the bufferClient',
-        example: '2023-06-22',
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Client ID to search for' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "availableDate", void 0);
+], SearchBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Session identifier',
-        example: 'session123',
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "session", void 0);
+], SearchBufferClientDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Channel Count',
-        example: 23,
-        type: Number
-    }),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchBufferClientDto.prototype, "channels", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'status identifier',
-        example: 'active',
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Name to search for' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "status", void 0);
+], SearchBufferClientDto.prototype, "name", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "channelLink", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "repl", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    __metadata("design:type", Boolean)
+], SearchBufferClientDto.prototype, "isActive", void 0);
 
 
 /***/ }),
@@ -13224,8 +13232,8 @@ exports.BuildController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const build_service_1 = __webpack_require__(/*! ./build.service */ "./src/components/builds/build.service.ts");
-const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
 const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
 let BuildController = class BuildController {
     constructor(buildService) {
         this.buildService = buildService;
@@ -13241,7 +13249,7 @@ exports.BuildController = BuildController;
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
-    (0, decorators_1.CloudflareCache)(3600, 60),
+    (0, decorators_1.NoCache)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get build data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -13730,6 +13738,7 @@ let ChannelsService = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
+                    banned: false,
                     restricted: false,
                     forbidden: false
                 }
@@ -14106,6 +14115,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const client_service_1 = __webpack_require__(/*! ./client.service */ "./src/components/clients/client.service.ts");
 const create_client_dto_1 = __webpack_require__(/*! ./dto/create-client.dto */ "./src/components/clients/dto/create-client.dto.ts");
+const client_schema_1 = __webpack_require__(/*! ./schemas/client.schema */ "./src/components/clients/schemas/client.schema.ts");
 const search_client_dto_1 = __webpack_require__(/*! ./dto/search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
 const update_client_dto_1 = __webpack_require__(/*! ./dto/update-client.dto */ "./src/components/clients/dto/update-client.dto.ts");
 const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
@@ -14115,224 +14125,134 @@ let ClientController = class ClientController {
         this.clientService = clientService;
     }
     async create(createClientDto) {
-        try {
-            return await this.clientService.create(createClientDto);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.create(createClientDto);
     }
     async search(query) {
-        try {
-            return await this.clientService.search(query);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.search(query);
     }
     async searchByPromoteMobile(mobile) {
-        try {
-            const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
-            return {
-                clients: result.clients,
-                matches: result.promoteMobileMatches || [],
-                searchedMobile: mobile
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+        return {
+            clients: result.clients,
+            matches: result.promoteMobileMatches || [],
+            searchedMobile: mobile,
+        };
     }
     async enhancedSearch(query) {
-        try {
-            const result = await this.clientService.enhancedSearch(query);
-            return {
-                clients: result.clients,
-                searchType: result.searchType,
-                promoteMobileMatches: result.promoteMobileMatches,
-                totalResults: result.clients.length
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.enhancedSearch(query);
+        return {
+            clients: result.clients,
+            searchType: result.searchType,
+            promoteMobileMatches: result.promoteMobileMatches,
+            totalResults: result.clients.length,
+        };
     }
     async updateClient(clientId) {
         this.clientService.updateClient(clientId);
-        return "Update client initiated";
+        return 'Update client initiated';
     }
     async findAllMasked() {
-        try {
-            return await this.clientService.findAllMasked();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findAllMasked();
     }
     async findOneMasked(clientId) {
-        try {
-            return await this.clientService.findOneMasked(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findOneMasked(clientId);
     }
     async findAll() {
-        try {
-            return await this.clientService.findAll();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return await this.clientService.findAll();
     }
     async syncNpoint() {
-        try {
-            await this.clientService.checkNpoint();
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        await this.clientService.checkNpoint();
     }
     async findOne(clientId) {
-        try {
-            return await this.clientService.findOne(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.findOne(clientId);
     }
     async update(clientId, updateClientDto) {
-        try {
-            return await this.clientService.update(clientId, updateClientDto);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.update(clientId, updateClientDto);
     }
     async remove(clientId) {
-        try {
-            return await this.clientService.remove(clientId);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.remove(clientId);
     }
     async executeQuery(requestBody) {
         const { query, sort, limit, skip } = requestBody;
-        try {
-            return await this.clientService.executeQuery(query, sort, limit, skip);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.executeQuery(query, sort, limit, skip);
     }
     async addPromoteMobile(clientId, body) {
         return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
     }
     async removePromoteMobile(clientId, body) {
-        try {
-            return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
-        }
+        return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
     }
     async getClientIpInfo(clientId) {
-        try {
-            const client = await this.clientService.findOne(clientId);
-            const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-            const result = {
-                clientId,
-                mobiles: {
-                    mainMobile: undefined,
-                    promoteMobiles: []
-                },
-                needingAssignment
+        const client = await this.clientService.findOne(clientId);
+        const needingAssignment = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+        const result = {
+            clientId,
+            mobiles: {
+                mainMobile: undefined,
+                promoteMobiles: [],
+            },
+            needingAssignment,
+        };
+        if (client.mobile) {
+            const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
+            const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
+            result.mobiles.mainMobile = {
+                mobile: client.mobile,
+                hasIp,
+                ipAddress: ipAddress || undefined,
             };
-            if (client.mobile) {
-                const hasIp = await this.clientService.hasMobileAssignedIp(client.mobile);
-                const ipAddress = hasIp ? await this.clientService.getIpForMobile(client.mobile) : undefined;
-                result.mobiles.mainMobile = {
-                    mobile: client.mobile,
-                    hasIp,
-                    ipAddress: ipAddress || undefined
-                };
-            }
-            const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
-            for (const mobile of promoteMobiles) {
-                const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
-                const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
-                result.mobiles.promoteMobiles.push({
-                    mobile,
-                    hasIp,
-                    ipAddress: ipAddress || undefined
-                });
-            }
-            return result;
         }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
+        const promoteMobiles = await this.clientService.getPromoteMobiles(clientId);
+        for (const mobile of promoteMobiles) {
+            const hasIp = await this.clientService.hasMobileAssignedIp(mobile);
+            const ipAddress = hasIp ? await this.clientService.getIpForMobile(mobile) : undefined;
+            result.mobiles.promoteMobiles.push({
+                mobile,
+                hasIp,
+                ipAddress: ipAddress || undefined,
+            });
         }
+        return result;
     }
     async getIpForMobile(mobile, clientId) {
-        try {
-            const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
-            return {
-                mobile,
-                ipAddress,
-                hasAssignment: ipAddress !== null
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const ipAddress = await this.clientService.getIpForMobile(mobile, clientId);
+        return {
+            mobile,
+            ipAddress,
+            hasAssignment: ipAddress !== null,
+        };
     }
     async autoAssignIpsToClient(clientId) {
-        try {
-            const result = await this.clientService.autoAssignIpsToClient(clientId);
-            return {
-                success: true,
-                message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
-                data: result
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const result = await this.clientService.autoAssignIpsToClient(clientId);
+        return {
+            success: true,
+            message: `Auto-assigned IPs to ${result.summary.assigned}/${result.summary.totalMobiles} mobiles`,
+            data: result,
+        };
     }
     async getMobilesNeedingIpAssignment(clientId) {
-        try {
-            const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
-            const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
-            return {
-                clientId,
-                mobilesNeedingIps,
-                summary: {
-                    totalNeedingAssignment,
-                    mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
-                    promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length
-                }
-            };
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        const mobilesNeedingIps = await this.clientService.getMobilesNeedingIpAssignment(clientId);
+        const totalNeedingAssignment = (mobilesNeedingIps.mainMobile ? 1 : 0) + mobilesNeedingIps.promoteMobiles.length;
+        return {
+            clientId,
+            mobilesNeedingIps,
+            summary: {
+                totalNeedingAssignment,
+                mainMobileNeedsIp: !!mobilesNeedingIps.mainMobile,
+                promoteMobilesNeedingIp: mobilesNeedingIps.promoteMobiles.length,
+            },
+        };
     }
     async releaseIpFromMobile(mobile) {
-        try {
-            return await this.clientService.releaseIpFromMobile(mobile);
-        }
-        catch (error) {
-            throw new common_1.HttpException(error.message, common_1.HttpStatus.BAD_REQUEST);
-        }
+        return await this.clientService.releaseIpFromMobile(mobile);
     }
 };
 exports.ClientController = ClientController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'The user data has been successfully created.' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
+    (0, swagger_1.ApiBody)({ type: create_client_dto_1.CreateClientDto }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully created.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
@@ -14345,7 +14265,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
     (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
     (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Matching user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'Matching user data returned successfully.', type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
@@ -14355,7 +14275,17 @@ __decorate([
     (0, common_1.Get)('search/promote-mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients with matching promote mobiles returned successfully.' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Clients with matching promote mobiles returned successfully.',
+        type: Object,
+        schema: {
+            properties: {
+                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
+                matches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
+                searchedMobile: { type: 'string' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Query)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14366,7 +14296,18 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
     (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
     (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Enhanced search results with promote mobile context.' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Enhanced search results with promote mobile context.',
+        type: Object,
+        schema: {
+            properties: {
+                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
+                searchType: { type: 'string' },
+                promoteMobileMatches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
+                totalResults: { type: 'number' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -14375,6 +14316,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateClient/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'Return the user data.', type: String }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14385,7 +14328,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -14394,8 +14337,9 @@ __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data with masked fields by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14406,7 +14350,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'All user data returned successfully.' }),
+    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -14414,8 +14358,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('sync-npoint'),
     (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Clients synchronized successfully with npoint.' }),
-    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error during synchronization.' }),
+    (0, swagger_1.ApiResponse)({ description: 'Clients synchronized successfully with npoint.' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -14423,8 +14366,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data returned successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14433,8 +14376,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'The user data has been successfully updated.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiBody)({ type: update_client_dto_1.UpdateClientDto }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully updated.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -14444,8 +14388,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'The user data has been successfully deleted.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully deleted.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14454,9 +14398,17 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Query executed successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query.' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { query: { type: 'object' }, sort: { type: 'object' }, limit: { type: 'number' }, skip: { type: 'number' } } } }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                query: { type: 'object' },
+                sort: { type: 'object' },
+                limit: { type: 'number' },
+                skip: { type: 'number' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -14466,9 +14418,14 @@ __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/add'),
     (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile number assigned as promote mobile successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                mobileNumber: { type: 'string', example: '916265240911' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Mobile number assigned as promote mobile successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -14479,9 +14436,14 @@ __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/remove'),
     (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ schema: { properties: { mobileNumber: { type: 'string', example: '916265240911' } } } }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Promote mobile assignment removed successfully.' }),
-    (0, swagger_1.ApiResponse)({ status: 404, description: 'Client not found.' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            properties: {
+                mobileNumber: { type: 'string', example: '916265240911' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({ description: 'Promote mobile assignment removed successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -14492,7 +14454,46 @@ __decorate([
     (0, common_1.Get)(':clientId/ip-info'),
     (0, swagger_1.ApiOperation)({ summary: 'Get IP assignment information for a client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP information retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP information retrieved successfully',
+        type: Object,
+        schema: {
+            properties: {
+                clientId: { type: 'string' },
+                mobiles: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: {
+                            type: 'object',
+                            properties: {
+                                mobile: { type: 'string' },
+                                hasIp: { type: 'boolean' },
+                                ipAddress: { type: 'string' },
+                            },
+                        },
+                        promoteMobiles: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    mobile: { type: 'string' },
+                                    hasIp: { type: 'boolean' },
+                                    ipAddress: { type: 'string' },
+                                },
+                            },
+                        },
+                    },
+                },
+                needingAssignment: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: { type: 'string' },
+                        promoteMobiles: { type: 'array', items: { type: 'string' } },
+                    },
+                },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14503,7 +14504,17 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get IP address for a specific mobile number' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID for context' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP address retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP address retrieved successfully',
+        type: Object,
+        schema: {
+            properties: {
+                mobile: { type: 'string' },
+                ipAddress: { type: 'string', nullable: true },
+                hasAssignment: { type: 'boolean' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -14514,8 +14525,17 @@ __decorate([
     (0, common_1.Post)(':clientId/auto-assign-ips'),
     (0, swagger_1.ApiOperation)({ summary: 'Auto-assign IPs to all client mobile numbers (Simplified System)' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IPs assigned successfully' }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Assignment failed' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IPs assigned successfully',
+        type: Object,
+        schema: {
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                data: { type: 'object' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14525,7 +14545,30 @@ __decorate([
     (0, common_1.Get)(':clientId/mobiles-needing-ips'),
     (0, swagger_1.ApiOperation)({ summary: 'Get mobile numbers that need IP assignment' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'Mobile numbers needing IP assignment' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'Mobile numbers needing IP assignment',
+        type: Object,
+        schema: {
+            properties: {
+                clientId: { type: 'string' },
+                mobilesNeedingIps: {
+                    type: 'object',
+                    properties: {
+                        mainMobile: { type: 'string' },
+                        promoteMobiles: { type: 'array', items: { type: 'string' } },
+                    },
+                },
+                summary: {
+                    type: 'object',
+                    properties: {
+                        totalNeedingAssignment: { type: 'number' },
+                        mainMobileNeedsIp: { type: 'boolean' },
+                        promoteMobilesNeedingIp: { type: 'number' },
+                    },
+                },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -14535,7 +14578,16 @@ __decorate([
     (0, common_1.Delete)('mobile/:mobile/ip'),
     (0, swagger_1.ApiOperation)({ summary: 'Release IP from a mobile number' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number to release IP from' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'IP released successfully' }),
+    (0, swagger_1.ApiResponse)({
+        description: 'IP released successfully',
+        type: Object,
+        schema: {
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19254,6 +19306,7 @@ const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const promote_client_service_1 = __webpack_require__(/*! ./promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
 const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote-client.dto */ "./src/components/promote-clients/dto/create-promote-client.dto.ts");
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
+const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 let PromoteClientController = class PromoteClientController {
     constructor(clientService) {
@@ -19269,16 +19322,12 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async updateInfo() {
-        this.clientService.updateInfo().catch(error => {
-            console.error('Error in checkPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.updateInfo();
+        return 'initiated Checking';
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients().catch(error => {
-            console.error('Error in checkPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.checkPromoteClients();
+        return 'initiated Checking';
     }
     async addNewUserstoPromoteClients(body) {
         if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
@@ -19287,16 +19336,14 @@ let PromoteClientController = class PromoteClientController {
         if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
             throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
         }
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch(error => {
-            console.error('Error in addNewUserstoPromoteClients:', error);
-        });
-        return "initiated Checking";
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined);
+        return 'initiated Checking';
     }
     async findAll(status) {
         return this.clientService.findAll(status);
     }
     async setAsPromoteClient(mobile) {
-        return await this.clientService.setAsPromoteClient(mobile);
+        return this.clientService.setAsPromoteClient(mobile);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -19311,12 +19358,7 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.remove(mobile);
     }
     async executeQuery(query) {
-        try {
-            return await this.clientService.executeQuery(query);
-        }
-        catch (error) {
-            throw error;
-        }
+        return this.clientService.executeQuery(query);
     }
     async getPromoteClientDistribution() {
         return this.clientService.getPromoteClientDistribution();
@@ -19359,6 +19401,8 @@ exports.PromoteClientController = PromoteClientController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiBody)({ type: create_promote_client_dto_1.CreatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_promote_client_dto_1.CreatePromoteClientDto]),
@@ -19371,6 +19415,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name' }),
     (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_promote_client_dto_1.SearchPromoteClientDto]),
@@ -19379,6 +19424,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('joinChannelsForPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for PromoteClients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19386,6 +19432,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19393,6 +19440,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19410,6 +19458,7 @@ __decorate([
             }
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -19419,6 +19468,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19428,6 +19478,7 @@ __decorate([
     (0, common_1.Get)('SetAsPromoteClient/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Set as Promote Client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19436,6 +19487,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19444,6 +19497,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -19453,6 +19509,9 @@ __decorate([
 __decorate([
     (0, common_1.Put)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -19462,6 +19521,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiResponse)({ type: null }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19471,6 +19532,7 @@ __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -19479,6 +19541,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19487,6 +19550,7 @@ __decorate([
     (0, common_1.Get)('status/:status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19513,6 +19577,7 @@ __decorate([
             required: ['status']
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -19531,6 +19596,7 @@ __decorate([
             }
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -19550,6 +19616,7 @@ __decorate([
             required: ['reason']
         }
     }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -19578,6 +19645,7 @@ __decorate([
     (0, common_1.Patch)('update-last-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19588,6 +19656,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
@@ -19598,6 +19667,7 @@ __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
+    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19605,9 +19675,10 @@ __decorate([
 ], PromoteClientController.prototype, "getNextAvailable", null);
 __decorate([
     (0, common_1.Get)('unused'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get promote clients that haven\'t been used for a specified time period' }),
+    (0, swagger_1.ApiOperation)({ summary: "Get promote clients that haven't been used for a specified time period" }),
     (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('hoursAgo')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -19618,6 +19689,18 @@ __decorate([
     (0, common_1.Get)('usage-stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    (0, swagger_1.ApiResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                totalClients: { type: 'number' },
+                neverUsed: { type: 'number' },
+                usedInLast24Hours: { type: 'number' },
+                usedInLastWeek: { type: 'number' },
+                averageUsageGap: { type: 'number' }
+            }
+        }
+    }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20014,9 +20097,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
                         await (0, Helpers_1.sleep)(1500);
-                        const result = channels.ids.length < 220
-                            ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
-                            : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        let result = [];
+                        if (document.createdAt > new Date("2025-08-22T00:00:00.000Z")) {
+                            result = channels.ids.length < 220 ? await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
+                        else {
+                            result = channels.ids.length < 220 ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
                         if (!this.joinChannelMap.has(mobile)) {
                             this.joinChannelMap.set(mobile, result);
                             joinSet.add(mobile);
@@ -20986,7 +21073,8 @@ __decorate([
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
+    (0, mongoose_1.Schema)({
+        collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,
         toJSON: {
             virtuals: true,
@@ -26198,8 +26286,11 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const user_data_service_1 = __webpack_require__(/*! ./user-data.service */ "./src/components/user-data/user-data.service.ts");
 const create_user_data_dto_1 = __webpack_require__(/*! ./dto/create-user-data.dto */ "./src/components/user-data/dto/create-user-data.dto.ts");
+const user_data_schema_1 = __webpack_require__(/*! ./schemas/user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts");
 const search_user_data_dto_1 = __webpack_require__(/*! ./dto/search-user-data.dto */ "./src/components/user-data/dto/search-user-data.dto.ts");
 const update_user_data_dto_1 = __webpack_require__(/*! ./dto/update-user-data.dto */ "./src/components/user-data/dto/update-user-data.dto.ts");
+const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
+const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let UserDataController = class UserDataController {
     constructor(userDataService) {
         this.userDataService = userDataService;
@@ -26241,7 +26332,10 @@ let UserDataController = class UserDataController {
 exports.UserDataController = UserDataController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create user data', description: 'Creates a new user data entry in the database.' }),
+    (0, swagger_1.ApiBody)({ type: create_user_data_dto_1.CreateUserDataDto, description: 'User data to create' }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'User data successfully created.', type: user_data_schema_1.UserData }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_user_data_dto_1.CreateUserDataDto]),
@@ -26249,11 +26343,13 @@ __decorate([
 ], UserDataController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
-    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile' }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, type: Boolean }),
-    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, type: Boolean }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search user data', description: 'Searches user data based on provided query parameters.' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile identifier', type: String, example: 'user123' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean, example: true }),
+    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean, example: false }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'List of matching user data.', type: [user_data_schema_1.UserData] }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query parameters.' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_user_data_dto_1.SearchDto]),
@@ -26261,14 +26357,20 @@ __decorate([
 ], UserDataController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all user data', description: 'Retrieves all user data entries from the database.' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'List of all user data.', type: [user_data_schema_1.UserData] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], UserDataController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Patch)('updateAll/:chatId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update all user data by chat ID', description: 'Updates all user data entries associated with a specific chat ID.' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID to update user data for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: Object }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'No user data found for the given chat ID.' }),
     __param(0, (0, common_1.Param)('chatId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -26277,7 +26379,11 @@ __decorate([
 ], UserDataController.prototype, "updateAll", null);
 __decorate([
     (0, common_1.Get)(':profile/:chatId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user data by profile and chat ID', description: 'Retrieves a specific user data entry by profile and chat ID.' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data found.', type: user_data_schema_1.UserData }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
     __param(1, (0, common_1.Param)('chatId')),
     __metadata("design:type", Function),
@@ -26286,7 +26392,13 @@ __decorate([
 ], UserDataController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':profile/:chatId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user data by profile and chat ID', description: 'Updates a specific user data entry identified by profile and chat ID.' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: user_data_schema_1.UserData }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
     __param(1, (0, common_1.Param)('chatId')),
     __param(2, (0, common_1.Body)()),
@@ -26296,7 +26408,11 @@ __decorate([
 ], UserDataController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':profile/:chatId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by profile and chat ID', description: 'Deletes a specific user data entry identified by profile and chat ID.' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully deleted.', type: user_data_schema_1.UserData }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
     __param(1, (0, common_1.Param)('chatId')),
     __metadata("design:type", Function),
@@ -26305,6 +26421,12 @@ __decorate([
 ], UserDataController.prototype, "remove", null);
 __decorate([
     (0, common_1.Get)('clear-count'),
+    (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
+    (0, decorators_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Clear count for user data', description: 'Clears the count for user data, optionally filtered by chat ID.' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Count cleared successfully.' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid chat ID.' }),
     __param(0, (0, common_1.Query)('chatId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -26312,7 +26434,21 @@ __decorate([
 ], UserDataController.prototype, "clearCount", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query', description: 'Executes a custom MongoDB query with optional sorting, limiting, and skipping.' }),
+    (0, swagger_1.ApiBody)({
+        description: 'MongoDB query parameters',
+        schema: {
+            type: 'object',
+            properties: {
+                query: { type: 'object', description: 'MongoDB query object', example: { profile: 'user123' } },
+                sort: { type: 'object', description: 'Sort criteria', example: { createdAt: -1 } },
+                limit: { type: 'number', description: 'Maximum number of results', example: 10 },
+                skip: { type: 'number', description: 'Number of results to skip', example: 0 }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Query executed successfully.', type: Object }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query parameters.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
