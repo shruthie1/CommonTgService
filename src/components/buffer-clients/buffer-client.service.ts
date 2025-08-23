@@ -538,12 +538,12 @@ export class BufferClientService implements OnModuleDestroy {
                     const excludedIds = channels.ids;
                     const result =
                         channels.ids.length < 220
-                            ? await this.channelsService.getActiveChannels(
+                            ? await this.activeChannelsService.getActiveChannels(
                                 150,
                                 0,
                                 excludedIds,
                             ) // Reduced limit
-                            : await this.activeChannelsService.getActiveChannels(
+                            : await this.channelsService.getActiveChannels(
                                 150,
                                 0,
                                 excludedIds,

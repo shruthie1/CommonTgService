@@ -2,7 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 export type PromoteClientDocument = PromoteClient & Document;
-@Schema({ collection: 'promoteClients', versionKey: false, autoIndex: true,
+@Schema({
+  collection: 'promoteClients', versionKey: false, autoIndex: true,
   timestamps: true,
   toJSON: {
     virtuals: true,
@@ -12,12 +13,12 @@ export type PromoteClientDocument = PromoteClient & Document;
   },
 })  // Specify the collection name here
 export class PromoteClient {
-  @Prop({ required: true})
+  @Prop({ required: true })
   tgId: string;
 
   @Prop({ required: true, unique: true })
   mobile: string;
-  
+
   @Prop({ required: true })
   lastActive: string;
 
@@ -38,6 +39,10 @@ export class PromoteClient {
 
   @Prop({ required: false, type: Date, default: null })
   lastUsed: Date;
+
+  createdAt?: Date;
+
+  updatedAt?: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);

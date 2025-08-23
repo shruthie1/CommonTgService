@@ -459,22 +459,13 @@ export class PromoteClientService implements OnModuleDestroy {
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
-
-                        // Add delay before channel retrieval
                         await sleep(1500);
-                        const result: Channel[] | ActiveChannel[] =
-                            channels.ids.length < 220
-                                ? await this.channelsService.getActiveChannels(
-                                    channelLimit,
-                                    0,
-                                    excludedIds,
-                                )
-                                : await this.activeChannelsService.getActiveChannels(
-                                    channelLimit,
-                                    0,
-                                    excludedIds,
-                                );
-
+                        let result: Channel[] | ActiveChannel[] = []
+                        if (document.createdAt > new Date("2025-08-22T00:00:00.000Z")) {
+                            result = channels.ids.length < 220 ? await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds,) : await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds,);
+                        } else {
+                            result = channels.ids.length < 220 ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds,) : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds,);
+                        }
                         if (!this.joinChannelMap.has(mobile)) {
                             this.joinChannelMap.set(mobile, result);
                             joinSet.add(mobile);
