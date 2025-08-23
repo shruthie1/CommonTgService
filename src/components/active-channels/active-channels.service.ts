@@ -16,7 +16,7 @@ export class ActiveChannelsService {
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
     @Inject(forwardRef(() => PromoteMsgsService))
     private promoteMsgsService: PromoteMsgsService
-  ) {}
+  ) { }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
     createActiveChannelDto.availableMsgs = Object.keys(await this.promoteMsgsService.findOne())
@@ -110,6 +110,7 @@ export class ActiveChannelsService {
             username: { $ne: null },
             canSendMsgs: true,
             restricted: false,
+            banned: false,
             forbidden: false
           }
         ]
