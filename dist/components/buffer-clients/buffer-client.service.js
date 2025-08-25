@@ -116,6 +116,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
                 this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
+            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
         }
         catch (error) {
             this.logger.error('Error during memory cleanup:', error);
@@ -135,24 +136,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         });
         this.activeTimeouts.clear();
         this.logger.debug('Cleared all active timeouts');
-    }
-    checkMemoryHealth() {
-        const memoryStats = {
-            joinMapSize: this.joinChannelMap.size,
-            leaveMapSize: this.leaveChannelMap.size,
-            activeTimeouts: this.activeTimeouts.size,
-            isJoinProcessing: this.isJoinChannelProcessing,
-            isLeaveProcessing: this.isLeaveChannelProcessing,
-        };
-        this.logger.debug('Memory health check:', memoryStats);
-        if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn('Join map approaching memory limit, performing emergency cleanup');
-            this.performMemoryCleanup();
-        }
-        if (memoryStats.leaveMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn('Leave map approaching memory limit, performing emergency cleanup');
-            this.performMemoryCleanup();
-        }
     }
     async create(bufferClient) {
         return await this.bufferClientModel.create({
@@ -365,8 +348,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;
                     const result = channels.ids.length < 220
-                        ? await this.channelsService.getActiveChannels(150, 0, excludedIds)
-                        : await this.activeChannelsService.getActiveChannels(150, 0, excludedIds);
+                        ? await this.activeChannelsService.getActiveChannels(150, 0, excludedIds)
+                        : await this.channelsService.getActiveChannels(150, 0, excludedIds);
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {
                             joinSet.add(mobile);
@@ -459,7 +442,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.debug('No channels to join, not starting queue');
             return;
         }
-        this.checkMemoryHealth();
         if (!this.joinChannelIntervalId) {
             this.logger.debug('Starting join channel interval');
             this.joinChannelIntervalId = setInterval(async () => {
@@ -601,7 +583,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.debug('No channels to leave, not starting queue');
             return;
         }
-        this.checkMemoryHealth();
         if (!this.leaveChannelIntervalId) {
             this.logger.debug('Starting leave channel interval');
             this.leaveChannelIntervalId = setInterval(async () => {

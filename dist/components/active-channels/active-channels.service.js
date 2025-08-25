@@ -100,6 +100,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                     username: { $ne: null },
                     canSendMsgs: true,
                     restricted: false,
+                    banned: false,
                     forbidden: false
                 }
             ]

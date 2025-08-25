@@ -72,33 +72,6 @@ export class PromoteClientService implements OnModuleDestroy {
         private sessionService: SessionService,
     ) { }
 
-    private checkMemoryHealth(): void {
-        const memoryStats = {
-            joinMapSize: this.joinChannelMap.size,
-            leaveMapSize: this.leaveChannelMap.size,
-            activeTimeouts: this.activeTimeouts.size,
-            isJoinProcessing: this.isJoinChannelProcessing,
-            isLeaveProcessing: this.isLeaveChannelProcessing,
-        };
-
-        this.logger.debug('Memory health check:', memoryStats);
-
-        // Emergency cleanup if memory usage is too high
-        if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn(
-                'Join map approaching memory limit, performing emergency cleanup',
-            );
-            this.performMemoryCleanup();
-        }
-
-        if (memoryStats.leaveMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn(
-                'Leave map approaching memory limit, performing emergency cleanup',
-            );
-            this.performMemoryCleanup();
-        }
-    }
-
     private startMemoryCleanup(): void {
         this.cleanupIntervalId = setInterval(() => {
             this.performMemoryCleanup();
@@ -589,9 +562,6 @@ export class PromoteClientService implements OnModuleDestroy {
             return;
         }
 
-        // Perform memory health check
-        this.checkMemoryHealth();
-
         // Start interval if not already running
         if (!this.joinChannelIntervalId) {
             this.logger.debug('Starting join channel interval');
@@ -780,9 +750,6 @@ export class PromoteClientService implements OnModuleDestroy {
             this.logger.debug('No channels to leave, not starting queue');
             return;
         }
-
-        // Perform memory health check
-        this.checkMemoryHealth();
 
         // Start interval if not already running
         if (!this.leaveChannelIntervalId) {

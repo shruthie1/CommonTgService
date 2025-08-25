@@ -60,24 +60,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
         this.cleanupIntervalId = null;
     }
-    checkMemoryHealth() {
-        const memoryStats = {
-            joinMapSize: this.joinChannelMap.size,
-            leaveMapSize: this.leaveChannelMap.size,
-            activeTimeouts: this.activeTimeouts.size,
-            isJoinProcessing: this.isJoinChannelProcessing,
-            isLeaveProcessing: this.isLeaveChannelProcessing,
-        };
-        this.logger.debug('Memory health check:', memoryStats);
-        if (memoryStats.joinMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn('Join map approaching memory limit, performing emergency cleanup');
-            this.performMemoryCleanup();
-        }
-        if (memoryStats.leaveMapSize > this.MAX_MAP_SIZE * 0.9) {
-            this.logger.warn('Leave map approaching memory limit, performing emergency cleanup');
-            this.performMemoryCleanup();
-        }
-    }
     startMemoryCleanup() {
         this.cleanupIntervalId = setInterval(() => {
             this.performMemoryCleanup();
@@ -321,9 +303,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
                         await (0, Helpers_1.sleep)(1500);
-                        const result = channels.ids.length < 220
-                            ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds)
-                            : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        let result = [];
+                        if (document.createdAt > new Date("2025-08-22T00:00:00.000Z")) {
+                            result = channels.ids.length < 220 ? await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
+                        else {
+                            result = channels.ids.length < 220 ? await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds) : await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                        }
                         if (!this.joinChannelMap.has(mobile)) {
                             this.joinChannelMap.set(mobile, result);
                             joinSet.add(mobile);
@@ -415,7 +401,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug('No channels to join, not starting queue');
             return;
         }
-        this.checkMemoryHealth();
         if (!this.joinChannelIntervalId) {
             this.logger.debug('Starting join channel interval');
             this.joinChannelIntervalId = setInterval(async () => {
@@ -557,7 +542,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug('No channels to leave, not starting queue');
             return;
         }
-        this.checkMemoryHealth();
         if (!this.leaveChannelIntervalId) {
             this.logger.debug('Starting leave channel interval');
             this.leaveChannelIntervalId = setInterval(async () => {

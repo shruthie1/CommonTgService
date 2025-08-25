@@ -45,7 +45,6 @@ export declare class BufferClientService implements OnModuleDestroy {
     private performMemoryCleanup;
     private createTimeout;
     private clearAllTimeouts;
-    private checkMemoryHealth;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument>;
     findAll(status?: 'active' | 'inactive'): Promise<BufferClientDocument[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument>;

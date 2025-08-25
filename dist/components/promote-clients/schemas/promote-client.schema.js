@@ -51,7 +51,8 @@ __decorate([
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUsed", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'promoteClients', versionKey: false, autoIndex: true,
+    (0, mongoose_1.Schema)({
+        collection: 'promoteClients', versionKey: false, autoIndex: true,
         timestamps: true,
         toJSON: {
             virtuals: true,

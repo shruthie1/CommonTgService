@@ -16,8 +16,8 @@ exports.BuildController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const build_service_1 = require("./build.service");
-const decorators_1 = require("../../decorators");
 const interceptors_1 = require("../../interceptors");
+const decorators_1 = require("../../decorators");
 let BuildController = class BuildController {
     constructor(buildService) {
         this.buildService = buildService;
@@ -33,7 +33,7 @@ exports.BuildController = BuildController;
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
-    (0, decorators_1.CloudflareCache)(3600, 60),
+    (0, decorators_1.NoCache)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get build data' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
