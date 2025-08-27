@@ -79,7 +79,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
                 retryDelay: 2000,
-                useWSS: true,
+                useWSS: false,
                 timeout: 30000
             });
             await client.setLogLevel(Logger_1.LogLevel.ERROR);
@@ -146,7 +146,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                         const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,
                             retryDelay: 2000,
-                            useWSS: true,
+                            useWSS: false,
                             timeout: 30000
                         });
                         await newClient.connect();
