@@ -98,7 +98,7 @@ export class TgSignupService implements OnModuleDestroy {
             const client = new TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
                 retryDelay: 2000,
-                useWSS: true,
+                useWSS: false,
                 timeout: 30000
             });
 
@@ -179,7 +179,7 @@ export class TgSignupService implements OnModuleDestroy {
                         const newClient = new TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,
                             retryDelay: 2000,
-                            useWSS: true,
+                            useWSS: false,
                             timeout: 30000
                         });
                         await newClient.connect();
