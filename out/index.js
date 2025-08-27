@@ -8667,6 +8667,40 @@ exports.connectionManager = ConnectionManager.getInstance();
 
 /***/ }),
 
+/***/ "./src/components/Telegram/utils/deleteProfilePics.ts":
+/*!************************************************************!*\
+  !*** ./src/components/Telegram/utils/deleteProfilePics.ts ***!
+  \************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.deleteProfilePhotos = deleteProfilePhotos;
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+async function deleteProfilePhotos(client, photos) {
+    try {
+        if (!photos) {
+            const result = await client.invoke(new telegram_1.Api.photos.GetUserPhotos({
+                userId: "me"
+            }));
+            console.info(`Profile Pics found: ${result.photos.length}`);
+            photos = result?.photos;
+        }
+        if (photos?.length > 0) {
+            await client.invoke(new telegram_1.Api.photos.DeletePhotos({
+                id: photos
+            }));
+        }
+        console.info("Deleted profile Photos");
+    }
+    catch (error) {
+        throw error;
+    }
+}
+
+
+/***/ }),
+
 /***/ "./src/components/Telegram/utils/generateTGConfig.ts":
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/utils/generateTGConfig.ts ***!
@@ -8705,6 +8739,24 @@ function generateTGConfig() {
         useIPV6: true,
         testServers: false
     };
+}
+
+
+/***/ }),
+
+/***/ "./src/components/Telegram/utils/getProfilePics.ts":
+/*!*********************************************************!*\
+  !*** ./src/components/Telegram/utils/getProfilePics.ts ***!
+  \*********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getProfilePics = getProfilePics;
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+async function getProfilePics(client, user = "me") {
+    const userPhotos = await client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: user }));
+    return userPhotos?.photos;
 }
 
 
@@ -19789,6 +19841,8 @@ const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connectio
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
+const getProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/getProfilePics */ "./src/components/Telegram/utils/getProfilePics.ts");
+const deleteProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/deleteProfilePics */ "./src/components/Telegram/utils/deleteProfilePics.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -20055,7 +20109,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await (0, Helpers_1.sleep)(2000);
                     const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                    await (0, Helpers_1.sleep)(2000);
                     await this.update(mobile, { channels: channels.ids.length });
+                    if (channels.ids.length > 100) {
+                        const profilePics = await (0, getProfilePics_1.getProfilePics)(client.client);
+                        if (profilePics.length > 0) {
+                            await (0, deleteProfilePics_1.deleteProfilePhotos)(client.client, profilePics);
+                        }
+                    }
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
