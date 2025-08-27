@@ -34,6 +34,8 @@ import { SessionService } from '../session-manager';
 import { contains } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
+import { getProfilePics } from '../Telegram/utils/getProfilePics';
+import { deleteProfilePhotos } from '../Telegram/utils/deleteProfilePics';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -427,8 +429,14 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.logger.debug(
                         `${mobile}: Found ${channels.ids.length} existing channels`,
                     );
+                    await sleep(2000);
                     await this.update(mobile, { channels: channels.ids.length });
-
+                    if (channels.ids.length > 100) {
+                        const profilePics = await getProfilePics(client.client);
+                        if (profilePics.length > 0) {
+                            await deleteProfilePhotos(client.client, profilePics)
+                        }
+                    }
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
