@@ -1221,16 +1221,10 @@ export class PromoteClientService implements OnModuleDestroy {
                     );
                     if (!hasPassword) {
                         await client.removeOtherAuths();
+                        await sleep(10000)
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
                         await sleep(30000);
-                        await client.updateUsername('');
-                        await sleep(3000);
-                        await client.updatePrivacyforDeletedAccount();
-                        await sleep(3000);
-                        await client.updateProfile('Deleted Account', 'Deleted Account');
-                        await sleep(3000);
-                        await client.deleteProfilePhotos();
                         const channels = await channelInfo(client.client, true);
                         this.logger.debug(
                             `Inserting Document for client ${targetClientId}`,
@@ -1258,10 +1252,6 @@ export class PromoteClientService implements OnModuleDestroy {
                             );
                             // Continue anyway as this is not critical
                         }
-                        await this.sessionService.getOldestSessionOrCreate({
-                            mobile: document.mobile
-                        })
-
                         this.logger.log(
                             `=============Created PromoteClient for ${targetClientId}==============`,
                         );
