@@ -105,6 +105,7 @@ class ConnectionManager {
         catch (error) {
             this.logger.error(mobile, 'Client creation failed', error);
             await this.handleConnectionError(mobile, clientInfo, error);
+            await this.unregisterClient(mobile);
             throw error;
         }
     }
@@ -156,7 +157,6 @@ class ConnectionManager {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
             }
         }
-        await this.unregisterClient(mobile);
     }
     async unregisterClient(mobile) {
         const clientInfo = this.clients.get(mobile);
