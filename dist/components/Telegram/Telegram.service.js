@@ -70,12 +70,10 @@ let TelegramService = class TelegramService {
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
         this.logger = new telegram_logger_1.TelegramLogger('TgService');
-        this.cleanupInterval = connection_manager_1.connectionManager.startCleanupInterval();
         connection_manager_1.connectionManager.setUsersService(this.usersService);
     }
     async onModuleDestroy() {
         this.logger.info('system', 'Module destroy initiated');
-        clearInterval(this.cleanupInterval);
     }
     getActiveClientSetup() {
         return TelegramManager_1.default.getActiveClientSetup();

@@ -410,10 +410,9 @@ __decorate([
 __decorate([
     (0, common_1.Get)('connection/stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get connection statistics' }),
-    (0, swagger_1.ApiResponse)({ type: connection_management_dto_1.ConnectionStatsDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", connection_management_dto_1.ConnectionStatsDto)
+    __metadata("design:returntype", void 0)
 ], TelegramController.prototype, "getConnectionStats", null);
 __decorate([
     (0, common_1.Get)('connection/state/:mobile'),

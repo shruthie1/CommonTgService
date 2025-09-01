@@ -1,10 +1,3 @@
-export declare class ConnectionStatsDto {
-    total: number;
-    connected: number;
-    connecting: number;
-    disconnecting: number;
-    error: number;
-}
 export declare class ConnectionStatusDto {
     state: string;
     autoDisconnect: boolean;

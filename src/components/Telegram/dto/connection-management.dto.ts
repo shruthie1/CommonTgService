@@ -1,22 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export class ConnectionStatsDto {
-    @ApiProperty({ description: 'Total number of connections' })
-    total: number;
-
-    @ApiProperty({ description: 'Number of connected clients' })
-    connected: number;
-
-    @ApiProperty({ description: 'Number of connecting clients' })
-    connecting: number;
-
-    @ApiProperty({ description: 'Number of disconnecting clients' })
-    disconnecting: number;
-
-    @ApiProperty({ description: 'Number of clients in error state' })
-    error: number;
-}
-
 export class ConnectionStatusDto {
     @ApiProperty({ description: 'Connection state of the client', enum: ['connecting', 'connected', 'disconnecting', 'disconnected', 'error'] })
     state: string;

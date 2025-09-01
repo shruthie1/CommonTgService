@@ -339,7 +339,8 @@ class TelegramManager {
     }
 
     async errorHandler(error) {
-        if (error.message && error.message == 'TIMEOUT') {
+        const errorDetails = parseError(error, `${this.phoneNumber}: RPC Error`, true);
+        if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
             // await this.client.disconnect();
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
             await this.destroy();
@@ -347,7 +348,6 @@ class TelegramManager {
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
             // this.logger.error(this.phoneNumber, `Error occurred: ${this.phoneNumber}:`, error);
-            parseError(error, `${this.phoneNumber}:RPC Error`, true);
         }
     }
 
@@ -577,7 +577,7 @@ class TelegramManager {
                             })
                         );
                     } catch (err) {
-                        this.logger.waning(this.phoneNumber, `Cannot fetch entity for: ${channelId}, likely not a member or invalid`);
+                        this.logger.warn(this.phoneNumber, `Cannot fetch entity for: ${channelId}, likely not a member or invalid`);
                         continue;
                     }
 
@@ -2506,7 +2506,7 @@ class TelegramManager {
                     );
                 }
             } catch (error) {
-                this.logger.waning(this.phoneNumber, `Failed to get thumbnail for message ${message.id}:`, error.message);
+                this.logger.warn(this.phoneNumber, `Failed to get thumbnail for message ${message.id}:`, error.message);
             }
 
             const mediaDetails = await this.getMediaDetails(message.media as Api.MessageMediaDocument);

@@ -29,7 +29,7 @@ import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
-import { ConnectionStatusDto, ConnectionStatsDto, GetClientOptionsDto } from './dto/connection-management.dto';
+import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import { connectionManager } from './utils/connection-manager';
@@ -80,8 +80,7 @@ export class TelegramController {
 
     @Get('connection/stats')
     @ApiOperation({ summary: 'Get connection statistics' })
-    @ApiResponse({ type: ConnectionStatsDto })
-    getConnectionStats(): ConnectionStatsDto {
+    getConnectionStats() {
         return this.telegramService.getConnectionStats();
     }
 

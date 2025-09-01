@@ -22,7 +22,7 @@ class TelegramLogger {
     error(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
     }
-    waning(mobile, message, details) {
+    warn(mobile, message, details) {
         this.logger.warn(this.formatMessage(mobile, message, details));
     }
     debug(mobile, message, details) {

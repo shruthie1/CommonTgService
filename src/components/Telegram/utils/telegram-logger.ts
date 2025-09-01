@@ -31,7 +31,7 @@ export class TelegramLogger {
         );
     }
 
-    waning(mobile: string, message: string, details?: any): void {
+    warn(mobile: string, message: string, details?: any): void {
         this.logger.warn(this.formatMessage(mobile, message, details));
     }
 

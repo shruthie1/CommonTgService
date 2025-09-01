@@ -135,7 +135,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
 
       // Handle connection shutdown
-      await connectionManager.handleShutdown();
+      await connectionManager.shutdown();
 
       // Clear cache
       this.clientsMap.clear();

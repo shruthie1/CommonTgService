@@ -9,31 +9,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GetClientOptionsDto = exports.ConnectionStatusDto = exports.ConnectionStatsDto = void 0;
+exports.GetClientOptionsDto = exports.ConnectionStatusDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
-class ConnectionStatsDto {
-}
-exports.ConnectionStatsDto = ConnectionStatsDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of connections' }),
-    __metadata("design:type", Number)
-], ConnectionStatsDto.prototype, "total", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of connected clients' }),
-    __metadata("design:type", Number)
-], ConnectionStatsDto.prototype, "connected", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of connecting clients' }),
-    __metadata("design:type", Number)
-], ConnectionStatsDto.prototype, "connecting", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of disconnecting clients' }),
-    __metadata("design:type", Number)
-], ConnectionStatsDto.prototype, "disconnecting", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of clients in error state' }),
-    __metadata("design:type", Number)
-], ConnectionStatsDto.prototype, "error", void 0);
 class ConnectionStatusDto {
 }
 exports.ConnectionStatusDto = ConnectionStatusDto;

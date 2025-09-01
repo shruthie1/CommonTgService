@@ -1,90 +1,58 @@
 import TelegramManager from '../TelegramManager';
 import { UsersService } from '../../../components/users/users.service';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
-interface RetryConfig {
-    maxAttempts: number;
-    baseDelay: number;
-    maxDelay: number;
-    backoffMultiplier: number;
-    jitter: boolean;
-}
-interface ClientInfo {
-    client: TelegramManager;
-    lastUsed: number;
-    autoDisconnect: boolean;
-    connectionAttempts: number;
-    lastError?: string;
-    state: 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
-    retryConfig: RetryConfig;
-    nextRetryAt?: number;
-    consecutiveFailures: number;
-    lastSuccessfulConnection?: number;
-    cleanupAttempts?: number;
-}
 interface GetClientOptions {
     autoDisconnect?: boolean;
     handler?: boolean;
     timeout?: number;
-    retryConfig?: Partial<RetryConfig>;
     forceReconnect?: boolean;
-}
-interface ConnectionLeakReport {
-    mapSize: number;
-    activeConnections: string[];
-    zombieConnections: string[];
-    staleConnections: string[];
 }
 declare class ConnectionManager {
     private static instance;
     private clients;
-    private readonly logger;
-    private cleanupInterval;
+    private logger;
+    private cleanupTimer;
     private usersService;
     private isShuttingDown;
-    private readonly DEFAULT_RETRY_CONFIG;
+    private readonly MAX_CONNECTIONS;
     private readonly CONNECTION_TIMEOUT;
-    private readonly MAX_CONCURRENT_CONNECTIONS;
-    private readonly COOLDOWN_PERIOD;
-    private readonly VALIDATION_TIMEOUT;
-    private readonly CLEANUP_TIMEOUT;
-    private readonly MAX_CLEANUP_ATTEMPTS;
+    private readonly IDLE_TIMEOUT;
+    private readonly CLEANUP_INTERVAL;
+    private readonly MAX_RETRY_ATTEMPTS;
     private constructor();
-    setUsersService(usersService: UsersService): void;
     static getInstance(): ConnectionManager;
-    handleShutdown(): Promise<void>;
-    private createTimeoutPromise;
-    private calculateRetryDelay;
-    private shouldRetry;
-    private waitForRetry;
-    private validateConnection;
+    setUsersService(usersService: UsersService): void;
     getClient(mobile: string, options?: GetClientOptions): Promise<TelegramManager>;
-    private retryConnection;
-    private handleConnectionError;
     private createNewClient;
-    private cleanupInactiveConnections;
+    private validateConnection;
+    private isClientHealthy;
+    private handleConnectionError;
+    unregisterClient(mobile: string): Promise<void>;
     private updateLastUsed;
-    hasClient(number: string): boolean;
-    disconnectAll(): Promise<void>;
-    unregisterClient(mobile: string, timeoutMs?: number): Promise<void>;
-    private forceCleanupClient;
-    getActiveConnectionCount(): number;
-    getConnectionLeakReport(): ConnectionLeakReport;
-    private performHealthCheck;
-    startCleanupInterval(intervalMs?: number): NodeJS.Timeout;
-    stopCleanupInterval(): void;
+    hasClient(mobile: string): boolean;
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getConnectionStats(): {
         total: number;
         connected: number;
         connecting: number;
-        disconnecting: number;
         disconnected: number;
         error: number;
-        retrying: number;
     };
-    getClientInfo(mobile: string): ClientInfo | undefined;
+    private cleanup;
+    private forceCleanup;
     forceReconnect(mobile: string): Promise<TelegramManager>;
-    setRetryConfig(mobile: string, config: Partial<RetryConfig>): boolean;
+    private startCleanup;
+    private stopCleanup;
+    shutdown(): Promise<void>;
+    disconnectAll(): Promise<void>;
+    getActiveConnectionCount(): number;
+    getClientList(): string[];
+    getHealthReport(): {
+        totalClients: number;
+        healthyClients: number;
+        unhealthyClients: string[];
+        memoryUsage: number;
+    };
 }
 export declare const connectionManager: ConnectionManager;
 export {};

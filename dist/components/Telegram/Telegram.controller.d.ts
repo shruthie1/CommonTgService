@@ -4,7 +4,7 @@ import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperation
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
-import { ConnectionStatusDto, ConnectionStatsDto } from './dto/connection-management.dto';
+import { ConnectionStatusDto } from './dto/connection-management.dto';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
@@ -21,7 +21,13 @@ export declare class TelegramController {
     disconnectAll(): Promise<{
         message: string;
     }>;
-    getConnectionStats(): ConnectionStatsDto;
+    getConnectionStats(): {
+        total: number;
+        connected: number;
+        connecting: number;
+        disconnected: number;
+        error: number;
+    };
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
@@ -102,7 +108,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

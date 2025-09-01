@@ -11,14 +11,13 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
-import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
+import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
     private channelsService;
     private readonly logger;
-    private cleanupInterval;
     constructor(usersService: UsersService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
     getActiveClientSetup(): {
@@ -225,7 +224,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -462,7 +461,13 @@ export declare class TelegramService implements OnModuleDestroy {
     connect(mobile: string, options?: GetClientOptionsDto): Promise<void>;
     disconnect(mobile: string): Promise<void>;
     disconnectAll(): Promise<void>;
-    getConnectionStats(): ConnectionStatsDto;
+    getConnectionStats(): {
+        total: number;
+        connected: number;
+        connecting: number;
+        disconnected: number;
+        error: number;
+    };
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
 }

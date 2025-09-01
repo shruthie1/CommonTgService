@@ -121,7 +121,7 @@ let ClientService = ClientService_1 = class ClientService {
             if (this.refreshPromise) {
                 await this.refreshPromise;
             }
-            await connection_manager_1.connectionManager.handleShutdown();
+            await connection_manager_1.connectionManager.shutdown();
             this.clientsMap.clear();
         }
         catch (error) {

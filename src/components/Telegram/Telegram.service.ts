@@ -21,14 +21,13 @@ import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { shouldMatch } from '../../utils';
-import { ConnectionStatsDto, ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
+import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
     private readonly logger: TelegramLogger;
-    private cleanupInterval: NodeJS.Timer;
 
     constructor(
         @Inject(forwardRef(() => UsersService))
@@ -39,13 +38,11 @@ export class TelegramService implements OnModuleDestroy {
         private channelsService: ChannelsService,
     ) {
         this.logger = new TelegramLogger('TgService');
-        this.cleanupInterval = connectionManager.startCleanupInterval();
         connectionManager.setUsersService(this.usersService);
     }
 
     async onModuleDestroy() {
         this.logger.info('system', 'Module destroy initiated');
-        clearInterval(this.cleanupInterval as NodeJS.Timeout);
     }
     public getActiveClientSetup() {
         return TelegramManager.getActiveClientSetup();
@@ -1104,7 +1101,7 @@ export class TelegramService implements OnModuleDestroy {
         await connectionManager.disconnectAll();
     }
 
-    getConnectionStats(): ConnectionStatsDto {
+    getConnectionStats() {
         return connectionManager.getConnectionStats();
     }
 
