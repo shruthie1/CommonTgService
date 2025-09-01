@@ -30,7 +30,6 @@ export function generateTGConfig(): TelegramClientParams {
     deviceModel: `${pickRandom(deviceModels)}-ssk`,
     systemVersion: pickRandom(systemVersions),
     appVersion: pickRandom(appVersions),
-    useIPV6: true,
-    testServers: false
+    useIPV6: false,
   };
 }

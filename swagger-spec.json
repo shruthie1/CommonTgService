@@ -181,15 +181,8 @@
         "operationId": "TelegramController_getConnectionStats",
         "parameters": [],
         "responses": {
-          "default": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectionStatsDto"
-                }
-              }
-            }
+          "200": {
+            "description": ""
           }
         },
         "summary": "Get connection statistics",
@@ -10677,38 +10670,6 @@
       "Object": {
         "type": "object",
         "properties": {}
-      },
-      "ConnectionStatsDto": {
-        "type": "object",
-        "properties": {
-          "total": {
-            "type": "number",
-            "description": "Total number of connections"
-          },
-          "connected": {
-            "type": "number",
-            "description": "Number of connected clients"
-          },
-          "connecting": {
-            "type": "number",
-            "description": "Number of connecting clients"
-          },
-          "disconnecting": {
-            "type": "number",
-            "description": "Number of disconnecting clients"
-          },
-          "error": {
-            "type": "number",
-            "description": "Number of clients in error state"
-          }
-        },
-        "required": [
-          "total",
-          "connected",
-          "connecting",
-          "disconnecting",
-          "error"
-        ]
       },
       "ConnectionStatusDto": {
         "type": "object",

@@ -306,6 +306,7 @@ class TelegramManager {
     async destroy(): Promise<void> {
         if (this.client) {
             try {
+                this.client._errorHandler = null;
                 await this.client?.destroy();
                 this.client._eventBuilders = [];
                 this.session?.delete();
@@ -339,7 +340,7 @@ class TelegramManager {
     }
 
     async errorHandler(error) {
-        const errorDetails = parseError(error, `${this.phoneNumber}: RPC Error`, true);
+        const errorDetails = parseError(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
             // await this.client.disconnect();
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
