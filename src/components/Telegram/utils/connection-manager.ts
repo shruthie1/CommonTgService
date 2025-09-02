@@ -149,7 +149,7 @@ class ConnectionManager {
             delete clientInfo.lastError;
             this.clients.set(mobile, clientInfo);
 
-            this.logger.info(mobile, 'Client created successfully');
+            // this.logger.info(mobile, 'Client created successfully');
             return telegramManager;
 
         } catch (error) {

@@ -16,7 +16,7 @@ export class TelegramLogger {
 
     private formatMessage(mobile: string, message: string, details?: any): string {
         return this.shouldIncludeDetails(details)
-            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            ? `[${mobile}] ${message} :: ${JSON.stringify(details)}`
             : `[${mobile}] ${message}`;
     }
 
