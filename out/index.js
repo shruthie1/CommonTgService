@@ -8189,7 +8189,6 @@ class ConnectionManager {
             clientInfo.connectionAttempts = 1;
             delete clientInfo.lastError;
             this.clients.set(mobile, clientInfo);
-            this.logger.info(mobile, 'Client created successfully');
             return telegramManager;
         }
         catch (error) {
@@ -8520,7 +8519,7 @@ class TelegramLogger {
     }
     formatMessage(mobile, message, details) {
         return this.shouldIncludeDetails(details)
-            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            ? `[${mobile}] ${message} :: ${JSON.stringify(details)}`
             : `[${mobile}] ${message}`;
     }
     info(mobile, operation, details) {
