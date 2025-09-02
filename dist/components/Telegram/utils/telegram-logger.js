@@ -13,7 +13,7 @@ class TelegramLogger {
     }
     formatMessage(mobile, message, details) {
         return this.shouldIncludeDetails(details)
-            ? `[${mobile}] ${message} - ${JSON.stringify(details)}`
+            ? `[${mobile}] ${message} :: ${JSON.stringify(details)}`
             : `[${mobile}] ${message}`;
     }
     info(mobile, operation, details) {
