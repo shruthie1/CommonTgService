@@ -227,7 +227,7 @@ class ConnectionManager {
         const clientInfo = this.clients.get(mobile);
         if (!clientInfo) return;
 
-        this.logger.info(mobile, 'Removing client', { state: clientInfo.state });
+        // this.logger.info(mobile, 'Removing client', { state: clientInfo.state });
 
         try {
             clientInfo.state = 'disconnected';
@@ -240,7 +240,7 @@ class ConnectionManager {
             this.logger.error(mobile, 'Error destroying client', error);
         } finally {
             this.clients.delete(mobile);
-            this.logger.info(mobile, 'Client removed from registry');
+            // this.logger.info(mobile, 'Client removed from registry');
         }
     }
 
