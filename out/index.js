@@ -8310,7 +8310,6 @@ class ConnectionManager {
             return;
         const now = Date.now();
         const toRemove = [];
-        this.logger.info('ConnectionManager', `Starting cleanup - ${this.clients.size} clients`);
         for (const [mobile, clientInfo] of this.clients.entries()) {
             const isIdle = (now - clientInfo.lastUsed) > this.IDLE_TIMEOUT;
             const shouldAutoDisconnect = clientInfo.autoDisconnect && isIdle;
