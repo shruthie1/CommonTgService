@@ -250,7 +250,6 @@ class TelegramManager {
                     this.client._destroyed = true;
                     if (this.client._sender && typeof this.client._sender.disconnect === 'function') {
                         await this.client._sender.disconnect();
-                        this.logger.info(this.phoneNumber, "Force CleanUp Done!");
                     }
                     this.client = null;
                 }
