@@ -8526,7 +8526,7 @@ class TelegramLogger {
         this.logger.log(this.formatMessage(mobile, operation, details));
     }
     error(mobile, operation, error) {
-        this.logger.error(`[${mobile}] ${operation} failed - ${error.message}`, error.stack);
+        this.logger.error(`[${mobile}] ${operation} - ${error.message}`, error.stack);
     }
     warn(mobile, message, details) {
         this.logger.warn(this.formatMessage(mobile, message, details));
