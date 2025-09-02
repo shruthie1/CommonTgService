@@ -26,7 +26,7 @@ export class TelegramLogger {
 
     error(mobile: string, operation: string, error: any): void {
         this.logger.error(
-            `[${mobile}] ${operation} failed - ${error.message}`,
+            `[${mobile}] ${operation} - ${error.message}`,
             error.stack
         );
     }
