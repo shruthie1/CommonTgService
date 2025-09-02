@@ -457,6 +457,15 @@ class TelegramManager {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber} Failed to leave channel  ${channelId}:`, false);
+                if ((0, utils_1.contains)(errorDetails.message, [
+                    'SESSION_REVOKED',
+                    'AUTH_KEY_UNREGISTERED',
+                    'USER_DEACTIVATED',
+                    'USER_DEACTIVATED_BAN',
+                    'FROZEN_METHOD_INVALID',
+                ])) {
+                    throw error;
+                }
                 if (errorDetails.message.includes('CHANNEL_INVALID')) {
                     try {
                         const entity = await this.safeGetEntity(channelId);
