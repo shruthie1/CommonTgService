@@ -12565,12 +12565,21 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             catch (innerError) {
                 this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
                 badIds.push(doc.mobile);
-                try {
-                    await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
-                    await (0, Helpers_1.sleep)(1500);
-                }
-                catch (removeError) {
-                    this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                const errorDetails = (0, parseError_1.parseError)(innerError);
+                if ((0, utils_1.contains)(errorDetails.message, [
+                    'SESSION_REVOKED',
+                    'AUTH_KEY_UNREGISTERED',
+                    'USER_DEACTIVATED',
+                    'USER_DEACTIVATED_BAN',
+                    'FROZEN_METHOD_INVALID',
+                ])) {
+                    try {
+                        await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
+                        await (0, Helpers_1.sleep)(1500);
+                    }
+                    catch (removeError) {
+                        this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                    }
                 }
             }
             finally {
@@ -12585,14 +12594,22 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         catch (error) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
-            (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error);
             badIds.push(doc.mobile);
-            try {
-                await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
-                await (0, Helpers_1.sleep)(1500);
-            }
-            catch (removeError) {
-                this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+            if ((0, utils_1.contains)(errorDetails.message, [
+                'SESSION_REVOKED',
+                'AUTH_KEY_UNREGISTERED',
+                'USER_DEACTIVATED',
+                'USER_DEACTIVATED_BAN',
+                'FROZEN_METHOD_INVALID',
+            ])) {
+                try {
+                    await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
+                    await (0, Helpers_1.sleep)(1500);
+                }
+                catch (removeError) {
+                    this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                }
             }
             try {
                 await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
