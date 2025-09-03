@@ -1205,16 +1205,27 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.error(
                     `Error processing client ${doc.mobile}: ${innerError.message}`,
                 );
-                badIds.push(doc.mobile);
-                try {
-                    await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
-                    await sleep(1500); // Delay after removal
-                } catch (removeError) {
-                    this.logger.error(
-                        `Error removing client ${doc.mobile}:`,
-                        removeError,
-                    );
-                }
+				badIds.push(doc.mobile);
+				const errorDetails = parseError(innerError);
+				if (
+					contains(errorDetails.message, [
+						'SESSION_REVOKED',
+						'AUTH_KEY_UNREGISTERED',
+						'USER_DEACTIVATED',
+						'USER_DEACTIVATED_BAN',
+						'FROZEN_METHOD_INVALID',
+					])
+				) {
+					try {
+						await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
+						await sleep(1500); // Delay after removal
+					} catch (removeError) {
+						this.logger.error(
+							`Error removing client ${doc.mobile}:`,
+							removeError,
+						);
+					}
+				}
             } finally {
                 try {
                     await connectionManager.unregisterClient(doc.mobile);
@@ -1228,16 +1239,24 @@ export class BufferClientService implements OnModuleDestroy {
             await sleep(3000); // Increased delay between individual client ops
         } catch (error: any) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
-            parseError(error);
+            const errorDetails = parseError(error);
             badIds.push(doc.mobile);
-
-            try {
-                await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
-                await sleep(1500);
-            } catch (removeError) {
-                this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
-            }
-
+			if (
+				contains(errorDetails.message, [
+					'SESSION_REVOKED',
+					'AUTH_KEY_UNREGISTERED',
+					'USER_DEACTIVATED',
+					'USER_DEACTIVATED_BAN',
+					'FROZEN_METHOD_INVALID',
+				])
+			) {
+				try {
+					await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
+					await sleep(1500);
+				} catch (removeError) {
+					this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+				}
+			}
             try {
                 await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError) {
@@ -1245,6 +1264,7 @@ export class BufferClientService implements OnModuleDestroy {
                     `Error unregistering client ${doc.mobile}: ${unregisterError.message}`,
                 );
             }
+            
         }
     }
 
