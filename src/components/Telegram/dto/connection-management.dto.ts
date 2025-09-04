@@ -22,7 +22,4 @@ export class GetClientOptionsDto {
 
     @ApiProperty({ description: 'Whether to use event handler', required: false, default: true })
     handler?: boolean;
-
-    @ApiProperty({ description: 'Connection timeout in milliseconds', required: false, default: 30000 })
-    timeout?: number;
 }

@@ -71,16 +71,6 @@
               "default": true,
               "type": "boolean"
             }
-          },
-          {
-            "name": "timeout",
-            "required": false,
-            "in": "query",
-            "description": "Connection timeout in milliseconds",
-            "schema": {
-              "default": 30000,
-              "type": "number"
-            }
           }
         ],
         "responses": {

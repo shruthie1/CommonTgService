@@ -356,7 +356,7 @@ class TelegramManager {
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
         const { apiHash, apiId } = getRandomCredentials();
         const tgConfiguration = generateTGConfig();
-        withTimeout(async () => {
+        await withTimeout(async () => {
             this.client = new TelegramClient(this.session, apiId, apiHash, tgConfiguration);
             this.client.setLogLevel(LogLevel.ERROR);
             this.client._errorHandler = this.errorHandler.bind(this)

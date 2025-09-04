@@ -8,6 +8,7 @@ exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.areJsonsNotSame = areJsonsNotSame;
 exports.mapToJson = mapToJson;
 exports.shouldMatch = shouldMatch;
+exports.parseObjectToString = parseObjectToString;
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -140,5 +141,17 @@ function shouldMatch(obj) {
     const titleMatch = obj.title && regex.test(obj.title);
     const usernameMatch = obj.username && regex.test(obj.username);
     return !!(titleMatch || usernameMatch);
+}
+function parseObjectToString(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return 'Invalid input: Not an object';
+    }
+    let result = '';
+    for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            result += `${key} : ${obj[key]}\n`;
+        }
+    }
+    return result;
 }
 //# sourceMappingURL=common.js.map

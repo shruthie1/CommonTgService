@@ -54,6 +54,7 @@ const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
 const generateTGConfig_1 = require("./utils/generateTGConfig");
 const telegram_logger_1 = require("./utils/telegram-logger");
+const withTimeout_1 = require("../../utils/withTimeout");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.logger = new telegram_logger_1.TelegramLogger('TgManager');
@@ -277,10 +278,16 @@ class TelegramManager {
     }
     async createClient(handler = true, handlerFn) {
         const { apiHash, apiId } = (0, utils_1.getRandomCredentials)();
-        this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, (0, generateTGConfig_1.generateTGConfig)());
-        this.client.setLogLevel(Logger_1.LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler.bind(this);
-        await this.client.connect();
+        const tgConfiguration = (0, generateTGConfig_1.generateTGConfig)();
+        await (0, withTimeout_1.withTimeout)(async () => {
+            this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, tgConfiguration);
+            this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+            this.client._errorHandler = this.errorHandler.bind(this);
+            await this.client.connect();
+        }, {
+            timeout: 15000,
+            errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
+        });
         const me = await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
         if (handler && this.client) {

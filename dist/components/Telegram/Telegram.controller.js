@@ -64,8 +64,8 @@ let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
     }
-    async connect(mobile, autoDisconnect, handler, timeout) {
-        const options = { autoDisconnect, handler, timeout };
+    async connect(mobile, autoDisconnect, handler) {
+        const options = { autoDisconnect, handler };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
@@ -379,14 +379,12 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true }),
-    (0, swagger_1.ApiQuery)({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 }),
     (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('autoDisconnect')),
     __param(2, (0, common_1.Query)('handler')),
-    __param(3, (0, common_1.Query)('timeout')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Boolean, Boolean, Number]),
+    __metadata("design:paramtypes", [String, Boolean, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "connect", null);
 __decorate([

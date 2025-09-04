@@ -48,15 +48,13 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true })
     @ApiQuery({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true })
-    @ApiQuery({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 })
     @ApiResponse({ type: Object, schema: { properties: { message: { type: 'string' } } } })
     async connect(
         @Param('mobile') mobile: string,
         @Query('autoDisconnect') autoDisconnect?: boolean,
         @Query('handler') handler?: boolean,
-        @Query('timeout') timeout?: number
     ): Promise<{ message: string }> {
-        const options: GetClientOptionsDto = { autoDisconnect, handler, timeout };
+        const options: GetClientOptionsDto = { autoDisconnect, handler };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }

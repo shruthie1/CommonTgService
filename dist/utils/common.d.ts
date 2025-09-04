@@ -7,3 +7,4 @@ export declare const defaultMessages: readonly ["1", "2", "3", "4", "5", "6", "7
 export declare function areJsonsNotSame(json1: unknown, json2: unknown): boolean;
 export declare function mapToJson<K extends string | number | symbol, V>(map: Map<K, V>): Record<string, V>;
 export declare function shouldMatch(obj: any): boolean;
+export declare function parseObjectToString(obj: Record<string, unknown>): string;

@@ -17,8 +17,8 @@ function generateTGConfig() {
     return {
         connectionRetries: 10,
         requestRetries: 10,
-        retryDelay: 5000,
-        timeout: 60000,
+        retryDelay: 2000,
+        timeout: 10000,
         autoReconnect: true,
         useWSS: false,
         maxConcurrentDownloads: 3,

@@ -8,5 +8,4 @@ export declare class ConnectionStatusDto {
 export declare class GetClientOptionsDto {
     autoDisconnect?: boolean;
     handler?: boolean;
-    timeout?: number;
 }

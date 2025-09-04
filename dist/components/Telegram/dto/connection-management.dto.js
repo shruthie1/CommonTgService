@@ -45,8 +45,4 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Whether to use event handler', required: false, default: true }),
     __metadata("design:type", Boolean)
 ], GetClientOptionsDto.prototype, "handler", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Connection timeout in milliseconds', required: false, default: 30000 }),
-    __metadata("design:type", Number)
-], GetClientOptionsDto.prototype, "timeout", void 0);
 //# sourceMappingURL=connection-management.dto.js.map

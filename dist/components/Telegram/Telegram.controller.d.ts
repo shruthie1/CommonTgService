@@ -12,7 +12,7 @@ import { SendMessageDto } from './dto/send-message.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
-    connect(mobile: string, autoDisconnect?: boolean, handler?: boolean, timeout?: number): Promise<{
+    connect(mobile: string, autoDisconnect?: boolean, handler?: boolean): Promise<{
         message: string;
     }>;
     disconnect(mobile: string): Promise<{
@@ -108,7 +108,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
