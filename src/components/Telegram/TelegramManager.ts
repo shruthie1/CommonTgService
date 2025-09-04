@@ -10,7 +10,7 @@ import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { contains, getRandomCredentials } from '../../utils';
+import { contains, getRandomCredentials, parseObjectToString } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
@@ -24,6 +24,7 @@ import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from '
 import { generateTGConfig } from './utils/generateTGConfig';
 import { Logger } from '@nestjs/common';
 import { TelegramLogger } from './utils/telegram-logger';
+import { withTimeout } from 'src/utils/withTimeout';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -353,11 +354,19 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-        const { apiHash, apiId } = getRandomCredentials()
-        this.client = new TelegramClient(this.session, apiId, apiHash, generateTGConfig());
-        this.client.setLogLevel(LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler.bind(this)
-        await this.client.connect();
+        const { apiHash, apiId } = getRandomCredentials();
+        const tgConfiguration = generateTGConfig();
+        withTimeout(async () => {
+            this.client = new TelegramClient(this.session, apiId, apiHash, tgConfiguration);
+            this.client.setLogLevel(LogLevel.ERROR);
+            this.client._errorHandler = this.errorHandler.bind(this)
+            await this.client.connect();
+        },
+            {
+                timeout: 15000,
+                errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
+            }
+        )
         const me = <Api.User>await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
         if (handler && this.client) {

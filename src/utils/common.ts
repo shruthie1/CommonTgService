@@ -166,3 +166,16 @@ export function shouldMatch(obj) {
   const usernameMatch = obj.username && regex.test(obj.username);
   return !!(titleMatch || usernameMatch);
 }
+
+export function parseObjectToString(obj: Record<string, unknown>) {
+  if (typeof obj !== 'object' || obj === null) {
+    return 'Invalid input: Not an object';
+  }
+  let result = '';
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      result += `${key} : ${obj[key]}\n`;
+    }
+  }
+  return result;
+}
