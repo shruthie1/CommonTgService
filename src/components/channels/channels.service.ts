@@ -156,7 +156,7 @@ export class ChannelsService {
             participantsCount: { $gt: 1000 },
             username: { $ne: null },
             canSendMsgs: true,
-            banned: false,
+            // banned: false,
             restricted: false,
             forbidden: false
           }

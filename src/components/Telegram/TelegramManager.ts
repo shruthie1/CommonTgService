@@ -22,9 +22,8 @@ import { IterMessagesParams } from 'telegram/client/messages';
 import { connectionManager } from './utils/connection-manager';
 import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { generateTGConfig } from './utils/generateTGConfig';
-import { Logger } from '@nestjs/common';
 import { TelegramLogger } from './utils/telegram-logger';
-import { withTimeout } from 'src/utils/withTimeout';
+import { withTimeout } from '../../utils/withTimeout';
 
 interface MessageScheduleOptions {
     chatId: string;
