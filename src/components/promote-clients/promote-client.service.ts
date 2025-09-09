@@ -640,7 +640,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     `${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,
                 );
                 this.joinChannelMap.set(mobile, channels);
-                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
+                if (activeChannel.banned == true) { // add DeletedCount  condition also if required
+                    this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`)
+                } else {
+                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                }
             } catch (error: any) {
                 const errorDetails = parseError(
                     error,

@@ -715,7 +715,12 @@ export class BufferClientService implements OnModuleDestroy {
                     `${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,
                 );
                 this.joinChannelMap.set(mobile, channels);
-                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
+                if (activeChannel.banned == true) { // add DeletedCount  condition also if required
+                    this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`)
+                } else {
+                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                }
             } catch (error: any) {
                 const errorDetails = parseError(
                     error,
@@ -1205,27 +1210,27 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.error(
                     `Error processing client ${doc.mobile}: ${innerError.message}`,
                 );
-				badIds.push(doc.mobile);
-				const errorDetails = parseError(innerError);
-				if (
-					contains(errorDetails.message, [
-						'SESSION_REVOKED',
-						'AUTH_KEY_UNREGISTERED',
-						'USER_DEACTIVATED',
-						'USER_DEACTIVATED_BAN',
-						'FROZEN_METHOD_INVALID',
-					])
-				) {
-					try {
-						await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
-						await sleep(1500); // Delay after removal
-					} catch (removeError) {
-						this.logger.error(
-							`Error removing client ${doc.mobile}:`,
-							removeError,
-						);
-					}
-				}
+                badIds.push(doc.mobile);
+                const errorDetails = parseError(innerError);
+                if (
+                    contains(errorDetails.message, [
+                        'SESSION_REVOKED',
+                        'AUTH_KEY_UNREGISTERED',
+                        'USER_DEACTIVATED',
+                        'USER_DEACTIVATED_BAN',
+                        'FROZEN_METHOD_INVALID',
+                    ])
+                ) {
+                    try {
+                        await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
+                        await sleep(1500); // Delay after removal
+                    } catch (removeError) {
+                        this.logger.error(
+                            `Error removing client ${doc.mobile}:`,
+                            removeError,
+                        );
+                    }
+                }
             } finally {
                 try {
                     await connectionManager.unregisterClient(doc.mobile);
@@ -1241,22 +1246,22 @@ export class BufferClientService implements OnModuleDestroy {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = parseError(error);
             badIds.push(doc.mobile);
-			if (
-				contains(errorDetails.message, [
-					'SESSION_REVOKED',
-					'AUTH_KEY_UNREGISTERED',
-					'USER_DEACTIVATED',
-					'USER_DEACTIVATED_BAN',
-					'FROZEN_METHOD_INVALID',
-				])
-			) {
-				try {
-					await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
-					await sleep(1500);
-				} catch (removeError) {
-					this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
-				}
-			}
+            if (
+                contains(errorDetails.message, [
+                    'SESSION_REVOKED',
+                    'AUTH_KEY_UNREGISTERED',
+                    'USER_DEACTIVATED',
+                    'USER_DEACTIVATED_BAN',
+                    'FROZEN_METHOD_INVALID',
+                ])
+            ) {
+                try {
+                    await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
+                    await sleep(1500);
+                } catch (removeError) {
+                    this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                }
+            }
             try {
                 await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError) {
@@ -1264,7 +1269,7 @@ export class BufferClientService implements OnModuleDestroy {
                     `Error unregistering client ${doc.mobile}: ${unregisterError.message}`,
                 );
             }
-            
+
         }
     }
 
