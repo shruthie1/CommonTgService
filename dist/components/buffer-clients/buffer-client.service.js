@@ -497,7 +497,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
-                if (activeChannel.banned == true) {
+                if (activeChannel && activeChannel.banned == true) {
                     this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`);
                 }
                 else {
