@@ -141,7 +141,6 @@ let ChannelsService = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    banned: false,
                     restricted: false,
                     forbidden: false
                 }
