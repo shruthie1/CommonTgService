@@ -464,7 +464,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 currentChannel = channels.shift();
                 this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
-                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
+                if (activeChannel.banned == true) {
+                    this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`);
+                }
+                else {
+                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                }
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
