@@ -360,14 +360,14 @@ class TelegramManager {
             this.client.setLogLevel(LogLevel.ERROR);
             this.client._errorHandler = this.errorHandler.bind(this)
             await this.client.connect();
+            this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         },
             {
                 timeout: 15000,
                 errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
             }
         )
-        const me = <Api.User>await this.client.getMe();
-        this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
+        // const me = <Api.User>await this.client.getMe();
         if (handler && this.client) {
             if (handlerFn) {
                 this.logger.info(this.phoneNumber, "Adding Custom Event Handler")
