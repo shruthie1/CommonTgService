@@ -1332,8 +1332,8 @@ let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
     }
-    async connect(mobile, autoDisconnect, handler, timeout) {
-        const options = { autoDisconnect, handler, timeout };
+    async connect(mobile, autoDisconnect, handler) {
+        const options = { autoDisconnect, handler };
         await this.telegramService.connect(mobile, options);
         return { message: 'Connected successfully' };
     }
@@ -1647,14 +1647,12 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'autoDisconnect', description: 'Whether to auto disconnect the client after period of inactivity', required: false, type: Boolean, default: true }),
     (0, swagger_1.ApiQuery)({ name: 'handler', description: 'Whether to use event handler', required: false, type: Boolean, default: true }),
-    (0, swagger_1.ApiQuery)({ name: 'timeout', description: 'Connection timeout in milliseconds', required: false, type: Number, default: 30000 }),
     (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { message: { type: 'string' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('autoDisconnect')),
     __param(2, (0, common_1.Query)('handler')),
-    __param(3, (0, common_1.Query)('timeout')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Boolean, Boolean, Number]),
+    __metadata("design:paramtypes", [String, Boolean, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "connect", null);
 __decorate([
@@ -3520,6 +3518,7 @@ const connection_manager_1 = __webpack_require__(/*! ./utils/connection-manager 
 const message_search_dto_1 = __webpack_require__(/*! ./dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
 const generateTGConfig_1 = __webpack_require__(/*! ./utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 const telegram_logger_1 = __webpack_require__(/*! ./utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
+const withTimeout_1 = __webpack_require__(/*! ../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.logger = new telegram_logger_1.TelegramLogger('TgManager');
@@ -3743,10 +3742,16 @@ class TelegramManager {
     }
     async createClient(handler = true, handlerFn) {
         const { apiHash, apiId } = (0, utils_1.getRandomCredentials)();
-        this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, (0, generateTGConfig_1.generateTGConfig)());
-        this.client.setLogLevel(Logger_1.LogLevel.ERROR);
-        this.client._errorHandler = this.errorHandler.bind(this);
-        await this.client.connect();
+        const tgConfiguration = (0, generateTGConfig_1.generateTGConfig)();
+        await (0, withTimeout_1.withTimeout)(async () => {
+            this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, tgConfiguration);
+            this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+            this.client._errorHandler = this.errorHandler.bind(this);
+            await this.client.connect();
+        }, {
+            timeout: 15000,
+            errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
+        });
         const me = await this.client.getMe();
         this.logger.info(this.phoneNumber, "Connected Client : ", me.phone);
         if (handler && this.client) {
@@ -6474,10 +6479,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Whether to use event handler', required: false, default: true }),
     __metadata("design:type", Boolean)
 ], GetClientOptionsDto.prototype, "handler", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Connection timeout in milliseconds', required: false, default: 30000 }),
-    __metadata("design:type", Number)
-], GetClientOptionsDto.prototype, "timeout", void 0);
 
 
 /***/ }),
@@ -8472,8 +8473,8 @@ function generateTGConfig() {
     return {
         connectionRetries: 10,
         requestRetries: 10,
-        retryDelay: 5000,
-        timeout: 60000,
+        retryDelay: 2000,
+        timeout: 10000,
         autoReconnect: true,
         useWSS: false,
         maxConcurrentDownloads: 3,
@@ -13533,7 +13534,6 @@ let ChannelsService = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    banned: false,
                     restricted: false,
                     forbidden: false
                 }
@@ -28500,6 +28500,7 @@ exports.fetchNumbersFromString = fetchNumbersFromString;
 exports.areJsonsNotSame = areJsonsNotSame;
 exports.mapToJson = mapToJson;
 exports.shouldMatch = shouldMatch;
+exports.parseObjectToString = parseObjectToString;
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -28632,6 +28633,18 @@ function shouldMatch(obj) {
     const titleMatch = obj.title && regex.test(obj.title);
     const usernameMatch = obj.username && regex.test(obj.username);
     return !!(titleMatch || usernameMatch);
+}
+function parseObjectToString(obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return 'Invalid input: Not an object';
+    }
+    let result = '';
+    for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            result += `${key} : ${obj[key]}\n`;
+        }
+    }
+    return result;
 }
 
 
@@ -28946,17 +28959,8 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.parseError = exports.ppplbot = exports.fetchWithTimeout = exports.toBoolean = exports.shouldMatch = exports.mapToJson = exports.areJsonsNotSame = exports.fetchNumbersFromString = exports.defaultReactions = exports.defaultMessages = exports.sleep = exports.contains = void 0;
-var common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
-Object.defineProperty(exports, "contains", ({ enumerable: true, get: function () { return common_1.contains; } }));
-Object.defineProperty(exports, "sleep", ({ enumerable: true, get: function () { return common_1.sleep; } }));
-Object.defineProperty(exports, "defaultMessages", ({ enumerable: true, get: function () { return common_1.defaultMessages; } }));
-Object.defineProperty(exports, "defaultReactions", ({ enumerable: true, get: function () { return common_1.defaultReactions; } }));
-Object.defineProperty(exports, "fetchNumbersFromString", ({ enumerable: true, get: function () { return common_1.fetchNumbersFromString; } }));
-Object.defineProperty(exports, "areJsonsNotSame", ({ enumerable: true, get: function () { return common_1.areJsonsNotSame; } }));
-Object.defineProperty(exports, "mapToJson", ({ enumerable: true, get: function () { return common_1.mapToJson; } }));
-Object.defineProperty(exports, "shouldMatch", ({ enumerable: true, get: function () { return common_1.shouldMatch; } }));
-Object.defineProperty(exports, "toBoolean", ({ enumerable: true, get: function () { return common_1.toBoolean; } }));
+exports.parseError = exports.ppplbot = exports.fetchWithTimeout = void 0;
+__exportStar(__webpack_require__(/*! ./common */ "./src/utils/common.ts"), exports);
 var fetchWithTimeout_1 = __webpack_require__(/*! ./fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 Object.defineProperty(exports, "fetchWithTimeout", ({ enumerable: true, get: function () { return fetchWithTimeout_1.fetchWithTimeout; } }));
 var logbots_1 = __webpack_require__(/*! ./logbots */ "./src/utils/logbots.ts");
