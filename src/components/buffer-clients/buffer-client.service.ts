@@ -716,7 +716,7 @@ export class BufferClientService implements OnModuleDestroy {
                 );
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
-                if (activeChannel.banned == true) { // add DeletedCount  condition also if required
+                if ( activeChannel && activeChannel.banned == true) { // add DeletedCount  condition also if required
                     this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`)
                 } else {
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
