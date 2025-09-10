@@ -108,7 +108,7 @@ class ConnectionManager {
     }
     async validateConnection(mobile, client) {
         await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
-            errorMessage: `getMe TimeOut for ${mobile}`,
+            errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
             throwErr: true
         });
