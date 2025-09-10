@@ -35,6 +35,7 @@ import { contains } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
+import TelegramManager from '../Telegram/TelegramManager';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -716,7 +717,7 @@ export class BufferClientService implements OnModuleDestroy {
                 );
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
-                if ( activeChannel && activeChannel.banned == true) { // add DeletedCount  condition also if required
+                if (activeChannel && activeChannel.banned == true) { // add DeletedCount  condition also if required
                     this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`)
                 } else {
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
@@ -1078,11 +1079,12 @@ export class BufferClientService implements OnModuleDestroy {
             return;
         }
 
-        await sleep(3000); // Increased initial delay
+        await sleep(3000); // Initial delay
         const bufferclients = await this.findAll('active');
         const badIds: string[] = [];
         let goodIds: string[] = [];
 
+        // Pad badIds if fewer than 80
         if (bufferclients.length < 80) {
             for (let i = 0; i < 80 - bufferclients.length; i++) {
                 badIds.push(i.toString());
@@ -1092,31 +1094,27 @@ export class BufferClientService implements OnModuleDestroy {
         const clients = await this.clientService.findAll();
         const promoteclients = await this.promoteClientService.findAll();
 
-        // Get all client mobiles including promote mobiles using new schema
+        // Collect all mobiles
         const clientMainMobiles = clients.map((c) => c.mobile);
-        const allPromoteMobiles = [];
+        const allPromoteMobiles: string[] = [];
         for (const client of clients) {
             const clientPromoteMobiles = await this.clientService.getPromoteMobiles(
                 client.clientId,
             );
             allPromoteMobiles.push(...clientPromoteMobiles);
         }
-        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(
-            Boolean,
-        );
-
+        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
         const promoteclientIds = promoteclients.map((c) => c.mobile);
 
+        // Filter buffer clients not already active/promote
         const toProcess = bufferclients.filter(
             (doc) =>
                 !clientIds.includes(doc.mobile) &&
                 !promoteclientIds.includes(doc.mobile),
         );
 
-        // Sequential processing instead of parallel
-        this.logger.debug(
-            `Processing ${toProcess.length} buffer clients sequentially`,
-        );
+        this.logger.debug(`Processing ${toProcess.length} buffer clients sequentially`);
+
         for (let i = 0; i < toProcess.length; i++) {
             const doc = toProcess[i];
             this.logger.debug(
@@ -1130,27 +1128,21 @@ export class BufferClientService implements OnModuleDestroy {
                     `Error processing buffer client ${doc.mobile}:`,
                     error,
                 );
-                badIds.push(doc.mobile);
             }
 
-            // Add delay between client processing
             if (i < toProcess.length - 1) {
-                await sleep(5000); // 5 seconds between each client
+                await sleep(5000); // Delay between clients
             }
         }
 
-        // Mark already active clients as good (sequential processing)
-        for (let i = 0; i < bufferclients.length; i++) {
-            const doc = bufferclients[i];
-            if (
-                clientIds.includes(doc.mobile) ||
-                promoteclientIds.includes(doc.mobile)
-            ) {
+        // Mark already active clients
+        for (const doc of bufferclients) {
+            if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
                 this.logger.warn(`Number ${doc.mobile} is an Active Client`);
                 goodIds.push(doc.mobile);
                 try {
                     await this.remove(doc.mobile, `CheckPoint: Already ActiveClient`);
-                    await sleep(1000); // Delay after removal
+                    await sleep(1000);
                 } catch (removeError) {
                     this.logger.error(
                         `Error removing active client ${doc.mobile}:`,
@@ -1160,92 +1152,56 @@ export class BufferClientService implements OnModuleDestroy {
             }
         }
 
+        // Deduplicate IDs once at the end
         goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
         this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
 
-        // Add delay before processing new users
         await sleep(2000);
         await this.addNewUserstoBufferClients(badIds, goodIds);
     }
 
     private async processBufferClient(
-        doc: any,
+        doc: BufferClient,
         badIds: string[],
         goodIds: string[],
     ) {
+        let cli: TelegramManager;
         try {
-            const cli = await connectionManager.getClient(doc.mobile, {
+            cli = await connectionManager.getClient(doc.mobile, {
                 autoDisconnect: true,
                 handler: false,
             });
 
-            try {
-                const me = await cli.getMe();
+            const me = await cli.getMe();
 
-                if (me.username) {
-                    await this.telegramService.updateUsername(doc.mobile, '');
-                    await sleep(2000);
-                }
-
-                if (me.firstName !== 'Deleted Account') {
-                    await this.telegramService.updateNameandBio(
-                        doc.mobile,
-                        'Deleted Account',
-                        '',
-                    );
-                    await sleep(2000);
-                }
-
-                await this.telegramService.deleteProfilePhotos(doc.mobile);
-                const hasPassword = await cli.hasPassword();
-
-                if (!hasPassword) {
-                    this.logger.warn(`Client ${doc.mobile} does not have password`);
-                    badIds.push(doc.mobile);
-                } else {
-                    this.logger.debug(`${doc.mobile}: ALL Good`);
-                    goodIds.push(doc.mobile);
-                }
-            } catch (innerError: any) {
-                this.logger.error(
-                    `Error processing client ${doc.mobile}: ${innerError.message}`,
-                );
-                badIds.push(doc.mobile);
-                const errorDetails = parseError(innerError);
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
-                    try {
-                        await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
-                        await sleep(1500); // Delay after removal
-                    } catch (removeError) {
-                        this.logger.error(
-                            `Error removing client ${doc.mobile}:`,
-                            removeError,
-                        );
-                    }
-                }
-            } finally {
-                try {
-                    await connectionManager.unregisterClient(doc.mobile);
-                } catch (unregisterError) {
-                    this.logger.error(
-                        `Error unregistering client ${doc.mobile}: ${unregisterError.message}`,
-                    );
-                }
+            if (me.username) {
+                await this.telegramService.updateUsername(doc.mobile, '');
+                await sleep(2000);
             }
 
-            await sleep(3000); // Increased delay between individual client ops
+            if (me.firstName !== 'Deleted Account') {
+                await this.telegramService.updateNameandBio(
+                    doc.mobile,
+                    'Deleted Account',
+                    '',
+                );
+                await sleep(2000);
+            }
+
+            await this.telegramService.deleteProfilePhotos(doc.mobile);
+
+            const hasPassword = await cli.hasPassword();
+            if (!hasPassword) {
+                this.logger.warn(`Client ${doc.mobile} does not have password`);
+                badIds.push(doc.mobile);
+            } else {
+                this.logger.debug(`${doc.mobile}: ALL Good`);
+                goodIds.push(doc.mobile);
+            }
         } catch (error: any) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
+
             const errorDetails = parseError(error);
-            badIds.push(doc.mobile);
             if (
                 contains(errorDetails.message, [
                     'SESSION_REVOKED',
@@ -1255,23 +1211,26 @@ export class BufferClientService implements OnModuleDestroy {
                     'FROZEN_METHOD_INVALID',
                 ])
             ) {
+                badIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
+                    await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
                     await sleep(1500);
                 } catch (removeError) {
                     this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
                 }
             }
+        } finally {
             try {
-                await connectionManager.unregisterClient(doc.mobile);
-            } catch (unregisterError) {
+                if (cli) await connectionManager.unregisterClient(doc.mobile);
+            } catch (unregisterError: any) {
                 this.logger.error(
                     `Error unregistering client ${doc.mobile}: ${unregisterError.message}`,
                 );
             }
-
+            await sleep(3000); // Delay after client ops
         }
     }
+
 
     async addNewUserstoBufferClients(badIds: string[], goodIds: string[]) {
         const sixMonthsAgo = new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)

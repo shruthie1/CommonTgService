@@ -4,7 +4,6 @@ type ShouldRetry = (error: any, attempt: number) => boolean;
 
 interface WithTimeoutOptions {
   timeout?: number; // per-attempt timeout
-  timeLimit?: number; // total allowed time
   errorMessage?: string;
   throwErr?: boolean;
   maxRetries?: number;
@@ -21,7 +20,6 @@ export async function withTimeout<T>(
 ): Promise<T> {
   const {
     timeout = 10000,
-    timeLimit = 30000,
     errorMessage = "Operation timeout",
     throwErr = true,
     maxRetries = 1,
@@ -33,24 +31,16 @@ export async function withTimeout<T>(
   } = options;
 
   let lastError: any;
-  const startTime = Date.now();
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    // Check if we've exceeded the total time limit
-    if (Date.now() - startTime > timeLimit) {
-      lastError = new Error(`${errorMessage}: exceeded total time limit ${timeLimit}ms`);
-      break;
-    }
-
     if (cancelSignal?.aborted) {
       lastError = new Error("Operation cancelled");
       break;
     }
 
     try {
-      const remainingTime = Math.min(timeout, timeLimit - (Date.now() - startTime));
       const task = promiseFactory();
-      return await runWithTimeout(task, remainingTime, cancelSignal, errorMessage);
+      return await runWithTimeout(task, timeout, cancelSignal, errorMessage);
     } catch (err) {
       lastError = err;
       if (!shouldRetry(err, attempt) || attempt === maxRetries) break;
@@ -85,12 +75,10 @@ async function runWithTimeout<T>(
 
   try {
     return await new Promise<T>((resolve, reject) => {
-      // Set up timeout
       timeoutId = setTimeout(() => {
         reject(new Error(`${errorMessage ?? "Timeout"} after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      // Set up cancel signal listener
       if (cancelSignal) {
         if (cancelSignal.aborted) {
           reject(new Error("Operation cancelled"));
@@ -100,19 +88,13 @@ async function runWithTimeout<T>(
         cancelSignal.addEventListener("abort", abortListener, { once: true });
       }
 
-      // Handle promise resolution/rejection
-      promise
-        .then(resolve)
-        .catch(reject);
+      promise.then(resolve).catch(reject);
     });
   } finally {
-    // Clean up timeout
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = null;
     }
-
-    // Clean up abort listener
     if (abortListener && cancelSignal) {
       cancelSignal.removeEventListener("abort", abortListener);
       abortListener = null;
