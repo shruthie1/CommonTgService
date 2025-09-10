@@ -167,7 +167,8 @@ class ConnectionManager {
             }
 
             await withTimeout(() => client.client.getMe(), {
-                errorMessage: "getMe TimeOut"
+                errorMessage: "getMe TimeOut",
+                maxRetries: 3,
             })
 
             return true;
