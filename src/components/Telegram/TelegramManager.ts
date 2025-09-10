@@ -42,13 +42,16 @@ class TelegramManager {
     private session: StringSession;
     public phoneNumber: string;
     public client: TelegramClient | null;
-    private channelArray: string[];
+    public apiId: number;
+    public apiHash: string
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        this.channelArray = [];
+        const tgCreds = getRandomCredentials();
+        this.apiHash = tgCreds.apiHash
+        this.apiId = tgCreds.apiId
     }
 
     public static getActiveClientSetup() {
@@ -310,7 +313,6 @@ class TelegramManager {
                 await this.client?.destroy();
                 this.client._eventBuilders = [];
                 this.session?.delete();
-                this.channelArray = [];
                 await sleep(2000);
                 this.logger.info(this.phoneNumber, "Client Disconnected Sucessfully");
             } catch (error) {
@@ -353,10 +355,9 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-        const { apiHash, apiId } = getRandomCredentials();
         const tgConfiguration = generateTGConfig();
         await withTimeout(async () => {
-            this.client = new TelegramClient(this.session, apiId, apiHash, tgConfiguration);
+            this.client = new TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
             this.client.setLogLevel(LogLevel.ERROR);
             this.client._errorHandler = this.errorHandler.bind(this)
             await this.client.connect();
@@ -364,7 +365,7 @@ class TelegramManager {
         },
             {
                 timeout: 15000,
-                errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
+                errorMessage: `Tg Manager Client Connection Timeout\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
             }
         )
         // const me = <Api.User>await this.client.getMe();

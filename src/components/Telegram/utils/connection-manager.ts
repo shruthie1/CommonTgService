@@ -160,7 +160,7 @@ class ConnectionManager {
 
     private async validateConnection(mobile: string, client: TelegramManager): Promise<void> {
         await withTimeout(() => client.client.getMe(), {
-            errorMessage: `getMe TimeOut for ${mobile}`,
+            errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
             throwErr: true
         })
