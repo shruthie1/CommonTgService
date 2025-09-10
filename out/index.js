@@ -8185,7 +8185,7 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
         try {
             const client = await (0, withTimeout_1.withTimeout)(() => telegramManager.createClient(options.handler), {
-                timeLimit: this.CONNECTION_TIMEOUT,
+                timeout: this.CONNECTION_TIMEOUT,
                 errorMessage: "Tg Client Connection Timeout"
             });
             if (!client) {
@@ -12515,16 +12515,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             catch (error) {
                 this.logger.error(`Error processing buffer client ${doc.mobile}:`, error);
-                badIds.push(doc.mobile);
             }
             if (i < toProcess.length - 1) {
                 await (0, Helpers_1.sleep)(5000);
             }
         }
-        for (let i = 0; i < bufferclients.length; i++) {
-            const doc = bufferclients[i];
-            if (clientIds.includes(doc.mobile) ||
-                promoteclientIds.includes(doc.mobile)) {
+        for (const doc of bufferclients) {
+            if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
                 this.logger.warn(`Number ${doc.mobile} is an Active Client`);
                 goodIds.push(doc.mobile);
                 try {
@@ -12542,66 +12539,35 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         await this.addNewUserstoBufferClients(badIds, goodIds);
     }
     async processBufferClient(doc, badIds, goodIds) {
+        let cli;
         try {
-            const cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+            cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
                 autoDisconnect: true,
                 handler: false,
             });
-            try {
-                const me = await cli.getMe();
-                if (me.username) {
-                    await this.telegramService.updateUsername(doc.mobile, '');
-                    await (0, Helpers_1.sleep)(2000);
-                }
-                if (me.firstName !== 'Deleted Account') {
-                    await this.telegramService.updateNameandBio(doc.mobile, 'Deleted Account', '');
-                    await (0, Helpers_1.sleep)(2000);
-                }
-                await this.telegramService.deleteProfilePhotos(doc.mobile);
-                const hasPassword = await cli.hasPassword();
-                if (!hasPassword) {
-                    this.logger.warn(`Client ${doc.mobile} does not have password`);
-                    badIds.push(doc.mobile);
-                }
-                else {
-                    this.logger.debug(`${doc.mobile}: ALL Good`);
-                    goodIds.push(doc.mobile);
-                }
+            const me = await cli.getMe();
+            if (me.username) {
+                await this.telegramService.updateUsername(doc.mobile, '');
+                await (0, Helpers_1.sleep)(2000);
             }
-            catch (innerError) {
-                this.logger.error(`Error processing client ${doc.mobile}: ${innerError.message}`);
+            if (me.firstName !== 'Deleted Account') {
+                await this.telegramService.updateNameandBio(doc.mobile, 'Deleted Account', '');
+                await (0, Helpers_1.sleep)(2000);
+            }
+            await this.telegramService.deleteProfilePhotos(doc.mobile);
+            const hasPassword = await cli.hasPassword();
+            if (!hasPassword) {
+                this.logger.warn(`Client ${doc.mobile} does not have password`);
                 badIds.push(doc.mobile);
-                const errorDetails = (0, parseError_1.parseError)(innerError);
-                if ((0, utils_1.contains)(errorDetails.message, [
-                    'SESSION_REVOKED',
-                    'AUTH_KEY_UNREGISTERED',
-                    'USER_DEACTIVATED',
-                    'USER_DEACTIVATED_BAN',
-                    'FROZEN_METHOD_INVALID',
-                ])) {
-                    try {
-                        await this.remove(doc.mobile, `Process BufferClienrError: ${innerError.message}`);
-                        await (0, Helpers_1.sleep)(1500);
-                    }
-                    catch (removeError) {
-                        this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
-                    }
-                }
             }
-            finally {
-                try {
-                    await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
-                }
-                catch (unregisterError) {
-                    this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
-                }
+            else {
+                this.logger.debug(`${doc.mobile}: ALL Good`);
+                goodIds.push(doc.mobile);
             }
-            await (0, Helpers_1.sleep)(3000);
         }
         catch (error) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = (0, parseError_1.parseError)(error);
-            badIds.push(doc.mobile);
             if ((0, utils_1.contains)(errorDetails.message, [
                 'SESSION_REVOKED',
                 'AUTH_KEY_UNREGISTERED',
@@ -12609,20 +12575,25 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 'USER_DEACTIVATED_BAN',
                 'FROZEN_METHOD_INVALID',
             ])) {
+                badIds.push(doc.mobile);
                 try {
-                    await this.remove(doc.mobile, `Process BufferClient 2: ${error.message}`);
+                    await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
                     await (0, Helpers_1.sleep)(1500);
                 }
                 catch (removeError) {
                     this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
                 }
             }
+        }
+        finally {
             try {
-                await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
+                if (cli)
+                    await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
             }
             catch (unregisterError) {
                 this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
+            await (0, Helpers_1.sleep)(3000);
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds) {
@@ -29774,22 +29745,16 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.withTimeout = withTimeout;
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 async function withTimeout(promiseFactory, options = {}) {
-    const { timeout = 10000, timeLimit = 30000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
+    const { timeout = 10000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
     let lastError;
-    const startTime = Date.now();
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        if (Date.now() - startTime > timeLimit) {
-            lastError = new Error(`${errorMessage}: exceeded total time limit ${timeLimit}ms`);
-            break;
-        }
         if (cancelSignal?.aborted) {
             lastError = new Error("Operation cancelled");
             break;
         }
         try {
-            const remainingTime = Math.min(timeout, timeLimit - (Date.now() - startTime));
             const task = promiseFactory();
-            return await runWithTimeout(task, remainingTime, cancelSignal, errorMessage);
+            return await runWithTimeout(task, timeout, cancelSignal, errorMessage);
         }
         catch (err) {
             lastError = err;
@@ -29825,9 +29790,7 @@ async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
                 abortListener = () => reject(new Error("Operation cancelled"));
                 cancelSignal.addEventListener("abort", abortListener, { once: true });
             }
-            promise
-                .then(resolve)
-                .catch(reject);
+            promise.then(resolve).catch(reject);
         });
     }
     finally {

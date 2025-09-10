@@ -1,7 +1,6 @@
 type ShouldRetry = (error: any, attempt: number) => boolean;
 interface WithTimeoutOptions {
     timeout?: number;
-    timeLimit?: number;
     errorMessage?: string;
     throwErr?: boolean;
     maxRetries?: number;

@@ -86,7 +86,7 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
         try {
             const client = await (0, withTimeout_1.withTimeout)(() => telegramManager.createClient(options.handler), {
-                timeLimit: this.CONNECTION_TIMEOUT,
+                timeout: this.CONNECTION_TIMEOUT,
                 errorMessage: "Tg Client Connection Timeout"
             });
             if (!client) {

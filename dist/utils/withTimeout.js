@@ -3,22 +3,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.withTimeout = withTimeout;
 const Helpers_1 = require("telegram/Helpers");
 async function withTimeout(promiseFactory, options = {}) {
-    const { timeout = 10000, timeLimit = 30000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
+    const { timeout = 10000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
     let lastError;
-    const startTime = Date.now();
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        if (Date.now() - startTime > timeLimit) {
-            lastError = new Error(`${errorMessage}: exceeded total time limit ${timeLimit}ms`);
-            break;
-        }
         if (cancelSignal?.aborted) {
             lastError = new Error("Operation cancelled");
             break;
         }
         try {
-            const remainingTime = Math.min(timeout, timeLimit - (Date.now() - startTime));
             const task = promiseFactory();
-            return await runWithTimeout(task, remainingTime, cancelSignal, errorMessage);
+            return await runWithTimeout(task, timeout, cancelSignal, errorMessage);
         }
         catch (err) {
             lastError = err;
@@ -54,9 +48,7 @@ async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
                 abortListener = () => reject(new Error("Operation cancelled"));
                 cancelSignal.addEventListener("abort", abortListener, { once: true });
             }
-            promise
-                .then(resolve)
-                .catch(reject);
+            promise.then(resolve).catch(reject);
         });
     }
     finally {
