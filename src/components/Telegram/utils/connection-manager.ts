@@ -139,9 +139,7 @@ class ConnectionManager {
             }
 
             // Validate connection
-            if (!await this.validateConnection(mobile, telegramManager)) {
-                throw new Error('Connection validation failed');
-            }
+            await this.validateConnection(mobile, telegramManager)
 
             // Update client state
             clientInfo.state = 'connected';
@@ -160,22 +158,12 @@ class ConnectionManager {
         }
     }
 
-    private async validateConnection(mobile: string, client: TelegramManager): Promise<boolean> {
-        try {
-            if (!client.connected()) {
-                return false;
-            }
-
-            await withTimeout(() => client.client.getMe(), {
-                errorMessage: "getMe TimeOut",
-                maxRetries: 3,
-            })
-
-            return true;
-        } catch (error) {
-            this.logger.error(mobile, 'Connection validation failed', error);
-            return false;
-        }
+    private async validateConnection(mobile: string, client: TelegramManager): Promise<void> {
+        await withTimeout(() => client.client.getMe(), {
+            errorMessage: `getMe TimeOut for ${mobile}`,
+            maxRetries: 3,
+            throwErr: true
+        })
     }
 
     private isClientHealthy(clientInfo: ClientInfo): boolean {
