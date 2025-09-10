@@ -92,9 +92,7 @@ class ConnectionManager {
             if (!client) {
                 throw new Error('Client creation returned null');
             }
-            if (!await this.validateConnection(mobile, telegramManager)) {
-                throw new Error('Connection validation failed');
-            }
+            await this.validateConnection(mobile, telegramManager);
             clientInfo.state = 'connected';
             clientInfo.connectionAttempts = 1;
             delete clientInfo.lastError;
@@ -109,20 +107,11 @@ class ConnectionManager {
         }
     }
     async validateConnection(mobile, client) {
-        try {
-            if (!client.connected()) {
-                return false;
-            }
-            await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
-                errorMessage: "getMe TimeOut",
-                maxRetries: 3,
-            });
-            return true;
-        }
-        catch (error) {
-            this.logger.error(mobile, 'Connection validation failed', error);
-            return false;
-        }
+        await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
+            errorMessage: `getMe TimeOut for ${mobile}`,
+            maxRetries: 3,
+            throwErr: true
+        });
     }
     isClientHealthy(clientInfo) {
         const now = Date.now();
