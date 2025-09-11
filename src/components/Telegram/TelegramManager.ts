@@ -365,7 +365,7 @@ class TelegramManager {
         },
             {
                 timeout: 15000,
-                errorMessage: `Tg Manager Client Connection Timeout\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
+                errorMessage: `Tg Manager Client Connection Timeout\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
             }
         )
         // const me = <Api.User>await this.client.getMe();
