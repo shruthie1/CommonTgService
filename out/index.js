@@ -3525,7 +3525,9 @@ class TelegramManager {
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        this.channelArray = [];
+        const tgCreds = (0, utils_1.getRandomCredentials)();
+        this.apiHash = tgCreds.apiHash;
+        this.apiId = tgCreds.apiId;
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -3703,7 +3705,6 @@ class TelegramManager {
                 await this.client?.destroy();
                 this.client._eventBuilders = [];
                 this.session?.delete();
-                this.channelArray = [];
                 await (0, Helpers_1.sleep)(2000);
                 this.logger.info(this.phoneNumber, "Client Disconnected Sucessfully");
             }
@@ -3741,17 +3742,16 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        const { apiHash, apiId } = (0, utils_1.getRandomCredentials)();
         const tgConfiguration = (0, generateTGConfig_1.generateTGConfig)();
         await (0, withTimeout_1.withTimeout)(async () => {
-            this.client = new telegram_1.TelegramClient(this.session, apiId, apiHash, tgConfiguration);
+            this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
             this.client.setLogLevel(Logger_1.LogLevel.ERROR);
             this.client._errorHandler = this.errorHandler.bind(this);
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
             timeout: 15000,
-            errorMessage: `Tg Manager Client Connection Timeout, apiId: ${apiId}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
+            errorMessage: `Tg Manager Client Connection Timeout\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {
             if (handlerFn) {
@@ -8207,7 +8207,7 @@ class ConnectionManager {
     }
     async validateConnection(mobile, client) {
         await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
-            errorMessage: `getMe TimeOut for ${mobile}`,
+            errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
             throwErr: true
         });

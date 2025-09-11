@@ -23,7 +23,8 @@ declare class TelegramManager {
     private session;
     phoneNumber: string;
     client: TelegramClient | null;
-    private channelArray;
+    apiId: number;
+    apiHash: string;
     private static activeClientSetup;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
