@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.withTimeout = withTimeout;
 const Helpers_1 = require("telegram/Helpers");
 async function withTimeout(promiseFactory, options = {}) {
-    const { timeout = 10000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
+    const { timeout = 60000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
     let lastError;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         if (cancelSignal?.aborted) {
