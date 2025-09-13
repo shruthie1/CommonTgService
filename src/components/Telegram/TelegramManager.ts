@@ -365,7 +365,7 @@ class TelegramManager {
         },
             {
                 timeout: 180000,
-                errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}`
+                errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n\n`
             }
         )
         // const me = <Api.User>await this.client.getMe();
