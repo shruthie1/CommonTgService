@@ -188,9 +188,9 @@ export class Logger extends NestLogger {
             return chalk.magentaBright.bold(context);
         }
         if (context === context.toUpperCase()) {
-            return chalk.cyanBright.bold(context);
+            return chalk.yellow.bold(context);
         }
-        return chalk.yellowBright.bold(context);
+        return chalk.cyanBright.bold(context);
     }
 
     private getChalkColor(colorName: string): any {
