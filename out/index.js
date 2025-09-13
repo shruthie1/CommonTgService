@@ -3751,7 +3751,7 @@ class TelegramManager {
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
-            timeout: 32000,
+            timeout: 40000,
             errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {
@@ -8457,10 +8457,10 @@ function generateTGConfig() {
         return arr[Math.floor(Math.random() * arr.length)];
     }
     return {
-        connectionRetries: 5,
+        connectionRetries: 3,
         requestRetries: 5,
         retryDelay: 1000,
-        timeout: 30000,
+        timeout: 9,
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
@@ -12250,7 +12250,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 if (i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0) {
-                    this.logger.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
                     await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
                 }
                 else {
@@ -20048,7 +20047,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 }
                 if (i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0) {
-                    console.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
                     await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
                 }
                 else {
