@@ -897,7 +897,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
                   bufferClientDto,
                 );
               // await this.archivedClientService.update(existingMobile, existingClient);
-              this.logger.log('client Archived: ', updatedBufferClient);
+              this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
               await fetchWithTimeout(`${notifbot()}&text=Client Archived`);
             } else {
               this.logger.log('Client Archive Skipped');
