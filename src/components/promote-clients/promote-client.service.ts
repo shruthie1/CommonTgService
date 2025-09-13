@@ -104,9 +104,7 @@ export class PromoteClientService implements OnModuleDestroy {
             // Clean up empty entries in leaveChannelMap
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(
-                        `Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`,
-                    );
+                    this.logger.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`,);
                     this.leaveChannelMap.delete(mobile);
                 }
             }
@@ -117,9 +115,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.MAX_MAP_SIZE,
                 );
                 keysToRemove.forEach((key) => this.joinChannelMap.delete(key));
-                this.logger.warn(
-                    `Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`,
-                );
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`);
             }
 
             if (this.leaveChannelMap.size > this.MAX_MAP_SIZE) {
@@ -127,14 +123,10 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.MAX_MAP_SIZE,
                 );
                 keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
-                this.logger.warn(
-                    `Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`,
-                );
+                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
             }
 
-            this.logger.debug(
-                `Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`,
-            );
+            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`,);
         } catch (error) {
             this.logger.error('Error during memory cleanup:', error);
         }
@@ -234,13 +226,13 @@ export class PromoteClientService implements OnModuleDestroy {
             await this.promoteClientModel.findOne({ mobile }).exec()
         )?.toJSON();
         if (existingUser) {
-            this.logger.debug('Updating existing promote client');
+            this.logger.debug(`Updating existing promote client: ${mobile}`);
             return this.update(
                 existingUser.mobile,
                 createOrUpdateUserDto as UpdatePromoteClientDto,
             );
         } else {
-            this.logger.debug('Creating new promote client');
+            this.logger.debug(`Creating new promote client: ${mobile}`);
             return this.create(createOrUpdateUserDto as CreatePromoteClientDto);
         }
     }
@@ -254,9 +246,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 .exec();
 
             if (deleteResult.deletedCount === 0) {
-                throw new NotFoundException(
-                    `PromoteClient with mobile ${mobile} not found`,
-                );
+                throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`,);
             }
 
             await fetchWithTimeout(
@@ -267,19 +257,17 @@ export class PromoteClientService implements OnModuleDestroy {
                 throw error;
             }
             const errorDetails = parseError(error);
-            this.logger.error(
-                `Error removing PromoteClient with mobile ${mobile}: ${errorDetails.message}`,
-            );
+            this.logger.error(`[${mobile}] Error removing PromoteClient: ${errorDetails.message}`,);
             throw new HttpException(errorDetails.message, errorDetails.status);
         }
-        this.logger.log(`PromoteClient with mobile ${mobile} removed successfully`);
+        this.logger.log(`[${mobile}] PromoteClient removed successfully`);
     }
     async search(filter: any): Promise<PromoteClient[]> {
-        this.logger.debug(`Search filter: ${JSON.stringify(filter)}`);
+        this.logger.debug(`Search filter: `, filter);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        this.logger.debug(`Modified filter: ${JSON.stringify(filter)}`);
+        this.logger.debug(`Modified filter: `, filter);
         return this.promoteClientModel.find(filter).exec();
     }
 
@@ -340,23 +328,18 @@ export class PromoteClientService implements OnModuleDestroy {
             const client = clients[i]
             const mobile = client?.mobile;
             try {
-                this.logger.debug(`Updating info for client: ${mobile}`);
+                this.logger.debug(`[${mobile}] Updating info`);
                 const telegramClient = await connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
                 });
                 const channels = await channelInfo(telegramClient.client, true);
-                this.logger.debug(
-                    `${mobile}: Found ${channels.ids.length} existing channels`,
-                );
+                this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
                 const errorDetails = parseError(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
                 await this.markAsInactive(mobile, `${errorDetails.message}`);
-                this.logger.error(
-                    `Error updating info for client ${client.mobile}:`,
-                    errorDetails,
-                );
+                this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
             } finally {
                 await connectionManager.unregisterClient(mobile);
                 await sleep(2000);
@@ -368,9 +351,7 @@ export class PromoteClientService implements OnModuleDestroy {
         skipExisting: boolean = true,
     ): Promise<string> {
         if (this.telegramService.getActiveClientSetup()) {
-            this.logger.warn(
-                'Active client setup exists, skipping promotion process',
-            );
+            this.logger.warn('Active client setup exists, skipping promotion process');
             return 'Active client setup exists, skipping promotion';
         }
 
@@ -398,9 +379,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 .sort({ channels: 1 })
                 .limit(16);
 
-            this.logger.debug(
-                `Found ${clients.length} clients to process for joining channels`,
-            );
+            this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
 
             const joinSet = new Set<string>();
             const leaveSet = new Set<string>();
@@ -412,9 +391,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 const document = clients[i];
                 const mobile = document.mobile;
 
-                this.logger.debug(
-                    `Processing client ${i + 1}/${clients.length}: ${mobile}`,
-                );
+                this.logger.debug(`Processing client ${i + 1}/${clients.length}: ${mobile}`);
 
                 try {
                     const client = await connectionManager.getClient(mobile, {
@@ -425,9 +402,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     // Add delay before channel info retrieval
                     await sleep(2000);
                     const channels = await channelInfo(client.client, true);
-                    this.logger.debug(
-                        `${mobile}: Found ${channels.ids.length} existing channels`,
-                    );
+                    this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`,);
                     await sleep(2000);
                     await this.update(mobile, { channels: channels.ids.length });
                     if (channels.ids.length > 100) {
@@ -450,24 +425,18 @@ export class PromoteClientService implements OnModuleDestroy {
                             this.joinChannelMap.set(mobile, result);
                             joinSet.add(mobile);
                         } else {
-                            this.logger.debug(
-                                `${mobile}: Already in join queue, skipping re-add`,
-                            );
+                            this.logger.debug(`[${mobile}]: Already in join queue, skipping re-add`);
                         }
                         await this.sessionService.getOldestSessionOrCreate({
                             mobile: document.mobile
                         })
                     } else {
-                        this.logger.debug(
-                            `${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`,
-                        );
+                        this.logger.debug(`[${mobile}]: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
                         if (!this.leaveChannelMap.has(mobile)) {
                             this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
                             leaveSet.add(mobile);
                         } else {
-                            this.logger.debug(
-                                `${mobile}: Already in leave queue, skipping re-add`,
-                            );
+                            this.logger.debug(`[${mobile}]: Already in leave queue, skipping re-add`);
                         }
                     }
 
@@ -475,7 +444,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 } catch (error) {
                     failCount++;
                     const errorDetails = parseError(error);
-                    this.logger.error(`Error processing client ${mobile}:`, errorDetails);
+                    this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
 
                     const errorMsg =
                         error?.errorMessage || errorDetails?.message || 'Unknown error';
@@ -489,35 +458,25 @@ export class PromoteClientService implements OnModuleDestroy {
                             'FROZEN_METHOD_INVALID',
                         ])
                     ) {
-                        this.logger.warn(
-                            `${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`,
-                        );
+                        this.logger.warn(`[${mobile}]: Fatal session error (${errorMsg}), marking as inactive and removing`,);
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             await sleep(1000); // Delay after status update
                         } catch (statusUpdateError) {
-                            this.logger.error(
-                                `Failed to update status for ${mobile}:`,
-                                statusUpdateError,
-                            );
+                            this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
                         }
 
                         await sleep(1000); // Delay before removal
                         await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                     } else {
-                        this.logger.warn(
-                            `${mobile}: Non-fatal error encountered, will retry later`,
-                        );
+                        this.logger.warn(`[${mobile}]: Non-fatal error encountered, will retry later`);
                     }
                 } finally {
                     // Ensure client cleanup with proper delay
                     try {
                         await connectionManager.unregisterClient(mobile);
                     } catch (cleanupError) {
-                        this.logger.warn(
-                            `Error during client cleanup for ${mobile}:`,
-                            cleanupError,
-                        );
+                        this.logger.warn(`Error during client cleanup for ${mobile}:`, cleanupError);
                     }
                     await sleep(5000);
                 }
@@ -528,28 +487,19 @@ export class PromoteClientService implements OnModuleDestroy {
 
             if (joinSet.size > 0) {
                 this.startMemoryCleanup();
-                this.logger.debug(
-                    `Starting join queue for ${joinSet.size} buffer clients`,
-                );
+                this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
                 this.createTimeout(() => this.joinChannelQueue(), 2000); // Delayed start
             }
 
             if (leaveSet.size > 0) {
-                this.logger.debug(
-                    `Starting leave queue for ${leaveSet.size} buffer clients`,
-                );
+                this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
                 this.createTimeout(() => this.leaveChannelQueue(), 5000); // Delayed start
             }
 
-            this.logger.log(
-                `Join channel process completed for ${clients.length} clients (Success: ${successCount}, Failed: ${failCount})`,
-            );
+            this.logger.log(`Join channel process completed for ${clients.length} clients (Success: ${successCount}, Failed: ${failCount})`,);
             return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
         } catch (error) {
-            this.logger.error(
-                'Unexpected error during joinchannelForPromoteClients:',
-                error,
-            );
+            this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
             throw new Error('Failed to initiate channel joining process');
@@ -584,9 +534,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     private async processJoinChannelInterval() {
         if (this.isJoinChannelProcessing) {
-            this.logger.debug(
-                'Join channel process already running, skipping interval',
-            );
+            this.logger.debug('Join channel process already running, skipping interval');
             return;
         }
 
@@ -616,9 +564,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     private async processJoinChannelSequentially() {
         const keys = Array.from(this.joinChannelMap.keys());
-        this.logger.debug(
-            `Processing join channel queue sequentially for ${keys.length} clients`,
-        );
+        this.logger.debug(`Processing join channel queue sequentially for ${keys.length} clients`,);
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
@@ -627,17 +573,13 @@ export class PromoteClientService implements OnModuleDestroy {
             try {
                 const channels = this.joinChannelMap.get(mobile);
                 if (!channels || channels.length === 0) {
-                    this.logger.debug(
-                        `No more channels to join for ${mobile}, removing from queue`,
-                    );
+                    this.logger.debug(`No more channels to join for ${mobile}, removing from queue`,);
                     this.removeFromPromoteMap(mobile);
                     continue;
                 }
 
                 currentChannel = channels.shift();
-                this.logger.debug(
-                    `${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,
-                );
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) { // add DeletedCount  condition also if required
@@ -648,20 +590,16 @@ export class PromoteClientService implements OnModuleDestroy {
             } catch (error: any) {
                 const errorDetails = parseError(
                     error,
-                    `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `,
+                    `[${mobile}] ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `,
                     false,
                 );
-                this.logger.error(
-                    `Error joining channel for ${mobile}: ${error.message}`,
-                );
+                this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
 
                 if (
                     errorDetails.error === 'FloodWaitError' ||
                     error.errorMessage === 'CHANNELS_TOO_MUCH'
                 ) {
-                    this.logger.warn(
-                        `${mobile} has FloodWaitError or joined too many channels, removing from queue`,
-                    );
+                    this.logger.warn(`[${mobile}] has FloodWaitError or joined too many channels, removing from queue`,);
                     this.removeFromPromoteMap(mobile);
 
                     try {
@@ -672,10 +610,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         );
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     } catch (updateError) {
-                        this.logger.error(
-                            `Error updating channel count for ${mobile}:`,
-                            updateError,
-                        );
+                        this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
                 }
 
@@ -701,10 +636,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 try {
                     await connectionManager.unregisterClient(mobile);
                 } catch (unregisterError) {
-                    this.logger.error(
-                        `Error unregistering client ${mobile}:`,
-                        unregisterError,
-                    );
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
 
                 // Add delay between channel processing operations
@@ -725,9 +657,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            this.logger.debug(
-                `Clearing join channel interval: ${this.joinChannelIntervalId}`,
-            );
+            this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
@@ -778,9 +708,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     private async processLeaveChannelInterval() {
         if (this.isLeaveChannelProcessing) {
-            this.logger.debug(
-                'Leave channel process already running, skipping interval',
-            );
+            this.logger.debug('Leave channel process already running, skipping interval',);
             return;
         }
 
@@ -810,9 +738,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
     private async processLeaveChannelSequentially() {
         const keys = Array.from(this.leaveChannelMap.keys());
-        this.logger.debug(
-            `Processing leave channel queue sequentially for ${keys.length} clients`,
-        );
+        this.logger.debug(`Processing leave channel queue sequentially for ${keys.length} clients`);
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
@@ -820,9 +746,7 @@ export class PromoteClientService implements OnModuleDestroy {
             try {
                 const channels = this.leaveChannelMap.get(mobile);
                 if (!channels || channels.length === 0) {
-                    this.logger.debug(
-                        `No more channels to leave for ${mobile}, removing from queue`,
-                    );
+                    this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
@@ -831,9 +755,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     0,
                     this.LEAVE_CHANNEL_BATCH_SIZE,
                 );
-                this.logger.debug(
-                    `${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`,
-                );
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`,);
 
                 // Only update map if there are remaining channels
                 if (channels.length > 0) {
@@ -847,21 +769,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     handler: false,
                 });
 
-                this.logger.debug(
-                    `${mobile} attempting to leave ${channelsToProcess.length} channels`,
-                );
+                this.logger.debug(`[${mobile}] attempting to leave ${channelsToProcess.length} channels`);
                 await sleep(1500);
                 await client.leaveChannels(channelsToProcess);
-                this.logger.debug(
-                    `${mobile} left ${channelsToProcess.length} channels successfully`,
-                );
+                this.logger.debug(`[${mobile}] left ${channelsToProcess.length} channels successfully`);
             } catch (error: any) {
-                const errorDetails = parseError(
-                    error,
-                    `${mobile} Leave Channel ERR: `,
-                    false,
-                );
-
+                const errorDetails = parseError(error, `[${mobile}] Leave Channel ERR: `, false,);
                 if (
                     contains(errorDetails.message, [
                         'SESSION_REVOKED',
@@ -880,17 +793,13 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                     this.removeFromLeaveMap(mobile);
                 } else {
-                    this.logger.warn(
-                        `Transient error for ${mobile}: ${errorDetails.message}`,
-                    );
+                    this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
                 }
             } finally {
                 try {
                     await connectionManager.unregisterClient(mobile);
                 } catch (unregisterError) {
-                    this.logger.error(
-                        `Error unregistering client ${mobile}: ${unregisterError.message}`,
-                    );
+                    this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
                 }
 
                 // Add delay between leave operations
@@ -906,17 +815,13 @@ export class PromoteClientService implements OnModuleDestroy {
 
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
-            this.logger.debug(
-                `Clearing leave channel interval: ${this.leaveChannelIntervalId}`,
-            );
+            this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
             clearInterval(this.leaveChannelIntervalId);
             this.activeTimeouts.delete(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
         this.isLeaveChannelProcessing = false;
-        this.logger.debug(
-            'Leave channel interval cleared and processing flag reset',
-        );
+        this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
 
     async setAsPromoteClient(
@@ -1066,22 +971,14 @@ export class PromoteClientService implements OnModuleDestroy {
                 totalSlotsNeeded += allocatedForThisClient;
             }
 
-            this.logger.debug(
-                `Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`,
-            );
-            this.logger.debug(
-                `Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`,
-            );
-            this.logger.debug(
-                `Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`,
-            );
+            this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`,);
+            this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`,);
+            this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`,);
 
             // Get total active promote clients count for logging
             const totalActivePromoteClients =
                 await this.promoteClientModel.countDocuments({ status: 'active' });
-            this.logger.debug(
-                `Total active promote clients: ${totalActivePromoteClients}`,
-            );
+            this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
 
             // Only proceed with creating new promote clients if we have clients that need them
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
@@ -1092,14 +989,10 @@ export class PromoteClientService implements OnModuleDestroy {
                     promoteClientsPerClient,
                 );
             } else {
-                this.logger.debug(
-                    'No new promote clients needed - all clients have sufficient promote clients',
-                );
+                this.logger.debug('No new promote clients needed - all clients have sufficient promote clients');
             }
         } else {
-            this.logger.warn(
-                'Ignored active check promote channels as active client setup exists',
-            );
+            this.logger.warn('Ignored active check promote channels as active client setup exists');
         }
     }
 
@@ -1141,15 +1034,11 @@ export class PromoteClientService implements OnModuleDestroy {
         const totalNeeded = Math.min(totalNeededFromClients, 10);
 
         if (totalNeeded === 0) {
-            this.logger.debug(
-                'No promote clients needed - all clients have sufficient promote clients or limit reached',
-            );
+            this.logger.debug('No promote clients needed - all clients have sufficient promote clients or limit reached');
             return;
         }
 
-        this.logger.debug(
-            `Limited to creating ${totalNeeded} new promote clients (max 10 per trigger)`,
-        );
+        this.logger.debug(`Limited to creating ${totalNeeded} new promote clients (max 10 per trigger)`,);
 
         const documents = await this.usersService.executeQuery(
             {
@@ -1163,9 +1052,7 @@ export class PromoteClientService implements OnModuleDestroy {
             totalNeeded + 5, // Get a few extra in case some fail
         );
 
-        this.logger.debug(
-            `New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`,
-        );
+        this.logger.debug(`New promote documents to be added: ${documents.length} for ${clientsNeedingPromoteClients.length} clients needing promote clients (limited to ${totalNeeded})`,);
 
         let processedCount = 0;
         const clientAssignmentTracker = new Map<string, number>();
@@ -1216,9 +1103,7 @@ export class PromoteClientService implements OnModuleDestroy {
             }
 
             if (!targetClientId) {
-                this.logger.debug(
-                    'All clients have sufficient promote clients assigned',
-                );
+                this.logger.debug('All clients have sufficient promote clients assigned');
                 break;
             }
 
@@ -1228,9 +1113,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 });
                 try {
                     const hasPassword = await client.hasPassword();
-                    this.logger.debug(
-                        `hasPassword for ${document.mobile}: ${hasPassword}`,
-                    );
+                    this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
                         await sleep(10000)
@@ -1238,9 +1121,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         this.logger.debug('Waiting for setting 2FA');
                         await sleep(30000);
                         const channels = await channelInfo(client.client, true);
-                        this.logger.debug(
-                            `Inserting Document for client ${targetClientId}`,
-                        );
+                        this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: 'today',
@@ -1258,26 +1139,16 @@ export class PromoteClientService implements OnModuleDestroy {
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         } catch (userUpdateError) {
-                            this.logger.warn(
-                                `Failed to update user 2FA status for ${document.mobile}:`,
-                                userUpdateError,
-                            );
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                             // Continue anyway as this is not critical
                         }
-                        this.logger.log(
-                            `=============Created PromoteClient for ${targetClientId}==============`,
-                        );
+                        this.logger.log(`=============Created PromoteClient for ${targetClientId}==============`,);
                     } else {
-                        this.logger.debug(
-                            `Failed to Update as PromoteClient as ${document.mobile} already has Password`,
-                        );
+                        this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
                         try {
                             await this.usersService.update(document.tgId, { twoFA: true });
                         } catch (userUpdateError) {
-                            this.logger.warn(
-                                `Failed to update user 2FA status for ${document.mobile}:`,
-                                userUpdateError,
-                            );
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
                         }
                     }
 
@@ -1294,37 +1165,27 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
                     }
 
-                    this.logger.debug(
-                        `Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`,
-                    );
+                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`,);
                     processedCount++; // Always increment to prevent infinite loops
                 } catch (error: any) {
-                    this.logger.error(
-                        `Error processing client ${document.mobile}: ${error.message}`,
-                    );
+                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     parseError(error);
                     processedCount++; // Always increment even on errors to prevent infinite loops
                 } finally {
                     try {
                         await connectionManager.unregisterClient(document.mobile);
                     } catch (unregisterError: any) {
-                        this.logger.error(
-                            `Error unregistering client ${document.mobile}: ${unregisterError.message}`,
-                        );
+                        this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
                     }
                 }
             } catch (error: any) {
-                this.logger.error(
-                    `Error creating client connection for ${document.mobile}: ${error.message}`,
-                );
+                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 parseError(error);
             }
         }
 
         // Log completion status
-        this.logger.log(
-            `✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`,
-        );
+        this.logger.log(`✅ Batch completed: Created ${processedCount} new promote clients (max ${totalNeeded} per trigger)`);
         if (clientsNeedingPromoteClients.length > 0) {
             const stillNeeded = clientsNeedingPromoteClients
                 .map((clientId) => {
