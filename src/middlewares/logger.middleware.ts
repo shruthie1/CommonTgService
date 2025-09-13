@@ -50,7 +50,7 @@ export class LoggerMiddleware implements NestMiddleware {
             `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else {
-          this.logger.log(
+          this.logger.debug(
             `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         }

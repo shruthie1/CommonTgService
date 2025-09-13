@@ -272,7 +272,7 @@ class TelegramManager {
         const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || (0, utils_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
-            await this.destroy();
+            await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
         }
         else {
         }
@@ -286,7 +286,7 @@ class TelegramManager {
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
-            timeout: 32000,
+            timeout: 40000,
             errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {

@@ -45,6 +45,7 @@ const common_1 = require("@nestjs/common");
 const fs = __importStar(require("fs"));
 const utils_1 = require("./utils");
 const Exception_filter_1 = require("./interceptors/Exception-filter");
+const timeout_interceptor_1 = require("./interceptors/timeout.interceptor");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: utils_1.Logger
@@ -86,6 +87,7 @@ async function bootstrap() {
     });
     mongoose_1.default.set('debug', true);
     app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
+    app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
         transformOptions: {

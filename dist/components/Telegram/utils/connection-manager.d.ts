@@ -15,7 +15,6 @@ declare class ConnectionManager {
     private usersService;
     private isShuttingDown;
     private readonly MAX_CONNECTIONS;
-    private readonly CONNECTION_TIMEOUT;
     private readonly IDLE_TIMEOUT;
     private readonly CLEANUP_INTERVAL;
     private readonly MAX_RETRY_ATTEMPTS;
@@ -55,4 +54,5 @@ declare class ConnectionManager {
     };
 }
 export declare const connectionManager: ConnectionManager;
+export declare function unregisterClient(mobile: string): Promise<void>;
 export {};

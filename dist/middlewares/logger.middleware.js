@@ -43,7 +43,7 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.verbose(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else {
-                    this.logger.log(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.debug(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
             });
             res.on('error', (error) => {

@@ -8,6 +8,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import { Logger } from './utils';
 import { ExceptionsFilter } from './interceptors/Exception-filter';
+import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -62,7 +63,7 @@ async function bootstrap() {
   );
   mongoose.set('debug', true)
   app.useGlobalFilters(new ExceptionsFilter());
-
+  app.useGlobalInterceptors(new TimeoutInterceptor(60000));
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
     // whitelist: true,

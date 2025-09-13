@@ -41,7 +41,6 @@ class ConnectionManager {
 
     // Configuration
     private readonly MAX_CONNECTIONS = 50;
-    private readonly CONNECTION_TIMEOUT = 30000;
     private readonly IDLE_TIMEOUT = 300000; // 5 minutes
     private readonly CLEANUP_INTERVAL = 60000; // 1 minute
     private readonly MAX_RETRY_ATTEMPTS = 3;
@@ -413,3 +412,7 @@ class ConnectionManager {
 }
 
 export const connectionManager = ConnectionManager.getInstance();
+
+export async function unregisterClient(mobile: string) {
+    await connectionManager.unregisterClient(mobile)
+}

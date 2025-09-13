@@ -4,7 +4,7 @@ import chalk from 'chalk';
 export class Logger extends NestLogger {
     constructor(context?: string) {
         super(context);
-        chalk.level = 3; // force colors in all environments
+        chalk.level = 3; // force colors
     }
 
     log(message: any, context?: any) {
@@ -44,7 +44,6 @@ export class Logger extends NestLogger {
             level: chalk.green,
             message: chalk.green.bold,
             context: chalk.cyan.bold,
-            timestamp: chalk.gray,
         };
     }
 
@@ -53,7 +52,6 @@ export class Logger extends NestLogger {
             level: chalk.blue,
             message: chalk.blue.bold,
             context: chalk.blueBright.bold,
-            timestamp: chalk.gray,
         };
     }
 
@@ -62,7 +60,6 @@ export class Logger extends NestLogger {
             level: chalk.red,
             message: chalk.red.bold,
             context: chalk.redBright.bold,
-            timestamp: chalk.gray,
         };
     }
 
@@ -71,7 +68,6 @@ export class Logger extends NestLogger {
             level: chalk.yellow,
             message: chalk.yellow.bold,
             context: chalk.yellowBright.bold,
-            timestamp: chalk.gray,
         };
     }
 
@@ -80,7 +76,6 @@ export class Logger extends NestLogger {
             level: chalk.magenta,
             message: chalk.magenta.bold,
             context: chalk.magentaBright.bold,
-            timestamp: chalk.gray,
         };
     }
 
@@ -89,7 +84,6 @@ export class Logger extends NestLogger {
             level: chalk.gray,
             message: chalk.gray.bold,
             context: chalk.white.dim,
-            timestamp: chalk.gray.dim,
         };
     }
 
@@ -98,10 +92,10 @@ export class Logger extends NestLogger {
             level: chalk.greenBright,
             message: chalk.greenBright.bold,
             context: chalk.green.bold,
-            timestamp: chalk.gray,
         };
     }
 
+    /** ---------- FORMATTERS ---------- */
     private formatMessage(
         level: string,
         message: any,
@@ -110,10 +104,9 @@ export class Logger extends NestLogger {
     ) {
         const formattedMessage = this.formatMultiColorMessage(message, colors.message);
 
-        // Fully colorful context
         const ctx = context !== undefined
             ? `[${typeof context === 'object'
-                ? this.formatObjectMessage(context)   // ✅ fully colorful JSON
+                ? this.formatObjectMessage(context)
                 : this.parseColoredContext(context)}]`
             : '';
 
@@ -122,10 +115,9 @@ export class Logger extends NestLogger {
         return `${levelFormatted}${ctx ? ' ' + ctx : ''} ${formattedMessage}`;
     }
 
-
     private formatMultiColorMessage(message: any, levelColor: any): string {
         if (typeof message === 'object') {
-            return this.formatObjectMessage(message);
+            return '\n' + this.formatObjectMessage(message);
         }
 
         let formatted = String(message);
@@ -139,20 +131,39 @@ export class Logger extends NestLogger {
         return levelColor(formatted);
     }
 
-    private formatObjectMessage(obj: any): string {
-        const jsonStr = JSON.stringify(obj, null, 2);
+    private formatObjectMessage(obj: any, indent = 2): string {
+        if (Array.isArray(obj)) {
+            return '[\n' + obj.map(
+                (el) => ' '.repeat(indent) + this.formatObjectMessage(el, indent + 2)
+            ).join(',\n') + '\n]';
+        }
 
-        return jsonStr
-            .replace(/"([^"]+)":/g, chalk.cyan('"$1"') + chalk.white(':')) // keys
-            .replace(/: "([^"]+)"/g, ': ' + chalk.green('"$1"')) // strings
-            .replace(/: (\d+)/g, ': ' + chalk.yellow('$1')) // numbers
-            .replace(/: (true|false)/g, ': ' + chalk.magenta('$1')) // booleans
-            .replace(/: null/g, ': ' + chalk.gray('null')); // null
+        if (obj && typeof obj === 'object') {
+            const entries = Object.entries(obj).map(([key, value]) => {
+                const coloredKey = chalk.cyan(`"${key}"`) + chalk.white(': ');
+                const formattedValue = this.formatObjectMessage(value, indent + 2);
+                return ' '.repeat(indent) + coloredKey + formattedValue;
+            });
+            return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
+        }
+
+        if (typeof obj === 'string') return chalk.green(`"${obj}"`);
+        if (typeof obj === 'number') return chalk.yellow(obj);
+        if (typeof obj === 'boolean') return chalk.magenta(obj);
+        if (obj === null) return chalk.gray('null');
+
+        return chalk.white(String(obj));
     }
 
     private parseColoredContext(context: string): string {
-        const colorPattern = /\{(\w+):([^}]+)\}/g;
+        if (/^\d+$/.test(context)) {
+            return chalk.magentaBright(context);
+        }
+        if (context === context.toUpperCase()) {
+            return chalk.cyanBright(context);
+        }
 
+        const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);
             return chalkColor ? chalkColor(text) : text;
@@ -183,7 +194,6 @@ export class Logger extends NestLogger {
             underline: chalk.underline,
             inverse: chalk.inverse,
         };
-
         return colorMap[colorName];
     }
 

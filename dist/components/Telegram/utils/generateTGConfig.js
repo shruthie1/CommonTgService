@@ -15,10 +15,10 @@ function generateTGConfig() {
         return arr[Math.floor(Math.random() * arr.length)];
     }
     return {
-        connectionRetries: 5,
+        connectionRetries: 3,
         requestRetries: 5,
         retryDelay: 1000,
-        timeout: 30000,
+        timeout: 9,
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,

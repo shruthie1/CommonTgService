@@ -14,6 +14,7 @@ let ExceptionsFilter = class ExceptionsFilter {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const errorDetails = (0, utils_1.parseError)(exception, 'Exception', false);
+        console.error("stack:", exception["stack"]);
         let status = errorDetails.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR;
         let message = errorDetails.message || 'Internal server error';
         if (exception instanceof common_1.HttpException) {

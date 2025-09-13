@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectionManager = void 0;
+exports.unregisterClient = unregisterClient;
 const TelegramManager_1 = __importDefault(require("../TelegramManager"));
 const parseError_1 = require("../../../utils/parseError");
 const telegram_logger_1 = require("./telegram-logger");
@@ -20,7 +21,6 @@ class ConnectionManager {
         this.usersService = null;
         this.isShuttingDown = false;
         this.MAX_CONNECTIONS = 50;
-        this.CONNECTION_TIMEOUT = 30000;
         this.IDLE_TIMEOUT = 300000;
         this.CLEANUP_INTERVAL = 60000;
         this.MAX_RETRY_ATTEMPTS = 3;
@@ -296,4 +296,7 @@ class ConnectionManager {
 }
 ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
+async function unregisterClient(mobile) {
+    await exports.connectionManager.unregisterClient(mobile);
+}
 //# sourceMappingURL=connection-manager.js.map

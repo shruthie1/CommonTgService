@@ -37,7 +37,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.green,
             message: chalk_1.default.green.bold,
             context: chalk_1.default.cyan.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getInfoColors() {
@@ -45,7 +44,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.blue,
             message: chalk_1.default.blue.bold,
             context: chalk_1.default.blueBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getErrorColors() {
@@ -53,7 +51,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.red,
             message: chalk_1.default.red.bold,
             context: chalk_1.default.redBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getWarnColors() {
@@ -61,7 +58,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.yellow,
             message: chalk_1.default.yellow.bold,
             context: chalk_1.default.yellowBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getDebugColors() {
@@ -69,7 +65,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.magenta,
             message: chalk_1.default.magenta.bold,
             context: chalk_1.default.magentaBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getVerboseColors() {
@@ -77,7 +72,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.gray,
             message: chalk_1.default.gray.bold,
             context: chalk_1.default.white.dim,
-            timestamp: chalk_1.default.gray.dim,
         };
     }
     getSuccessColors() {
@@ -85,7 +79,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.greenBright,
             message: chalk_1.default.greenBright.bold,
             context: chalk_1.default.green.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     formatMessage(level, message, colors, context) {
@@ -100,7 +93,7 @@ class Logger extends common_1.Logger {
     }
     formatMultiColorMessage(message, levelColor) {
         if (typeof message === 'object') {
-            return this.formatObjectMessage(message);
+            return '\n' + this.formatObjectMessage(message);
         }
         let formatted = String(message);
         formatted = formatted.replace(/\[([^\]]+)\]/g, chalk_1.default.cyan.bold('[$1]'));
@@ -109,16 +102,35 @@ class Logger extends common_1.Logger {
         formatted = formatted.replace(/_([^_]+)_/g, chalk_1.default.underline('$1'));
         return levelColor(formatted);
     }
-    formatObjectMessage(obj) {
-        const jsonStr = JSON.stringify(obj, null, 2);
-        return jsonStr
-            .replace(/"([^"]+)":/g, chalk_1.default.cyan('"$1"') + chalk_1.default.white(':'))
-            .replace(/: "([^"]+)"/g, ': ' + chalk_1.default.green('"$1"'))
-            .replace(/: (\d+)/g, ': ' + chalk_1.default.yellow('$1'))
-            .replace(/: (true|false)/g, ': ' + chalk_1.default.magenta('$1'))
-            .replace(/: null/g, ': ' + chalk_1.default.gray('null'));
+    formatObjectMessage(obj, indent = 2) {
+        if (Array.isArray(obj)) {
+            return '[\n' + obj.map((el) => ' '.repeat(indent) + this.formatObjectMessage(el, indent + 2)).join(',\n') + '\n]';
+        }
+        if (obj && typeof obj === 'object') {
+            const entries = Object.entries(obj).map(([key, value]) => {
+                const coloredKey = chalk_1.default.cyan(`"${key}"`) + chalk_1.default.white(': ');
+                const formattedValue = this.formatObjectMessage(value, indent + 2);
+                return ' '.repeat(indent) + coloredKey + formattedValue;
+            });
+            return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
+        }
+        if (typeof obj === 'string')
+            return chalk_1.default.green(`"${obj}"`);
+        if (typeof obj === 'number')
+            return chalk_1.default.yellow(obj);
+        if (typeof obj === 'boolean')
+            return chalk_1.default.magenta(obj);
+        if (obj === null)
+            return chalk_1.default.gray('null');
+        return chalk_1.default.white(String(obj));
     }
     parseColoredContext(context) {
+        if (/^\d+$/.test(context)) {
+            return chalk_1.default.magentaBright(context);
+        }
+        if (context === context.toUpperCase()) {
+            return chalk_1.default.cyanBright(context);
+        }
         const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);

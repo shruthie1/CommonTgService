@@ -296,7 +296,7 @@ export class BotConfig {
             });
             return res.data?.ok ? res.data.result.username : '';
         } catch (error) {
-            console.error('Error fetching bot username:', error);
+            parseError(error, 'Failed fetching bot username:')
             return '';
         }
     }

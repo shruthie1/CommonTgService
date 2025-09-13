@@ -547,7 +547,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 if (i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0) {
-                    this.logger.log(`Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`);
                     await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
                 }
                 else {

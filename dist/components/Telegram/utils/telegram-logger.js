@@ -6,27 +6,23 @@ class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
         this.logger = new utils_1.Logger(serviceName);
     }
-    shouldIncludeDetails(details) {
-        return details !== undefined
-            && details !== null
-            && !(typeof details === 'object' && Object.keys(details).length === 0);
-    }
-    formatMessage(mobile, message, details) {
-        return this.shouldIncludeDetails(details)
-            ? `[${mobile}] ${message} :: ${JSON.stringify(details)}`
-            : `[${mobile}] ${message}`;
-    }
     info(mobile, operation, details) {
-        this.logger.log(this.formatMessage(mobile, operation, details));
+        this.logger.log(`[${mobile}] ${operation}`, details);
     }
     error(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} - ${error.message}`, error.stack);
     }
     warn(mobile, message, details) {
-        this.logger.warn(this.formatMessage(mobile, message, details));
+        this.logger.warn(`[${mobile}] ${message}`, details);
     }
     debug(mobile, message, details) {
-        this.logger.debug(this.formatMessage(mobile, message, details));
+        this.logger.debug(`[${mobile}] ${message}`, details);
+    }
+    verbose(mobile, message, details) {
+        this.logger.verbose(`[${mobile}] ${message}`, details);
+    }
+    log(mobile, message, details) {
+        this.logger.log(`[${mobile}] ${message}`, details);
     }
 }
 exports.TelegramLogger = TelegramLogger;

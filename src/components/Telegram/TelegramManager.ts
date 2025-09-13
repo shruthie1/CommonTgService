@@ -19,7 +19,7 @@ import {
 } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { IterMessagesParams } from 'telegram/client/messages';
-import { connectionManager } from './utils/connection-manager';
+import { connectionManager, unregisterClient } from './utils/connection-manager';
 import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { generateTGConfig } from './utils/generateTGConfig';
 import { TelegramLogger } from './utils/telegram-logger';
@@ -346,7 +346,7 @@ class TelegramManager {
         if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
             // await this.client.disconnect();
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
-            await this.destroy();
+            await unregisterClient(this.phoneNumber)
             // await disconnectAll()
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
