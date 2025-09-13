@@ -82,13 +82,36 @@ class Logger extends common_1.Logger {
         };
     }
     formatMessage(level, message, colors, context) {
-        const formattedMessage = this.formatMultiColorMessage(message, colors.message);
-        const ctx = context !== undefined
-            ? `[${typeof context === 'object'
-                ? this.formatObjectMessage(context)
-                : this.parseColoredContext(context)}]`
-            : '';
-        const levelFormatted = colors.level(`[${level}]`);
+        const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
+        const safeColors = {
+            level: (colors?.level && typeof colors.level === 'function')
+                ? colors.level
+                : (txt) => txt,
+            message: (colors?.message && typeof colors.message === 'function')
+                ? colors.message
+                : (txt) => txt,
+        };
+        const formattedMessage = message !== undefined && message !== null
+            ? this.formatMultiColorMessage(message, safeColors.message)
+            : safeColors.message('[EMPTY MESSAGE]');
+        let ctx = '';
+        if (context !== undefined && context !== null) {
+            if (typeof context === 'object') {
+                try {
+                    ctx = `[${this.formatObjectMessage(context)}]`;
+                }
+                catch {
+                    ctx = '[Invalid Context Object]';
+                }
+            }
+            else if (typeof context === 'string') {
+                ctx = `[${this.parseColoredContext(context)}]`;
+            }
+            else {
+                ctx = `[${String(context)}]`;
+            }
+        }
+        const levelFormatted = safeColors.level(`[${safeLevel}]`);
         return `${levelFormatted}${ctx ? ' ' + ctx : ''} ${formattedMessage}`;
     }
     formatMultiColorMessage(message, levelColor) {
