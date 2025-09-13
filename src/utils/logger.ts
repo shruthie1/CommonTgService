@@ -133,7 +133,7 @@ export class Logger extends NestLogger {
         } else if (typeof data === 'string') {
             extraCtx = this.parseColoredContext(data);
         } else {
-            extraCtx = String(data);
+            extraCtx = chalk.yellow.bold(String(data));
         }
         extraCtx = ' ' + extraCtx;
 
@@ -175,26 +175,26 @@ export class Logger extends NestLogger {
             return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
         }
 
-        if (typeof obj === 'string') return chalk.green(`"${obj}"`);
-        if (typeof obj === 'number') return chalk.yellow(obj);
-        if (typeof obj === 'boolean') return chalk.magenta(obj);
-        if (obj === null) return chalk.gray('null');
+        if (typeof obj === 'string') return chalk.blueBright.bold(`"${obj}"`);
+        if (typeof obj === 'number') return chalk.yellow.bold(obj);
+        if (typeof obj === 'boolean') return chalk.magenta.bold(obj);
+        if (obj === null) return chalk.gray.bold('null');
 
-        return chalk.white(String(obj));
+        return chalk.cyanBright.bold(String(obj));
     }
 
     private parseColoredContext(context: string): string {
         if (/^\d+$/.test(context)) {
-            return chalk.magentaBright(context);
+            return chalk.magentaBright.bold(context);
         }
         if (context === context.toUpperCase()) {
-            return chalk.cyanBright(context);
+            return chalk.cyanBright.bold(context);
         }
 
         const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);
-            return chalkColor ? chalkColor(text) : text;
+            return chalkColor ? chalkColor(text) : chalk.cyanBright.bold(text);
         });
     }
 

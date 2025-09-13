@@ -708,7 +708,7 @@ export class BufferClientService implements OnModuleDestroy {
 
                 currentChannel = channels.shift();
                 this.logger.debug(
-                    `${mobile} has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`,
+                    `${mobile} has ${channels.length} pending channels to join, processing:`, `@${currentChannel.username}`,
                 );
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
