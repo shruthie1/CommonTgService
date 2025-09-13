@@ -8457,19 +8457,13 @@ function generateTGConfig() {
         return arr[Math.floor(Math.random() * arr.length)];
     }
     return {
-        connectionRetries: 10,
-        requestRetries: 10,
-        retryDelay: 2000,
+        connectionRetries: 5,
+        requestRetries: 5,
+        retryDelay: 1000,
         timeout: 10000,
         autoReconnect: true,
-        useWSS: false,
         maxConcurrentDownloads: 3,
-        downloadRetries: 10,
-        floodSleepThreshold: 180,
-        deviceModel: `${pickRandom(deviceModels)}-ssk`,
-        systemVersion: pickRandom(systemVersions),
-        appVersion: pickRandom(appVersions),
-        useIPV6: false,
+        downloadRetries: 5,
     };
 }
 
