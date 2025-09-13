@@ -125,14 +125,14 @@ private formatMessage(
     if (context !== undefined && context !== null) {
         if (typeof context === 'object') {
             try {
-                ctx = `[${this.formatObjectMessage(context)}]`;
+                ctx = `${this.formatObjectMessage(context)}`;
             } catch {
                 ctx = '[Invalid Context Object]';
             }
         } else if (typeof context === 'string') {
-            ctx = `[${this.parseColoredContext(context)}]`;
+            ctx = `${this.parseColoredContext(context)}`;
         } else {
-            ctx = `[${String(context)}]`; // fallback for numbers, booleans, etc.
+            ctx = `${String(context)}`; // fallback for numbers, booleans, etc.
         }
     }
 
