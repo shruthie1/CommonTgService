@@ -138,7 +138,7 @@ export class Logger extends NestLogger {
 
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
 
-        return `${levelFormatted} ${formattedMessage}${ctx ? '\n' + ctx : ''}`;
+        return `${levelFormatted} ${formattedMessage}${ctx ? ' - ' + ctx : ''}`;
     }
 
 
