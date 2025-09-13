@@ -29217,7 +29217,7 @@ class Logger extends common_1.Logger {
             }
         }
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
-        return `${levelFormatted}${ctx ? ' ' + ctx : ''} ${formattedMessage}`;
+        return `${levelFormatted} ${formattedMessage}${ctx ? '\n' + ctx : ''}`;
     }
     formatMultiColorMessage(message, levelColor) {
         if (typeof message === 'object') {
