@@ -190,12 +190,7 @@ export class Logger extends NestLogger {
         if (context === context.toUpperCase()) {
             return chalk.cyanBright.bold(context);
         }
-
-        const colorPattern = /\{(\w+):([^}]+)\}/g;
-        return context.replace(colorPattern, (match, colorName, text) => {
-            const chalkColor = this.getChalkColor(colorName);
-            return chalkColor ? chalkColor(text) : chalk.cyanBright.bold(text);
-        });
+        return chalk.yellowBright.bold(context);
     }
 
     private getChalkColor(colorName: string): any {
