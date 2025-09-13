@@ -3751,7 +3751,7 @@ class TelegramManager {
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
-            timeout: 15000,
+            timeout: 32000,
             errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {
@@ -8460,7 +8460,7 @@ function generateTGConfig() {
         connectionRetries: 5,
         requestRetries: 5,
         retryDelay: 1000,
-        timeout: 10000,
+        timeout: 30000,
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
