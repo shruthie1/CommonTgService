@@ -7,7 +7,7 @@ import { BotConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
-import { contains } from 'src/utils';
+import { contains } from '../../../utils';
 
 interface User {
     mobile: string;
