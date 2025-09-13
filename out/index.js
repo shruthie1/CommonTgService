@@ -8164,7 +8164,7 @@ class ConnectionManager {
             await this.unregisterClient(mobile);
             await (0, Helpers_1.sleep)(3000);
         }
-        return this.createNewClient(mobile, { autoDisconnect, handler });
+        return await this.createNewClient(mobile, { autoDisconnect, handler });
     }
     async createNewClient(mobile, options) {
         if (!this.usersService) {
@@ -8174,7 +8174,7 @@ class ConnectionManager {
         const users = await this.usersService.search({ mobile });
         const user = users[0];
         if (!user) {
-            throw new common_1.BadRequestException(`[Connection Manager]\nUser not found : ${mobile}`);
+            throw new common_1.NotFoundException(`[Connection Manager]\nUser not found : ${mobile}`);
         }
         const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
         const clientInfo = {
@@ -27588,6 +27588,53 @@ __exportStar(__webpack_require__(/*! ./auth.guard */ "./src/guards/auth.guard.ts
 
 /***/ }),
 
+/***/ "./src/interceptors/Exception-filter.ts":
+/*!**********************************************!*\
+  !*** ./src/interceptors/Exception-filter.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ExceptionsFilter = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+let ExceptionsFilter = class ExceptionsFilter {
+    catch(exception, host) {
+        const ctx = host.switchToHttp();
+        const response = ctx.getResponse();
+        const errorDetails = (0, utils_1.parseError)(exception, 'Exception', false);
+        let status = errorDetails.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR;
+        let message = errorDetails.message || 'Internal server error';
+        if (exception instanceof common_1.HttpException) {
+            status = exception.getStatus();
+            const errorResponse = exception.getResponse();
+            message =
+                typeof errorResponse === 'string'
+                    ? errorResponse
+                    : errorResponse.message || errorResponse;
+        }
+        response.status(status).json({
+            statusCode: status,
+            message,
+            error: errorDetails.error
+        });
+    }
+};
+exports.ExceptionsFilter = ExceptionsFilter;
+exports.ExceptionsFilter = ExceptionsFilter = __decorate([
+    (0, common_1.Catch)()
+], ExceptionsFilter);
+
+
+/***/ }),
+
 /***/ "./src/interceptors/cloudflare-cache.interceptor.ts":
 /*!**********************************************************!*\
   !*** ./src/interceptors/cloudflare-cache.interceptor.ts ***!
@@ -27662,6 +27709,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./cloudflare-cache.interceptor */ "./src/interceptors/cloudflare-cache.interceptor.ts"), exports);
+__exportStar(__webpack_require__(/*! ./Exception-filter */ "./src/interceptors/Exception-filter.ts"), exports);
 
 
 /***/ }),
@@ -27737,6 +27785,7 @@ const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
+const Exception_filter_1 = __webpack_require__(/*! ./interceptors/Exception-filter */ "./src/interceptors/Exception-filter.ts");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: utils_1.Logger
@@ -27777,6 +27826,7 @@ async function bootstrap() {
         },
     });
     mongoose_1.default.set('debug', true);
+    app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
         transformOptions: {
@@ -27816,7 +27866,7 @@ async function bootstrap() {
         await shutdown('SIGQUIT');
     });
     await app.init();
-    await app.listen(process.env.PORT || 9000);
+    await app.listen(process.env.PORT || 9002);
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
@@ -27913,6 +27963,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const form_data_1 = __importDefault(__webpack_require__(/*! form-data */ "form-data"));
+const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -28418,18 +28469,19 @@ class BotConfig {
         for (const [category, data] of this.categoryMap) {
             for (const token of data.botTokens) {
                 const promise = (async () => {
+                    const url = `https://api.telegram.org/bot${token}/getMe`;
                     try {
-                        const botInfo = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
+                        const botInfo = await axios_1.default.get(url, {
                             timeout: 5000
                         });
                         if (!botInfo.data?.ok) {
                             console.error(`Failed to get bot info for ${category}`);
                             return;
                         }
-                        console.debug(`Successfully initialized bot for ${category}`);
+                        console.log(`Successfully initialized bot for ${category}`);
                     }
                     catch (error) {
-                        console.error(`Failed to initialize bot for ${category}:`, error);
+                        (0, parseError_1.parseError)(error, `Failed to initialize bot for ${category} | URL: ${url}`, false);
                     }
                 })();
                 initPromises.push(promise);
@@ -29622,7 +29674,7 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
         }
         const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-        console.log("parsedErr: ", fullMessage);
+        console.error("parsedErr: ", fullMessage);
         const response = {
             status,
             message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),

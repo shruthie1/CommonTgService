@@ -74,7 +74,7 @@ class ConnectionManager {
         const users = await this.usersService.search({ mobile });
         const user = users[0];
         if (!user) {
-            throw new common_1.BadRequestException(`[Connection Manager]\nUser not found : ${mobile}`);
+            throw new common_1.NotFoundException(`[Connection Manager]\nUser not found : ${mobile}`);
         }
         const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
         const clientInfo = {
