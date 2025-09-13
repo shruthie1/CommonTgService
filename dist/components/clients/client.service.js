@@ -55,7 +55,6 @@ const client_schema_1 = require("./schemas/client.schema");
 const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
-const archived_client_service_1 = require("../archived-clients/archived-client.service");
 const utils_1 = require("../../utils");
 const path = __importStar(require("path"));
 const cloudinary_1 = require("../../cloudinary");
@@ -64,19 +63,16 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
-const session_manager_1 = require("../session-manager");
 const ip_management_service_1 = require("../ip-management/ip-management.service");
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, archivedClientService, sessionService, ipManagementService, npointService) {
+    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, ipManagementService, npointService) {
         this.clientModel = clientModel;
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
-        this.archivedClientService = archivedClientService;
-        this.sessionService = sessionService;
         this.ipManagementService = ipManagementService;
         this.npointService = npointService;
         this.logger = new utils_1.Logger(ClientService_1.name);
@@ -1076,16 +1072,12 @@ exports.ClientService = ClientService = ClientService_1 = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
-    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => archived_client_service_1.ArchivedClientService))),
-    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => session_manager_1.SessionService))),
-    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => ip_management_service_1.IpManagementService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => ip_management_service_1.IpManagementService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService,
-        archived_client_service_1.ArchivedClientService,
-        session_manager_1.SessionService,
         ip_management_service_1.IpManagementService,
         npoint_service_1.NpointService])
 ], ClientService);

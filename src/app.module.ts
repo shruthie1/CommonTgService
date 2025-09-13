@@ -5,7 +5,6 @@ import { ClientModule } from './components/clients/client.module';
 import { TelegramModule } from './components/Telegram/Telegram.module';
 import { BufferClientModule } from './components/buffer-clients/buffer-client.module';
 import { ActiveChannelsModule } from './components/active-channels/active-channels.module';
-import { ArchivedClientModule } from './components/archived-clients/archived-client.module';
 import { InitModule } from './components/ConfigurationInit/init.module';
 import { ChannelsModule } from './components/channels/channels.module';
 import { AppController } from './app.controller';
@@ -38,7 +37,6 @@ import { AuthGuard } from './guards';
     UserDataModule,
     UsersModule,
     BufferClientModule,
-    ArchivedClientModule,
     ChannelsModule,
     PromoteClientModule,
     BuildModule,
@@ -67,7 +65,6 @@ import { AuthGuard } from './guards';
     UserDataModule,
     UsersModule,
     BufferClientModule,
-    ArchivedClientModule,
     ChannelsModule,
     PromoteClientModule,
     TgSignupModule,

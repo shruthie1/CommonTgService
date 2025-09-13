@@ -1,1 +1,0 @@
-{"version":3,"file":"session-update.dto.js","sourceRoot":"","sources":["../../../../src/components/archived-clients/dto/session-update.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,6CAA8C;AAC9C,qDAAuD;AAEvD,MAAa,gBAAgB;CAQ5B;AARD,4CAQC;AADY;IANR,IAAA,qBAAW,EAAC;QACT,OAAO,EAAE,qBAAqB;QAC9B,WAAW,EAAE,6CAA6C;KAC7D,CAAC;IACD,IAAA,4BAAU,GAAE;IACZ,IAAA,0BAAQ,GAAE;;oDACiB"}

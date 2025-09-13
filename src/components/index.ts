@@ -1,6 +1,5 @@
 // Core components
 export * from './active-channels';
-export * from './archived-clients';
 export * from './buffer-clients';
 export * from './builds';
 export * from './channels';

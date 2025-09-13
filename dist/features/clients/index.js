@@ -20,8 +20,6 @@ __exportStar(require("../../components/clients/dto/create-client.dto"), exports)
 __exportStar(require("../../components/clients/dto/search-client.dto"), exports);
 __exportStar(require("../../components/active-channels/active-channels.module"), exports);
 __exportStar(require("../../components/active-channels/active-channels.service"), exports);
-__exportStar(require("../../components/archived-clients/archived-client.module"), exports);
-__exportStar(require("../../components/archived-clients/archived-client.service"), exports);
 __exportStar(require("../../components/buffer-clients/buffer-client.module"), exports);
 __exportStar(require("../../components/buffer-clients/buffer-client.service"), exports);
 __exportStar(require("../../components/promote-clients/promote-client.module"), exports);

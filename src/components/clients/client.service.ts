@@ -18,7 +18,6 @@ import { SetupClientQueryDto } from './dto/setup-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
-import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import {
   contains,
   fetchNumbersFromString,
@@ -93,10 +92,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly bufferClientService: BufferClientService,
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
-    @Inject(forwardRef(() => ArchivedClientService))
-    private readonly archivedClientService: ArchivedClientService,
-    @Inject(forwardRef(() => SessionService))
-    private readonly sessionService: SessionService,
     @Inject(forwardRef(() => IpManagementService))
     private readonly ipManagementService: IpManagementService,
     private readonly npointService: NpointService,

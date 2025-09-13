@@ -6,7 +6,6 @@ import { ClientController } from './client.controller';
 import { TelegramModule } from '../Telegram/Telegram.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
-import { ArchivedClientModule } from '../archived-clients/archived-client.module';
 import { InitModule } from '../ConfigurationInit/init.module';
 import { NpointModule } from '../n-point/npoint.module';
 import { TimestampModule } from '../timestamps/timestamp.module';
@@ -23,7 +22,6 @@ import { PromoteClient, PromoteClientSchema } from '../promote-clients';
     forwardRef(() => TelegramModule),
     forwardRef(() => BufferClientModule),
     forwardRef(() => UsersModule),
-    forwardRef(() => ArchivedClientModule),
     forwardRef(() => SessionModule),
     forwardRef(() => TimestampModule),
     forwardRef(() => IpManagementModule),

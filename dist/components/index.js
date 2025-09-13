@@ -15,7 +15,6 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./active-channels"), exports);
-__exportStar(require("./archived-clients"), exports);
 __exportStar(require("./buffer-clients"), exports);
 __exportStar(require("./builds"), exports);
 __exportStar(require("./channels"), exports);

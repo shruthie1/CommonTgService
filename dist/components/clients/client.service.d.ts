@@ -6,11 +6,9 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
-import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
-import { SessionService } from '../session-manager';
 import { IpManagementService } from '../ip-management/ip-management.service';
 import { PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
 interface SearchResult {
@@ -27,8 +25,6 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly telegramService;
     private readonly bufferClientService;
     private readonly usersService;
-    private readonly archivedClientService;
-    private readonly sessionService;
     private readonly ipManagementService;
     private readonly npointService;
     private readonly logger;
@@ -45,7 +41,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly RETRY_DELAY;
     private readonly CACHE_WARMUP_THRESHOLD;
     private refreshPromise;
-    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, archivedClientService: ArchivedClientService, sessionService: SessionService, ipManagementService: IpManagementService, npointService: NpointService);
+    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, ipManagementService: IpManagementService, npointService: NpointService);
     onModuleInit(): Promise<void>;
     onModuleDestroy(): Promise<void>;
     private initializeService;
