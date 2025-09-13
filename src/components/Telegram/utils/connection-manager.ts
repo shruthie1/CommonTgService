@@ -7,6 +7,7 @@ import { BotConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
+import { contains } from 'src/utils';
 
 interface User {
     mobile: string;
@@ -111,7 +112,7 @@ class ConnectionManager {
         const users = await this.usersService.search({ mobile });
         const user = users[0] as User;
         if (!user) {
-            throw new BadRequestException('User not found');
+            throw new BadRequestException(`User not found : ${mobile}`);
         }
 
         const telegramManager = new TelegramManager(user.session, user.mobile);
@@ -133,10 +134,6 @@ class ConnectionManager {
                 timeout: this.CONNECTION_TIMEOUT,
                 errorMessage: "Tg Client Connection Timeout"
             })
-
-            if (!client) {
-                throw new Error('Client creation returned null');
-            }
 
             // Validate connection
             await this.validateConnection(mobile, telegramManager)
@@ -176,26 +173,15 @@ class ConnectionManager {
     }
 
     private async handleConnectionError(mobile: string, clientInfo: ClientInfo, error: Error): Promise<void> {
-        const errorMessage = error.message.toLowerCase();
         clientInfo.lastError = error.message;
         clientInfo.state = 'error';
         this.clients.set(mobile, clientInfo);
 
         const errorDetails = parseError(error, mobile, false);
-
-        // Send notification
-        try {
-            await BotConfig.getInstance().sendMessage(
-                ChannelCategory.ACCOUNT_LOGIN_FAILURES,
-                `${process.env.clientId}::${mobile}\nAttempt: ${clientInfo.connectionAttempts}\nError: ${errorDetails.message}`
-            );
-        } catch (notificationError) {
-            this.logger.error(mobile, 'Failed to send error notification', notificationError);
-        }
-
+        let markedAsExpired: boolean = false
         // Handle permanent failures
         const permanentErrors = ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'];
-        if (permanentErrors.some(errType => errorMessage.includes(errType))) {
+        if (contains(errorDetails.message, permanentErrors)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
                 const users = await this.usersService!.search({ mobile });
@@ -205,10 +191,20 @@ class ConnectionManager {
                         { $or: [{ tgId: user.tgId }, { mobile: mobile }] },
                         { expired: true }
                     );
+                    markedAsExpired = true
                 }
             } catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
             }
+        }
+
+        try {
+            await BotConfig.getInstance().sendMessage(
+                ChannelCategory.ACCOUNT_LOGIN_FAILURES,
+                `${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`
+            );
+        } catch (notificationError) {
+            this.logger.error(mobile, 'Failed to send error notification', notificationError);
         }
     }
 
