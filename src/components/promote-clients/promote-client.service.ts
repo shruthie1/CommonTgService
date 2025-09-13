@@ -712,9 +712,9 @@ export class PromoteClientService implements OnModuleDestroy {
                     i < keys.length - 1 ||
                     this.joinChannelMap.get(mobile)?.length > 0
                 ) {
-                    console.log(
-                        `Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`,
-                    );
+                    // console.log(
+                    //     `Sleeping for ${this.CHANNEL_PROCESSING_DELAY} before continuing with next Mobile`,
+                    // );
                     await sleep(this.CHANNEL_PROCESSING_DELAY);
                 } else {
                     console.log(`Not Sleeping before continuing with next Mobile`);
