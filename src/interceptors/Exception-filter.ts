@@ -6,7 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { parseError } from 'src/utils';
+import { parseError } from '../utils';
 
 @Catch()
 export class ExceptionsFilter implements ExceptionFilter {
