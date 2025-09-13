@@ -108,7 +108,7 @@ class Logger extends common_1.Logger {
             extraCtx = this.parseColoredContext(data);
         }
         else {
-            extraCtx = String(data);
+            extraCtx = chalk_1.default.yellow.bold(String(data));
         }
         extraCtx = ' ' + extraCtx;
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
@@ -138,26 +138,26 @@ class Logger extends common_1.Logger {
             return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
         }
         if (typeof obj === 'string')
-            return chalk_1.default.green(`"${obj}"`);
+            return chalk_1.default.blueBright.bold(`"${obj}"`);
         if (typeof obj === 'number')
-            return chalk_1.default.yellow(obj);
+            return chalk_1.default.yellow.bold(obj);
         if (typeof obj === 'boolean')
-            return chalk_1.default.magenta(obj);
+            return chalk_1.default.magenta.bold(obj);
         if (obj === null)
-            return chalk_1.default.gray('null');
-        return chalk_1.default.white(String(obj));
+            return chalk_1.default.gray.bold('null');
+        return chalk_1.default.cyanBright.bold(String(obj));
     }
     parseColoredContext(context) {
         if (/^\d+$/.test(context)) {
-            return chalk_1.default.magentaBright(context);
+            return chalk_1.default.magentaBright.bold(context);
         }
         if (context === context.toUpperCase()) {
-            return chalk_1.default.cyanBright(context);
+            return chalk_1.default.cyanBright.bold(context);
         }
         const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);
-            return chalkColor ? chalkColor(text) : text;
+            return chalkColor ? chalkColor(text) : chalk_1.default.cyanBright.bold(text);
         });
     }
     getChalkColor(colorName) {

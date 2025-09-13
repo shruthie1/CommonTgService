@@ -492,7 +492,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     continue;
                 }
                 currentChannel = channels.shift();
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing:`, `@${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) {
