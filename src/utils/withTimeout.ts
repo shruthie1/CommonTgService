@@ -72,19 +72,25 @@ async function runWithTimeout<T>(
 ): Promise<T> {
   let timeoutId: NodeJS.Timeout | null = null;
   let abortListener: (() => void) | null = null;
+  const start = Date.now();
 
   try {
     return await new Promise<T>((resolve, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`${errorMessage ?? "Timeout"} after ${timeoutMs}ms`));
+        const elapsed = Date.now() - start;
+        reject(new Error(`${errorMessage ?? "Timeout"}\nElapsed: ${elapsed}ms`));
       }, timeoutMs);
 
       if (cancelSignal) {
         if (cancelSignal.aborted) {
-          reject(new Error("Operation cancelled"));
+          const elapsed = Date.now() - start;
+          reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
           return;
         }
-        abortListener = () => reject(new Error("Operation cancelled"));
+        abortListener = () => {
+          const elapsed = Date.now() - start;
+          reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
+        };
         cancelSignal.addEventListener("abort", abortListener, { once: true });
       }
 
