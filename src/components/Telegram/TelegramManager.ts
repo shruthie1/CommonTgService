@@ -572,7 +572,7 @@ class TelegramManager {
                         channel: channelId
                     })
                 );
-                this.logger.info(this.phoneNumber, `${this.phoneNumber} Left channel :`, id);
+                this.logger.info(this.phoneNumber, `Left channel : ${id}`);
                 if (chats.length > 1) {
                     await sleep(3000);
                 }
