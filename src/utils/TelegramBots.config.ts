@@ -193,9 +193,10 @@ export class BotConfig {
                 key.startsWith('TELEGRAM_CHANNEL_CONFIG_')
             );
 
-            for (const key of envKeys) {
+            // Process all envKeys in parallel
+            await Promise.all(envKeys.map(async (key) => {
                 const value = process.env[key];
-                if (!value) continue;
+                if (!value) return;
 
                 try {
                     const [channelId, description = '', botTokensStr] = value.split('::');
@@ -203,32 +204,37 @@ export class BotConfig {
 
                     if (!channelId || !botTokens || botTokens.length === 0) {
                         console.warn(`Invalid configuration for ${key}: missing channelId or botTokens`);
-                        continue;
+                        return;
                     }
 
                     const category = this.getCategoryFromDescription(description);
                     if (!category) {
                         console.warn(`Invalid category in description for ${key}: ${description}`);
-                        continue;
+                        return;
                     }
 
-                    const botUsernames: string[] = [];
-                    for (const token of botTokens) {
-                        try {
-                            const username = await this.fetchUsername(token);
-                            if (!username) {
-                                console.warn(`Invalid bot token in ${category}`);
-                                continue;
+                    // Fetch all usernames in parallel
+                    const results = await Promise.all(
+                        botTokens.map(async (token) => {
+                            try {
+                                const username = await this.fetchUsername(token);
+                                if (!username) {
+                                    console.warn(`Invalid bot token in ${category}`);
+                                    return null;
+                                }
+                                return username;
+                            } catch (error) {
+                                console.error(`Error fetching username for token in ${category}:`, error);
+                                return null;
                             }
-                            botUsernames.push(username);
-                        } catch (error) {
-                            console.error(`Error fetching username for token in ${category}:`, error);
-                        }
-                    }
+                        })
+                    );
+
+                    const botUsernames = results.filter(Boolean) as string[];
 
                     if (botUsernames.length === 0) {
                         console.warn(`No valid bot usernames found for ${category}`);
-                        continue;
+                        return;
                     }
 
                     this.categoryMap.set(category, {
@@ -240,7 +246,7 @@ export class BotConfig {
                 } catch (error) {
                     console.error(`Error processing configuration for ${key}:`, error);
                 }
-            }
+            }));
 
             // Initialize bots after configuration is loaded
             await this.initializeBots();
@@ -767,35 +773,35 @@ export class BotConfig {
     /**
      * Initialize bots with /start command
      */
+    /**
+     * Initialize bots with /start command
+     */
     private async initializeBots(): Promise<void> {
-        console.debug('Initializing bots with /start command...');
+        console.debug("Initializing bots with /start command...");
 
-        const initPromises: Promise<void>[] = [];
+        const initPromises = Array.from(this.categoryMap.entries()).flatMap(([category, data]) =>
+            data.botTokens.map(async (token) => {
+                const url = `https://api.telegram.org/bot${token}/getMe`;
 
-        for (const [category, data] of this.categoryMap) {
-            for (const token of data.botTokens) {
-                const promise = (async () => {
-                    const url = `https://api.telegram.org/bot${token}/getMe`
-                    try {
-                        const botInfo = await axios.get(url, {
-                            timeout: 5000
-                        });
+                try {
+                    const botInfo = await axios.get(url, { timeout: 5000 });
 
-                        if (!botInfo.data?.ok) {
-                            console.error(`Failed to get bot info for ${category}`);
-                            return;
-                        }
-                        console.log(`Successfully initialized bot for ${category}`);
-                    } catch (error) {
-                        parseError(error, `Failed to initialize bot for ${category} | URL: ${url}`, false)
+                    if (!botInfo.data?.ok) {
+                        console.error(`Failed to get bot info for ${category}`);
+                        return;
                     }
-                })();
+                    console.log(`✅ Successfully initialized bot for ${category}`);
+                } catch (error) {
+                    parseError(
+                        error,
+                        `❌ Failed to initialize bot for ${category} | URL: ${url}`,
+                        false
+                    );
+                }
+            })
+        );
 
-                initPromises.push(promise);
-            }
-        }
-
-        // Wait for all initialization attempts to complete
+        // Run all initializations in parallel
         await Promise.allSettled(initPromises);
     }
 

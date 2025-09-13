@@ -60,7 +60,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.cleanupIntervalId = null;
     }
     async onModuleDestroy() {
-        this.logger.log('Cleaning up BufferClientService resources');
         await this.cleanup();
     }
     async cleanup() {
@@ -73,7 +72,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveMap();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
-            this.logger.log('BufferClientService cleanup completed');
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
@@ -557,13 +555,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
         this.isJoinChannelProcessing = false;
-        this.logger.debug('Join channel processing cleared and flag reset');
     }
     removeFromLeaveMap(key) {
         this.leaveChannelMap.delete(key);

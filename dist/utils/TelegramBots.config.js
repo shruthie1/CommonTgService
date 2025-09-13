@@ -66,39 +66,40 @@ class BotConfig {
             this.initializing = true;
             console.debug('Initializing Telegram channel configuration...');
             const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
-            for (const key of envKeys) {
+            await Promise.all(envKeys.map(async (key) => {
                 const value = process.env[key];
                 if (!value)
-                    continue;
+                    return;
                 try {
                     const [channelId, description = '', botTokensStr] = value.split('::');
                     const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
                     if (!channelId || !botTokens || botTokens.length === 0) {
                         console.warn(`Invalid configuration for ${key}: missing channelId or botTokens`);
-                        continue;
+                        return;
                     }
                     const category = this.getCategoryFromDescription(description);
                     if (!category) {
                         console.warn(`Invalid category in description for ${key}: ${description}`);
-                        continue;
+                        return;
                     }
-                    const botUsernames = [];
-                    for (const token of botTokens) {
+                    const results = await Promise.all(botTokens.map(async (token) => {
                         try {
                             const username = await this.fetchUsername(token);
                             if (!username) {
                                 console.warn(`Invalid bot token in ${category}`);
-                                continue;
+                                return null;
                             }
-                            botUsernames.push(username);
+                            return username;
                         }
                         catch (error) {
                             console.error(`Error fetching username for token in ${category}:`, error);
+                            return null;
                         }
-                    }
+                    }));
+                    const botUsernames = results.filter(Boolean);
                     if (botUsernames.length === 0) {
                         console.warn(`No valid bot usernames found for ${category}`);
-                        continue;
+                        return;
                     }
                     this.categoryMap.set(category, {
                         botTokens,
@@ -110,7 +111,7 @@ class BotConfig {
                 catch (error) {
                     console.error(`Error processing configuration for ${key}:`, error);
                 }
-            }
+            }));
             await this.initializeBots();
             this.initialized = true;
             console.info(`BotConfig initialized successfully with ${this.categoryMap.size} categories.`);
@@ -507,29 +508,21 @@ class BotConfig {
         }
     }
     async initializeBots() {
-        console.debug('Initializing bots with /start command...');
-        const initPromises = [];
-        for (const [category, data] of this.categoryMap) {
-            for (const token of data.botTokens) {
-                const promise = (async () => {
-                    const url = `https://api.telegram.org/bot${token}/getMe`;
-                    try {
-                        const botInfo = await axios_1.default.get(url, {
-                            timeout: 5000
-                        });
-                        if (!botInfo.data?.ok) {
-                            console.error(`Failed to get bot info for ${category}`);
-                            return;
-                        }
-                        console.log(`Successfully initialized bot for ${category}`);
-                    }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error, `Failed to initialize bot for ${category} | URL: ${url}`, false);
-                    }
-                })();
-                initPromises.push(promise);
+        console.debug("Initializing bots with /start command...");
+        const initPromises = Array.from(this.categoryMap.entries()).flatMap(([category, data]) => data.botTokens.map(async (token) => {
+            const url = `https://api.telegram.org/bot${token}/getMe`;
+            try {
+                const botInfo = await axios_1.default.get(url, { timeout: 5000 });
+                if (!botInfo.data?.ok) {
+                    console.error(`Failed to get bot info for ${category}`);
+                    return;
+                }
+                console.log(`✅ Successfully initialized bot for ${category}`);
             }
-        }
+            catch (error) {
+                (0, parseError_1.parseError)(error, `❌ Failed to initialize bot for ${category} | URL: ${url}`, false);
+            }
+        }));
         await Promise.allSettled(initPromises);
     }
     async ensureInitialized() {

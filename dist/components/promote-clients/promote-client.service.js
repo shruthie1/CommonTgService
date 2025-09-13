@@ -973,16 +973,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.clearLeaveMap();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
-            this.logger.log('BufferClientService cleanup completed');
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
         }
     }
     async onModuleDestroy() {
-        this.logger.log('Cleaning up PromoteClientService resources');
         await this.cleanup();
-        this.logger.log('PromoteClientService cleanup completed');
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();

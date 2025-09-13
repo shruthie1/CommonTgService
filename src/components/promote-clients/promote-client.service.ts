@@ -1225,16 +1225,16 @@ export class PromoteClientService implements OnModuleDestroy {
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
 
-            this.logger.log('BufferClientService cleanup completed');
+            // this.logger.log('BufferClientService cleanup completed');
         } catch (error) {
             this.logger.error('Error during cleanup:', error);
         }
     }
 
     async onModuleDestroy() {
-        this.logger.log('Cleaning up PromoteClientService resources');
+        // this.logger.log('Cleaning up PromoteClientService resources');
         await this.cleanup();
-        this.logger.log('PromoteClientService cleanup completed');
+        // this.logger.log('PromoteClientService cleanup completed');
     }
 
     /**

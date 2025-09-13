@@ -83,7 +83,7 @@ export class BufferClientService implements OnModuleDestroy {
     ) { }
 
     async onModuleDestroy() {
-        this.logger.log('Cleaning up BufferClientService resources');
+        // this.logger.log('Cleaning up BufferClientService resources');
         await this.cleanup();
     }
 
@@ -105,7 +105,7 @@ export class BufferClientService implements OnModuleDestroy {
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
 
-            this.logger.log('BufferClientService cleanup completed');
+            // this.logger.log('BufferClientService cleanup completed');
         } catch (error) {
             this.logger.error('Error during cleanup:', error);
         }
@@ -797,15 +797,13 @@ export class BufferClientService implements OnModuleDestroy {
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            this.logger.debug(
-                `Clearing join channel interval: ${this.joinChannelIntervalId}`,
-            );
+            // this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`,);
             clearInterval(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
         this.isJoinChannelProcessing = false;
-        this.logger.debug('Join channel processing cleared and flag reset');
+        // this.logger.debug('Join channel processing cleared and flag reset');
     }
 
     removeFromLeaveMap(key: string) {

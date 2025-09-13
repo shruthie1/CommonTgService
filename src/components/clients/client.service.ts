@@ -107,7 +107,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Client Service shutting down...');
+    // this.logger.log('Client Service shutting down...');
     this.isShuttingDown = true;
 
     try {

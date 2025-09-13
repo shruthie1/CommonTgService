@@ -307,12 +307,12 @@ class ConnectionManager {
 
         if (removePromises.length > 0) {
             await Promise.allSettled(removePromises);
-            this.logger.info('ConnectionManager', `Cleanup completed - removed ${removePromises.length} clients`);
+            this.logger.info('Default', `Cleanup completed - removed ${removePromises.length} clients`);
         }
     }
 
     private async forceCleanup(): Promise<void> {
-        this.logger.info('ConnectionManager', 'Force cleanup triggered');
+        this.logger.info('Default', 'Force cleanup triggered');
 
         const oldestClients = Array.from(this.clients.entries())
             .sort(([, a], [, b]) => a.lastUsed - b.lastUsed)
@@ -323,7 +323,7 @@ class ConnectionManager {
             await this.unregisterClient(mobile);
         }
 
-        this.logger.info('ConnectionManager', `Force cleanup completed - removed ${oldestClients.length} clients`);
+        this.logger.info('Default', `Force cleanup completed - removed ${oldestClients.length} clients`);
     }
 
     public async forceReconnect(mobile: string): Promise<TelegramManager> {
@@ -337,30 +337,30 @@ class ConnectionManager {
 
         this.cleanupTimer = setInterval(() => {
             this.cleanup().catch(error =>
-                this.logger.error('ConnectionManager', 'Cleanup error', error)
+                this.logger.error('Default', 'Cleanup error', error)
             );
         }, this.CLEANUP_INTERVAL);
 
-        this.logger.info('ConnectionManager', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
+        this.logger.info('Default', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
     }
 
     private stopCleanup(): void {
         if (this.cleanupTimer) {
             clearInterval(this.cleanupTimer);
             this.cleanupTimer = null;
-            this.logger.info('ConnectionManager', 'Cleanup stopped');
+            // this.logger.info('Default', 'Cleanup stopped');
         }
     }
 
     public async shutdown(): Promise<void> {
-        this.logger.info('ConnectionManager', 'Shutdown initiated');
+        // this.logger.info('Default', 'Shutdown initiated');
         this.isShuttingDown = true;
         this.stopCleanup();
 
         // Disconnect all clients
         await this.disconnectAll();
         this.clients.clear();
-        this.logger.info('ConnectionManager', 'Shutdown completed');
+        // this.logger.info('Default', 'Shutdown completed');
     }
 
     public async disconnectAll() {
