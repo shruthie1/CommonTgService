@@ -27675,11 +27675,7 @@ class Logger extends common_1.Logger {
         if (context === context.toUpperCase()) {
             return chalk_1.default.cyanBright.bold(context);
         }
-        const colorPattern = /\{(\w+):([^}]+)\}/g;
-        return context.replace(colorPattern, (match, colorName, text) => {
-            const chalkColor = this.getChalkColor(colorName);
-            return chalkColor ? chalkColor(text) : chalk_1.default.cyanBright.bold(text);
-        });
+        return chalk_1.default.yellowBright.bold(context);
     }
     getChalkColor(colorName) {
         const colorMap = {
