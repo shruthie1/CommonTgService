@@ -35,17 +35,23 @@ async function withTimeout(promiseFactory, options = {}) {
 async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
     let timeoutId = null;
     let abortListener = null;
+    const start = Date.now();
     try {
         return await new Promise((resolve, reject) => {
             timeoutId = setTimeout(() => {
-                reject(new Error(`${errorMessage ?? "Timeout"} after ${timeoutMs}ms`));
+                const elapsed = Date.now() - start;
+                reject(new Error(`${errorMessage ?? "Timeout"}\nElapsed: ${elapsed}ms`));
             }, timeoutMs);
             if (cancelSignal) {
                 if (cancelSignal.aborted) {
-                    reject(new Error("Operation cancelled"));
+                    const elapsed = Date.now() - start;
+                    reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
                     return;
                 }
-                abortListener = () => reject(new Error("Operation cancelled"));
+                abortListener = () => {
+                    const elapsed = Date.now() - start;
+                    reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
+                };
                 cancelSignal.addEventListener("abort", abortListener, { once: true });
             }
             promise.then(resolve).catch(reject);

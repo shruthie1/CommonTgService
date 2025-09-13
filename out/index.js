@@ -3749,7 +3749,7 @@ class TelegramManager {
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
             timeout: 180000,
-            errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
+            errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
         });
         if (handler && this.client) {
             if (handlerFn) {
@@ -28505,17 +28505,23 @@ async function withTimeout(promiseFactory, options = {}) {
 async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
     let timeoutId = null;
     let abortListener = null;
+    const start = Date.now();
     try {
         return await new Promise((resolve, reject) => {
             timeoutId = setTimeout(() => {
-                reject(new Error(`${errorMessage ?? "Timeout"} after ${timeoutMs}ms`));
+                const elapsed = Date.now() - start;
+                reject(new Error(`${errorMessage ?? "Timeout"}\nElapsed: ${elapsed}ms`));
             }, timeoutMs);
             if (cancelSignal) {
                 if (cancelSignal.aborted) {
-                    reject(new Error("Operation cancelled"));
+                    const elapsed = Date.now() - start;
+                    reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
                     return;
                 }
-                abortListener = () => reject(new Error("Operation cancelled"));
+                abortListener = () => {
+                    const elapsed = Date.now() - start;
+                    reject(new Error(`Operation cancelled\nElapsed: ${elapsed}ms`));
+                };
                 cancelSignal.addEventListener("abort", abortListener, { once: true });
             }
             promise.then(resolve).catch(reject);
