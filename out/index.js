@@ -239,7 +239,7 @@ const url_1 = __webpack_require__(/*! url */ "url");
 const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 let AppController = AppController_1 = class AppController {
     constructor() {
-        this.logger = new common_1.Logger(AppController_1.name);
+        this.logger = new utils_1.Logger(AppController_1.name);
         this.DEFAULT_TIMEOUT = 30000;
         this.MAX_CONTENT_SIZE = 50 * 1024 * 1024;
     }
@@ -1165,11 +1165,12 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const config_1 = __webpack_require__(/*! @nestjs/config */ "@nestjs/config");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     constructor(configurationModel, configService) {
         this.configurationModel = configurationModel;
         this.configService = configService;
-        this.logger = new common_1.Logger(ConfigurationService_1.name);
+        this.logger = new utils_1.Logger(ConfigurationService_1.name);
     }
     async onModuleInit() {
         if (ConfigurationService_1.initialized) {
@@ -8502,10 +8503,10 @@ async function getProfilePics(client, user = "me") {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TelegramLogger = void 0;
-const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
-        this.logger = new common_1.Logger(serviceName);
+        this.logger = new utils_1.Logger(serviceName);
     }
     shouldIncludeDetails(details) {
         return details !== undefined
@@ -8681,10 +8682,11 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const tg_signup_service_1 = __webpack_require__(/*! ./tg-signup.service */ "./src/components/TgSignup/tg-signup.service.ts");
 const tg_signup_dto_1 = __webpack_require__(/*! ./dto/tg-signup.dto */ "./src/components/TgSignup/dto/tg-signup.dto.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TgSignupController = TgSignupController_1 = class TgSignupController {
     constructor(tgSignupService) {
         this.tgSignupService = tgSignupService;
-        this.logger = new common_1.Logger(TgSignupController_1.name);
+        this.logger = new utils_1.Logger(TgSignupController_1.name);
     }
     async sendCode(sendCodeDto) {
         try {
@@ -8866,10 +8868,11 @@ const Password_1 = __webpack_require__(/*! telegram/Password */ "telegram/Passwo
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const tg_apps_1 = __webpack_require__(/*! ../../utils/tg-apps */ "./src/utils/tg-apps.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
         this.usersService = usersService;
-        this.logger = new common_1.Logger(TgSignupService_1.name);
+        this.logger = new utils_1.Logger(TgSignupService_1.name);
         this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), TgSignupService_1.SESSION_CLEANUP_INTERVAL);
     }
     async onModuleDestroy() {
@@ -10396,14 +10399,14 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
-const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
         this.telegramService = telegramService;
         this.clientService = clientService;
-        this.logger = new common_1.Logger(ArchivedClientService_1.name);
+        this.logger = new utils_1.Logger(ArchivedClientService_1.name);
         this.MAX_OLD_SESSIONS = 10;
         this.SESSION_GENERATION_TIMEOUT = 30000;
         this.MAX_RETRY_ATTEMPTS = 3;
@@ -10471,7 +10474,7 @@ let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientServic
         }
         catch (error) {
             this.logger.error(`Session factory failed for mobile ${mobile}:`, error);
-            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, parseError_1.parseError)(error).message}`);
+            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, utils_1.parseError)(error).message}`);
         }
     }
     async update(mobile, updateClientDto) {
@@ -11747,7 +11750,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
         this.sessionService = sessionService;
-        this.logger = new common_1.Logger(BufferClientService_1.name);
+        this.logger = new utils_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
         this.leaveChannelMap = new Map();
@@ -14505,7 +14508,7 @@ let ClientService = ClientService_1 = class ClientService {
         this.sessionService = sessionService;
         this.ipManagementService = ipManagementService;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(ClientService_1.name);
+        this.logger = new utils_1.Logger(ClientService_1.name);
         this.lastUpdateMap = new Map();
         this.clientsMap = new Map();
         this.cacheMetadata = {
@@ -16385,7 +16388,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
         this.dynamicDataModel = dynamicDataModel;
         this.connection = connection;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(DynamicDataService_1.name);
+        this.logger = new utils_1.Logger(DynamicDataService_1.name);
     }
     async create(createDto) {
         this.logger.debug(`Creating dynamic data with configKey: ${createDto.configKey}`);
@@ -16861,12 +16864,13 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
 const promote_client_service_1 = __webpack_require__(/*! ../promote-clients/promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
 const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIntegrationService {
     constructor(clientService, promoteClientService, ipManagementService) {
         this.clientService = clientService;
         this.promoteClientService = promoteClientService;
         this.ipManagementService = ipManagementService;
-        this.logger = new common_1.Logger(ClientIpIntegrationService_1.name);
+        this.logger = new utils_1.Logger(ClientIpIntegrationService_1.name);
     }
     async getPromoteMobiles(clientId) {
         return await this.clientService.getPromoteMobiles(clientId);
@@ -17801,11 +17805,12 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
 const ip_mobile_mapping_schema_1 = __webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let IpManagementService = IpManagementService_1 = class IpManagementService {
     constructor(proxyIpModel, ipMobileMappingModel) {
         this.proxyIpModel = proxyIpModel;
         this.ipMobileMappingModel = ipMobileMappingModel;
-        this.logger = new common_1.Logger(IpManagementService_1.name);
+        this.logger = new utils_1.Logger(IpManagementService_1.name);
     }
     async createProxyIp(createProxyIpDto) {
         if (!createProxyIpDto.ipAddress || !createProxyIpDto.port) {
@@ -18638,9 +18643,10 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.NpointService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let NpointService = NpointService_1 = class NpointService {
     constructor() {
-        this.logger = new common_1.Logger(NpointService_1.name);
+        this.logger = new utils_1.Logger(NpointService_1.name);
         this.csrfToken = null;
         this.cookie = '_npoint_session=MTBOeElFZ0pXV0oxTm9xd1dQQ0tNYnhVYWg1blFCMUVtUUJVWFQ1cGZwdlNwSTdacjBVTStJbDlHaGlWd0pGUDRzUmRaYnZNQVNTMTVmY1R6dEVUd0RPMXVFcmE1cnFYY09qd1A5TFpNVnZOUnVJRnlWV3ZtODk0ajlQVXQ0QzQ0MUtGeU5mTTB5dGFPNCtLUW9tVy9yTmFRZzlRQUdRK0NkQVVtZGxtMVEySzN0TC9sUjdMR2RjVW5xTmtleWw4TWdPOVNMa2JaZEs1c1o3eGE3UHdsQ2JiTEdQbHhUaysraCsrcG9LM25YREdyTDdpYWlHQ0wraEhNV3NXbzJtK1YvVzEvVTh2Z0N5bnpzU1hqcndiM041L2I3R29UMDY3RitBYkxvTktWaUVmdTg4SGJORjRTS25uZ2JDSWhmNWFoem0vNGNvUnAzMDBsQ0FJcUZTMjdnPT0tLWs2a2x2SUZqcHhDN1A0eFdUaWhBeVE9PQ%3D%3D--4d0883b9956c6d2744389228dab7321ff2eb88e5';
         this.baseUrl = 'https://www.npoint.io';
@@ -19577,7 +19583,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
         this.sessionService = sessionService;
-        this.logger = new common_1.Logger(PromoteClientService_1.name);
+        this.logger = new utils_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
         this.leaveChannelMap = new Map();
@@ -25115,10 +25121,11 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const transaction_schema_1 = __webpack_require__(/*! ./schemas/transaction.schema */ "./src/components/transactions/schemas/transaction.schema.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TransactionService = TransactionService_1 = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
-        this.logger = new common_1.Logger(TransactionService_1.name);
+        this.logger = new utils_1.Logger(TransactionService_1.name);
     }
     async create(createTransactionDto) {
         this.logger.log(`Creating new transaction: ${JSON.stringify(createTransactionDto)}`);
@@ -25488,11 +25495,12 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let UpiIdService = UpiIdService_1 = class UpiIdService {
     constructor(upiIdModel, npointService) {
         this.upiIdModel = upiIdModel;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(UpiIdService_1.name);
+        this.logger = new utils_1.Logger(UpiIdService_1.name);
         this.checkInterval = null;
         this.upiIds = null;
         this.isInitialized = false;
@@ -26272,13 +26280,13 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const user_data_schema_1 = __webpack_require__(/*! ./schemas/user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
-const common_2 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
         this.callCounts = new Map();
-        this.logger = new common_2.Logger(UserDataService_1.name);
+        this.logger = new utils_1.Logger(UserDataService_1.name);
     }
     async create(createUserDataDto) {
         try {
@@ -27370,6 +27378,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AuthGuard = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const ALLOWED_IPS = [
     '31.97.59.2',
     '148.230.84.50',
@@ -27417,7 +27426,7 @@ const IGNORE_PATHS = [
 ];
 let AuthGuard = AuthGuard_1 = class AuthGuard {
     constructor() {
-        this.logger = new common_1.Logger(AuthGuard_1.name);
+        this.logger = new utils_1.Logger(AuthGuard_1.name);
     }
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
@@ -27733,8 +27742,11 @@ const app_module_1 = __webpack_require__(/*! ./app.module */ "./src/app.module.t
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
+const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 async function bootstrap() {
-    const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+        logger: utils_1.Logger
+    });
     const config = new swagger_1.DocumentBuilder()
         .setTitle('NestJS and Express API')
         .setDescription('API documentation')
@@ -27836,9 +27848,10 @@ exports.LoggerMiddleware = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
 const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
+const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
-        this.logger = new common_1.Logger('HTTP');
+        this.logger = new utils_1.Logger('HTTP');
     }
     use(req, res, next) {
         const { method, originalUrl } = req;
@@ -28938,6 +28951,7 @@ Object.defineProperty(exports, "parseError", ({ enumerable: true, get: function 
 __exportStar(__webpack_require__(/*! ./obfuscateText */ "./src/utils/obfuscateText.ts"), exports);
 __exportStar(__webpack_require__(/*! ./tg-apps */ "./src/utils/tg-apps.ts"), exports);
 __exportStar(__webpack_require__(/*! ./telegram-utils */ "./src/utils/telegram-utils/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./logger */ "./src/utils/logger.ts"), exports);
 
 
 /***/ }),
@@ -28989,6 +29003,56 @@ function ppplbot(chatId = process.env.updatesChannel || '-1001972065816', botTok
     }
     return apiUrl;
 }
+
+
+/***/ }),
+
+/***/ "./src/utils/logger.ts":
+/*!*****************************!*\
+  !*** ./src/utils/logger.ts ***!
+  \*****************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Logger = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const chalk_1 = __importDefault(__webpack_require__(/*! chalk */ "chalk"));
+class Logger extends common_1.Logger {
+    log(message, context) {
+        console.log(this.formatMessage('LOG', message, chalk_1.default.green, context));
+    }
+    info(message, context) {
+        console.log(this.formatMessage('INFO', message, chalk_1.default.white, context));
+    }
+    error(message, context, trace) {
+        console.error(this.formatMessage('ERROR', message, chalk_1.default.red, context), trace ? chalk_1.default.red(trace) : '');
+    }
+    warn(message, context) {
+        console.warn(this.formatMessage('WARN', message, chalk_1.default.yellow, context));
+    }
+    debug(message, context) {
+        console.debug(this.formatMessage('DEBUG', message, chalk_1.default.cyan, context));
+    }
+    verbose(message, context) {
+        console.debug(this.formatMessage('VERBOSE', message, chalk_1.default.gray, context));
+    }
+    formatMessage(level, message, levelColor, context) {
+        const msg = typeof message === 'object'
+            ? JSON.stringify(message, null, 2)
+            : String(message);
+        const ctx = context !== undefined
+            ? chalk_1.default.magenta(`[${typeof context === 'object'
+                ? JSON.stringify(context, null, 2)
+                : context}]`)
+            : '';
+        return `${levelColor(`[${level}]`)}${ctx ? ' ' + ctx : ''} ${chalk_1.default.green(msg)}`;
+    }
+}
+exports.Logger = Logger;
 
 
 /***/ }),
@@ -29905,6 +29969,16 @@ module.exports = require("axios");
 /***/ ((module) => {
 
 module.exports = require("big-integer");
+
+/***/ }),
+
+/***/ "chalk":
+/*!************************!*\
+  !*** external "chalk" ***!
+  \************************/
+/***/ ((module) => {
+
+module.exports = require("chalk");
 
 /***/ }),
 
