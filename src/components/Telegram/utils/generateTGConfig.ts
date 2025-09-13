@@ -18,10 +18,10 @@ export function generateTGConfig(): TelegramClientParams {
   }
 
   return {
-    connectionRetries: 5,
+    connectionRetries: 10,
     requestRetries: 5,
     retryDelay: 1000,
-    timeout: 9,
+    timeout: 10,
     autoReconnect: true,
     // useWSS: false,
     maxConcurrentDownloads: 3,
