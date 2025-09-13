@@ -19,7 +19,7 @@ export async function withTimeout<T>(
   options: WithTimeoutOptions = {}
 ): Promise<T> {
   const {
-    timeout = 10000,
+    timeout = 60000,
     errorMessage = "Operation timeout",
     throwErr = true,
     maxRetries = 1,
