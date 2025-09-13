@@ -18,7 +18,7 @@ export function generateTGConfig(): TelegramClientParams {
   }
 
   return {
-    connectionRetries: 3,
+    connectionRetries: 5,
     requestRetries: 5,
     retryDelay: 1000,
     timeout: 9,
