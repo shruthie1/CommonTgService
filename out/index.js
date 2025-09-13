@@ -3739,10 +3739,10 @@ class TelegramManager {
     async errorHandler(error) {
         const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || (0, utils_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
-            this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
+            this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}`, error);
             this.timeoutErr = setTimeout(async () => {
                 if (this.client && !this.client.connected) {
-                    this.logger.debug(this.phoneNumber, "Removing Connection Manually");
+                    this.logger.debug(this.phoneNumber, "disconnecting client Connection Manually");
                     await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
                 }
                 else {
