@@ -64,7 +64,7 @@ class ConnectionManager {
             await this.unregisterClient(mobile);
             await (0, Helpers_1.sleep)(3000);
         }
-        return this.createNewClient(mobile, { autoDisconnect, handler });
+        return await this.createNewClient(mobile, { autoDisconnect, handler });
     }
     async createNewClient(mobile, options) {
         if (!this.usersService) {

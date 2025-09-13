@@ -1,5 +1,6 @@
 import axios from 'axios';
 import FormData from 'form-data';
+import { parseError } from './parseError';
 
 export enum ChannelCategory {
     CLIENT_UPDATES = 'CLIENT_UPDATES',
@@ -774,8 +775,9 @@ export class BotConfig {
         for (const [category, data] of this.categoryMap) {
             for (const token of data.botTokens) {
                 const promise = (async () => {
+                    const url = `https://api.telegram.org/bot${token}/getMe`
                     try {
-                        const botInfo = await axios.get(`https://api.telegram.org/bot${token}/getMe`, {
+                        const botInfo = await axios.get(url, {
                             timeout: 5000
                         });
 
@@ -783,9 +785,9 @@ export class BotConfig {
                             console.error(`Failed to get bot info for ${category}`);
                             return;
                         }
-                        console.debug(`Successfully initialized bot for ${category}`);
+                        console.log(`Successfully initialized bot for ${category}`);
                     } catch (error) {
-                        console.error(`Failed to initialize bot for ${category}:`, error);
+                        parseError(error, `Failed to initialize bot for ${category} | URL: ${url}`, false)
                     }
                 })();
 

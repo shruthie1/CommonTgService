@@ -307,7 +307,7 @@ export function parseError(
 
     // Prepare the full message for logging
     const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-    console.log("parsedErr: ", fullMessage);
+    console.error("parsedErr: ", fullMessage);
 
     // Prepare response object
     const response: ErrorResponse = {

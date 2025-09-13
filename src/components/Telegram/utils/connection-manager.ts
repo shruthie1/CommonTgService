@@ -1,7 +1,7 @@
 import TelegramManager from '../TelegramManager';
 import { parseError } from '../../../utils/parseError';
 import { TelegramLogger } from './telegram-logger';
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { UsersService } from '../../../components/users/users.service';
 import { BotConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
@@ -98,7 +98,7 @@ class ConnectionManager {
             await sleep(3000)
         }
 
-        return this.createNewClient(mobile, { autoDisconnect, handler });
+        return await this.createNewClient(mobile, { autoDisconnect, handler });
     }
 
     private async createNewClient(mobile: string, options: { autoDisconnect: boolean; handler: boolean }): Promise<TelegramManager> {
@@ -112,7 +112,7 @@ class ConnectionManager {
         const users = await this.usersService.search({ mobile });
         const user = users[0] as User;
         if (!user) {
-            throw new BadRequestException(`[Connection Manager]\nUser not found : ${mobile}`);
+            throw new NotFoundException(`[Connection Manager]\nUser not found : ${mobile}`);
         }
 
         const telegramManager = new TelegramManager(user.session, user.mobile);

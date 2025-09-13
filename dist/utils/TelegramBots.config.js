@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotConfig = exports.ChannelCategory = void 0;
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
+const parseError_1 = require("./parseError");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -511,18 +512,19 @@ class BotConfig {
         for (const [category, data] of this.categoryMap) {
             for (const token of data.botTokens) {
                 const promise = (async () => {
+                    const url = `https://api.telegram.org/bot${token}/getMe`;
                     try {
-                        const botInfo = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
+                        const botInfo = await axios_1.default.get(url, {
                             timeout: 5000
                         });
                         if (!botInfo.data?.ok) {
                             console.error(`Failed to get bot info for ${category}`);
                             return;
                         }
-                        console.debug(`Successfully initialized bot for ${category}`);
+                        console.log(`Successfully initialized bot for ${category}`);
                     }
                     catch (error) {
-                        console.error(`Failed to initialize bot for ${category}:`, error);
+                        (0, parseError_1.parseError)(error, `Failed to initialize bot for ${category} | URL: ${url}`, false);
                     }
                 })();
                 initPromises.push(promise);

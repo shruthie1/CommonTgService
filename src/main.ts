@@ -7,6 +7,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import { Logger } from './utils';
+import { ExceptionsFilter } from './interceptors/Exception-filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -60,6 +61,8 @@ async function bootstrap() {
     }
   );
   mongoose.set('debug', true)
+  app.useGlobalFilters(new ExceptionsFilter());
+
   app.useGlobalPipes(new ValidationPipe({
     transform: true,
     // whitelist: true,
@@ -111,7 +114,7 @@ async function bootstrap() {
   });
 
   await app.init();
-  await app.listen(process.env.PORT || 9000);
+  await app.listen(process.env.PORT || 9002);
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

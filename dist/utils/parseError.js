@@ -190,7 +190,7 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
         }
         const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-        console.log("parsedErr: ", fullMessage);
+        console.error("parsedErr: ", fullMessage);
         const response = {
             status,
             message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),

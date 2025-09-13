@@ -44,6 +44,7 @@ const swagger_1 = require("@nestjs/swagger");
 const common_1 = require("@nestjs/common");
 const fs = __importStar(require("fs"));
 const utils_1 = require("./utils");
+const Exception_filter_1 = require("./interceptors/Exception-filter");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: utils_1.Logger
@@ -84,6 +85,7 @@ async function bootstrap() {
         },
     });
     mongoose_1.default.set('debug', true);
+    app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
         transformOptions: {
@@ -123,7 +125,7 @@ async function bootstrap() {
         await shutdown('SIGQUIT');
     });
     await app.init();
-    await app.listen(process.env.PORT || 9000);
+    await app.listen(process.env.PORT || 9002);
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
