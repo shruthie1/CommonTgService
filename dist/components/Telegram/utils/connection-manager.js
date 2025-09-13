@@ -220,11 +220,11 @@ class ConnectionManager {
         const removePromises = toRemove.slice(0, 10).map(mobile => this.unregisterClient(mobile).catch(error => this.logger.error(mobile, 'Cleanup removal failed', error)));
         if (removePromises.length > 0) {
             await Promise.allSettled(removePromises);
-            this.logger.info('ConnectionManager', `Cleanup completed - removed ${removePromises.length} clients`);
+            this.logger.info('Default', `Cleanup completed - removed ${removePromises.length} clients`);
         }
     }
     async forceCleanup() {
-        this.logger.info('ConnectionManager', 'Force cleanup triggered');
+        this.logger.info('Default', 'Force cleanup triggered');
         const oldestClients = Array.from(this.clients.entries())
             .sort(([, a], [, b]) => a.lastUsed - b.lastUsed)
             .slice(0, Math.ceil(this.MAX_CONNECTIONS * 0.2))
@@ -232,7 +232,7 @@ class ConnectionManager {
         for (const mobile of oldestClients) {
             await this.unregisterClient(mobile);
         }
-        this.logger.info('ConnectionManager', `Force cleanup completed - removed ${oldestClients.length} clients`);
+        this.logger.info('Default', `Force cleanup completed - removed ${oldestClients.length} clients`);
     }
     async forceReconnect(mobile) {
         this.logger.info(mobile, 'Force reconnect requested');
@@ -243,24 +243,21 @@ class ConnectionManager {
         if (this.cleanupTimer)
             return;
         this.cleanupTimer = setInterval(() => {
-            this.cleanup().catch(error => this.logger.error('ConnectionManager', 'Cleanup error', error));
+            this.cleanup().catch(error => this.logger.error('Default', 'Cleanup error', error));
         }, this.CLEANUP_INTERVAL);
-        this.logger.info('ConnectionManager', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
+        this.logger.info('Default', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
     }
     stopCleanup() {
         if (this.cleanupTimer) {
             clearInterval(this.cleanupTimer);
             this.cleanupTimer = null;
-            this.logger.info('ConnectionManager', 'Cleanup stopped');
         }
     }
     async shutdown() {
-        this.logger.info('ConnectionManager', 'Shutdown initiated');
         this.isShuttingDown = true;
         this.stopCleanup();
         await this.disconnectAll();
         this.clients.clear();
-        this.logger.info('ConnectionManager', 'Shutdown completed');
     }
     async disconnectAll() {
         const disconnectPromises = Array.from(this.clients.keys()).map(mobile => this.unregisterClient(mobile).catch(error => this.logger.error(mobile, 'Shutdown disconnect failed', error)));

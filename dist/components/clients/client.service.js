@@ -103,7 +103,6 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async onModuleDestroy() {
-        this.logger.log('Client Service shutting down...');
         this.isShuttingDown = true;
         try {
             if (this.checkInterval) {
