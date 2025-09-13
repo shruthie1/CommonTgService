@@ -3751,7 +3751,7 @@ class TelegramManager {
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
             timeout: 15000,
-            errorMessage: `Tg Manager Client Connection Timeout\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
+            errorMessage: `[Tg Manager] Client Creation TimeOut\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {
             if (handlerFn) {
@@ -8110,6 +8110,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const TelegramBots_config_1 = __webpack_require__(/*! ../../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const withTimeout_1 = __webpack_require__(/*! ../../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
@@ -8172,7 +8173,7 @@ class ConnectionManager {
         const users = await this.usersService.search({ mobile });
         const user = users[0];
         if (!user) {
-            throw new common_1.BadRequestException('User not found');
+            throw new common_1.BadRequestException(`[Connection Manager]\nUser not found : ${mobile}`);
         }
         const telegramManager = new TelegramManager_1.default(user.session, user.mobile);
         const clientInfo = {
@@ -8184,13 +8185,7 @@ class ConnectionManager {
         };
         this.clients.set(mobile, clientInfo);
         try {
-            const client = await (0, withTimeout_1.withTimeout)(() => telegramManager.createClient(options.handler), {
-                timeout: this.CONNECTION_TIMEOUT,
-                errorMessage: "Tg Client Connection Timeout"
-            });
-            if (!client) {
-                throw new Error('Client creation returned null');
-            }
+            await telegramManager.createClient(options.handler);
             await this.validateConnection(mobile, telegramManager);
             clientInfo.state = 'connected';
             clientInfo.connectionAttempts = 1;
@@ -8220,30 +8215,31 @@ class ConnectionManager {
         return isConnected && isNotStale && hasNoErrors;
     }
     async handleConnectionError(mobile, clientInfo, error) {
-        const errorMessage = error.message.toLowerCase();
         clientInfo.lastError = error.message;
         clientInfo.state = 'error';
         this.clients.set(mobile, clientInfo);
         const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
-        try {
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${process.env.clientId}::${mobile}\nAttempt: ${clientInfo.connectionAttempts}\nError: ${errorDetails.message}`);
-        }
-        catch (notificationError) {
-            this.logger.error(mobile, 'Failed to send error notification', notificationError);
-        }
+        let markedAsExpired = false;
         const permanentErrors = ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'];
-        if (permanentErrors.some(errType => errorMessage.includes(errType))) {
+        if ((0, utils_1.contains)(errorDetails.message, permanentErrors)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
                 const users = await this.usersService.search({ mobile });
                 const user = users[0];
                 if (user) {
                     await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
+                    markedAsExpired = true;
                 }
             }
             catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
             }
+        }
+        try {
+            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`);
+        }
+        catch (notificationError) {
+            this.logger.error(mobile, 'Failed to send error notification', notificationError);
         }
     }
     async unregisterClient(mobile) {
