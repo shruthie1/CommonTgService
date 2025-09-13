@@ -96,50 +96,50 @@ export class Logger extends NestLogger {
     }
 
     /** ---------- FORMATTERS ---------- */
-private formatMessage(
-    level: string,
-    message: any,
-    colors: { level: any; message: any },
-    context?: any,
-): string {
-    // Ensure level is safe
-    const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
+    private formatMessage(
+        level: string,
+        message: any,
+        colors: { level: any; message: any },
+        context?: any,
+    ): string {
+        // Ensure level is safe
+        const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
 
-    // Ensure colors exist with fallbacks
-    const safeColors = {
-        level: (colors?.level && typeof colors.level === 'function')
-            ? colors.level
-            : (txt: string) => txt, // fallback: no color
-        message: (colors?.message && typeof colors.message === 'function')
-            ? colors.message
-            : (txt: string) => txt, // fallback: no color
-    };
+        // Ensure colors exist with fallbacks
+        const safeColors = {
+            level: (colors?.level && typeof colors.level === 'function')
+                ? colors.level
+                : (txt: string) => txt, // fallback: no color
+            message: (colors?.message && typeof colors.message === 'function')
+                ? colors.message
+                : (txt: string) => txt, // fallback: no color
+        };
 
-    // Format message safely
-    const formattedMessage = message !== undefined && message !== null
-        ? this.formatMultiColorMessage(message, safeColors.message)
-        : safeColors.message('[EMPTY MESSAGE]');
+        // Format message safely
+        const formattedMessage = message !== undefined && message !== null
+            ? this.formatMultiColorMessage(message, safeColors.message)
+            : safeColors.message('[EMPTY MESSAGE]');
 
-    // Handle context safely
-    let ctx = '';
-    if (context !== undefined && context !== null) {
-        if (typeof context === 'object') {
-            try {
-                ctx = `${this.formatObjectMessage(context)}`;
-            } catch {
-                ctx = '[Invalid Context Object]';
+        // Handle context safely
+        let ctx = '';
+        if (context !== undefined && context !== null) {
+            if (typeof context === 'object') {
+                try {
+                    ctx = `${this.formatObjectMessage(context)}`;
+                } catch {
+                    ctx = '[Invalid Context Object]';
+                }
+            } else if (typeof context === 'string') {
+                ctx = `${this.parseColoredContext(context)}`;
+            } else {
+                ctx = `${String(context)}`; // fallback for numbers, booleans, etc.
             }
-        } else if (typeof context === 'string') {
-            ctx = `${this.parseColoredContext(context)}`;
-        } else {
-            ctx = `${String(context)}`; // fallback for numbers, booleans, etc.
         }
+
+        const levelFormatted = safeColors.level(`[${safeLevel}]`);
+
+        return `${levelFormatted} ${formattedMessage}${ctx ? '\n' + ctx : ''}`;
     }
-
-    const levelFormatted = safeColors.level(`[${safeLevel}]`);
-
-    return `${levelFormatted}${ctx ? ' ' + ctx : ''} ${formattedMessage}`;
-}
 
 
     private formatMultiColorMessage(message: any, levelColor: any): string {
