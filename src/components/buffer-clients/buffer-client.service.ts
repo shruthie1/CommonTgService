@@ -132,9 +132,7 @@ export class BufferClientService implements OnModuleDestroy {
             // Clean up empty entries in joinChannelMap
             for (const [mobile, channels] of this.joinChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    this.logger.log(
-                        `Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`,
-                    );
+                    this.logger.log(`Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`,);
                     this.joinChannelMap.delete(mobile);
                 }
             }
@@ -142,9 +140,7 @@ export class BufferClientService implements OnModuleDestroy {
             // Clean up empty entries in leaveChannelMap
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    this.logger.log(
-                        `Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`,
-                    );
+                    this.logger.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.leaveChannelMap.delete(mobile);
                 }
             }
@@ -712,7 +708,7 @@ export class BufferClientService implements OnModuleDestroy {
 
                 currentChannel = channels.shift();
                 this.logger.debug(
-                    `${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,
+                    `${mobile} has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`,
                 );
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);

@@ -579,7 +579,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 }
 
                 currentChannel = channels.shift();
-                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: @${currentChannel.username}`,);
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel: ActiveChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) { // add DeletedCount  condition also if required
