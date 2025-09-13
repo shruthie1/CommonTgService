@@ -364,7 +364,7 @@ class TelegramManager {
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         },
             {
-                timeout: 120000,
+                timeout: 180000,
                 errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${parseObjectToString(tgConfiguration as any)}`
             }
         )
