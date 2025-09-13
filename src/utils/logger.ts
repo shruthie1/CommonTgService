@@ -41,8 +41,8 @@ export class Logger extends NestLogger {
     /** ---------- COLORS ---------- */
     private getLogColors() {
         return {
-            level: chalk.green.bold,
-            message: chalk.green,
+            level: chalk.green,
+            message: chalk.green.bold,
             context: chalk.cyan.bold,
             timestamp: chalk.gray,
         };
@@ -50,8 +50,8 @@ export class Logger extends NestLogger {
 
     private getInfoColors() {
         return {
-            level: chalk.blue.bold,
-            message: chalk.blue,
+            level: chalk.blue,
+            message: chalk.blue.bold,
             context: chalk.blueBright.bold,
             timestamp: chalk.gray,
         };
@@ -59,8 +59,8 @@ export class Logger extends NestLogger {
 
     private getErrorColors() {
         return {
-            level: chalk.red.bold,
-            message: chalk.red,
+            level: chalk.red,
+            message: chalk.red.bold,
             context: chalk.redBright.bold,
             timestamp: chalk.gray,
         };
@@ -68,8 +68,8 @@ export class Logger extends NestLogger {
 
     private getWarnColors() {
         return {
-            level: chalk.yellow.bold,
-            message: chalk.yellow,
+            level: chalk.yellow,
+            message: chalk.yellow.bold,
             context: chalk.yellowBright.bold,
             timestamp: chalk.gray,
         };
@@ -77,8 +77,8 @@ export class Logger extends NestLogger {
 
     private getDebugColors() {
         return {
-            level: chalk.magenta.bold,
-            message: chalk.magenta,
+            level: chalk.magenta,
+            message: chalk.magenta.bold,
             context: chalk.magentaBright.bold,
             timestamp: chalk.gray,
         };
@@ -86,8 +86,8 @@ export class Logger extends NestLogger {
 
     private getVerboseColors() {
         return {
-            level: chalk.gray.bold,
-            message: chalk.gray,
+            level: chalk.gray,
+            message: chalk.gray.bold,
             context: chalk.white.dim,
             timestamp: chalk.gray.dim,
         };
@@ -95,8 +95,8 @@ export class Logger extends NestLogger {
 
     private getSuccessColors() {
         return {
-            level: chalk.greenBright.bold,
-            message: chalk.greenBright,
+            level: chalk.greenBright,
+            message: chalk.greenBright.bold,
             context: chalk.green.bold,
             timestamp: chalk.gray,
         };
