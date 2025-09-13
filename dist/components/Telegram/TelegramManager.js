@@ -512,7 +512,7 @@ class TelegramManager {
         return await this.client?.getEntity(entity);
     }
     async joinChannel(entity) {
-        this.logger.info(this.phoneNumber, "trying to join channel : ", entity);
+        this.logger.info(this.phoneNumber, "trying to join channel: ", `@${entity}`);
         return await this.client?.invoke(new telegram_1.Api.channels.JoinChannel({
             channel: await this.client?.getEntity(entity)
         }));

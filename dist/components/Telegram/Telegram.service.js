@@ -105,17 +105,17 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
-            this.logger.debug(telegramClient.phoneNumber, `Joined channel Success: [@${chatEntity.username}]`);
+            this.logger.debug(telegramClient.phoneNumber, `Joined channel Success: `, `@${chatEntity.username}`);
             if (chatEntity.canSendMsgs) {
             }
             else {
                 await this.channelsService.remove(chatEntity.channelId);
                 await this.activeChannelsService.remove(chatEntity.channelId);
-                this.logger.debug(mobile, `Removed Channel: [@${chatEntity.username}]`);
+                this.logger.debug(mobile, `Removed Channel: `, `@${chatEntity.username}`);
             }
         }
         catch (error) {
-            this.logger.debug(telegramClient.phoneNumber, `Failed to join: [@${chatEntity.username}]`);
+            this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error;
         }

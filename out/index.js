@@ -2754,17 +2754,17 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
             await telegramClient.joinChannel(chatEntity.username);
-            this.logger.debug(telegramClient.phoneNumber, `Joined channel Success: [@${chatEntity.username}]`);
+            this.logger.debug(telegramClient.phoneNumber, `Joined channel Success: `, `@${chatEntity.username}`);
             if (chatEntity.canSendMsgs) {
             }
             else {
                 await this.channelsService.remove(chatEntity.channelId);
                 await this.activeChannelsService.remove(chatEntity.channelId);
-                this.logger.debug(mobile, `Removed Channel: [@${chatEntity.username}]`);
+                this.logger.debug(mobile, `Removed Channel: `, `@${chatEntity.username}`);
             }
         }
         catch (error) {
-            this.logger.debug(telegramClient.phoneNumber, `Failed to join: [@${chatEntity.username}]`);
+            this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error;
         }
@@ -3972,7 +3972,7 @@ class TelegramManager {
         return await this.client?.getEntity(entity);
     }
     async joinChannel(entity) {
-        this.logger.info(this.phoneNumber, "trying to join channel : ", entity);
+        this.logger.info(this.phoneNumber, "trying to join channel: ", `@${entity}`);
         return await this.client?.invoke(new telegram_1.Api.channels.JoinChannel({
             channel: await this.client?.getEntity(entity)
         }));
@@ -10637,7 +10637,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     continue;
                 }
                 currentChannel = channels.shift();
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`);
+                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing:`, `@${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) {
@@ -18421,7 +18421,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     continue;
                 }
                 currentChannel = channels.shift();
-                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: [@${currentChannel.username}]`);
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: `, `@${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) {
@@ -27629,7 +27629,7 @@ class Logger extends common_1.Logger {
             extraCtx = this.parseColoredContext(data);
         }
         else {
-            extraCtx = String(data);
+            extraCtx = chalk_1.default.yellow.bold(String(data));
         }
         extraCtx = ' ' + extraCtx;
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
@@ -27659,26 +27659,26 @@ class Logger extends common_1.Logger {
             return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
         }
         if (typeof obj === 'string')
-            return chalk_1.default.green(`"${obj}"`);
+            return chalk_1.default.blueBright.bold(`"${obj}"`);
         if (typeof obj === 'number')
-            return chalk_1.default.yellow(obj);
+            return chalk_1.default.yellow.bold(obj);
         if (typeof obj === 'boolean')
-            return chalk_1.default.magenta(obj);
+            return chalk_1.default.magenta.bold(obj);
         if (obj === null)
-            return chalk_1.default.gray('null');
-        return chalk_1.default.white(String(obj));
+            return chalk_1.default.gray.bold('null');
+        return chalk_1.default.cyanBright.bold(String(obj));
     }
     parseColoredContext(context) {
         if (/^\d+$/.test(context)) {
-            return chalk_1.default.magentaBright(context);
+            return chalk_1.default.magentaBright.bold(context);
         }
         if (context === context.toUpperCase()) {
-            return chalk_1.default.cyanBright(context);
+            return chalk_1.default.cyanBright.bold(context);
         }
         const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);
-            return chalkColor ? chalkColor(text) : text;
+            return chalkColor ? chalkColor(text) : chalk_1.default.cyanBright.bold(text);
         });
     }
     getChalkColor(colorName) {
