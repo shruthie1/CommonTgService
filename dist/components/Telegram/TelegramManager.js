@@ -285,8 +285,11 @@ class TelegramManager {
                     this.logger.debug(this.phoneNumber, "disconnecting client Connection Manually");
                     await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
                 }
-                else {
+                else if (this.client) {
                     this.logger.debug(this.phoneNumber, "Client Connected after Retry");
+                }
+                else {
+                    this.logger.debug(this.phoneNumber, "Client does not exist");
                 }
             }, 10000);
         }
