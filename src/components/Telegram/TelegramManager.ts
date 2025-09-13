@@ -44,6 +44,7 @@ class TelegramManager {
     public client: TelegramClient | null;
     public apiId: number;
     public apiHash: string
+    private timeoutErr: NodeJS.Timeout = null;
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
     constructor(sessionString: string, phoneNumber: string) {
         this.session = new StringSession(sessionString);
@@ -307,6 +308,7 @@ class TelegramManager {
     }
 
     async destroy(): Promise<void> {
+        this.clearTimeoutErr();
         if (this.client) {
             try {
                 this.client._errorHandler = null;
@@ -341,12 +343,26 @@ class TelegramManager {
         return me
     }
 
+    clearTimeoutErr() {
+        if (this.timeoutErr) {
+            clearTimeout(this.timeoutErr)
+            this.timeoutErr == null
+        }
+    }
+
     async errorHandler(error) {
         const errorDetails = parseError(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
             // await this.client.disconnect();
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
-            await unregisterClient(this.phoneNumber)
+            this.timeoutErr = setTimeout(async () => {
+                if (this.client && !this.client.connected) {
+                    this.logger.debug(this.phoneNumber, "Removing Connection Manually")
+                    await unregisterClient(this.phoneNumber)
+                } else {
+                    this.logger.debug(this.phoneNumber, "Client Connected after Retry")
+                }
+            }, 10000);
             // await disconnectAll()
             //Do nothing, as this error does not make sense to appear while keeping the client disconnected
         } else {
@@ -362,6 +378,7 @@ class TelegramManager {
             this.client._errorHandler = this.errorHandler.bind(this)
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
+            this.clearTimeoutErr()
         },
             {
                 timeout: 180000,
