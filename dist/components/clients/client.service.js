@@ -676,7 +676,7 @@ let ClientService = ClientService_1 = class ClientService {
                                 status: days > 35 ? 'inactive' : 'active',
                             };
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
-                            this.logger.log('client Archived: ', updatedBufferClient);
+                            this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
                             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Client Archived`);
                         }
                         else {
