@@ -34,56 +34,56 @@ class Logger extends common_1.Logger {
     }
     getLogColors() {
         return {
-            level: chalk_1.default.green.bold,
-            message: chalk_1.default.green,
+            level: chalk_1.default.green,
+            message: chalk_1.default.green.bold,
             context: chalk_1.default.cyan.bold,
             timestamp: chalk_1.default.gray,
         };
     }
     getInfoColors() {
         return {
-            level: chalk_1.default.blue.bold,
-            message: chalk_1.default.blue,
+            level: chalk_1.default.blue,
+            message: chalk_1.default.blue.bold,
             context: chalk_1.default.blueBright.bold,
             timestamp: chalk_1.default.gray,
         };
     }
     getErrorColors() {
         return {
-            level: chalk_1.default.red.bold,
-            message: chalk_1.default.red,
+            level: chalk_1.default.red,
+            message: chalk_1.default.red.bold,
             context: chalk_1.default.redBright.bold,
             timestamp: chalk_1.default.gray,
         };
     }
     getWarnColors() {
         return {
-            level: chalk_1.default.yellow.bold,
-            message: chalk_1.default.yellow,
+            level: chalk_1.default.yellow,
+            message: chalk_1.default.yellow.bold,
             context: chalk_1.default.yellowBright.bold,
             timestamp: chalk_1.default.gray,
         };
     }
     getDebugColors() {
         return {
-            level: chalk_1.default.magenta.bold,
-            message: chalk_1.default.magenta,
+            level: chalk_1.default.magenta,
+            message: chalk_1.default.magenta.bold,
             context: chalk_1.default.magentaBright.bold,
             timestamp: chalk_1.default.gray,
         };
     }
     getVerboseColors() {
         return {
-            level: chalk_1.default.gray.bold,
-            message: chalk_1.default.gray,
+            level: chalk_1.default.gray,
+            message: chalk_1.default.gray.bold,
             context: chalk_1.default.white.dim,
             timestamp: chalk_1.default.gray.dim,
         };
     }
     getSuccessColors() {
         return {
-            level: chalk_1.default.greenBright.bold,
-            message: chalk_1.default.greenBright,
+            level: chalk_1.default.greenBright,
+            message: chalk_1.default.greenBright.bold,
             context: chalk_1.default.green.bold,
             timestamp: chalk_1.default.gray,
         };
