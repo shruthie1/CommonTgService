@@ -8315,11 +8315,11 @@ class ConnectionManager {
         const removePromises = toRemove.slice(0, 10).map(mobile => this.unregisterClient(mobile).catch(error => this.logger.error(mobile, 'Cleanup removal failed', error)));
         if (removePromises.length > 0) {
             await Promise.allSettled(removePromises);
-            this.logger.info('ConnectionManager', `Cleanup completed - removed ${removePromises.length} clients`);
+            this.logger.info('Default', `Cleanup completed - removed ${removePromises.length} clients`);
         }
     }
     async forceCleanup() {
-        this.logger.info('ConnectionManager', 'Force cleanup triggered');
+        this.logger.info('Default', 'Force cleanup triggered');
         const oldestClients = Array.from(this.clients.entries())
             .sort(([, a], [, b]) => a.lastUsed - b.lastUsed)
             .slice(0, Math.ceil(this.MAX_CONNECTIONS * 0.2))
@@ -8327,7 +8327,7 @@ class ConnectionManager {
         for (const mobile of oldestClients) {
             await this.unregisterClient(mobile);
         }
-        this.logger.info('ConnectionManager', `Force cleanup completed - removed ${oldestClients.length} clients`);
+        this.logger.info('Default', `Force cleanup completed - removed ${oldestClients.length} clients`);
     }
     async forceReconnect(mobile) {
         this.logger.info(mobile, 'Force reconnect requested');
@@ -8338,24 +8338,21 @@ class ConnectionManager {
         if (this.cleanupTimer)
             return;
         this.cleanupTimer = setInterval(() => {
-            this.cleanup().catch(error => this.logger.error('ConnectionManager', 'Cleanup error', error));
+            this.cleanup().catch(error => this.logger.error('Default', 'Cleanup error', error));
         }, this.CLEANUP_INTERVAL);
-        this.logger.info('ConnectionManager', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
+        this.logger.info('Default', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
     }
     stopCleanup() {
         if (this.cleanupTimer) {
             clearInterval(this.cleanupTimer);
             this.cleanupTimer = null;
-            this.logger.info('ConnectionManager', 'Cleanup stopped');
         }
     }
     async shutdown() {
-        this.logger.info('ConnectionManager', 'Shutdown initiated');
         this.isShuttingDown = true;
         this.stopCleanup();
         await this.disconnectAll();
         this.clients.clear();
-        this.logger.info('ConnectionManager', 'Shutdown completed');
     }
     async disconnectAll() {
         const disconnectPromises = Array.from(this.clients.keys()).map(mobile => this.unregisterClient(mobile).catch(error => this.logger.error(mobile, 'Shutdown disconnect failed', error)));
@@ -10188,7 +10185,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.cleanupIntervalId = null;
     }
     async onModuleDestroy() {
-        this.logger.log('Cleaning up BufferClientService resources');
         await this.cleanup();
     }
     async cleanup() {
@@ -10201,7 +10197,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.clearLeaveMap();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
-            this.logger.log('BufferClientService cleanup completed');
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
@@ -10685,13 +10680,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            this.logger.debug(`Clearing join channel interval: ${this.joinChannelIntervalId}`);
             clearInterval(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
         this.isJoinChannelProcessing = false;
-        this.logger.debug('Join channel processing cleared and flag reset');
     }
     removeFromLeaveMap(key) {
         this.leaveChannelMap.delete(key);
@@ -12948,7 +12941,6 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async onModuleDestroy() {
-        this.logger.log('Client Service shutting down...');
         this.isShuttingDown = true;
         try {
             if (this.checkInterval) {
@@ -18920,16 +18912,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.clearLeaveMap();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
-            this.logger.log('BufferClientService cleanup completed');
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
         }
     }
     async onModuleDestroy() {
-        this.logger.log('Cleaning up PromoteClientService resources');
         await this.cleanup();
-        this.logger.log('PromoteClientService cleanup completed');
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -26479,39 +26468,40 @@ class BotConfig {
             this.initializing = true;
             console.debug('Initializing Telegram channel configuration...');
             const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
-            for (const key of envKeys) {
+            await Promise.all(envKeys.map(async (key) => {
                 const value = process.env[key];
                 if (!value)
-                    continue;
+                    return;
                 try {
                     const [channelId, description = '', botTokensStr] = value.split('::');
                     const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
                     if (!channelId || !botTokens || botTokens.length === 0) {
                         console.warn(`Invalid configuration for ${key}: missing channelId or botTokens`);
-                        continue;
+                        return;
                     }
                     const category = this.getCategoryFromDescription(description);
                     if (!category) {
                         console.warn(`Invalid category in description for ${key}: ${description}`);
-                        continue;
+                        return;
                     }
-                    const botUsernames = [];
-                    for (const token of botTokens) {
+                    const results = await Promise.all(botTokens.map(async (token) => {
                         try {
                             const username = await this.fetchUsername(token);
                             if (!username) {
                                 console.warn(`Invalid bot token in ${category}`);
-                                continue;
+                                return null;
                             }
-                            botUsernames.push(username);
+                            return username;
                         }
                         catch (error) {
                             console.error(`Error fetching username for token in ${category}:`, error);
+                            return null;
                         }
-                    }
+                    }));
+                    const botUsernames = results.filter(Boolean);
                     if (botUsernames.length === 0) {
                         console.warn(`No valid bot usernames found for ${category}`);
-                        continue;
+                        return;
                     }
                     this.categoryMap.set(category, {
                         botTokens,
@@ -26523,7 +26513,7 @@ class BotConfig {
                 catch (error) {
                     console.error(`Error processing configuration for ${key}:`, error);
                 }
-            }
+            }));
             await this.initializeBots();
             this.initialized = true;
             console.info(`BotConfig initialized successfully with ${this.categoryMap.size} categories.`);
@@ -26920,29 +26910,21 @@ class BotConfig {
         }
     }
     async initializeBots() {
-        console.debug('Initializing bots with /start command...');
-        const initPromises = [];
-        for (const [category, data] of this.categoryMap) {
-            for (const token of data.botTokens) {
-                const promise = (async () => {
-                    const url = `https://api.telegram.org/bot${token}/getMe`;
-                    try {
-                        const botInfo = await axios_1.default.get(url, {
-                            timeout: 5000
-                        });
-                        if (!botInfo.data?.ok) {
-                            console.error(`Failed to get bot info for ${category}`);
-                            return;
-                        }
-                        console.log(`Successfully initialized bot for ${category}`);
-                    }
-                    catch (error) {
-                        (0, parseError_1.parseError)(error, `Failed to initialize bot for ${category} | URL: ${url}`, false);
-                    }
-                })();
-                initPromises.push(promise);
+        console.debug("Initializing bots with /start command...");
+        const initPromises = Array.from(this.categoryMap.entries()).flatMap(([category, data]) => data.botTokens.map(async (token) => {
+            const url = `https://api.telegram.org/bot${token}/getMe`;
+            try {
+                const botInfo = await axios_1.default.get(url, { timeout: 5000 });
+                if (!botInfo.data?.ok) {
+                    console.error(`Failed to get bot info for ${category}`);
+                    return;
+                }
+                console.log(`✅ Successfully initialized bot for ${category}`);
             }
-        }
+            catch (error) {
+                (0, parseError_1.parseError)(error, `❌ Failed to initialize bot for ${category} | URL: ${url}`, false);
+            }
+        }));
         await Promise.allSettled(initPromises);
     }
     async ensureInitialized() {
