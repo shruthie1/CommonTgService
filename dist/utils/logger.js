@@ -152,9 +152,9 @@ class Logger extends common_1.Logger {
             return chalk_1.default.magentaBright.bold(context);
         }
         if (context === context.toUpperCase()) {
-            return chalk_1.default.cyanBright.bold(context);
+            return chalk_1.default.yellow.bold(context);
         }
-        return chalk_1.default.yellowBright.bold(context);
+        return chalk_1.default.cyanBright.bold(context);
     }
     getChalkColor(colorName) {
         const colorMap = {
