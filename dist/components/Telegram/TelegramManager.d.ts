@@ -25,6 +25,7 @@ declare class TelegramManager {
     client: TelegramClient | null;
     apiId: number;
     apiHash: string;
+    private timeoutErr;
     private static activeClientSetup;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
@@ -56,6 +57,7 @@ declare class TelegramManager {
     destroy(): Promise<void>;
     getchatId(username: string): Promise<any>;
     getMe(): Promise<Api.User>;
+    clearTimeoutErr(): void;
     errorHandler(error: any): Promise<void>;
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
     getGrpMembers(entity: EntityLike): Promise<any[]>;

@@ -3518,6 +3518,7 @@ const withTimeout_1 = __webpack_require__(/*! ../../utils/withTimeout */ "./src/
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.logger = new telegram_logger_1.TelegramLogger('TgManager');
+        this.timeoutErr = null;
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
@@ -3695,6 +3696,7 @@ class TelegramManager {
         return forwardedCount;
     }
     async destroy() {
+        this.clearTimeoutErr();
         if (this.client) {
             try {
                 this.client._errorHandler = null;
@@ -3728,11 +3730,25 @@ class TelegramManager {
         const me = await this.client.getMe();
         return me;
     }
+    clearTimeoutErr() {
+        if (this.timeoutErr) {
+            clearTimeout(this.timeoutErr);
+            this.timeoutErr == null;
+        }
+    }
     async errorHandler(error) {
         const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || (0, utils_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
-            await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
+            this.timeoutErr = setTimeout(async () => {
+                if (this.client && !this.client.connected) {
+                    this.logger.debug(this.phoneNumber, "Removing Connection Manually");
+                    await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
+                }
+                else {
+                    this.logger.debug(this.phoneNumber, "Client Connected after Retry");
+                }
+            }, 10000);
         }
         else {
         }
@@ -3745,6 +3761,7 @@ class TelegramManager {
             this.client._errorHandler = this.errorHandler.bind(this);
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
+            this.clearTimeoutErr();
         }, {
             timeout: 180000,
             errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
