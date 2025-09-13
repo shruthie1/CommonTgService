@@ -15,7 +15,7 @@ function generateTGConfig() {
         return arr[Math.floor(Math.random() * arr.length)];
     }
     return {
-        connectionRetries: 3,
+        connectionRetries: 5,
         requestRetries: 5,
         retryDelay: 1000,
         timeout: 9,
