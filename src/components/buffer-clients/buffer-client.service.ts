@@ -758,6 +758,7 @@ export class BufferClientService implements OnModuleDestroy {
                         'USER_DEACTIVATED',
                         'USER_DEACTIVATED_BAN',
                         'FROZEN_METHOD_INVALID',
+                        'not found'
                     ])
                 ) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
