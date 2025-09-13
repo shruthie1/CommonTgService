@@ -3737,7 +3737,7 @@ class TelegramManager {
         const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber}: RPC Error`, false);
         if ((error.message && error.message == 'TIMEOUT') || (0, utils_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
             this.logger.error(this.phoneNumber, `Timeout error occurred for ${this.phoneNumber}, disconnecting client.`, error);
-            await this.destroy();
+            await (0, connection_manager_1.unregisterClient)(this.phoneNumber);
         }
         else {
         }
@@ -8104,6 +8104,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.connectionManager = void 0;
+exports.unregisterClient = unregisterClient;
 const TelegramManager_1 = __importDefault(__webpack_require__(/*! ../TelegramManager */ "./src/components/Telegram/TelegramManager.ts"));
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
 const telegram_logger_1 = __webpack_require__(/*! ./telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
@@ -8120,7 +8121,6 @@ class ConnectionManager {
         this.usersService = null;
         this.isShuttingDown = false;
         this.MAX_CONNECTIONS = 50;
-        this.CONNECTION_TIMEOUT = 30000;
         this.IDLE_TIMEOUT = 300000;
         this.CLEANUP_INTERVAL = 60000;
         this.MAX_RETRY_ATTEMPTS = 3;
@@ -8396,6 +8396,9 @@ class ConnectionManager {
 }
 ConnectionManager.instance = null;
 exports.connectionManager = ConnectionManager.getInstance();
+async function unregisterClient(mobile) {
+    await exports.connectionManager.unregisterClient(mobile);
+}
 
 
 /***/ }),
@@ -8502,27 +8505,23 @@ class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
         this.logger = new utils_1.Logger(serviceName);
     }
-    shouldIncludeDetails(details) {
-        return details !== undefined
-            && details !== null
-            && !(typeof details === 'object' && Object.keys(details).length === 0);
-    }
-    formatMessage(mobile, message, details) {
-        return this.shouldIncludeDetails(details)
-            ? `[${mobile}] ${message} :: ${JSON.stringify(details)}`
-            : `[${mobile}] ${message}`;
-    }
     info(mobile, operation, details) {
-        this.logger.log(this.formatMessage(mobile, operation, details));
+        this.logger.log(`[${mobile}] ${operation}`, details);
     }
     error(mobile, operation, error) {
         this.logger.error(`[${mobile}] ${operation} - ${error.message}`, error.stack);
     }
     warn(mobile, message, details) {
-        this.logger.warn(this.formatMessage(mobile, message, details));
+        this.logger.warn(`[${mobile}] ${message}`, details);
     }
     debug(mobile, message, details) {
-        this.logger.debug(this.formatMessage(mobile, message, details));
+        this.logger.debug(`[${mobile}] ${message}`, details);
+    }
+    verbose(mobile, message, details) {
+        this.logger.verbose(`[${mobile}] ${message}`, details);
+    }
+    log(mobile, message, details) {
+        this.logger.log(`[${mobile}] ${message}`, details);
     }
 }
 exports.TelegramLogger = TelegramLogger;
@@ -27608,6 +27607,7 @@ let ExceptionsFilter = class ExceptionsFilter {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const errorDetails = (0, utils_1.parseError)(exception, 'Exception', false);
+        console.error("stack:", exception["stack"]);
         let status = errorDetails.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR;
         let message = errorDetails.message || 'Internal server error';
         if (exception instanceof common_1.HttpException) {
@@ -27712,6 +27712,49 @@ __exportStar(__webpack_require__(/*! ./Exception-filter */ "./src/interceptors/E
 
 /***/ }),
 
+/***/ "./src/interceptors/timeout.interceptor.ts":
+/*!*************************************************!*\
+  !*** ./src/interceptors/timeout.interceptor.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.TimeoutInterceptor = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const rxjs_1 = __webpack_require__(/*! rxjs */ "rxjs");
+const operators_1 = __webpack_require__(/*! rxjs/operators */ "rxjs/operators");
+let TimeoutInterceptor = class TimeoutInterceptor {
+    constructor(defaultTimeout = 120000) {
+        this.defaultTimeout = defaultTimeout;
+    }
+    intercept(context, next) {
+        return next.handle().pipe((0, operators_1.timeout)(this.defaultTimeout), (0, operators_1.catchError)((err) => {
+            if (err.name === 'TimeoutError') {
+                return (0, rxjs_1.throwError)(() => new common_1.RequestTimeoutException('Request timed out'));
+            }
+            return (0, rxjs_1.throwError)(() => err);
+        }));
+    }
+};
+exports.TimeoutInterceptor = TimeoutInterceptor;
+exports.TimeoutInterceptor = TimeoutInterceptor = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [Number])
+], TimeoutInterceptor);
+
+
+/***/ }),
+
 /***/ "./src/interfaces/telegram.ts":
 /*!************************************!*\
   !*** ./src/interfaces/telegram.ts ***!
@@ -27784,6 +27827,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 const Exception_filter_1 = __webpack_require__(/*! ./interceptors/Exception-filter */ "./src/interceptors/Exception-filter.ts");
+const timeout_interceptor_1 = __webpack_require__(/*! ./interceptors/timeout.interceptor */ "./src/interceptors/timeout.interceptor.ts");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         logger: utils_1.Logger
@@ -27825,6 +27869,7 @@ async function bootstrap() {
     });
     mongoose_1.default.set('debug', true);
     app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
+    app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
     app.useGlobalPipes(new common_1.ValidationPipe({
         transform: true,
         transformOptions: {
@@ -27923,7 +27968,7 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.verbose(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else {
-                    this.logger.log(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.debug(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
             });
             res.on('error', (error) => {
@@ -28106,7 +28151,7 @@ class BotConfig {
             return res.data?.ok ? res.data.result.username : '';
         }
         catch (error) {
-            console.error('Error fetching bot username:', error);
+            (0, parseError_1.parseError)(error, 'Failed fetching bot username:');
             return '';
         }
     }
@@ -29096,7 +29141,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.green,
             message: chalk_1.default.green.bold,
             context: chalk_1.default.cyan.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getInfoColors() {
@@ -29104,7 +29148,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.blue,
             message: chalk_1.default.blue.bold,
             context: chalk_1.default.blueBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getErrorColors() {
@@ -29112,7 +29155,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.red,
             message: chalk_1.default.red.bold,
             context: chalk_1.default.redBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getWarnColors() {
@@ -29120,7 +29162,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.yellow,
             message: chalk_1.default.yellow.bold,
             context: chalk_1.default.yellowBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getDebugColors() {
@@ -29128,7 +29169,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.magenta,
             message: chalk_1.default.magenta.bold,
             context: chalk_1.default.magentaBright.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     getVerboseColors() {
@@ -29136,7 +29176,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.gray,
             message: chalk_1.default.gray.bold,
             context: chalk_1.default.white.dim,
-            timestamp: chalk_1.default.gray.dim,
         };
     }
     getSuccessColors() {
@@ -29144,7 +29183,6 @@ class Logger extends common_1.Logger {
             level: chalk_1.default.greenBright,
             message: chalk_1.default.greenBright.bold,
             context: chalk_1.default.green.bold,
-            timestamp: chalk_1.default.gray,
         };
     }
     formatMessage(level, message, colors, context) {
@@ -29159,7 +29197,7 @@ class Logger extends common_1.Logger {
     }
     formatMultiColorMessage(message, levelColor) {
         if (typeof message === 'object') {
-            return this.formatObjectMessage(message);
+            return '\n' + this.formatObjectMessage(message);
         }
         let formatted = String(message);
         formatted = formatted.replace(/\[([^\]]+)\]/g, chalk_1.default.cyan.bold('[$1]'));
@@ -29168,16 +29206,35 @@ class Logger extends common_1.Logger {
         formatted = formatted.replace(/_([^_]+)_/g, chalk_1.default.underline('$1'));
         return levelColor(formatted);
     }
-    formatObjectMessage(obj) {
-        const jsonStr = JSON.stringify(obj, null, 2);
-        return jsonStr
-            .replace(/"([^"]+)":/g, chalk_1.default.cyan('"$1"') + chalk_1.default.white(':'))
-            .replace(/: "([^"]+)"/g, ': ' + chalk_1.default.green('"$1"'))
-            .replace(/: (\d+)/g, ': ' + chalk_1.default.yellow('$1'))
-            .replace(/: (true|false)/g, ': ' + chalk_1.default.magenta('$1'))
-            .replace(/: null/g, ': ' + chalk_1.default.gray('null'));
+    formatObjectMessage(obj, indent = 2) {
+        if (Array.isArray(obj)) {
+            return '[\n' + obj.map((el) => ' '.repeat(indent) + this.formatObjectMessage(el, indent + 2)).join(',\n') + '\n]';
+        }
+        if (obj && typeof obj === 'object') {
+            const entries = Object.entries(obj).map(([key, value]) => {
+                const coloredKey = chalk_1.default.cyan(`"${key}"`) + chalk_1.default.white(': ');
+                const formattedValue = this.formatObjectMessage(value, indent + 2);
+                return ' '.repeat(indent) + coloredKey + formattedValue;
+            });
+            return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
+        }
+        if (typeof obj === 'string')
+            return chalk_1.default.green(`"${obj}"`);
+        if (typeof obj === 'number')
+            return chalk_1.default.yellow(obj);
+        if (typeof obj === 'boolean')
+            return chalk_1.default.magenta(obj);
+        if (obj === null)
+            return chalk_1.default.gray('null');
+        return chalk_1.default.white(String(obj));
     }
     parseColoredContext(context) {
+        if (/^\d+$/.test(context)) {
+            return chalk_1.default.magentaBright(context);
+        }
+        if (context === context.toUpperCase()) {
+            return chalk_1.default.cyanBright(context);
+        }
         const colorPattern = /\{(\w+):([^}]+)\}/g;
         return context.replace(colorPattern, (match, colorName, text) => {
             const chalkColor = this.getChalkColor(colorName);
@@ -30286,6 +30343,26 @@ module.exports = require("path");
 /***/ ((module) => {
 
 module.exports = require("reflect-metadata");
+
+/***/ }),
+
+/***/ "rxjs":
+/*!***********************!*\
+  !*** external "rxjs" ***!
+  \***********************/
+/***/ ((module) => {
+
+module.exports = require("rxjs");
+
+/***/ }),
+
+/***/ "rxjs/operators":
+/*!*********************************!*\
+  !*** external "rxjs/operators" ***!
+  \*********************************/
+/***/ ((module) => {
+
+module.exports = require("rxjs/operators");
 
 /***/ }),
 
