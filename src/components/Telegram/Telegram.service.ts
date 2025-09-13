@@ -82,7 +82,7 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await connectionManager.getClient(mobile)
         try {
             await telegramClient.joinChannel(chatEntity.username);
-            this.logger.debug(telegramClient.phoneNumber, " - Joined channel Success - ", chatEntity.username);
+            this.logger.debug(telegramClient.phoneNumber, "Joined channel Success: ", chatEntity.username);
             if (chatEntity.canSendMsgs) {
                 // try {
                 //     await this.activeChannelsService.update(chatEntity.channelId, chatEntity);
@@ -94,10 +94,10 @@ export class TelegramService implements OnModuleDestroy {
             } else {
                 await this.channelsService.remove(chatEntity.channelId);
                 await this.activeChannelsService.remove(chatEntity.channelId);
-                this.logger.debug(mobile, "Removed Channel- ", chatEntity.username);
+                this.logger.debug(mobile, "Removed Channel: ", chatEntity.username);
             }
         } catch (error) {
-            this.logger.debug(telegramClient.phoneNumber, " - Failed to join - ", chatEntity.username);
+            this.logger.debug(telegramClient.phoneNumber, "Failed to join: ", chatEntity.username);
             this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error
         }
@@ -109,12 +109,12 @@ export class TelegramService implements OnModuleDestroy {
                 if (channelId) {
                     await this.channelsService.remove(channelId)
                     await this.activeChannelsService.remove(channelId);
-                    this.logger.debug(mobile, `Removed Channel-  ${channelId}`);
+                    this.logger.debug(mobile, `Removed Channel:  ${channelId}`);
                 } else {
                     const channelDetails = (await this.channelsService.search({ username: username }))[0];
                     await this.channelsService.remove(channelDetails.channelId)
                     await this.activeChannelsService.remove(channelDetails.channelId);
-                    this.logger.debug(mobile, `Removed Channel-${channelDetails.channelId}`);
+                    this.logger.debug(mobile, `Removed Channel: ${channelDetails.channelId}`);
                 }
             } catch (searchError) {
                 this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
