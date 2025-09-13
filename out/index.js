@@ -3751,7 +3751,7 @@ class TelegramManager {
             await this.client.connect();
             this.logger.info(this.phoneNumber, "Connected Client Succesfully");
         }, {
-            timeout: 40000,
+            timeout: 120000,
             errorMessage: `[Tg Manager] Client Creation TimeOut\nMobile: ${this.phoneNumber}\n\napiId: ${this.apiId}\napiHash: ${this.apiHash}\n\nConfig: ${(0, utils_1.parseObjectToString)(tgConfiguration)}`
         });
         if (handler && this.client) {
@@ -30053,7 +30053,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.withTimeout = withTimeout;
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 async function withTimeout(promiseFactory, options = {}) {
-    const { timeout = 10000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
+    const { timeout = 60000, errorMessage = "Operation timeout", throwErr = true, maxRetries = 1, baseDelay = 500, maxDelay = 5000, shouldRetry = defaultShouldRetry, cancelSignal, onTimeout, } = options;
     let lastError;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         if (cancelSignal?.aborted) {
