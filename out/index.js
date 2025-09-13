@@ -1183,11 +1183,9 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
         }
     }
     async initializeConfiguration() {
-        this.logger.log('Initializing configuration service...');
         await this.setEnv();
         await TelegramBots_config_1.BotConfig.getInstance().ready();
         await this.notifyStart();
-        this.logger.log('Configuration service initialized successfully');
     }
     async notifyStart() {
         try {
@@ -8122,7 +8120,6 @@ class ConnectionManager {
         this.CLEANUP_INTERVAL = 60000;
         this.MAX_RETRY_ATTEMPTS = 3;
         this.startCleanup();
-        this.logger.info('ConnectionManager', 'Initialized');
     }
     static getInstance() {
         if (!ConnectionManager.instance) {
@@ -8132,7 +8129,6 @@ class ConnectionManager {
     }
     setUsersService(usersService) {
         this.usersService = usersService;
-        this.logger.info('ConnectionManager', 'UsersService attached');
     }
     async getClient(mobile, options = {}) {
         if (!mobile) {
@@ -23920,10 +23916,8 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         this.RETRY_DELAY = 1000;
     }
     async onModuleInit() {
-        this.logger.log('UPI ID Service initializing...');
         try {
             await this.initializeService();
-            this.logger.log('UPI ID Service initialized successfully');
         }
         catch (error) {
             this.logger.error('Failed to initialize UPI ID Service', error.stack);
@@ -23931,12 +23925,10 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         }
     }
     onModuleDestroy() {
-        this.logger.log('UPI ID Service shutting down...');
         if (this.checkInterval) {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
         }
-        this.logger.log('UPI ID Service shutdown complete');
     }
     async initializeService() {
         try {
@@ -27536,26 +27528,26 @@ class Logger extends common_1.Logger {
         super(context);
         chalk_1.default.level = 3;
     }
-    log(message, context) {
-        console.log(this.formatMessage('LOG', message, this.getLogColors(), context));
+    log(message, data = '') {
+        console.log(this.formatMessage('LOG', message, this.getLogColors(), data));
     }
-    info(message, context) {
-        console.log(this.formatMessage('INFO', message, this.getInfoColors(), context));
+    info(message, data = '') {
+        console.log(this.formatMessage('INFO', message, this.getInfoColors(), data));
     }
-    error(message, context, trace) {
-        console.error(this.formatMessage('ERROR', message, this.getErrorColors(), context), trace ? '\n' + chalk_1.default.red.bold(trace) : '');
+    error(message, data = '', trace) {
+        console.error(this.formatMessage('ERROR', message, this.getErrorColors(), data), trace ? '\n' + chalk_1.default.red.bold(trace) : '');
     }
-    warn(message, context) {
-        console.warn(this.formatMessage('WARN', message, this.getWarnColors(), context));
+    warn(message, data = '') {
+        console.warn(this.formatMessage('WARN', message, this.getWarnColors(), data));
     }
-    debug(message, context) {
-        console.debug(this.formatMessage('DEBUG', message, this.getDebugColors(), context));
+    debug(message, data = '') {
+        console.debug(this.formatMessage('DEBUG', message, this.getDebugColors(), data));
     }
-    verbose(message, context) {
-        console.debug(this.formatMessage('VERBOSE', message, this.getVerboseColors(), context));
+    verbose(message, data = '') {
+        console.debug(this.formatMessage('VERBOSE', message, this.getVerboseColors(), data));
     }
-    success(message, context) {
-        console.log(this.formatMessage('SUCCESS', message, this.getSuccessColors(), context));
+    success(message, data = '') {
+        console.log(this.formatMessage('SUCCESS', message, this.getSuccessColors(), data));
     }
     getLogColors() {
         return {
@@ -27606,7 +27598,7 @@ class Logger extends common_1.Logger {
             context: chalk_1.default.green.bold,
         };
     }
-    formatMessage(level, message, colors, context) {
+    formatMessage(level, message, colors, data) {
         const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
         const safeColors = {
             level: (colors?.level && typeof colors.level === 'function')
@@ -27619,25 +27611,25 @@ class Logger extends common_1.Logger {
         const formattedMessage = message !== undefined && message !== null
             ? this.formatMultiColorMessage(message, safeColors.message)
             : safeColors.message('[EMPTY MESSAGE]');
-        let ctx = '';
-        if (context !== undefined && context !== null) {
-            if (typeof context === 'object') {
-                try {
-                    ctx = `${this.formatObjectMessage(context)}`;
-                }
-                catch {
-                    ctx = '[Invalid Context Object]';
-                }
+        const serviceCtx = this.context ? chalk_1.default.yellow(`[${this.context}]`) : '';
+        let extraCtx = '';
+        if (typeof data === 'object') {
+            try {
+                extraCtx = this.formatObjectMessage(data);
             }
-            else if (typeof context === 'string') {
-                ctx = `${this.parseColoredContext(context)}`;
-            }
-            else {
-                ctx = `${String(context)}`;
+            catch {
+                extraCtx = '[Invalid Context Object]';
             }
         }
+        else if (typeof data === 'string') {
+            extraCtx = this.parseColoredContext(data);
+        }
+        else {
+            extraCtx = String(data);
+        }
+        extraCtx = ' ' + extraCtx;
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
-        return `${levelFormatted} ${formattedMessage}${ctx ? ' ' + ctx : ''}`;
+        return `${levelFormatted} ${serviceCtx} ${formattedMessage}${extraCtx}`;
     }
     formatMultiColorMessage(message, levelColor) {
         if (typeof message === 'object') {

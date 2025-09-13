@@ -45,7 +45,6 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
         }
-        this.logger.log('UPI ID Service shutdown complete');
     }
     async initializeService() {
         try {
