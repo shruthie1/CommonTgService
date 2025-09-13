@@ -10,9 +10,10 @@ exports.LoggerMiddleware = void 0;
 const common_1 = require("@nestjs/common");
 const parseError_1 = require("../utils/parseError");
 const TelegramBots_config_1 = require("../utils/TelegramBots.config");
+const utils_1 = require("../utils");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
-        this.logger = new common_1.Logger('HTTP');
+        this.logger = new utils_1.Logger('HTTP');
     }
     use(req, res, next) {
         const { method, originalUrl } = req;

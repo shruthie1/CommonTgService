@@ -9,9 +9,10 @@ var MemoryCleanerService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MemoryCleanerService = void 0;
 const common_1 = require("@nestjs/common");
+const utils_1 = require("./utils");
 let MemoryCleanerService = MemoryCleanerService_1 = class MemoryCleanerService {
     constructor() {
-        this.logger = new common_1.Logger(MemoryCleanerService_1.name);
+        this.logger = new utils_1.Logger(MemoryCleanerService_1.name);
         this.intervalId = null;
         this.memoryLimitMB = 400;
         this.cleanupIntervalMs = 5 * 60 * 1000;

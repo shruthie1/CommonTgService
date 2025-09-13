@@ -19,13 +19,13 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_data_schema_1 = require("./schemas/user-data.schema");
 const parseError_1 = require("../../utils/parseError");
-const common_2 = require("@nestjs/common");
 const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
+const utils_1 = require("../../utils");
 let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
         this.callCounts = new Map();
-        this.logger = new common_2.Logger(UserDataService_1.name);
+        this.logger = new utils_1.Logger(UserDataService_1.name);
     }
     async create(createUserDataDto) {
         try {

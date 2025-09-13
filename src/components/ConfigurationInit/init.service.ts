@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
@@ -6,6 +6,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { BotConfig } from '../../utils/TelegramBots.config';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class ConfigurationService implements OnModuleInit {

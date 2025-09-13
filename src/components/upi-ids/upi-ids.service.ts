@@ -1,10 +1,9 @@
-import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
-import axios from 'axios';
-import { areJsonsNotSame } from '../../utils';
 import { NpointService } from '../n-point/npoint.service';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class UpiIdService implements OnModuleDestroy, OnModuleInit {

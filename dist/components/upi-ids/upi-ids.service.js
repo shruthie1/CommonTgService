@@ -18,11 +18,12 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const npoint_service_1 = require("../n-point/npoint.service");
+const utils_1 = require("../../utils");
 let UpiIdService = UpiIdService_1 = class UpiIdService {
     constructor(upiIdModel, npointService) {
         this.upiIdModel = upiIdModel;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(UpiIdService_1.name);
+        this.logger = new utils_1.Logger(UpiIdService_1.name);
         this.checkInterval = null;
         this.upiIds = null;
         this.isInitialized = false;

@@ -1,6 +1,6 @@
 // src/common/memory-cleaner.service.ts
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Logger } from './utils';
 @Injectable()
 export class MemoryCleanerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MemoryCleanerService.name);

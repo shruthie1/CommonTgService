@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Logger, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiExtraModels } from '@nestjs/swagger';
 import { TgSignupService } from './tg-signup.service';
 import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
+import { Logger } from '../../utils';
 
 @Controller('tgsignup')
 @ApiTags('tgsignup')

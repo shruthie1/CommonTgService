@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import axios from 'axios';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class NpointService {

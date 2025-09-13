@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger } from "../../../utils";
 
 export class TelegramLogger {
     private static instance: TelegramLogger;

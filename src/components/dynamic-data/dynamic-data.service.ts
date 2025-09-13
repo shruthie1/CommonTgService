@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ClientSession } from 'mongoose';
 import { DynamicData, DynamicDataDocument } from './dynamic-data.schema';
@@ -7,9 +7,7 @@ import { UpdateDynamicDataDto, ArrayOperationType } from './dto/update-dynamic-d
 import { get, set, unset, has } from 'lodash';
 import { InjectConnection } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
-import { parseError } from '../../utils';
-import axios from 'axios';
-import { areJsonsNotSame } from '../../utils/common';
+import { parseError, Logger } from '../../utils';
 import { NpointService } from '../n-point/npoint.service';
 
 @Injectable()

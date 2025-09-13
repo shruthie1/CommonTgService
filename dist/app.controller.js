@@ -60,7 +60,7 @@ const url_1 = require("url");
 const utils_1 = require("./utils");
 let AppController = AppController_1 = class AppController {
     constructor() {
-        this.logger = new common_1.Logger(AppController_1.name);
+        this.logger = new utils_1.Logger(AppController_1.name);
         this.DEFAULT_TIMEOUT = 30000;
         this.MAX_CONTENT_SIZE = 50 * 1024 * 1024;
     }

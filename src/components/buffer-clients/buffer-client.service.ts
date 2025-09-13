@@ -7,7 +7,6 @@ import {
     Inject,
     Injectable,
     InternalServerErrorException,
-    Logger,
     NotFoundException,
     forwardRef,
     OnModuleDestroy,
@@ -31,7 +30,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { contains } from '../../utils';
+import { contains, Logger } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';

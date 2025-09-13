@@ -25,4 +25,5 @@ Object.defineProperty(exports, "parseError", { enumerable: true, get: function (
 __exportStar(require("./obfuscateText"), exports);
 __exportStar(require("./tg-apps"), exports);
 __exportStar(require("./telegram-utils"), exports);
+__exportStar(require("./logger"), exports);
 //# sourceMappingURL=index.js.map

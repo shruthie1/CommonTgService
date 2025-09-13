@@ -41,7 +41,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
         this.sessionService = sessionService;
-        this.logger = new common_1.Logger(BufferClientService_1.name);
+        this.logger = new utils_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
         this.leaveChannelMap = new Map();

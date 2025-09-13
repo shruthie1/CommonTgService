@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ProxyIp, ProxyIpDocument } from './schemas/proxy-ip.schema';
@@ -6,6 +6,7 @@ import { IpMobileMapping, IpMobileMappingDocument } from './schemas/ip-mobile-ma
 import { CreateProxyIpDto } from './dto/create-proxy-ip.dto';
 import { UpdateProxyIpDto } from './dto/update-proxy-ip.dto';
 import { AssignIpToMobileDto, BulkAssignIpDto, ReleaseIpFromMobileDto } from './dto/assign-ip.dto';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class IpManagementService {

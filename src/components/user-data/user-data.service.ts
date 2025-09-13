@@ -10,8 +10,8 @@ import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
-import { Logger } from '@nestjs/common';
 import { BotConfig, ChannelCategory } from '../../utils/TelegramBots.config';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class UserDataService {

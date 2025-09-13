@@ -18,12 +18,13 @@ const common_1 = require("@nestjs/common");
 const client_service_1 = require("../clients/client.service");
 const promote_client_service_1 = require("../promote-clients/promote-client.service");
 const ip_management_service_1 = require("./ip-management.service");
+const utils_1 = require("../../utils");
 let ClientIpIntegrationService = ClientIpIntegrationService_1 = class ClientIpIntegrationService {
     constructor(clientService, promoteClientService, ipManagementService) {
         this.clientService = clientService;
         this.promoteClientService = promoteClientService;
         this.ipManagementService = ipManagementService;
-        this.logger = new common_1.Logger(ClientIpIntegrationService_1.name);
+        this.logger = new utils_1.Logger(ClientIpIntegrationService_1.name);
     }
     async getPromoteMobiles(clientId) {
         return await this.clientService.getPromoteMobiles(clientId);

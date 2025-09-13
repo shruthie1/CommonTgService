@@ -19,11 +19,12 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const proxy_ip_schema_1 = require("./schemas/proxy-ip.schema");
 const ip_mobile_mapping_schema_1 = require("./schemas/ip-mobile-mapping.schema");
+const utils_1 = require("../../utils");
 let IpManagementService = IpManagementService_1 = class IpManagementService {
     constructor(proxyIpModel, ipMobileMappingModel) {
         this.proxyIpModel = proxyIpModel;
         this.ipMobileMappingModel = ipMobileMappingModel;
-        this.logger = new common_1.Logger(IpManagementService_1.name);
+        this.logger = new utils_1.Logger(IpManagementService_1.name);
     }
     async createProxyIp(createProxyIpDto) {
         if (!createProxyIpDto.ipAddress || !createProxyIpDto.port) {

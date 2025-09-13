@@ -5,18 +5,16 @@ import {
     InternalServerErrorException,
     NotFoundException,
     forwardRef,
-    Logger
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { CreateArchivedClientDto } from './dto/create-archived-client.dto';
 import { ArchivedClient, ArchivedClientDocument } from './schemas/archived-client.schema';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
 import { ClientService } from '../clients/client.service';
-import { parseError } from '../../utils/parseError';
+import { parseError, Logger } from '../../utils';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 @Injectable()
 export class ArchivedClientService {

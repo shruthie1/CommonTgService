@@ -20,14 +20,14 @@ const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
 const client_service_1 = require("../clients/client.service");
-const parseError_1 = require("../../utils/parseError");
+const utils_1 = require("../../utils");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientService {
     constructor(archivedclientModel, telegramService, clientService) {
         this.archivedclientModel = archivedclientModel;
         this.telegramService = telegramService;
         this.clientService = clientService;
-        this.logger = new common_1.Logger(ArchivedClientService_1.name);
+        this.logger = new utils_1.Logger(ArchivedClientService_1.name);
         this.MAX_OLD_SESSIONS = 10;
         this.SESSION_GENERATION_TIMEOUT = 30000;
         this.MAX_RETRY_ATTEMPTS = 3;
@@ -95,7 +95,7 @@ let ArchivedClientService = ArchivedClientService_1 = class ArchivedClientServic
         }
         catch (error) {
             this.logger.error(`Session factory failed for mobile ${mobile}:`, error);
-            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, parseError_1.parseError)(error).message}`);
+            throw new common_1.InternalServerErrorException(`Session generation failed: ${(0, utils_1.parseError)(error).message}`);
         }
     }
     async update(mobile, updateClientDto) {

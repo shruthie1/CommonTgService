@@ -20,10 +20,11 @@ const mongoose_2 = require("mongoose");
 const transaction_schema_1 = require("./schemas/transaction.schema");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
+const utils_1 = require("../../utils");
 let TransactionService = TransactionService_1 = class TransactionService {
     constructor(transactionModel) {
         this.transactionModel = transactionModel;
-        this.logger = new common_1.Logger(TransactionService_1.name);
+        this.logger = new utils_1.Logger(TransactionService_1.name);
     }
     async create(createTransactionDto) {
         this.logger.log(`Creating new transaction: ${JSON.stringify(createTransactionDto)}`);

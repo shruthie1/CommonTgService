@@ -4,7 +4,6 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
   forwardRef,
   Query,
@@ -21,10 +20,9 @@ import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import { ArchivedClientService } from '../archived-clients/archived-client.service';
 import {
-  areJsonsNotSame,
   contains,
   fetchNumbersFromString,
-  mapToJson,
+  Logger,
   toBoolean,
 } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';

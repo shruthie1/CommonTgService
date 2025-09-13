@@ -62,7 +62,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
         this.dynamicDataModel = dynamicDataModel;
         this.connection = connection;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(DynamicDataService_1.name);
+        this.logger = new utils_1.Logger(DynamicDataService_1.name);
     }
     async create(createDto) {
         this.logger.debug(`Creating dynamic data with configKey: ${createDto.configKey}`);

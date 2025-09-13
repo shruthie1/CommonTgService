@@ -79,7 +79,7 @@ let ClientService = ClientService_1 = class ClientService {
         this.sessionService = sessionService;
         this.ipManagementService = ipManagementService;
         this.npointService = npointService;
-        this.logger = new common_1.Logger(ClientService_1.name);
+        this.logger = new utils_1.Logger(ClientService_1.name);
         this.lastUpdateMap = new Map();
         this.clientsMap = new Map();
         this.cacheMetadata = {

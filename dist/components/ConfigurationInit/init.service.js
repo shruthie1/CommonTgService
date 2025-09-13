@@ -21,11 +21,12 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 const config_1 = require("@nestjs/config");
+const utils_1 = require("../../utils");
 let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     constructor(configurationModel, configService) {
         this.configurationModel = configurationModel;
         this.configService = configService;
-        this.logger = new common_1.Logger(ConfigurationService_1.name);
+        this.logger = new utils_1.Logger(ConfigurationService_1.name);
     }
     async onModuleInit() {
         if (ConfigurationService_1.initialized) {

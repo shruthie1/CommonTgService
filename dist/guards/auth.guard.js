@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthGuard = void 0;
 const common_1 = require("@nestjs/common");
 const TelegramBots_config_1 = require("../utils/TelegramBots.config");
+const utils_1 = require("../utils");
 const ALLOWED_IPS = [
     '31.97.59.2',
     '148.230.84.50',
@@ -57,7 +58,7 @@ const IGNORE_PATHS = [
 ];
 let AuthGuard = AuthGuard_1 = class AuthGuard {
     constructor() {
-        this.logger = new common_1.Logger(AuthGuard_1.name);
+        this.logger = new utils_1.Logger(AuthGuard_1.name);
     }
     canActivate(context) {
         const request = context.switchToHttp().getRequest();

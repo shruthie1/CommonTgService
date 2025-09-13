@@ -20,10 +20,11 @@ const Password_1 = require("telegram/Password");
 const users_service_1 = require("../users/users.service");
 const parseError_1 = require("../../utils/parseError");
 const tg_apps_1 = require("../../utils/tg-apps");
+const utils_1 = require("../../utils");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
         this.usersService = usersService;
-        this.logger = new common_1.Logger(TgSignupService_1.name);
+        this.logger = new utils_1.Logger(TgSignupService_1.name);
         this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), TgSignupService_1.SESSION_CLEANUP_INTERVAL);
     }
     async onModuleDestroy() {

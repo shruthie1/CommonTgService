@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramLogger = void 0;
-const common_1 = require("@nestjs/common");
+const utils_1 = require("../../../utils");
 class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
-        this.logger = new common_1.Logger(serviceName);
+        this.logger = new utils_1.Logger(serviceName);
     }
     shouldIncludeDetails(details) {
         return details !== undefined

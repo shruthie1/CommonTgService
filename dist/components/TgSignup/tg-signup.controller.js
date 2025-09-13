@@ -18,10 +18,11 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const tg_signup_service_1 = require("./tg-signup.service");
 const tg_signup_dto_1 = require("./dto/tg-signup.dto");
+const utils_1 = require("../../utils");
 let TgSignupController = TgSignupController_1 = class TgSignupController {
     constructor(tgSignupService) {
         this.tgSignupService = tgSignupService;
-        this.logger = new common_1.Logger(TgSignupController_1.name);
+        this.logger = new utils_1.Logger(TgSignupController_1.name);
     }
     async sendCode(sendCodeDto) {
         try {

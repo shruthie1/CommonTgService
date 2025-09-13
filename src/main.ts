@@ -6,9 +6,12 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
+import { Logger } from './utils';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: Logger
+  });
   const config = new DocumentBuilder()
     .setTitle('NestJS and Express API')
     .setDescription('API documentation')

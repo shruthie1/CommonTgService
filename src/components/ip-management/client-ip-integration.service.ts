@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { ClientService } from '../clients/client.service';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { IpManagementService } from './ip-management.service';
+import { Logger } from '../../utils';
 
 @Injectable()
 export class ClientIpIntegrationService {

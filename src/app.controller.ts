@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, ValidationPipe, Logger, HttpException, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, ValidationPipe, HttpException, HttpStatus, Res } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import * as https from 'https';
 import { URL } from 'url';
-import { parseError } from './utils';
+import { parseError , Logger} from './utils';
 
 @ApiTags('App')
 @Controller()

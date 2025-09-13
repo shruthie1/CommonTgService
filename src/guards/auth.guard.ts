@@ -2,11 +2,11 @@ import {
     CanActivate,
     ExecutionContext,
     Injectable,
-    UnauthorizedException,
-    Logger,
+    UnauthorizedException
 } from '@nestjs/common';
 import { Request } from 'express';
 import { BotConfig, ChannelCategory } from '../utils/TelegramBots.config';
+import { Logger } from '../utils';
 
 const ALLOWED_IPS = [
     '31.97.59.2',
