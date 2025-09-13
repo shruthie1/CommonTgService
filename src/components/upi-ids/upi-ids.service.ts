@@ -21,10 +21,10 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
     ) {}
 
     async onModuleInit(): Promise<void> {
-        this.logger.log('UPI ID Service initializing...');
+        // this.logger.log('UPI ID Service initializing...');
         try {
             await this.initializeService();
-            this.logger.log('UPI ID Service initialized successfully');
+            // this.logger.log('UPI ID Service initialized successfully');
         } catch (error) {
             this.logger.error('Failed to initialize UPI ID Service', error.stack);
             throw error;
@@ -32,12 +32,12 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
     }
 
     onModuleDestroy(): void {
-        this.logger.log('UPI ID Service shutting down...');
+        // this.logger.log('UPI ID Service shutting down...');
         if (this.checkInterval) {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
         }
-        this.logger.log('UPI ID Service shutdown complete');
+        // this.logger.log('UPI ID Service shutdown complete');
     }
 
     private async initializeService(): Promise<void> {

@@ -47,7 +47,6 @@ class ConnectionManager {
 
     private constructor() {
         this.startCleanup();
-        this.logger.info('ConnectionManager', 'Initialized');
     }
 
     public static getInstance(): ConnectionManager {
@@ -59,7 +58,6 @@ class ConnectionManager {
 
     public setUsersService(usersService: UsersService): void {
         this.usersService = usersService;
-        this.logger.info('ConnectionManager', 'UsersService attached');
     }
 
     public async getClient(mobile: string, options: GetClientOptions = {}): Promise<TelegramManager> {

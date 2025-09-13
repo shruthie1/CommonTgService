@@ -25,7 +25,6 @@ class ConnectionManager {
         this.CLEANUP_INTERVAL = 60000;
         this.MAX_RETRY_ATTEMPTS = 3;
         this.startCleanup();
-        this.logger.info('ConnectionManager', 'Initialized');
     }
     static getInstance() {
         if (!ConnectionManager.instance) {
@@ -35,7 +34,6 @@ class ConnectionManager {
     }
     setUsersService(usersService) {
         this.usersService = usersService;
-        this.logger.info('ConnectionManager', 'UsersService attached');
     }
     async getClient(mobile, options = {}) {
         if (!mobile) {

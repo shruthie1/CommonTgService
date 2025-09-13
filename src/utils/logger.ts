@@ -7,35 +7,35 @@ export class Logger extends NestLogger {
         chalk.level = 3; // force colors
     }
 
-    log(message: any, context?: any) {
-        console.log(this.formatMessage('LOG', message, this.getLogColors(), context));
+    log(message: any, data: any = '') {
+        console.log(this.formatMessage('LOG', message, this.getLogColors(), data));
     }
 
-    info(message: any, context?: any) {
-        console.log(this.formatMessage('INFO', message, this.getInfoColors(), context));
+    info(message: any, data: any = '') {
+        console.log(this.formatMessage('INFO', message, this.getInfoColors(), data));
     }
 
-    error(message: any, context?: any, trace?: any) {
+    error(message: any, data: any = '', trace?: any) {
         console.error(
-            this.formatMessage('ERROR', message, this.getErrorColors(), context),
+            this.formatMessage('ERROR', message, this.getErrorColors(), data),
             trace ? '\n' + chalk.red.bold(trace) : '',
         );
     }
 
-    warn(message: any, context?: any) {
-        console.warn(this.formatMessage('WARN', message, this.getWarnColors(), context));
+    warn(message: any, data: any = '') {
+        console.warn(this.formatMessage('WARN', message, this.getWarnColors(), data));
     }
 
-    debug(message: any, context?: any) {
-        console.debug(this.formatMessage('DEBUG', message, this.getDebugColors(), context));
+    debug(message: any, data: any = '') {
+        console.debug(this.formatMessage('DEBUG', message, this.getDebugColors(), data));
     }
 
-    verbose(message: any, context?: any) {
-        console.debug(this.formatMessage('VERBOSE', message, this.getVerboseColors(), context));
+    verbose(message: any, data: any = '') {
+        console.debug(this.formatMessage('VERBOSE', message, this.getVerboseColors(), data));
     }
 
-    success(message: any, context?: any) {
-        console.log(this.formatMessage('SUCCESS', message, this.getSuccessColors(), context));
+    success(message: any, data: any = '') {
+        console.log(this.formatMessage('SUCCESS', message, this.getSuccessColors(), data));
     }
 
     /** ---------- COLORS ---------- */
@@ -95,12 +95,11 @@ export class Logger extends NestLogger {
         };
     }
 
-    /** ---------- FORMATTERS ---------- */
     private formatMessage(
         level: string,
         message: any,
         colors: { level: any; message: any },
-        context?: any,
+        data?: any,
     ): string {
         // Ensure level is safe
         const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
@@ -109,10 +108,10 @@ export class Logger extends NestLogger {
         const safeColors = {
             level: (colors?.level && typeof colors.level === 'function')
                 ? colors.level
-                : (txt: string) => txt, // fallback: no color
+                : (txt: string) => txt,
             message: (colors?.message && typeof colors.message === 'function')
                 ? colors.message
-                : (txt: string) => txt, // fallback: no color
+                : (txt: string) => txt,
         };
 
         // Format message safely
@@ -120,25 +119,27 @@ export class Logger extends NestLogger {
             ? this.formatMultiColorMessage(message, safeColors.message)
             : safeColors.message('[EMPTY MESSAGE]');
 
-        // Handle context safely
-        let ctx = '';
-        if (context !== undefined && context !== null) {
-            if (typeof context === 'object') {
-                try {
-                    ctx = `${this.formatObjectMessage(context)}`;
-                } catch {
-                    ctx = '[Invalid Context Object]';
-                }
-            } else if (typeof context === 'string') {
-                ctx = `${this.parseColoredContext(context)}`;
-            } else {
-                ctx = `${String(context)}`; // fallback for numbers, booleans, etc.
+        // ---- SERVICE NAME (from NestLogger) ----
+        const serviceCtx = this.context ? chalk.yellow(`[${this.context}]`) : '';
+
+        // ---- EXTRA CONTEXT (manual) ----
+        let extraCtx = '';
+        if (typeof data === 'object') {
+            try {
+                extraCtx = this.formatObjectMessage(data);
+            } catch {
+                extraCtx = '[Invalid Context Object]';
             }
+        } else if (typeof data === 'string') {
+            extraCtx = this.parseColoredContext(data);
+        } else {
+            extraCtx = String(data);
         }
+        extraCtx = ' ' + extraCtx;
 
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
 
-        return `${levelFormatted} ${formattedMessage}${ctx ? ' ' + ctx : ''}`;
+        return `${levelFormatted} ${serviceCtx} ${formattedMessage}${extraCtx}`;
     }
 
 

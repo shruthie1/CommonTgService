@@ -33,11 +33,11 @@ export class ConfigurationService implements OnModuleInit {
     }
 
     private async initializeConfiguration() {
-        this.logger.log('Initializing configuration service...');
+        // this.logger.log('Initializing configuration service...');
         await this.setEnv();
         await BotConfig.getInstance().ready();
         await this.notifyStart();
-        this.logger.log('Configuration service initialized successfully');
+        // this.logger.log('Configuration service initialized successfully');
     }
 
     private async notifyStart() {

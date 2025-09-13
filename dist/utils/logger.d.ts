@@ -1,13 +1,13 @@
 import { Logger as NestLogger } from '@nestjs/common';
 export declare class Logger extends NestLogger {
     constructor(context?: string);
-    log(message: any, context?: any): void;
-    info(message: any, context?: any): void;
-    error(message: any, context?: any, trace?: any): void;
-    warn(message: any, context?: any): void;
-    debug(message: any, context?: any): void;
-    verbose(message: any, context?: any): void;
-    success(message: any, context?: any): void;
+    log(message: any, data?: any): void;
+    info(message: any, data?: any): void;
+    error(message: any, data?: any, trace?: any): void;
+    warn(message: any, data?: any): void;
+    debug(message: any, data?: any): void;
+    verbose(message: any, data?: any): void;
+    success(message: any, data?: any): void;
     private getLogColors;
     private getInfoColors;
     private getErrorColors;

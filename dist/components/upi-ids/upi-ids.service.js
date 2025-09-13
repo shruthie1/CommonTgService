@@ -32,10 +32,8 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         this.RETRY_DELAY = 1000;
     }
     async onModuleInit() {
-        this.logger.log('UPI ID Service initializing...');
         try {
             await this.initializeService();
-            this.logger.log('UPI ID Service initialized successfully');
         }
         catch (error) {
             this.logger.error('Failed to initialize UPI ID Service', error.stack);
@@ -43,7 +41,6 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         }
     }
     onModuleDestroy() {
-        this.logger.log('UPI ID Service shutting down...');
         if (this.checkInterval) {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
