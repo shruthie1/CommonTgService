@@ -29203,17 +29203,17 @@ class Logger extends common_1.Logger {
         if (context !== undefined && context !== null) {
             if (typeof context === 'object') {
                 try {
-                    ctx = `[${this.formatObjectMessage(context)}]`;
+                    ctx = `${this.formatObjectMessage(context)}`;
                 }
                 catch {
                     ctx = '[Invalid Context Object]';
                 }
             }
             else if (typeof context === 'string') {
-                ctx = `[${this.parseColoredContext(context)}]`;
+                ctx = `${this.parseColoredContext(context)}`;
             }
             else {
-                ctx = `[${String(context)}]`;
+                ctx = `${String(context)}`;
             }
         }
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
