@@ -85,7 +85,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             for (const [mobile, channels] of this.leaveChannelMap.entries()) {
                 if (!channels || channels.length === 0) {
-                    console.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
+                    this.logger.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
                     this.leaveChannelMap.delete(mobile);
                 }
             }
@@ -160,11 +160,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            this.logger.debug('Updating existing promote client');
+            this.logger.debug(`Updating existing promote client: ${mobile}`);
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            this.logger.debug('Creating new promote client');
+            this.logger.debug(`Creating new promote client: ${mobile}`);
             return this.create(createOrUpdateUserDto);
         }
     }
@@ -184,17 +184,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 throw error;
             }
             const errorDetails = (0, parseError_1.parseError)(error);
-            this.logger.error(`Error removing PromoteClient with mobile ${mobile}: ${errorDetails.message}`);
+            this.logger.error(`[${mobile}] Error removing PromoteClient: ${errorDetails.message}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
-        this.logger.log(`PromoteClient with mobile ${mobile} removed successfully`);
+        this.logger.log(`[${mobile}] PromoteClient removed successfully`);
     }
     async search(filter) {
-        this.logger.debug(`Search filter: ${JSON.stringify(filter)}`);
+        this.logger.debug(`Search filter: `, filter);
         if (filter.firstName) {
             filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
         }
-        this.logger.debug(`Modified filter: ${JSON.stringify(filter)}`);
+        this.logger.debug(`Modified filter: `, filter);
         return this.promoteClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
@@ -240,19 +240,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const client = clients[i];
             const mobile = client?.mobile;
             try {
-                this.logger.debug(`Updating info for client: ${mobile}`);
+                this.logger.debug(`[${mobile}] Updating info`);
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
                 });
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
                 await this.markAsInactive(mobile, `${errorDetails.message}`);
-                this.logger.error(`Error updating info for client ${client.mobile}:`, errorDetails);
+                this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
             }
             finally {
                 await connection_manager_1.connectionManager.unregisterClient(mobile);
@@ -299,7 +299,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     });
                     await (0, Helpers_1.sleep)(2000);
                     const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                    this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
+                    this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                     await (0, Helpers_1.sleep)(2000);
                     await this.update(mobile, { channels: channels.ids.length });
                     if (channels.ids.length > 100) {
@@ -324,20 +324,20 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                             joinSet.add(mobile);
                         }
                         else {
-                            this.logger.debug(`${mobile}: Already in join queue, skipping re-add`);
+                            this.logger.debug(`[${mobile}]: Already in join queue, skipping re-add`);
                         }
                         await this.sessionService.getOldestSessionOrCreate({
                             mobile: document.mobile
                         });
                     }
                     else {
-                        this.logger.debug(`${mobile}: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
+                        this.logger.debug(`[${mobile}]: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
                         if (!this.leaveChannelMap.has(mobile)) {
                             this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
                             leaveSet.add(mobile);
                         }
                         else {
-                            this.logger.debug(`${mobile}: Already in leave queue, skipping re-add`);
+                            this.logger.debug(`[${mobile}]: Already in leave queue, skipping re-add`);
                         }
                     }
                     successCount++;
@@ -345,7 +345,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 catch (error) {
                     failCount++;
                     const errorDetails = (0, parseError_1.parseError)(error);
-                    this.logger.error(`Error processing client ${mobile}:`, errorDetails);
+                    this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
                     if ((0, utils_1.contains)(errorDetails.message, [
                         'SESSION_REVOKED',
@@ -354,7 +354,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         'USER_DEACTIVATED_BAN',
                         'FROZEN_METHOD_INVALID',
                     ])) {
-                        this.logger.warn(`${mobile}: Fatal session error (${errorMsg}), marking as inactive and removing`);
+                        this.logger.warn(`[${mobile}]: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             await (0, Helpers_1.sleep)(1000);
@@ -366,7 +366,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
                     }
                     else {
-                        this.logger.warn(`${mobile}: Non-fatal error encountered, will retry later`);
+                        this.logger.warn(`[${mobile}]: Non-fatal error encountered, will retry later`);
                     }
                 }
                 finally {
@@ -462,7 +462,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     continue;
                 }
                 currentChannel = channels.shift();
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to join, processing: @${currentChannel.username}`);
                 this.joinChannelMap.set(mobile, channels);
                 const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                 if (activeChannel && activeChannel.banned == true) {
@@ -473,11 +473,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 }
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
+                const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
                 this.logger.error(`Error joining channel for ${mobile}: ${error.message}`);
                 if (errorDetails.error === 'FloodWaitError' ||
                     error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                    this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
+                    this.logger.warn(`[${mobile}] has FloodWaitError or joined too many channels, removing from queue`);
                     this.removeFromPromoteMap(mobile);
                     try {
                         await (0, Helpers_1.sleep)(2000);
@@ -607,7 +607,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     continue;
                 }
                 const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
+                this.logger.debug(`[${mobile}] has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
                 if (channels.length > 0) {
                     this.leaveChannelMap.set(mobile, channels);
                 }
@@ -618,13 +618,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
-                this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
+                this.logger.debug(`[${mobile}] attempting to leave ${channelsToProcess.length} channels`);
                 await (0, Helpers_1.sleep)(1500);
                 await client.leaveChannels(channelsToProcess);
-                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+                this.logger.debug(`[${mobile}] left ${channelsToProcess.length} channels successfully`);
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
+                const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] Leave Channel ERR: `, false);
                 if ((0, utils_1.contains)(errorDetails.message, [
                     'SESSION_REVOKED',
                     'AUTH_KEY_UNREGISTERED',
