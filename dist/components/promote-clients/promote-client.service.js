@@ -353,6 +353,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         'USER_DEACTIVATED',
                         'USER_DEACTIVATED_BAN',
                         'FROZEN_METHOD_INVALID',
+                        'not found'
                     ])) {
                         this.logger.warn(`[${mobile}]: Fatal session error (${errorMsg}), marking as inactive and removing`);
                         try {
