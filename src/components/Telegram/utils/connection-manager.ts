@@ -3,11 +3,11 @@ import { parseError } from '../../../utils/parseError';
 import { TelegramLogger } from './telegram-logger';
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { UsersService } from '../../../components/users/users.service';
-import { BotConfig, ChannelCategory } from '../../../utils/TelegramBots.config';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
-import { contains } from '../../../utils';
+import { contains, getBotsServiceInstance } from '../../../utils';
+import { ChannelCategory } from '../../../components/bots/bots.service';
 
 interface User {
     mobile: string;
@@ -193,10 +193,11 @@ class ConnectionManager {
         }
 
         try {
-            await BotConfig.getInstance().sendMessage(
-                ChannelCategory.ACCOUNT_LOGIN_FAILURES,
-                `${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`
-            );
+            const botsService = getBotsServiceInstance();
+            if (botsService) {
+                const botMessage = `Client connection error for ${mobile}\n\n${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`;
+                await botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage);
+            }
         } catch (notificationError) {
             this.logger.error(mobile, 'Failed to send error notification', notificationError);
         }

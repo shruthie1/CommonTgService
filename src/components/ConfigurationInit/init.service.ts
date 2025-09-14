@@ -4,7 +4,6 @@ import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
-import { BotConfig } from '../../utils/TelegramBots.config';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../../utils';
 
@@ -35,7 +34,6 @@ export class ConfigurationService implements OnModuleInit {
     private async initializeConfiguration() {
         // this.logger.log('Initializing configuration service...');
         await this.setEnv();
-        await BotConfig.getInstance().ready();
         await this.notifyStart();
         // this.logger.log('Configuration service initialized successfully');
     }

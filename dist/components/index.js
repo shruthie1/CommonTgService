@@ -37,4 +37,5 @@ __exportStar(require("./transactions"), exports);
 __exportStar(require("./upi-ids"), exports);
 __exportStar(require("./shared"), exports);
 __exportStar(require("./dynamic-data"), exports);
+__exportStar(require("./bots"), exports);
 //# sourceMappingURL=index.js.map

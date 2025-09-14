@@ -9,8 +9,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoggerMiddleware = void 0;
 const common_1 = require("@nestjs/common");
 const parseError_1 = require("../utils/parseError");
-const TelegramBots_config_1 = require("../utils/TelegramBots.config");
 const utils_1 = require("../utils");
+const components_1 = require("../components");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new utils_1.Logger('HTTP');
@@ -31,12 +31,17 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const duration = Date.now() - startTime;
                 const durationStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
                 if (statusCode >= 500) {
-                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 400) {
-                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 300) {
@@ -48,7 +53,12 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
             res.on('error', (error) => {
                 const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
-                TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
             });
         }
         else {

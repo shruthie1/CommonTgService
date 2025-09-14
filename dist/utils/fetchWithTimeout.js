@@ -7,7 +7,8 @@ exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(require("axios"));
 const parseError_1 = require("./parseError");
 const common_1 = require("./common");
-const TelegramBots_config_1 = require("./TelegramBots.config");
+const bots_service_1 = require("../components/bots/bots.service");
+const bot_service_instance_1 = require("./bot.service.instance");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -37,7 +38,8 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `${prefix}\n\n${formattedMessage}`;
         try {
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, notificationText);
+            const botsService = (0, bot_service_instance_1.getBotsServiceInstance)();
+            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText);
         }
         catch (error) {
             console.error('Failed to send notification:', error.response?.data || error.message || error.code);

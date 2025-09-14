@@ -19,7 +19,6 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
-const TelegramBots_config_1 = require("../../utils/TelegramBots.config");
 const config_1 = require("@nestjs/config");
 const utils_1 = require("../../utils");
 let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
@@ -43,7 +42,6 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     }
     async initializeConfiguration() {
         await this.setEnv();
-        await TelegramBots_config_1.BotConfig.getInstance().ready();
         await this.notifyStart();
     }
     async notifyStart() {

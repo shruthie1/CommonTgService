@@ -6,3 +6,4 @@ export * from './obfuscateText';
 export * from './tg-apps';
 export * from './telegram-utils';
 export * from './logger';
+export * from './bot.service.instance';

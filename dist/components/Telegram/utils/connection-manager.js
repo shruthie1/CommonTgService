@@ -9,10 +9,10 @@ const TelegramManager_1 = __importDefault(require("../TelegramManager"));
 const parseError_1 = require("../../../utils/parseError");
 const telegram_logger_1 = require("./telegram-logger");
 const common_1 = require("@nestjs/common");
-const TelegramBots_config_1 = require("../../../utils/TelegramBots.config");
 const withTimeout_1 = require("../../../utils/withTimeout");
 const Helpers_1 = require("telegram/Helpers");
 const utils_1 = require("../../../utils");
+const bots_service_1 = require("../../../components/bots/bots.service");
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
@@ -135,7 +135,11 @@ class ConnectionManager {
             }
         }
         try {
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`);
+            const botsService = (0, utils_1.getBotsServiceInstance)();
+            if (botsService) {
+                const botMessage = `Client connection error for ${mobile}\n\n${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`;
+                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage);
+            }
         }
         catch (notificationError) {
             this.logger.error(mobile, 'Failed to send error notification', notificationError);

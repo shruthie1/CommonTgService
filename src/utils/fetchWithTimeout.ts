@@ -2,7 +2,8 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { extractMessage, parseError } from './parseError';
 import { clog } from './ChannelLogger';
 import { sleep } from './common';
-import { BotConfig, ChannelCategory } from './TelegramBots.config';
+import { ChannelCategory } from '../components/bots/bots.service';
+import { getBotsServiceInstance } from './bot.service.instance';
 
 // Configuration types
 interface RetryConfig {
@@ -63,9 +64,10 @@ async function notifyInternal(
     const notificationText = `${prefix}\n\n${formattedMessage}`;
 
     try {
-      await BotConfig.getInstance().sendMessage(
+      const botsService = getBotsServiceInstance();
+      await botsService.sendMessageByCategory(
         ChannelCategory.HTTP_FAILURES,
-        notificationText,
+        notificationText
       );
     } catch (error) {
       console.error(

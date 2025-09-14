@@ -34,6 +34,7 @@ const session_manager_1 = require("./components/session-manager");
 const ip_management_module_1 = require("./components/ip-management/ip-management.module");
 const core_1 = require("@nestjs/core");
 const guards_1 = require("./guards");
+const components_1 = require("./components");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -45,6 +46,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             init_module_1.InitModule,
             Telegram_module_1.TelegramModule,
+            components_1.BotsModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             session_manager_1.SessionModule,

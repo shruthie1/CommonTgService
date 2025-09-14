@@ -9,8 +9,8 @@ var AuthGuard_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthGuard = void 0;
 const common_1 = require("@nestjs/common");
-const TelegramBots_config_1 = require("../utils/TelegramBots.config");
 const utils_1 = require("../utils");
+const components_1 = require("../components");
 const ALLOWED_IPS = [
     '31.97.59.2',
     '148.230.84.50',
@@ -186,7 +186,15 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     notifyUnauthorized(clientIp, origin, originalUrl) {
         try {
-            TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+            const botsService = (0, utils_1.getBotsServiceInstance)();
+            if (!botsService) {
+                this.logger.warn(`BotsService instance not available for notifications`);
+                return;
+            }
+            else {
+                botsService.sendMessageByCategory(components_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+                return;
+            }
         }
         catch (err) {
             this.logger.error(`Notifbot failed: ${err.message}`);

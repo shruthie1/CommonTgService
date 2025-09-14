@@ -5,8 +5,8 @@ import {
     UnauthorizedException
 } from '@nestjs/common';
 import { Request } from 'express';
-import { BotConfig, ChannelCategory } from '../utils/TelegramBots.config';
-import { Logger } from '../utils';
+import { getBotsServiceInstance, Logger } from '../utils';
+import { ChannelCategory } from '../components';
 
 const ALLOWED_IPS = [
     '31.97.59.2',
@@ -222,11 +222,14 @@ export class AuthGuard implements CanActivate {
         originalUrl: string,
     ) {
         try {
-            BotConfig.getInstance().sendMessage(
-                ChannelCategory.UNAUTH_CALLS,
-                `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`,
-            );
-
+            const botsService = getBotsServiceInstance();
+            if (!botsService) {
+                this.logger.warn(`BotsService instance not available for notifications`);
+                return;
+            }else{
+                botsService.sendMessageByCategory(ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+                return;
+            }
         } catch (err) {
             this.logger.error(`Notifbot failed: ${err.message}`);
         }

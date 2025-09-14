@@ -3776,6 +3776,855 @@
         ]
       }
     },
+    "/bots": {
+      "post": {
+        "description": "Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.",
+        "operationId": "BotsController_createBot",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Bot creation parameters including token and category",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBotDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bot has been successfully created"
+          },
+          "400": {
+            "description": "Invalid bot configuration provided"
+          },
+          "409": {
+            "description": "Bot with the same token already exists"
+          }
+        },
+        "summary": "Create a new bot",
+        "tags": [
+          "Bots"
+        ]
+      },
+      "get": {
+        "description": "Retrieves a list of all registered bots. Can be filtered by category if provided.",
+        "operationId": "BotsController_getBots",
+        "parameters": [
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "Optional category filter to return only bots of a specific category",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bots retrieved successfully"
+          },
+          "400": {
+            "description": "Invalid category provided"
+          }
+        },
+        "summary": "Get all bots or filter by category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/{id}": {
+      "get": {
+        "description": "Retrieves detailed information about a specific bot using its unique identifier.",
+        "operationId": "BotsController_getBotById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot details retrieved successfully"
+          },
+          "404": {
+            "description": "Bot not found"
+          }
+        },
+        "summary": "Get a bot by ID",
+        "tags": [
+          "Bots"
+        ]
+      },
+      "patch": {
+        "description": "Updates the configuration of an existing bot. Only provided fields will be modified.",
+        "operationId": "BotsController_updateBot",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot updated successfully"
+          },
+          "400": {
+            "description": "Invalid update parameters"
+          },
+          "404": {
+            "description": "Bot not found"
+          }
+        },
+        "summary": "Update a bot",
+        "tags": [
+          "Bots"
+        ]
+      },
+      "delete": {
+        "description": "Removes a bot from the system. This action cannot be undone.",
+        "operationId": "BotsController_deleteBot",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot successfully deleted"
+          },
+          "404": {
+            "description": "Bot not found"
+          }
+        },
+        "summary": "Delete a bot",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/message": {
+      "post": {
+        "description": "Sends a text message using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendMessageByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the message",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Message content and optional formatting parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message sent successfully"
+          },
+          "400": {
+            "description": "Invalid message parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a message using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/photo": {
+      "post": {
+        "description": "Sends a photo using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendPhotoByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the photo",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Photo content and optional caption parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendPhotoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Photo sent successfully"
+          },
+          "400": {
+            "description": "Invalid photo parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a photo using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/video": {
+      "post": {
+        "description": "Sends a video using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendVideoByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the video",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Video content and optional caption parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendVideoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Video sent successfully"
+          },
+          "400": {
+            "description": "Invalid video parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a video using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/audio": {
+      "post": {
+        "description": "Sends an audio file using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendAudioByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the audio",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Audio content and optional metadata parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAudioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Audio sent successfully"
+          },
+          "400": {
+            "description": "Invalid audio parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send audio using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/document": {
+      "post": {
+        "description": "Sends a document file using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendDocumentByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the document",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Document content and optional caption parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document sent successfully"
+          },
+          "400": {
+            "description": "Invalid document parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a document using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/voice": {
+      "post": {
+        "description": "Sends a voice message using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendVoiceByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the voice message",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Voice message content and optional parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendVoiceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Voice message sent successfully"
+          },
+          "400": {
+            "description": "Invalid voice message parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a voice message using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/animation": {
+      "post": {
+        "description": "Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendAnimationByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the animation",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Animation content and optional caption parameters",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAnimationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Animation sent successfully"
+          },
+          "400": {
+            "description": "Invalid animation parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send an animation using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/sticker": {
+      "post": {
+        "description": "Sends a sticker using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendStickerByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the sticker",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Sticker file or sticker ID to send",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendStickerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sticker sent successfully"
+          },
+          "400": {
+            "description": "Invalid sticker parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a sticker using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/media-group": {
+      "post": {
+        "description": "Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.",
+        "operationId": "BotsController_sendMediaGroupByCategory",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to use for sending the media group",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "botId",
+            "required": false,
+            "in": "query",
+            "description": "Optional specific bot ID to use instead of all bots in the category",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Array of media items (photos/videos) to send as a group",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMediaGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Media group sent successfully"
+          },
+          "400": {
+            "description": "Invalid media group parameters or bot category"
+          },
+          "404": {
+            "description": "Bot or category not found"
+          }
+        },
+        "summary": "Send a media group using bots in a category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/category/{category}/stats": {
+      "get": {
+        "description": "Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.",
+        "operationId": "BotsController_getBotStats",
+        "parameters": [
+          {
+            "name": "category",
+            "required": true,
+            "in": "path",
+            "description": "Category of bots to get statistics for",
+            "schema": {
+              "enum": [
+                "CLIENT_UPDATES",
+                "USER_WARNINGS",
+                "VC_WARNINGS",
+                "USER_REQUESTS",
+                "VC_NOTIFICATIONS",
+                "CHANNEL_NOTIFICATIONS",
+                "ACCOUNT_NOTIFICATIONS",
+                "ACCOUNT_LOGIN_FAILURES",
+                "PROMOTION_ACCOUNT",
+                "CLIENT_ACCOUNT",
+                "PAYMENT_FAIL_QUERIES",
+                "SAVED_MESSAGES",
+                "HTTP_FAILURES",
+                "UNVDS",
+                "PROM_LOGS1",
+                "PROM_LOGS2",
+                "UNAUTH_CALLS"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistics retrieved successfully"
+          },
+          "404": {
+            "description": "Category not found"
+          }
+        },
+        "summary": "Get bot statistics by category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
     "/active-channels": {
       "post": {
         "operationId": "ActiveChannelsController_create",
@@ -9950,24 +10799,21 @@
       "SendMessageDto": {
         "type": "object",
         "properties": {
-          "peer": {
-            "type": "string",
-            "description": "Target username or peer ID",
-            "example": "someusername"
-          },
           "message": {
             "type": "string",
             "description": "Message text to send",
-            "example": "Hello from NestJS and GramJS!"
+            "example": "Hello, this is a test message!"
           },
-          "parseMode": {
-            "type": "string",
-            "description": "Optional message parse mode (Markdown, HTML)",
-            "example": "Markdown"
+          "options": {
+            "description": "Message sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SendMessageOptionsDto"
+              }
+            ]
           }
         },
         "required": [
-          "peer",
           "message"
         ]
       },
@@ -10729,35 +11575,676 @@
       "CreateBotDto": {
         "type": "object",
         "properties": {
-          "name": {
+          "token": {
             "type": "string",
-            "description": "Name of the bot (required)",
-            "example": "MyAwesomeBot"
+            "description": "Telegram bot token",
+            "example": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
           },
-          "username": {
+          "category": {
             "type": "string",
-            "description": "Username for the bot (required)",
-            "example": "my_awesome_bot"
+            "description": "Channel category the bot belongs to",
+            "enum": [
+              "CLIENT_UPDATES",
+              "USER_WARNINGS",
+              "VC_WARNINGS",
+              "USER_REQUESTS",
+              "VC_NOTIFICATIONS",
+              "CHANNEL_NOTIFICATIONS",
+              "ACCOUNT_NOTIFICATIONS",
+              "ACCOUNT_LOGIN_FAILURES",
+              "PROMOTION_ACCOUNT",
+              "CLIENT_ACCOUNT",
+              "PAYMENT_FAIL_QUERIES",
+              "SAVED_MESSAGES",
+              "HTTP_FAILURES",
+              "UNVDS",
+              "PROM_LOGS1",
+              "PROM_LOGS2",
+              "UNAUTH_CALLS"
+            ],
+            "example": "CLIENT_UPDATES"
+          },
+          "channelId": {
+            "type": "string",
+            "description": "Channel ID where bot will post messages",
+            "example": "-1001234567890"
           },
           "description": {
             "type": "string",
-            "description": "Description of what your bot can do",
-            "example": "This bot helps you manage your tasks"
-          },
-          "aboutText": {
-            "type": "string",
-            "description": "What the bot can be used for",
-            "example": "Task Management, Reminders, Notes"
-          },
-          "profilePhotoUrl": {
-            "type": "string",
-            "description": "URL to the bot's profile photo",
-            "example": "https://example.com/bot-photo.jpg"
+            "description": "Optional description of the bot",
+            "example": "Bot for sending client updates"
           }
         },
         "required": [
-          "name",
-          "username"
+          "token",
+          "category",
+          "channelId"
+        ]
+      },
+      "LinkPreviewOptionsDto": {
+        "type": "object",
+        "properties": {
+          "isDisabled": {
+            "type": "boolean",
+            "description": "Disables link preview"
+          },
+          "url": {
+            "type": "string",
+            "description": "URL to use for the link preview"
+          },
+          "preferSmallMedia": {
+            "type": "boolean",
+            "description": "Prefer small media"
+          },
+          "preferLargeMedia": {
+            "type": "boolean",
+            "description": "Prefer large media"
+          },
+          "showAboveText": {
+            "type": "boolean",
+            "description": "Show preview above text"
+          }
+        }
+      },
+      "SendMessageOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the message",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "disableWebPagePreview": {
+            "type": "boolean",
+            "description": "Disable web page preview"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "linkPreviewOptions": {
+            "description": "Link preview options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LinkPreviewOptionsDto"
+              }
+            ]
+          }
+        }
+      },
+      "MediaOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          }
+        }
+      },
+      "SendPhotoDto": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "type": "string",
+            "description": "Photo URL or file ID",
+            "example": "https://example.com/photo.jpg"
+          },
+          "options": {
+            "description": "Photo sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "photo"
+        ]
+      },
+      "VideoOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration of the video in seconds"
+          },
+          "width": {
+            "type": "number",
+            "description": "Video width"
+          },
+          "height": {
+            "type": "number",
+            "description": "Video height"
+          },
+          "supportsStreaming": {
+            "type": "boolean",
+            "description": "Pass True if the uploaded video is suitable for streaming"
+          }
+        }
+      },
+      "SendVideoDto": {
+        "type": "object",
+        "properties": {
+          "video": {
+            "type": "string",
+            "description": "Video URL or file ID",
+            "example": "https://example.com/video.mp4"
+          },
+          "options": {
+            "description": "Video sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VideoOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "video"
+        ]
+      },
+      "AudioOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration of the audio in seconds"
+          },
+          "performer": {
+            "type": "string",
+            "description": "Performer name"
+          },
+          "title": {
+            "type": "string",
+            "description": "Track title"
+          }
+        }
+      },
+      "SendAudioDto": {
+        "type": "object",
+        "properties": {
+          "audio": {
+            "type": "string",
+            "description": "Audio URL or file ID",
+            "example": "https://example.com/audio.mp3"
+          },
+          "options": {
+            "description": "Audio sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AudioOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "audio"
+        ]
+      },
+      "DocumentOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "disableContentTypeDetection": {
+            "type": "boolean",
+            "description": "Disables automatic content type detection"
+          }
+        }
+      },
+      "SendDocumentDto": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Document URL or file ID",
+            "example": "https://example.com/document.pdf"
+          },
+          "options": {
+            "description": "Document sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DocumentOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "document"
+        ]
+      },
+      "VoiceOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration of the voice message in seconds"
+          }
+        }
+      },
+      "SendVoiceDto": {
+        "type": "object",
+        "properties": {
+          "voice": {
+            "type": "string",
+            "description": "Voice message URL or file ID",
+            "example": "https://example.com/voice.ogg"
+          },
+          "options": {
+            "description": "Voice sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/VoiceOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "voice"
+        ]
+      },
+      "AnimationOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration of the animation in seconds"
+          },
+          "width": {
+            "type": "number",
+            "description": "Animation width"
+          },
+          "height": {
+            "type": "number",
+            "description": "Animation height"
+          }
+        }
+      },
+      "SendAnimationDto": {
+        "type": "object",
+        "properties": {
+          "animation": {
+            "type": "string",
+            "description": "Animation (GIF/MP4) URL or file ID",
+            "example": "https://example.com/animation.gif"
+          },
+          "options": {
+            "description": "Animation sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AnimationOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "animation"
+        ]
+      },
+      "StickerOptionsDto": {
+        "type": "object",
+        "properties": {
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for the caption",
+            "enum": [
+              "HTML",
+              "MarkdownV2",
+              "Markdown"
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption text"
+          },
+          "disableNotification": {
+            "type": "boolean",
+            "description": "Disable notification"
+          },
+          "replyToMessageId": {
+            "type": "number",
+            "description": "Message ID to reply to"
+          },
+          "allowSendingWithoutReply": {
+            "type": "boolean",
+            "description": "Allow sending without reply"
+          },
+          "protectContent": {
+            "type": "boolean",
+            "description": "Protect content"
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation"
+          },
+          "emoji": {
+            "type": "string",
+            "description": "Emoji associated with the sticker",
+            "example": "😊"
+          }
+        }
+      },
+      "SendStickerDto": {
+        "type": "object",
+        "properties": {
+          "sticker": {
+            "type": "string",
+            "description": "Sticker URL or file ID",
+            "example": "https://example.com/sticker.webp"
+          },
+          "options": {
+            "description": "Sticker sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StickerOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sticker"
+        ]
+      },
+      "MediaGroupItemDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Type of media",
+            "enum": [
+              "photo",
+              "video",
+              "audio",
+              "document"
+            ],
+            "example": "photo"
+          },
+          "media": {
+            "type": "string",
+            "description": "Media URL or file ID",
+            "example": "https://example.com/media.jpg"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption for the media"
+          },
+          "parseMode": {
+            "type": "string",
+            "description": "Parse mode for caption",
+            "enum": [
+              "HTML",
+              "Markdown",
+              "MarkdownV2"
+            ]
+          },
+          "hasSpoiler": {
+            "type": "boolean",
+            "description": "Apply spoiler animation to media"
+          },
+          "extension": {
+            "type": "string",
+            "description": "File extension when sending as buffer"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Duration for video/audio in seconds"
+          },
+          "width": {
+            "type": "number",
+            "description": "Width for video"
+          },
+          "height": {
+            "type": "number",
+            "description": "Height for video"
+          },
+          "supportsStreaming": {
+            "type": "boolean",
+            "description": "Whether video supports streaming"
+          },
+          "performer": {
+            "type": "string",
+            "description": "Performer name for audio"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title for audio"
+          }
+        },
+        "required": [
+          "type",
+          "media"
+        ]
+      },
+      "SendMediaGroupDto": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "description": "Array of media items to send",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaGroupItemDto"
+            }
+          },
+          "options": {
+            "description": "Media group sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "media"
         ]
       },
       "CreateActiveChannelDto": {

@@ -1,8 +1,8 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { parseError } from '../utils/parseError';
-import { BotConfig, ChannelCategory } from '../utils/TelegramBots.config';
-import { Logger } from '../utils';
+import { getBotsServiceInstance, Logger } from '../utils';
+import { ChannelCategory } from '../components';
 
 @Injectable()
 export class LoggerMiddleware implements NestMiddleware {
@@ -28,17 +28,19 @@ export class LoggerMiddleware implements NestMiddleware {
         const duration = Date.now() - startTime; // Duration in ms
         const durationStr =
           duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+        const botsService  = getBotsServiceInstance();
+        if (!botsService) {
+            this.logger.warn(`BotsService instance not available for notifications`);
+            return;
+        }
 
         if (statusCode >= 500) {
-          BotConfig.getInstance().sendMessage(
-            ChannelCategory.HTTP_FAILURES,
-            `Threw Status ${statusCode} for ${originalUrl}`
-          );
+          botsService.sendMessageByCategory(ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
           this.logger.error(
             `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 400) {
-          BotConfig.getInstance().sendMessage(
+          botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
             `Threw Status ${statusCode} for ${originalUrl}`
           );
@@ -58,7 +60,12 @@ export class LoggerMiddleware implements NestMiddleware {
 
       res.on('error', (error) => {
         const errorDetails = parseError(error, process.env.clientId);
-        BotConfig.getInstance().sendMessage(
+        const botsService  = getBotsServiceInstance();
+        if (!botsService) {
+            this.logger.warn(`BotsService instance not available for notifications`);
+            return;
+        }
+        botsService.sendMessageByCategory(
           ChannelCategory.HTTP_FAILURES,
           `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`,
         );

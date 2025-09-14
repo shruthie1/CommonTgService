@@ -25,11 +25,13 @@ import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './guards';
+import { BotsModule } from './components';
 
 @Module({
   imports: [
     InitModule,
     TelegramModule,
+    BotsModule,
     ActiveChannelsModule,
     ClientModule,
     SessionModule,

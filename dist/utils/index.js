@@ -26,4 +26,5 @@ __exportStar(require("./obfuscateText"), exports);
 __exportStar(require("./tg-apps"), exports);
 __exportStar(require("./telegram-utils"), exports);
 __exportStar(require("./logger"), exports);
+__exportStar(require("./bot.service.instance"), exports);
 //# sourceMappingURL=index.js.map

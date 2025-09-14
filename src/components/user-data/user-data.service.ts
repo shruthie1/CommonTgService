@@ -10,8 +10,8 @@ import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
 import { parseError } from '../../utils/parseError';
-import { BotConfig, ChannelCategory } from '../../utils/TelegramBots.config';
-import { Logger } from '../../utils';
+import { getBotsServiceInstance, Logger } from '../../utils';
+import { ChannelCategory } from '../bots';
 
 @Injectable()
 export class UserDataService {
@@ -79,7 +79,10 @@ export class UserDataService {
     }
 
     async remove(profile: string, chatId: string): Promise<UserDataDocument> {
-        BotConfig.getInstance().sendMessage(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`)
+        const botsService = getBotsServiceInstance();
+        if (botsService) {
+            botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
+        }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
             throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
