@@ -500,6 +500,7 @@ const session_manager_1 = __webpack_require__(/*! ./components/session-manager *
 const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const guards_1 = __webpack_require__(/*! ./guards */ "./src/guards/index.ts");
+const components_1 = __webpack_require__(/*! ./components */ "./src/components/index.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -511,6 +512,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             init_module_1.InitModule,
             Telegram_module_1.TelegramModule,
+            components_1.BotsModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
             session_manager_1.SessionModule,
@@ -1160,7 +1162,6 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
-const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const config_1 = __webpack_require__(/*! @nestjs/config */ "@nestjs/config");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
@@ -1184,7 +1185,6 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
     }
     async initializeConfiguration() {
         await this.setEnv();
-        await TelegramBots_config_1.BotConfig.getInstance().ready();
         await this.notifyStart();
     }
     async notifyStart() {
@@ -6441,6 +6441,50 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/Telegram/dto/channel-operation.dto.ts":
+/*!**************************************************************!*\
+  !*** ./src/components/Telegram/dto/channel-operation.dto.ts ***!
+  \**************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChannelOperationDto = void 0;
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class ChannelOperationDto {
+}
+exports.ChannelOperationDto = ChannelOperationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Channel username or ID' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ChannelOperationDto.prototype, "channel", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether to forward messages after joining', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], ChannelOperationDto.prototype, "forward", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Source chat ID to forward messages from', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ChannelOperationDto.prototype, "fromChatId", void 0);
+
+
+/***/ }),
+
 /***/ "./src/components/Telegram/dto/connection-management.dto.ts":
 /*!******************************************************************!*\
   !*** ./src/components/Telegram/dto/connection-management.dto.ts ***!
@@ -7968,6 +8012,44 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/Telegram/dto/update-profile.dto.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/Telegram/dto/update-profile.dto.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateProfileDto = void 0;
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class UpdateProfileDto {
+}
+exports.UpdateProfileDto = UpdateProfileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'First name' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateProfileDto.prototype, "firstName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'About information', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateProfileDto.prototype, "about", void 0);
+
+
+/***/ }),
+
 /***/ "./src/components/Telegram/dto/update-username.dto.ts":
 /*!************************************************************!*\
   !*** ./src/components/Telegram/dto/update-username.dto.ts ***!
@@ -8107,6 +8189,40 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/Telegram/index.ts":
+/*!******************************************!*\
+  !*** ./src/components/Telegram/index.ts ***!
+  \******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./Telegram.controller */ "./src/components/Telegram/Telegram.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./Telegram.service */ "./src/components/Telegram/Telegram.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./Telegram.module */ "./src/components/Telegram/Telegram.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/channel-operation.dto */ "./src/components/Telegram/dto/channel-operation.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts"), exports);
+__exportStar(__webpack_require__(/*! ./utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts"), exports);
+__exportStar(__webpack_require__(/*! ./utils/rate-limiter */ "./src/components/Telegram/utils/rate-limiter.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/Telegram/utils/connection-manager.ts":
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/utils/connection-manager.ts ***!
@@ -8124,10 +8240,10 @@ const TelegramManager_1 = __importDefault(__webpack_require__(/*! ../TelegramMan
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
 const telegram_logger_1 = __webpack_require__(/*! ./telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const TelegramBots_config_1 = __webpack_require__(/*! ../../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const withTimeout_1 = __webpack_require__(/*! ../../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
+const bots_service_1 = __webpack_require__(/*! ../../../components/bots/bots.service */ "./src/components/bots/bots.service.ts");
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
@@ -8250,7 +8366,11 @@ class ConnectionManager {
             }
         }
         try {
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, `${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`);
+            const botsService = (0, utils_1.getBotsServiceInstance)();
+            if (botsService) {
+                const botMessage = `Client connection error for ${mobile}\n\n${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`;
+                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage);
+            }
         }
         catch (notificationError) {
             this.logger.error(mobile, 'Failed to send error notification', notificationError);
@@ -8501,6 +8621,46 @@ async function getProfilePics(client, user = "me") {
 
 /***/ }),
 
+/***/ "./src/components/Telegram/utils/rate-limiter.ts":
+/*!*******************************************************!*\
+  !*** ./src/components/Telegram/utils/rate-limiter.ts ***!
+  \*******************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.RateLimiter = void 0;
+class RateLimiter {
+    constructor(windowMs, maxRequests) {
+        this.timestamps = new Map();
+        this.windowMs = windowMs;
+        this.maxRequests = maxRequests;
+    }
+    async checkRateLimit(key) {
+        const now = Date.now();
+        const timestamps = this.timestamps.get(key) || [];
+        const validTimestamps = timestamps.filter(timestamp => now - timestamp < this.windowMs);
+        if (validTimestamps.length >= this.maxRequests) {
+            return false;
+        }
+        validTimestamps.push(now);
+        this.timestamps.set(key, validTimestamps);
+        return true;
+    }
+    async waitForRateLimit(key) {
+        while (!(await this.checkRateLimit(key))) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+    resetLimit(key) {
+        this.timestamps.delete(key);
+    }
+}
+exports.RateLimiter = RateLimiter;
+
+
+/***/ }),
+
 /***/ "./src/components/Telegram/utils/telegram-logger.ts":
 /*!**********************************************************!*\
   !*** ./src/components/Telegram/utils/telegram-logger.ts ***!
@@ -8535,6 +8695,33 @@ class TelegramLogger {
     }
 }
 exports.TelegramLogger = TelegramLogger;
+
+
+/***/ }),
+
+/***/ "./src/components/TgSignup/dto/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/TgSignup/dto/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./tg-signup.dto */ "./src/components/TgSignup/dto/tg-signup.dto.ts"), exports);
 
 
 /***/ }),
@@ -8655,6 +8842,36 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], TgSignupResponse.prototype, "requires2FA", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/TgSignup/index.ts":
+/*!******************************************!*\
+  !*** ./src/components/TgSignup/index.ts ***!
+  \******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/TgSignup/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./tg-signup.controller */ "./src/components/TgSignup/tg-signup.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./tg-signup.module */ "./src/components/TgSignup/tg-signup.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./tg-signup.service */ "./src/components/TgSignup/tg-signup.service.ts"), exports);
 
 
 /***/ }),
@@ -9677,6 +9894,34 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/active-channels/dto/index.ts":
+/*!*****************************************************!*\
+  !*** ./src/components/active-channels/dto/index.ts ***!
+  \*****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-active-channel.dto */ "./src/components/active-channels/dto/create-active-channel.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-active-channel.dto */ "./src/components/active-channels/dto/update-active-channel.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/active-channels/dto/update-active-channel.dto.ts":
 /*!*************************************************************************!*\
   !*** ./src/components/active-channels/dto/update-active-channel.dto.ts ***!
@@ -9691,6 +9936,41 @@ const create_active_channel_dto_1 = __webpack_require__(/*! ./create-active-chan
 class UpdateActiveChannelDto extends (0, swagger_1.PartialType)(create_active_channel_dto_1.CreateActiveChannelDto) {
 }
 exports.UpdateActiveChannelDto = UpdateActiveChannelDto;
+
+
+/***/ }),
+
+/***/ "./src/components/active-channels/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/active-channels/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ActiveChannelsService = exports.ActiveChannelsModule = exports.ActiveChannelsController = void 0;
+var active_channels_controller_1 = __webpack_require__(/*! ./active-channels.controller */ "./src/components/active-channels/active-channels.controller.ts");
+Object.defineProperty(exports, "ActiveChannelsController", ({ enumerable: true, get: function () { return active_channels_controller_1.ActiveChannelsController; } }));
+var active_channels_module_1 = __webpack_require__(/*! ./active-channels.module */ "./src/components/active-channels/active-channels.module.ts");
+Object.defineProperty(exports, "ActiveChannelsModule", ({ enumerable: true, get: function () { return active_channels_module_1.ActiveChannelsModule; } }));
+var active_channels_service_1 = __webpack_require__(/*! ./active-channels.service */ "./src/components/active-channels/active-channels.service.ts");
+Object.defineProperty(exports, "ActiveChannelsService", ({ enumerable: true, get: function () { return active_channels_service_1.ActiveChannelsService; } }));
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/active-channels/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/active-channels/schemas/index.ts"), exports);
 
 
 /***/ }),
@@ -9870,6 +10150,2154 @@ exports.ActiveChannel = ActiveChannel = __decorate([
     })
 ], ActiveChannel);
 exports.ActiveChannelSchema = mongoose_1.SchemaFactory.createForClass(ActiveChannel);
+
+
+/***/ }),
+
+/***/ "./src/components/active-channels/schemas/index.ts":
+/*!*********************************************************!*\
+  !*** ./src/components/active-channels/schemas/index.ts ***!
+  \*********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./active-channel.schema */ "./src/components/active-channels/schemas/active-channel.schema.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/bots.controller.ts":
+/*!************************************************!*\
+  !*** ./src/components/bots/bots.controller.ts ***!
+  \************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BotsController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
+const bots_service_2 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
+const create_bot_dto_1 = __webpack_require__(/*! ./dto/create-bot.dto */ "./src/components/bots/dto/create-bot.dto.ts");
+const send_message_dto_1 = __webpack_require__(/*! ./dto/send-message.dto */ "./src/components/bots/dto/send-message.dto.ts");
+const media_dto_1 = __webpack_require__(/*! ./dto/media.dto */ "./src/components/bots/dto/media.dto.ts");
+const media_extras_dto_1 = __webpack_require__(/*! ./dto/media-extras.dto */ "./src/components/bots/dto/media-extras.dto.ts");
+const media_group_dto_1 = __webpack_require__(/*! ./dto/media-group.dto */ "./src/components/bots/dto/media-group.dto.ts");
+let BotsController = class BotsController {
+    constructor(botsService) {
+        this.botsService = botsService;
+    }
+    async createBot(createBotDto) {
+        return this.botsService.createBot(createBotDto);
+    }
+    async getBots(category) {
+        return this.botsService.getBots(category);
+    }
+    async getBotById(id) {
+        return this.botsService.getBotById(id);
+    }
+    async updateBot(id, updateBotDto) {
+        return this.botsService.updateBot(id, updateBotDto);
+    }
+    async deleteBot(id) {
+        return this.botsService.deleteBot(id);
+    }
+    async sendMessageByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+            return this.botsService.sendMessageByBotId(botId, data.message, data.options);
+        }
+        return this.botsService.sendMessageByCategory(category, data.message, data.options);
+    }
+    async sendPhotoByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendPhotoByCategory(category, data.photo, data.options);
+    }
+    async sendVideoByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendVideoByCategory(category, data.video, data.options);
+    }
+    async sendAudioByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendAudioByCategory(category, data.audio, data.options);
+    }
+    async sendDocumentByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendDocumentByCategory(category, data.document, data.options);
+    }
+    async sendVoiceByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendVoiceByCategory(category, data.voice, data.options);
+    }
+    async sendAnimationByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendAnimationByCategory(category, data.animation, data.options);
+    }
+    async sendStickerByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendStickerByCategory(category, data.sticker, data.options);
+    }
+    async sendMediaGroupByCategory(category, botId, data) {
+        if (botId) {
+            const bot = await this.botsService.getBotById(botId);
+            if (bot.category !== category) {
+                throw new Error(`Bot ${botId} does not belong to category ${category}`);
+            }
+        }
+        return this.botsService.sendMediaGroupByCategory(category, data.media, data.options);
+    }
+    async getBotStats(category) {
+        return this.botsService.getBotStatsByCategory(category);
+    }
+};
+exports.BotsController = BotsController;
+__decorate([
+    (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Create a new bot',
+        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Bot has been successfully created' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid bot configuration provided' }),
+    (0, swagger_1.ApiResponse)({ status: 409, description: 'Bot with the same token already exists' }),
+    (0, swagger_1.ApiBody)({ type: create_bot_dto_1.CreateBotDto, description: 'Bot creation parameters including token and category' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_bot_dto_1.CreateBotDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "createBot", null);
+__decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get all bots or filter by category',
+        description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.',
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'category',
+        required: false,
+        description: 'Optional category filter to return only bots of a specific category',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'List of bots retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid category provided' }),
+    __param(0, (0, common_1.Query)('category')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "getBots", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get a bot by ID',
+        description: 'Retrieves detailed information about a specific bot using its unique identifier.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot details retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "getBotById", null);
+__decorate([
+    (0, common_1.Patch)(':id'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Update a bot',
+        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot updated successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid update parameters' }),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "updateBot", null);
+__decorate([
+    (0, common_1.Delete)(':id'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Delete a bot',
+        description: 'Removes a bot from the system. This action cannot be undone.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot successfully deleted' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "deleteBot", null);
+__decorate([
+    (0, common_1.Post)('category/:category/message'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a message using bots in a category',
+        description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the message',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: send_message_dto_1.SendMessageDto,
+        description: 'Message content and optional formatting parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Message sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid message parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, send_message_dto_1.SendMessageDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendMessageByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/photo'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a photo using bots in a category',
+        description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the photo',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_dto_1.SendPhotoDto,
+        description: 'Photo content and optional caption parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Photo sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid photo parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_dto_1.SendPhotoDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendPhotoByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/video'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a video using bots in a category',
+        description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the video',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_dto_1.SendVideoDto,
+        description: 'Video content and optional caption parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Video sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid video parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_dto_1.SendVideoDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendVideoByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/audio'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send audio using bots in a category',
+        description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the audio',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_dto_1.SendAudioDto,
+        description: 'Audio content and optional metadata parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Audio sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid audio parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_dto_1.SendAudioDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendAudioByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/document'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a document using bots in a category',
+        description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the document',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_dto_1.SendDocumentDto,
+        description: 'Document content and optional caption parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Document sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid document parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_dto_1.SendDocumentDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendDocumentByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/voice'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a voice message using bots in a category',
+        description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the voice message',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_extras_dto_1.SendVoiceDto,
+        description: 'Voice message content and optional parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Voice message sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid voice message parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_extras_dto_1.SendVoiceDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendVoiceByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/animation'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send an animation using bots in a category',
+        description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the animation',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_extras_dto_1.SendAnimationDto,
+        description: 'Animation content and optional caption parameters'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Animation sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid animation parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_extras_dto_1.SendAnimationDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendAnimationByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/sticker'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a sticker using bots in a category',
+        description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the sticker',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_extras_dto_1.SendStickerDto,
+        description: 'Sticker file or sticker ID to send'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Sticker sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid sticker parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_extras_dto_1.SendStickerDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendStickerByCategory", null);
+__decorate([
+    (0, common_1.Post)('category/:category/media-group'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send a media group using bots in a category',
+        description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to use for sending the media group',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'botId',
+        required: false,
+        description: 'Optional specific bot ID to use instead of all bots in the category'
+    }),
+    (0, swagger_1.ApiBody)({
+        type: media_group_dto_1.SendMediaGroupDto,
+        description: 'Array of media items (photos/videos) to send as a group'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Media group sent successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid media group parameters or bot category' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot or category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __param(1, (0, common_1.Query)('botId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, media_group_dto_1.SendMediaGroupDto]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "sendMediaGroupByCategory", null);
+__decorate([
+    (0, common_1.Get)('category/:category/stats'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get bot statistics by category',
+        description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'category',
+        description: 'Category of bots to get statistics for',
+        enum: bots_service_2.ChannelCategory
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Statistics retrieved successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Category not found' }),
+    __param(0, (0, common_1.Param)('category')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "getBotStats", null);
+exports.BotsController = BotsController = __decorate([
+    (0, swagger_1.ApiTags)('Bots'),
+    (0, common_1.Controller)('bots'),
+    __metadata("design:paramtypes", [bots_service_1.BotsService])
+], BotsController);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/bots.module.ts":
+/*!********************************************!*\
+  !*** ./src/components/bots/bots.module.ts ***!
+  \********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BotsModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const bots_controller_1 = __webpack_require__(/*! ./bots.controller */ "./src/components/bots/bots.controller.ts");
+const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
+const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
+const bot_service_instance_1 = __webpack_require__(/*! ../../utils/bot.service.instance */ "./src/utils/bot.service.instance.ts");
+let BotsModule = class BotsModule {
+    constructor(botsService) {
+        this.botsService = botsService;
+    }
+    onModuleInit() {
+        (0, bot_service_instance_1.setBotsServiceInstance)(this.botsService);
+    }
+};
+exports.BotsModule = BotsModule;
+exports.BotsModule = BotsModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }])
+        ],
+        controllers: [bots_controller_1.BotsController],
+        providers: [bots_service_1.BotsService],
+        exports: [bots_service_1.BotsService]
+    }),
+    __metadata("design:paramtypes", [bots_service_1.BotsService])
+], BotsModule);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/bots.service.ts":
+/*!*********************************************!*\
+  !*** ./src/components/bots/bots.service.ts ***!
+  \*********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BotsService = exports.ChannelCategory = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const form_data_1 = __importDefault(__webpack_require__(/*! form-data */ "form-data"));
+const node_cache_1 = __importDefault(__webpack_require__(/*! node-cache */ "node-cache"));
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
+var ChannelCategory;
+(function (ChannelCategory) {
+    ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
+    ChannelCategory["USER_WARNINGS"] = "USER_WARNINGS";
+    ChannelCategory["VC_WARNINGS"] = "VC_WARNINGS";
+    ChannelCategory["USER_REQUESTS"] = "USER_REQUESTS";
+    ChannelCategory["VC_NOTIFICATIONS"] = "VC_NOTIFICATIONS";
+    ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
+    ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
+    ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
+    ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
+    ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
+    ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
+    ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
+    ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
+    ChannelCategory["UNVDS"] = "UNVDS";
+    ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
+    ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
+    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
+})(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
+let BotsService = class BotsService {
+    constructor(botModel) {
+        this.botModel = botModel;
+        this.flushInterval = 300000;
+        this.maxPendingUpdates = 100;
+        this.cache = new node_cache_1.default({ stdTTL: 300, checkperiod: 60 });
+    }
+    async onModuleInit() {
+        await this.initializeCache();
+        this.startPeriodicFlush();
+    }
+    async initializeCache() {
+        try {
+            const bots = await this.botModel.find().lean().exec();
+            const botsByCategory = bots.reduce((acc, bot) => {
+                if (!acc[bot.category]) {
+                    acc[bot.category] = [];
+                }
+                acc[bot.category].push(bot);
+                return acc;
+            }, {});
+            for (const category in botsByCategory) {
+                const sortedBots = botsByCategory[category].sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+                this.cache.set(`category:${category}`, sortedBots);
+                sortedBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+            }
+            console.log('Bot cache initialized with', Object.keys(botsByCategory).length, 'categories');
+        }
+        catch (error) {
+            console.error('Failed to initialize bot cache:', error);
+        }
+    }
+    startPeriodicFlush() {
+        setInterval(async () => {
+            await this.flushPendingStats();
+        }, this.flushInterval);
+    }
+    async flushPendingStats() {
+        const pendingUpdates = this.cache.get('pendingStats') || {};
+        if (Object.keys(pendingUpdates).length === 0) {
+            return;
+        }
+        try {
+            const bulkOps = Object.entries(pendingUpdates).map(([botId, updates]) => ({
+                updateOne: {
+                    filter: { _id: botId },
+                    update: {
+                        $inc: {
+                            ...(updates.messagesSent ? { 'stats.messagesSent': updates.messagesSent } : {}),
+                            ...(updates.photosSent ? { 'stats.photosSent': updates.photosSent } : {}),
+                            ...(updates.videosSent ? { 'stats.videosSent': updates.videosSent } : {}),
+                            ...(updates.documentsSent ? { 'stats.documentsSent': updates.documentsSent } : {}),
+                            ...(updates.audiosSent ? { 'stats.audiosSent': updates.audiosSent } : {}),
+                            ...(updates.voicesSent ? { 'stats.voicesSent': updates.voicesSent } : {}),
+                            ...(updates.animationsSent ? { 'stats.animationsSent': updates.animationsSent } : {}),
+                            ...(updates.stickersSent ? { 'stats.stickersSent': updates.stickersSent } : {}),
+                            ...(updates.mediaGroupsSent ? { 'stats.mediaGroupsSent': updates.mediaGroupsSent } : {}),
+                        },
+                        ...(updates.lastUsed ? { $set: { lastUsed: updates.lastUsed } } : {}),
+                    },
+                },
+            }));
+            if (bulkOps.length > 0) {
+                await this.botModel.bulkWrite(bulkOps);
+                console.log(`Flushed ${bulkOps.length} pending stat updates to database`);
+            }
+            this.cache.del('pendingStats');
+        }
+        catch (error) {
+            console.error('Failed to flush pending stats:', error);
+        }
+    }
+    async createBot(createBotDto) {
+        const username = await this.fetchUsername(createBotDto.token);
+        if (!username) {
+            throw new Error('Invalid bot token or unable to fetch bot username');
+        }
+        const existingBot = await this.botModel.findOne({ token: createBotDto.token }).exec();
+        if (existingBot) {
+            throw new Error('Bot with this token already exists');
+        }
+        const createdBot = new this.botModel({
+            ...createBotDto,
+            username,
+            lastUsed: new Date(),
+            stats: {
+                messagesSent: 0,
+                photosSent: 0,
+                videosSent: 0,
+                documentsSent: 0,
+                audiosSent: 0,
+                voicesSent: 0,
+                animationsSent: 0,
+                stickersSent: 0,
+                mediaGroupsSent: 0
+            }
+        });
+        const savedBot = await createdBot.save();
+        const cachedBots = this.cache.get(`category:${createBotDto.category}`) || [];
+        cachedBots.push(savedBot.toObject());
+        this.cache.set(`category:${createBotDto.category}`, cachedBots.sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()));
+        this.cache.set(`bot:${savedBot._id}`, savedBot.toObject());
+        return savedBot;
+    }
+    async getBots(category) {
+        if (category) {
+            const cachedBots = this.cache.get(`category:${category}`);
+            if (cachedBots) {
+                return cachedBots;
+            }
+            console.warn(`Cache miss for category: ${category}`);
+            const bots = await this.botModel.find({ category }).lean().exec();
+            this.cache.set(`category:${category}`, bots);
+            bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+            return bots;
+        }
+        const allCategories = Object.values(ChannelCategory);
+        const allBots = [];
+        for (const cat of allCategories) {
+            const bots = this.cache.get(`category:${cat}`) || [];
+            allBots.push(...bots);
+        }
+        if (allBots.length > 0) {
+            return allBots;
+        }
+        console.warn('Cache miss for all bots');
+        const bots = await this.botModel.find().lean().exec();
+        bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+        const botsByCategory = bots.reduce((acc, bot) => {
+            if (!acc[bot.category])
+                acc[bot.category] = [];
+            acc[bot.category].push(bot);
+            return acc;
+        }, {});
+        for (const category in botsByCategory) {
+            this.cache.set(`category:${category}`, botsByCategory[category]);
+        }
+        return bots;
+    }
+    async getBotById(id) {
+        const cachedBot = this.cache.get(`bot:${id}`);
+        if (cachedBot) {
+            return cachedBot;
+        }
+        console.warn(`Cache miss for bot ID: ${id}`);
+        const bot = await this.botModel.findById(id).lean().exec();
+        if (!bot) {
+            throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
+        }
+        this.cache.set(`bot:${id}`, bot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        if (!cachedBots.some(b => b._id.toString() === id)) {
+            cachedBots.push(bot);
+            this.cache.set(`category:${bot.category}`, cachedBots.sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()));
+        }
+        return bot;
+    }
+    async updateBot(id, updateBotDto) {
+        const bot = await this.botModel
+            .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { new: true })
+            .lean()
+            .exec();
+        if (!bot) {
+            throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
+        }
+        this.cache.set(`bot:${id}`, bot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .filter(b => b._id.toString() !== id)
+            .concat(bot)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
+        return bot;
+    }
+    async deleteBot(id) {
+        const bot = await this.botModel.findById(id).lean().exec();
+        if (!bot) {
+            throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
+        }
+        await this.botModel.findByIdAndDelete(id).exec();
+        this.cache.del(`bot:${id}`);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .filter(b => b._id.toString() !== id)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
+    }
+    async sendByCategoryWithFailover(category, sender, ...args) {
+        let availableBots = this.cache.get(`category:${category}`);
+        if (!availableBots || availableBots.length === 0) {
+            console.warn(`Cache miss for category: ${category}`);
+            availableBots = await this.botModel
+                .find({ category })
+                .sort({ lastUsed: 'asc' })
+                .lean()
+                .exec();
+            this.cache.set(`category:${category}`, availableBots);
+            availableBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+        }
+        if (availableBots.length === 0) {
+            console.error(`No bots found for category: ${category}`);
+            return false;
+        }
+        for (const bot of availableBots) {
+            const success = await sender.call(this, bot._id.toString(), ...args);
+            if (success) {
+                const updatedBot = { ...bot, lastUsed: new Date() };
+                this.cache.set(`bot:${bot._id}`, updatedBot);
+                const updatedBots = availableBots
+                    .map(b => b._id.toString() === bot._id.toString() ? updatedBot : b)
+                    .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+                this.cache.set(`category:${category}`, updatedBots);
+                const pendingStats = this.cache.get('pendingStats') || {};
+                pendingStats[bot._id.toString()] = pendingStats[bot._id.toString()] || {};
+                pendingStats[bot._id.toString()].lastUsed = new Date();
+                this.cache.set('pendingStats', pendingStats);
+                return true;
+            }
+            console.warn(`Sending via bot ${bot.username} for category ${category} failed. Trying next available bot.`);
+        }
+        console.error(`Failed to send for category ${category} after trying all ${availableBots.length} available bot(s).`);
+        return false;
+    }
+    async sendMessageByCategory(category, message, options) {
+        return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options);
+    }
+    async sendPhotoByCategory(category, photo, options) {
+        return this.sendByCategoryWithFailover(category, this.sendPhotoByBotId, photo, options);
+    }
+    async sendVideoByCategory(category, video, options) {
+        return this.sendByCategoryWithFailover(category, this.sendVideoByBotId, video, options);
+    }
+    async sendAudioByCategory(category, audio, options) {
+        return this.sendByCategoryWithFailover(category, this.sendAudioByBotId, audio, options);
+    }
+    async sendDocumentByCategory(category, document, options) {
+        return this.sendByCategoryWithFailover(category, this.sendDocumentByBotId, document, options);
+    }
+    async sendVoiceByCategory(category, voice, options) {
+        return this.sendByCategoryWithFailover(category, this.sendVoiceByBotId, voice, options);
+    }
+    async sendAnimationByCategory(category, animation, options) {
+        return this.sendByCategoryWithFailover(category, this.sendAnimationByBotId, animation, options);
+    }
+    async sendStickerByCategory(category, sticker, options) {
+        return this.sendByCategoryWithFailover(category, this.sendStickerByBotId, sticker, options);
+    }
+    async sendMediaGroupByCategory(category, media, options) {
+        return this.sendByCategoryWithFailover(category, this.sendMediaGroupByBotId, media, options);
+    }
+    async sendMessageByBotId(botId, message, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMessage(bot, message, options);
+        if (success) {
+            await this.updateBotStats(botId, 'messagesSent', bot);
+        }
+        return success;
+    }
+    async sendPhotoByBotId(botId, photo, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendPhoto', photo, options);
+        if (success) {
+            await this.updateBotStats(botId, 'photosSent', bot);
+        }
+        return success;
+    }
+    async sendVideoByBotId(botId, video, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendVideo', video, options);
+        if (success) {
+            await this.updateBotStats(botId, 'videosSent', bot);
+        }
+        return success;
+    }
+    async sendAudioByBotId(botId, audio, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendAudio', audio, options);
+        if (success) {
+            await this.updateBotStats(botId, 'audiosSent', bot);
+        }
+        return success;
+    }
+    async sendDocumentByBotId(botId, document, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendDocument', document, options);
+        if (success) {
+            await this.updateBotStats(botId, 'documentsSent', bot);
+        }
+        return success;
+    }
+    async sendVoiceByBotId(botId, voice, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendVoice', voice, options);
+        if (success) {
+            await this.updateBotStats(botId, 'voicesSent', bot);
+        }
+        return success;
+    }
+    async sendAnimationByBotId(botId, animation, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendAnimation', animation, options);
+        if (success) {
+            await this.updateBotStats(botId, 'animationsSent', bot);
+        }
+        return success;
+    }
+    async sendStickerByBotId(botId, sticker, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMedia(bot, 'sendSticker', sticker, options);
+        if (success) {
+            await this.updateBotStats(botId, 'stickersSent', bot);
+        }
+        return success;
+    }
+    async sendMediaGroupByBotId(botId, media, options) {
+        const bot = await this.getBotById(botId);
+        const success = await this.executeSendMediaGroup(bot, media, options);
+        if (success) {
+            await this.updateBotStats(botId, 'mediaGroupsSent', bot);
+        }
+        return success;
+    }
+    async executeSendMessage(bot, text, options) {
+        try {
+            const response = await axios_1.default.post(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                chat_id: bot.channelId,
+                text: `${process.env.clientId?.toUpperCase()}:\n\n${text}`,
+                parse_mode: options?.parseMode,
+                disable_web_page_preview: options?.disableWebPagePreview,
+                disable_notification: options?.disableNotification,
+                reply_to_message_id: options?.replyToMessageId,
+                allow_sending_without_reply: options?.allowSendingWithoutReply,
+                protect_content: options?.protectContent,
+                link_preview_options: options?.linkPreviewOptions,
+            }, { timeout: 15000 });
+            if (!response.data?.ok) {
+                console.error(`Telegram API error for sendMessage with bot ${bot.username}:`, response.data.description);
+            }
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, `Failed to execute sendMessage for bot ${bot.username}`);
+            return false;
+        }
+    }
+    async executeSendMedia(bot, method, media, options = {}) {
+        const formData = new form_data_1.default();
+        formData.append('chat_id', bot.channelId);
+        const mediaField = method.replace('send', '').toLowerCase();
+        if (Buffer.isBuffer(media)) {
+            formData.append(mediaField, media, `${mediaField}.${this.getDefaultExtension(mediaField)}`);
+        }
+        else {
+            formData.append(mediaField, media);
+        }
+        if (options.caption) {
+            formData.append('caption', `${process.env.clientId?.toUpperCase()}:\n\n${options.caption}`);
+        }
+        if (options.parseMode)
+            formData.append('parse_mode', options.parseMode);
+        if (options.disableNotification)
+            formData.append('disable_notification', 'true');
+        if (options.replyToMessageId)
+            formData.append('reply_to_message_id', options.replyToMessageId.toString());
+        if (options.allowSendingWithoutReply)
+            formData.append('allow_sending_without_reply', 'true');
+        if (options.protectContent)
+            formData.append('protect_content', 'true');
+        if (options.hasSpoiler)
+            formData.append('has_spoiler', 'true');
+        this.addMethodSpecificOptions(method, options, formData);
+        try {
+            const response = await axios_1.default.post(`https://api.telegram.org/bot${bot.token}/${method}`, formData, { timeout: 30000, headers: formData.getHeaders() });
+            if (!response.data?.ok) {
+                console.error(`Telegram API error for ${method} with bot ${bot.username}:`, response.data.description);
+            }
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, `Failed to execute ${method} for bot ${bot.username}`);
+            return false;
+        }
+    }
+    async executeSendMediaGroup(bot, media, options) {
+        const formData = new form_data_1.default();
+        formData.append('chat_id', bot.channelId);
+        const mediaArray = media.map((item, i) => {
+            const mediaObj = {
+                type: item.type,
+                media: Buffer.isBuffer(item.media) ? `attach://file${i}` : item.media,
+            };
+            if (item.caption)
+                mediaObj.caption = `${process.env.clientId?.toUpperCase()}:\n\n${item.caption}`;
+            if (item.parseMode)
+                mediaObj.parse_mode = item.parseMode;
+            if (item.hasSpoiler)
+                mediaObj.has_spoiler = true;
+            if (item.type === 'video') {
+                if (item.duration)
+                    mediaObj.duration = item.duration;
+                if (item.width)
+                    mediaObj.width = item.width;
+                if (item.height)
+                    mediaObj.height = item.height;
+                if (item.supportsStreaming)
+                    mediaObj.supports_streaming = true;
+            }
+            if (item.type === 'audio') {
+                if (item.duration)
+                    mediaObj.duration = item.duration;
+                if (item.performer)
+                    mediaObj.performer = item.performer;
+                if (item.title)
+                    mediaObj.title = item.title;
+            }
+            if (Buffer.isBuffer(item.media)) {
+                const filename = item.extension ? `file${i}.${item.extension}` : `file${i}.${this.getDefaultExtension(item.type)}`;
+                formData.append(`file${i}`, item.media, filename);
+            }
+            if (item.thumbnail && Buffer.isBuffer(item.thumbnail)) {
+                mediaObj.thumbnail = `attach://thumb${i}`;
+                formData.append(`thumb${i}`, item.thumbnail, `thumb${i}.jpg`);
+            }
+            return mediaObj;
+        });
+        formData.append('media', JSON.stringify(mediaArray));
+        if (options) {
+            if (options.disableNotification)
+                formData.append('disable_notification', 'true');
+            if (options.replyToMessageId)
+                formData.append('reply_to_message_id', options.replyToMessageId.toString());
+            if (options.allowSendingWithoutReply)
+                formData.append('allow_sending_without_reply', 'true');
+            if (options.protectContent)
+                formData.append('protect_content', 'true');
+        }
+        try {
+            const response = await axios_1.default.post(`https://api.telegram.org/bot${bot.token}/sendMediaGroup`, formData, { timeout: 30000, headers: formData.getHeaders() });
+            if (!response.data?.ok) {
+                console.error(`Telegram API error for sendMediaGroup with bot ${bot.username}:`, response.data.description);
+            }
+            return response.data?.ok === true;
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, `Failed to execute sendMediaGroup for bot ${bot.username}`);
+            return false;
+        }
+    }
+    async fetchUsername(token) {
+        if (!token || typeof token !== 'string' || token.length < 10) {
+            return '';
+        }
+        try {
+            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
+                timeout: 10000
+            });
+            return res.data?.ok ? res.data.result.username : '';
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error, 'Failed fetching bot username:');
+            return '';
+        }
+    }
+    async updateBotStats(botId, statField, bot) {
+        const updatedBot = {
+            ...bot,
+            stats: {
+                ...bot.stats,
+                [statField]: bot.stats[statField] + 1,
+            },
+            lastUsed: new Date(),
+        };
+        this.cache.set(`bot:${botId}`, updatedBot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .map(b => b._id.toString() === botId ? updatedBot : b)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
+        const pendingStats = this.cache.get('pendingStats') || {};
+        pendingStats[botId] = pendingStats[botId] || {};
+        pendingStats[botId][statField] = (pendingStats[botId][statField] || 0) + 1;
+        pendingStats[botId].lastUsed = updatedBot.lastUsed;
+        this.cache.set('pendingStats', pendingStats);
+        if (Object.keys(pendingStats).length >= this.maxPendingUpdates) {
+            await this.flushPendingStats();
+        }
+    }
+    getDefaultExtension(type) {
+        switch (type) {
+            case 'photo': return 'jpg';
+            case 'video': return 'mp4';
+            case 'audio': return 'mp3';
+            case 'document': return 'bin';
+            default: return 'dat';
+        }
+    }
+    addMethodSpecificOptions(method, options, formData) {
+        if (method === 'sendVideo' || method === 'sendAnimation') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.width)
+                formData.append('width', options.width.toString());
+            if (options.height)
+                formData.append('height', options.height.toString());
+            if (options.supportsStreaming)
+                formData.append('supports_streaming', 'true');
+        }
+        if (method === 'sendAudio') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+            if (options.performer)
+                formData.append('performer', options.performer);
+            if (options.title)
+                formData.append('title', options.title);
+        }
+        if (options.thumbnail) {
+            if (Buffer.isBuffer(options.thumbnail)) {
+                formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
+            }
+            else {
+                formData.append('thumbnail', options.thumbnail);
+            }
+        }
+        if (method === 'sendDocument' && options.disableContentTypeDetection) {
+            formData.append('disable_content_type_detection', 'true');
+        }
+        if (method === 'sendVoice' || method === 'sendVideoNote') {
+            if (options.duration)
+                formData.append('duration', options.duration.toString());
+        }
+        if (method === 'sendVideoNote' && options.length) {
+            formData.append('length', options.length.toString());
+        }
+        if (method === 'sendSticker' && options.emoji) {
+            formData.append('emoji', options.emoji);
+        }
+    }
+    async getBotStatsByCategory(category) {
+        const cacheKey = `stats:${category}`;
+        const cachedStats = this.cache.get(cacheKey);
+        if (cachedStats) {
+            return cachedStats;
+        }
+        console.warn(`Cache miss for stats: ${category}`);
+        const stats = await this.botModel.aggregate([
+            { $match: { category } },
+            {
+                $group: {
+                    _id: '$category',
+                    totalBots: { $sum: 1 },
+                    totalMessagesSent: { $sum: '$stats.messagesSent' },
+                    totalPhotosSent: { $sum: '$stats.photosSent' },
+                    totalVideosSent: { $sum: '$stats.videosSent' },
+                    totalDocumentsSent: { $sum: '$stats.documentsSent' },
+                    totalAudiosSent: { $sum: '$stats.audiosSent' },
+                    totalMediaGroupsSent: { $sum: '$stats.mediaGroupsSent' },
+                    avgFailedAttempts: { $avg: '$failedAttempts' }
+                }
+            }
+        ]);
+        const result = stats[0] || { _id: category, totalBots: 0 };
+        this.cache.set(cacheKey, result);
+        return result;
+    }
+};
+exports.BotsService = BotsService;
+exports.BotsService = BotsService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(bot_schema_1.Bot.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model])
+], BotsService);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/create-bot.dto.ts":
+/*!***************************************************!*\
+  !*** ./src/components/bots/dto/create-bot.dto.ts ***!
+  \***************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateBotDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const bots_service_1 = __webpack_require__(/*! ../bots.service */ "./src/components/bots/bots.service.ts");
+class CreateBotDto {
+}
+exports.CreateBotDto = CreateBotDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Telegram bot token',
+        example: '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBotDto.prototype, "token", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Channel category the bot belongs to',
+        enum: bots_service_1.ChannelCategory,
+        example: bots_service_1.ChannelCategory.CLIENT_UPDATES
+    }),
+    (0, class_validator_1.IsEnum)(bots_service_1.ChannelCategory),
+    __metadata("design:type", String)
+], CreateBotDto.prototype, "category", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Channel ID where bot will post messages',
+        example: '-1001234567890'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBotDto.prototype, "channelId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Optional description of the bot',
+        required: false,
+        example: 'Bot for sending client updates'
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateBotDto.prototype, "description", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/index.ts":
+/*!******************************************!*\
+  !*** ./src/components/bots/dto/index.ts ***!
+  \******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-bot.dto */ "./src/components/bots/dto/create-bot.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./send-message.dto */ "./src/components/bots/dto/send-message.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./media.dto */ "./src/components/bots/dto/media.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./media-extras.dto */ "./src/components/bots/dto/media-extras.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./media-group.dto */ "./src/components/bots/dto/media-group.dto.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/media-extras.dto.ts":
+/*!*****************************************************!*\
+  !*** ./src/components/bots/dto/media-extras.dto.ts ***!
+  \*****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SendStickerDto = exports.StickerOptionsDto = exports.SendAnimationDto = exports.AnimationOptionsDto = exports.SendVoiceDto = exports.VoiceOptionsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const media_dto_1 = __webpack_require__(/*! ./media.dto */ "./src/components/bots/dto/media.dto.ts");
+class VoiceOptionsDto extends media_dto_1.MediaOptionsDto {
+}
+exports.VoiceOptionsDto = VoiceOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Duration of the voice message in seconds',
+        required: false,
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], VoiceOptionsDto.prototype, "duration", void 0);
+class SendVoiceDto {
+}
+exports.SendVoiceDto = SendVoiceDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Voice message URL or file ID',
+        example: 'https://example.com/voice.ogg',
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendVoiceDto.prototype, "voice", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Voice sending options',
+        required: false,
+        type: () => VoiceOptionsDto,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => VoiceOptionsDto),
+    __metadata("design:type", VoiceOptionsDto)
+], SendVoiceDto.prototype, "options", void 0);
+class AnimationOptionsDto extends media_dto_1.MediaOptionsDto {
+}
+exports.AnimationOptionsDto = AnimationOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Duration of the animation in seconds', required: false }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], AnimationOptionsDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Animation width', required: false }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], AnimationOptionsDto.prototype, "width", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Animation height', required: false }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], AnimationOptionsDto.prototype, "height", void 0);
+class SendAnimationDto {
+}
+exports.SendAnimationDto = SendAnimationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Animation (GIF/MP4) URL or file ID',
+        example: 'https://example.com/animation.gif',
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendAnimationDto.prototype, "animation", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Animation sending options',
+        required: false,
+        type: () => AnimationOptionsDto,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => AnimationOptionsDto),
+    __metadata("design:type", AnimationOptionsDto)
+], SendAnimationDto.prototype, "options", void 0);
+class StickerOptionsDto extends media_dto_1.MediaOptionsDto {
+}
+exports.StickerOptionsDto = StickerOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Emoji associated with the sticker',
+        required: false,
+        example: '😊',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], StickerOptionsDto.prototype, "emoji", void 0);
+class SendStickerDto {
+}
+exports.SendStickerDto = SendStickerDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Sticker URL or file ID',
+        example: 'https://example.com/sticker.webp',
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendStickerDto.prototype, "sticker", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Sticker sending options',
+        required: false,
+        type: () => StickerOptionsDto,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => StickerOptionsDto),
+    __metadata("design:type", StickerOptionsDto)
+], SendStickerDto.prototype, "options", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/media-group.dto.ts":
+/*!****************************************************!*\
+  !*** ./src/components/bots/dto/media-group.dto.ts ***!
+  \****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SendMediaGroupDto = exports.MediaGroupItemDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const media_dto_1 = __webpack_require__(/*! ./media.dto */ "./src/components/bots/dto/media.dto.ts");
+class MediaGroupItemDto {
+}
+exports.MediaGroupItemDto = MediaGroupItemDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Type of media',
+        enum: ['photo', 'video', 'audio', 'document'],
+        example: 'photo'
+    }),
+    (0, class_validator_1.IsEnum)(['photo', 'video', 'audio', 'document']),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Media URL or file ID',
+        example: 'https://example.com/media.jpg'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "media", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Caption for the media',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "caption", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Parse mode for caption',
+        enum: ['HTML', 'Markdown', 'MarkdownV2'],
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "parseMode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Apply spoiler animation to media',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaGroupItemDto.prototype, "hasSpoiler", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'File extension when sending as buffer',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "extension", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Duration for video/audio in seconds',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], MediaGroupItemDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Width for video',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], MediaGroupItemDto.prototype, "width", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Height for video',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], MediaGroupItemDto.prototype, "height", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether video supports streaming',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaGroupItemDto.prototype, "supportsStreaming", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Performer name for audio',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "performer", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Title for audio',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaGroupItemDto.prototype, "title", void 0);
+class SendMediaGroupDto {
+}
+exports.SendMediaGroupDto = SendMediaGroupDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Array of media items to send',
+        type: [MediaGroupItemDto]
+    }),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => MediaGroupItemDto),
+    __metadata("design:type", Array)
+], SendMediaGroupDto.prototype, "media", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Media group sending options',
+        required: false,
+        type: () => media_dto_1.MediaOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => media_dto_1.MediaOptionsDto),
+    __metadata("design:type", media_dto_1.MediaOptionsDto)
+], SendMediaGroupDto.prototype, "options", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/media.dto.ts":
+/*!**********************************************!*\
+  !*** ./src/components/bots/dto/media.dto.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SendDocumentDto = exports.SendAudioDto = exports.SendVideoDto = exports.SendPhotoDto = exports.DocumentOptionsDto = exports.AudioOptionsDto = exports.VideoOptionsDto = exports.MediaOptionsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+class MediaOptionsDto {
+}
+exports.MediaOptionsDto = MediaOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Parse mode for the caption',
+        enum: ['HTML', 'MarkdownV2', 'Markdown'],
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaOptionsDto.prototype, "parseMode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Caption text',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MediaOptionsDto.prototype, "caption", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Disable notification',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaOptionsDto.prototype, "disableNotification", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Message ID to reply to',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], MediaOptionsDto.prototype, "replyToMessageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Allow sending without reply',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaOptionsDto.prototype, "allowSendingWithoutReply", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Protect content',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaOptionsDto.prototype, "protectContent", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Apply spoiler animation',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], MediaOptionsDto.prototype, "hasSpoiler", void 0);
+class VideoOptionsDto extends MediaOptionsDto {
+}
+exports.VideoOptionsDto = VideoOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Duration of the video in seconds',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], VideoOptionsDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Video width',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], VideoOptionsDto.prototype, "width", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Video height',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], VideoOptionsDto.prototype, "height", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Pass True if the uploaded video is suitable for streaming',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], VideoOptionsDto.prototype, "supportsStreaming", void 0);
+class AudioOptionsDto extends MediaOptionsDto {
+}
+exports.AudioOptionsDto = AudioOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Duration of the audio in seconds',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], AudioOptionsDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Performer name',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], AudioOptionsDto.prototype, "performer", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Track title',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], AudioOptionsDto.prototype, "title", void 0);
+class DocumentOptionsDto extends MediaOptionsDto {
+}
+exports.DocumentOptionsDto = DocumentOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Disables automatic content type detection',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], DocumentOptionsDto.prototype, "disableContentTypeDetection", void 0);
+class SendPhotoDto {
+}
+exports.SendPhotoDto = SendPhotoDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Photo URL or file ID',
+        example: 'https://example.com/photo.jpg'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendPhotoDto.prototype, "photo", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Photo sending options',
+        required: false,
+        type: () => MediaOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => MediaOptionsDto),
+    __metadata("design:type", MediaOptionsDto)
+], SendPhotoDto.prototype, "options", void 0);
+class SendVideoDto {
+}
+exports.SendVideoDto = SendVideoDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Video URL or file ID',
+        example: 'https://example.com/video.mp4'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendVideoDto.prototype, "video", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Video sending options',
+        required: false,
+        type: () => VideoOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => VideoOptionsDto),
+    __metadata("design:type", VideoOptionsDto)
+], SendVideoDto.prototype, "options", void 0);
+class SendAudioDto {
+}
+exports.SendAudioDto = SendAudioDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Audio URL or file ID',
+        example: 'https://example.com/audio.mp3'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendAudioDto.prototype, "audio", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Audio sending options',
+        required: false,
+        type: () => AudioOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => AudioOptionsDto),
+    __metadata("design:type", AudioOptionsDto)
+], SendAudioDto.prototype, "options", void 0);
+class SendDocumentDto {
+}
+exports.SendDocumentDto = SendDocumentDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Document URL or file ID',
+        example: 'https://example.com/document.pdf'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendDocumentDto.prototype, "document", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Document sending options',
+        required: false,
+        type: () => DocumentOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => DocumentOptionsDto),
+    __metadata("design:type", DocumentOptionsDto)
+], SendDocumentDto.prototype, "options", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/dto/send-message.dto.ts":
+/*!*****************************************************!*\
+  !*** ./src/components/bots/dto/send-message.dto.ts ***!
+  \*****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SendMessageDto = exports.SendMessageOptionsDto = exports.LinkPreviewOptionsDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+class LinkPreviewOptionsDto {
+}
+exports.LinkPreviewOptionsDto = LinkPreviewOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Disables link preview',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], LinkPreviewOptionsDto.prototype, "isDisabled", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'URL to use for the link preview',
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], LinkPreviewOptionsDto.prototype, "url", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Prefer small media',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], LinkPreviewOptionsDto.prototype, "preferSmallMedia", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Prefer large media',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], LinkPreviewOptionsDto.prototype, "preferLargeMedia", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Show preview above text',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], LinkPreviewOptionsDto.prototype, "showAboveText", void 0);
+class SendMessageOptionsDto {
+}
+exports.SendMessageOptionsDto = SendMessageOptionsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Parse mode for the message',
+        enum: ['HTML', 'MarkdownV2', 'Markdown'],
+        required: false
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], SendMessageOptionsDto.prototype, "parseMode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Disable web page preview',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], SendMessageOptionsDto.prototype, "disableWebPagePreview", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Disable notification',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], SendMessageOptionsDto.prototype, "disableNotification", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Message ID to reply to',
+        required: false
+    }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], SendMessageOptionsDto.prototype, "replyToMessageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Allow sending without reply',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], SendMessageOptionsDto.prototype, "allowSendingWithoutReply", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Protect content',
+        required: false
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], SendMessageOptionsDto.prototype, "protectContent", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Link preview options',
+        required: false,
+        type: () => LinkPreviewOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => LinkPreviewOptionsDto),
+    __metadata("design:type", LinkPreviewOptionsDto)
+], SendMessageOptionsDto.prototype, "linkPreviewOptions", void 0);
+class SendMessageDto {
+}
+exports.SendMessageDto = SendMessageDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Message text to send',
+        example: 'Hello, this is a test message!'
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendMessageDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Message sending options',
+        required: false,
+        type: () => SendMessageOptionsDto
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => SendMessageOptionsDto),
+    __metadata("design:type", SendMessageOptionsDto)
+], SendMessageDto.prototype, "options", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/index.ts":
+/*!**************************************!*\
+  !*** ./src/components/bots/index.ts ***!
+  \**************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./bots.controller */ "./src/components/bots/bots.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./bots.module */ "./src/components/bots/bots.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/bots/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/bots/schemas/index.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/schemas/bot.schema.ts":
+/*!***************************************************!*\
+  !*** ./src/components/bots/schemas/bot.schema.ts ***!
+  \***************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BotSchema = exports.Bot = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const bots_service_1 = __webpack_require__(/*! ../bots.service */ "./src/components/bots/bots.service.ts");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+let Bot = class Bot {
+};
+exports.Bot = Bot;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Bot.prototype, "token", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Bot.prototype, "username", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: bots_service_1.ChannelCategory }),
+    (0, mongoose_1.Prop)({ required: true, enum: bots_service_1.ChannelCategory }),
+    __metadata("design:type", String)
+], Bot.prototype, "category", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], Bot.prototype, "channelId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "description", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], Bot.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ type: Object }),
+    __metadata("design:type", Object)
+], Bot.prototype, "stats", void 0);
+exports.Bot = Bot = __decorate([
+    (0, mongoose_1.Schema)({ timestamps: true })
+], Bot);
+exports.BotSchema = mongoose_1.SchemaFactory.createForClass(Bot);
+
+
+/***/ }),
+
+/***/ "./src/components/bots/schemas/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/bots/schemas/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./bot.schema */ "./src/components/bots/schemas/bot.schema.ts"), exports);
 
 
 /***/ }),
@@ -11244,6 +13672,35 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/buffer-clients/dto/index.ts":
+/*!****************************************************!*\
+  !*** ./src/components/buffer-clients/dto/index.ts ***!
+  \****************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-buffer-client.dto */ "./src/components/buffer-clients/dto/create-buffer-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-buffer-client.dto */ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-buffer-client.dto */ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts":
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/dto/search-buffer-client.dto.ts ***!
@@ -11333,6 +13790,37 @@ exports.UpdateBufferClientDto = UpdateBufferClientDto;
 
 /***/ }),
 
+/***/ "./src/components/buffer-clients/index.ts":
+/*!************************************************!*\
+  !*** ./src/components/buffer-clients/index.ts ***!
+  \************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./buffer-client.controller */ "./src/components/buffer-clients/buffer-client.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./buffer-client.service */ "./src/components/buffer-clients/buffer-client.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/buffer-clients/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/buffer-clients/schemas/index.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/buffer-clients/schemas/buffer-client.schema.ts":
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/schemas/buffer-client.schema.ts ***!
@@ -11397,6 +13885,33 @@ exports.BufferClient = BufferClient = __decorate([
     })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
+
+
+/***/ }),
+
+/***/ "./src/components/buffer-clients/schemas/index.ts":
+/*!********************************************************!*\
+  !*** ./src/components/buffer-clients/schemas/index.ts ***!
+  \********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./buffer-client.schema */ "./src/components/buffer-clients/schemas/buffer-client.schema.ts"), exports);
 
 
 /***/ }),
@@ -11610,6 +14125,36 @@ exports.Build = Build = __decorate([
 ], Build);
 exports.BuildSchema = mongoose_1.SchemaFactory.createForClass(Build);
 exports.BuildSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
+
+
+/***/ }),
+
+/***/ "./src/components/builds/index.ts":
+/*!****************************************!*\
+  !*** ./src/components/builds/index.ts ***!
+  \****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./build.controller */ "./src/components/builds/build.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./build.module */ "./src/components/builds/build.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./build.service */ "./src/components/builds/build.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./builds.schema */ "./src/components/builds/builds.schema.ts"), exports);
 
 
 /***/ }),
@@ -12077,6 +14622,35 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/channels/dto/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/channels/dto/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-channel.dto */ "./src/components/channels/dto/create-channel.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-channel.dto */ "./src/components/channels/dto/search-channel.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-channel.dto */ "./src/components/channels/dto/update-channel.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/channels/dto/search-channel.dto.ts":
 /*!***********************************************************!*\
   !*** ./src/components/channels/dto/search-channel.dto.ts ***!
@@ -12166,6 +14740,37 @@ const create_channel_dto_1 = __webpack_require__(/*! ./create-channel.dto */ "./
 class UpdateChannelDto extends (0, swagger_1.PartialType)(create_channel_dto_1.CreateChannelDto) {
 }
 exports.UpdateChannelDto = UpdateChannelDto;
+
+
+/***/ }),
+
+/***/ "./src/components/channels/index.ts":
+/*!******************************************!*\
+  !*** ./src/components/channels/index.ts ***!
+  \******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./channels.controller */ "./src/components/channels/channels.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./channels.module */ "./src/components/channels/channels.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./channels.service */ "./src/components/channels/channels.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/channels/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/channels/schemas/index.ts"), exports);
 
 
 /***/ }),
@@ -12278,6 +14883,33 @@ exports.Channel = Channel = __decorate([
     })
 ], Channel);
 exports.ChannelSchema = mongoose_1.SchemaFactory.createForClass(Channel);
+
+
+/***/ }),
+
+/***/ "./src/components/channels/schemas/index.ts":
+/*!**************************************************!*\
+  !*** ./src/components/channels/schemas/index.ts ***!
+  \**************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./channel.schema */ "./src/components/channels/schemas/channel.schema.ts"), exports);
 
 
 /***/ }),
@@ -14045,6 +16677,36 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/clients/dto/index.ts":
+/*!*********************************************!*\
+  !*** ./src/components/clients/dto/index.ts ***!
+  \*********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-client.dto */ "./src/components/clients/dto/create-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-client.dto */ "./src/components/clients/dto/search-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-client.dto */ "./src/components/clients/dto/update-client.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./setup-client.dto */ "./src/components/clients/dto/setup-client.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/clients/dto/search-client.dto.ts":
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/search-client.dto.ts ***!
@@ -14186,6 +16848,81 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/clients/dto/setup-client.dto.ts":
+/*!********************************************************!*\
+  !*** ./src/components/clients/dto/setup-client.dto.ts ***!
+  \********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SetupClientQueryDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class SetupClientQueryDto {
+    constructor() {
+        this.days = 0;
+        this.archiveOld = true;
+        this.formalities = true;
+    }
+}
+exports.SetupClientQueryDto = SetupClientQueryDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        type: Number,
+        default: 3
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], SetupClientQueryDto.prototype, "days", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        default: true
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        console.log("archiveOld: ", value);
+        return value === 'true' || value === true;
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SetupClientQueryDto.prototype, "archiveOld", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        type: String
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SetupClientQueryDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        default: true
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        console.log("formalities: ", value);
+        return value === 'true' || value === true;
+    }),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SetupClientQueryDto.prototype, "formalities", void 0);
+
+
+/***/ }),
+
 /***/ "./src/components/clients/dto/update-client.dto.ts":
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/update-client.dto.ts ***!
@@ -14200,6 +16937,41 @@ const create_client_dto_1 = __webpack_require__(/*! ./create-client.dto */ "./sr
 class UpdateClientDto extends (0, swagger_1.PartialType)(create_client_dto_1.CreateClientDto) {
 }
 exports.UpdateClientDto = UpdateClientDto;
+
+
+/***/ }),
+
+/***/ "./src/components/clients/index.ts":
+/*!*****************************************!*\
+  !*** ./src/components/clients/index.ts ***!
+  \*****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientService = exports.ClientModule = exports.ClientController = void 0;
+var client_controller_1 = __webpack_require__(/*! ./client.controller */ "./src/components/clients/client.controller.ts");
+Object.defineProperty(exports, "ClientController", ({ enumerable: true, get: function () { return client_controller_1.ClientController; } }));
+var client_module_1 = __webpack_require__(/*! ./client.module */ "./src/components/clients/client.module.ts");
+Object.defineProperty(exports, "ClientModule", ({ enumerable: true, get: function () { return client_module_1.ClientModule; } }));
+var client_service_1 = __webpack_require__(/*! ./client.service */ "./src/components/clients/client.service.ts");
+Object.defineProperty(exports, "ClientService", ({ enumerable: true, get: function () { return client_service_1.ClientService; } }));
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/clients/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/clients/schemas/index.ts"), exports);
 
 
 /***/ }),
@@ -14324,6 +17096,33 @@ exports.Client = Client = __decorate([
     })
 ], Client);
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
+
+
+/***/ }),
+
+/***/ "./src/components/clients/schemas/index.ts":
+/*!*************************************************!*\
+  !*** ./src/components/clients/schemas/index.ts ***!
+  \*************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./client.schema */ "./src/components/clients/schemas/client.schema.ts"), exports);
 
 
 /***/ }),
@@ -15041,6 +17840,89 @@ exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decor
 
 /***/ }),
 
+/***/ "./src/components/dynamic-data/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/dynamic-data/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./dynamic-data.controller */ "./src/components/dynamic-data/dynamic-data.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dynamic-data.service */ "./src/components/dynamic-data/dynamic-data.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dynamic-data.schema */ "./src/components/dynamic-data/dynamic-data.schema.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/create-dynamic-data.dto */ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/get-dynamic-data.dto */ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/index.ts":
+/*!*********************************!*\
+  !*** ./src/components/index.ts ***!
+  \*********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./active-channels */ "./src/components/active-channels/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./buffer-clients */ "./src/components/buffer-clients/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./builds */ "./src/components/builds/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./channels */ "./src/components/channels/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./clients */ "./src/components/clients/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./ConfigurationInit */ "./src/components/ConfigurationInit/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./n-point */ "./src/components/n-point/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./session-manager */ "./src/components/session-manager/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./stats */ "./src/components/stats/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./stats2 */ "./src/components/stats2/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-stats */ "./src/components/promote-stats/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-clients */ "./src/components/promote-clients/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-msgs */ "./src/components/promote-msgs/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./user-data */ "./src/components/user-data/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./users */ "./src/components/users/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./Telegram */ "./src/components/Telegram/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./TgSignup */ "./src/components/TgSignup/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./ip-management */ "./src/components/ip-management/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./timestamps */ "./src/components/timestamps/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./transactions */ "./src/components/transactions/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./upi-ids */ "./src/components/upi-ids/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./shared */ "./src/components/shared/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dynamic-data */ "./src/components/dynamic-data/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./bots */ "./src/components/bots/index.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/ip-management/client-ip-integration.controller.ts":
 /*!**************************************************************************!*\
   !*** ./src/components/ip-management/client-ip-integration.controller.ts ***!
@@ -15738,6 +18620,54 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/ip-management/dto/create-ip-mobile-mapping.dto.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/dto/create-ip-mobile-mapping.dto.ts ***!
+  \**************************************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CreateIpMobileMappingDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateIpMobileMappingDto {
+}
+exports.CreateIpMobileMappingDto = CreateIpMobileMappingDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateIpMobileMappingDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address and port combination' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateIpMobileMappingDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this mobile number' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateIpMobileMappingDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of this mapping', enum: ['active', 'inactive'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['active', 'inactive']),
+    __metadata("design:type", String)
+], CreateIpMobileMappingDto.prototype, "status", void 0);
+
+
+/***/ }),
+
 /***/ "./src/components/ip-management/dto/create-proxy-ip.dto.ts":
 /*!*****************************************************************!*\
   !*** ./src/components/ip-management/dto/create-proxy-ip.dto.ts ***!
@@ -15804,6 +18734,126 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/ip-management/dto/search-ip.dto.ts":
+/*!***********************************************************!*\
+  !*** ./src/components/ip-management/dto/search-ip.dto.ts ***!
+  \***********************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SearchIpMobileMappingDto = exports.SearchProxyIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class SearchProxyIpDto {
+}
+exports.SearchProxyIpDto = SearchProxyIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], SearchProxyIpDto.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type to search for', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "protocol", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "country", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive', 'blocked', 'maintenance'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['active', 'inactive', 'blocked', 'maintenance']),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to search for assigned or unassigned IPs', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SearchProxyIpDto.prototype, "isAssigned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "assignedToClient", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'DataCenter', description: 'Provider to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchProxyIpDto.prototype, "provider", void 0);
+class SearchIpMobileMappingDto {
+}
+exports.SearchIpMobileMappingDto = SearchIpMobileMappingDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchIpMobileMappingDto.prototype, "mobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchIpMobileMappingDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchIpMobileMappingDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['active', 'inactive']),
+    __metadata("design:type", String)
+], SearchIpMobileMappingDto.prototype, "status", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/dto/update-ip-mobile-mapping.dto.ts":
+/*!**************************************************************************!*\
+  !*** ./src/components/ip-management/dto/update-ip-mobile-mapping.dto.ts ***!
+  \**************************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UpdateIpMobileMappingDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const create_ip_mobile_mapping_dto_1 = __webpack_require__(/*! ./create-ip-mobile-mapping.dto */ "./src/components/ip-management/dto/create-ip-mobile-mapping.dto.ts");
+class UpdateIpMobileMappingDto extends (0, swagger_1.PartialType)(create_ip_mobile_mapping_dto_1.CreateIpMobileMappingDto) {
+}
+exports.UpdateIpMobileMappingDto = UpdateIpMobileMappingDto;
+
+
+/***/ }),
+
 /***/ "./src/components/ip-management/dto/update-proxy-ip.dto.ts":
 /*!*****************************************************************!*\
   !*** ./src/components/ip-management/dto/update-proxy-ip.dto.ts ***!
@@ -15818,6 +18868,45 @@ const create_proxy_ip_dto_1 = __webpack_require__(/*! ./create-proxy-ip.dto */ "
 class UpdateProxyIpDto extends (0, swagger_1.PartialType)(create_proxy_ip_dto_1.CreateProxyIpDto) {
 }
 exports.UpdateProxyIpDto = UpdateProxyIpDto;
+
+
+/***/ }),
+
+/***/ "./src/components/ip-management/index.ts":
+/*!***********************************************!*\
+  !*** ./src/components/ip-management/index.ts ***!
+  \***********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./ip-management.module */ "./src/components/ip-management/ip-management.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./ip-management.controller */ "./src/components/ip-management/ip-management.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./client-ip-integration.service */ "./src/components/ip-management/client-ip-integration.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./client-ip-integration.controller */ "./src/components/ip-management/client-ip-integration.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas/ip-mobile-mapping.schema */ "./src/components/ip-management/schemas/ip-mobile-mapping.schema.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/components/ip-management/dto/update-proxy-ip.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/create-ip-mobile-mapping.dto */ "./src/components/ip-management/dto/create-ip-mobile-mapping.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/update-ip-mobile-mapping.dto */ "./src/components/ip-management/dto/update-ip-mobile-mapping.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/search-ip.dto */ "./src/components/ip-management/dto/search-ip.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/assign-ip.dto */ "./src/components/ip-management/dto/assign-ip.dto.ts"), exports);
 
 
 /***/ }),
@@ -19257,6 +22346,36 @@ exports.PromoteClientSchema.index({ clientId: 1 });
 
 /***/ }),
 
+/***/ "./src/components/promote-msgs/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/promote-msgs/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-msgs.controller */ "./src/components/promote-msgs/promote-msgs.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-msgs.module */ "./src/components/promote-msgs/promote-msgs.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-msgs.service */ "./src/components/promote-msgs/promote-msgs.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-msgs.schema */ "./src/components/promote-msgs/promote-msgs.schema.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/promote-msgs/promote-msgs.controller.ts":
 /*!****************************************************************!*\
   !*** ./src/components/promote-msgs/promote-msgs.controller.ts ***!
@@ -19512,6 +22631,34 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/promote-stats/dto/index.ts":
+/*!***************************************************!*\
+  !*** ./src/components/promote-stats/dto/index.ts ***!
+  \***************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-promote-stat.dto */ "./src/components/promote-stats/dto/create-promote-stat.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-promote-stat.dto */ "./src/components/promote-stats/dto/update-promote-stat.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/promote-stats/dto/update-promote-stat.dto.ts":
 /*!*********************************************************************!*\
   !*** ./src/components/promote-stats/dto/update-promote-stat.dto.ts ***!
@@ -19526,6 +22673,37 @@ const create_promote_stat_dto_1 = __webpack_require__(/*! ./create-promote-stat.
 class UpdatePromoteStatDto extends (0, swagger_1.PartialType)(create_promote_stat_dto_1.CreatePromoteStatDto) {
 }
 exports.UpdatePromoteStatDto = UpdatePromoteStatDto;
+
+
+/***/ }),
+
+/***/ "./src/components/promote-stats/index.ts":
+/*!***********************************************!*\
+  !*** ./src/components/promote-stats/index.ts ***!
+  \***********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-stat.controller */ "./src/components/promote-stats/promote-stat.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-stat.module */ "./src/components/promote-stats/promote-stat.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./promote-stat.service */ "./src/components/promote-stats/promote-stat.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/promote-stats/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-stats/schemas/index.ts"), exports);
 
 
 /***/ }),
@@ -19747,6 +22925,33 @@ exports.PromoteStatService = PromoteStatService = __decorate([
     __metadata("design:paramtypes", [mongoose_2.Model,
         client_service_1.ClientService])
 ], PromoteStatService);
+
+
+/***/ }),
+
+/***/ "./src/components/promote-stats/schemas/index.ts":
+/*!*******************************************************!*\
+  !*** ./src/components/promote-stats/schemas/index.ts ***!
+  \*******************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./promote-stat.schema */ "./src/components/promote-stats/schemas/promote-stat.schema.ts"), exports);
 
 
 /***/ }),
@@ -21936,6 +25141,33 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/shared/index.ts":
+/*!****************************************!*\
+  !*** ./src/components/shared/index.ts ***!
+  \****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./dto/execute-request.dto */ "./src/components/shared/dto/execute-request.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/stats/create-stat.dto.ts":
 /*!*************************************************!*\
   !*** ./src/components/stats/create-stat.dto.ts ***!
@@ -22006,6 +25238,32 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "profile", void 0);
+
+
+/***/ }),
+
+/***/ "./src/components/stats/index.ts":
+/*!***************************************!*\
+  !*** ./src/components/stats/index.ts ***!
+  \***************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Stat1UpdateDto = exports.Stat1Schema = exports.Stat1 = exports.Stat1Service = exports.Stat1Module = exports.Stat1Controller = exports.Stat1CreateDto = void 0;
+var create_stat_dto_1 = __webpack_require__(/*! ./create-stat.dto */ "./src/components/stats/create-stat.dto.ts");
+Object.defineProperty(exports, "Stat1CreateDto", ({ enumerable: true, get: function () { return create_stat_dto_1.CreateStatDto; } }));
+var stat_controller_1 = __webpack_require__(/*! ./stat.controller */ "./src/components/stats/stat.controller.ts");
+Object.defineProperty(exports, "Stat1Controller", ({ enumerable: true, get: function () { return stat_controller_1.StatController; } }));
+var stat_module_1 = __webpack_require__(/*! ./stat.module */ "./src/components/stats/stat.module.ts");
+Object.defineProperty(exports, "Stat1Module", ({ enumerable: true, get: function () { return stat_module_1.StatModule; } }));
+var stat_service_1 = __webpack_require__(/*! ./stat.service */ "./src/components/stats/stat.service.ts");
+Object.defineProperty(exports, "Stat1Service", ({ enumerable: true, get: function () { return stat_service_1.StatService; } }));
+var stat_schema_1 = __webpack_require__(/*! ./stat.schema */ "./src/components/stats/stat.schema.ts");
+Object.defineProperty(exports, "Stat1", ({ enumerable: true, get: function () { return stat_schema_1.Stat; } }));
+Object.defineProperty(exports, "Stat1Schema", ({ enumerable: true, get: function () { return stat_schema_1.StatSchema; } }));
+var update_stat_dto_1 = __webpack_require__(/*! ./update-stat.dto */ "./src/components/stats/update-stat.dto.ts");
+Object.defineProperty(exports, "Stat1UpdateDto", ({ enumerable: true, get: function () { return update_stat_dto_1.UpdateStatDto; } }));
 
 
 /***/ }),
@@ -22397,6 +25655,32 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/stats2/index.ts":
+/*!****************************************!*\
+  !*** ./src/components/stats2/index.ts ***!
+  \****************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Stat2UpdateDto = exports.Stat2Schema = exports.Stat2 = exports.Stat2Service = exports.Stat2Module = exports.Stat2Controller = exports.Stat2CreateDto = void 0;
+var create_stat2_dto_1 = __webpack_require__(/*! ./create-stat2.dto */ "./src/components/stats2/create-stat2.dto.ts");
+Object.defineProperty(exports, "Stat2CreateDto", ({ enumerable: true, get: function () { return create_stat2_dto_1.CreateStatDto; } }));
+var stat2_controller_1 = __webpack_require__(/*! ./stat2.controller */ "./src/components/stats2/stat2.controller.ts");
+Object.defineProperty(exports, "Stat2Controller", ({ enumerable: true, get: function () { return stat2_controller_1.Stat2Controller; } }));
+var stat2_module_1 = __webpack_require__(/*! ./stat2.module */ "./src/components/stats2/stat2.module.ts");
+Object.defineProperty(exports, "Stat2Module", ({ enumerable: true, get: function () { return stat2_module_1.Stat2Module; } }));
+var stat2_service_1 = __webpack_require__(/*! ./stat2.service */ "./src/components/stats2/stat2.service.ts");
+Object.defineProperty(exports, "Stat2Service", ({ enumerable: true, get: function () { return stat2_service_1.Stat2Service; } }));
+var stat2_schema_1 = __webpack_require__(/*! ./stat2.schema */ "./src/components/stats2/stat2.schema.ts");
+Object.defineProperty(exports, "Stat2", ({ enumerable: true, get: function () { return stat2_schema_1.Stat2; } }));
+Object.defineProperty(exports, "Stat2Schema", ({ enumerable: true, get: function () { return stat2_schema_1.StatSchema; } }));
+var update_stat2_dto_1 = __webpack_require__(/*! ./update-stat2.dto */ "./src/components/stats2/update-stat2.dto.ts");
+Object.defineProperty(exports, "Stat2UpdateDto", ({ enumerable: true, get: function () { return update_stat2_dto_1.UpdateStatDto; } }));
+
+
+/***/ }),
+
 /***/ "./src/components/stats2/stat2.controller.ts":
 /*!***************************************************!*\
   !*** ./src/components/stats2/stat2.controller.ts ***!
@@ -22706,6 +25990,35 @@ const create_stat2_dto_1 = __webpack_require__(/*! ./create-stat2.dto */ "./src/
 class UpdateStatDto extends (0, swagger_1.PartialType)(create_stat2_dto_1.CreateStatDto) {
 }
 exports.UpdateStatDto = UpdateStatDto;
+
+
+/***/ }),
+
+/***/ "./src/components/timestamps/index.ts":
+/*!********************************************!*\
+  !*** ./src/components/timestamps/index.ts ***!
+  \********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./timestamp.controller */ "./src/components/timestamps/timestamp.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./timestamp.module */ "./src/components/timestamps/timestamp.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./timestamp.service */ "./src/components/timestamps/timestamp.service.ts"), exports);
 
 
 /***/ }),
@@ -23119,6 +26432,34 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/transactions/dto/index.ts":
+/*!**************************************************!*\
+  !*** ./src/components/transactions/dto/index.ts ***!
+  \**************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-transaction.dto */ "./src/components/transactions/dto/create-transaction.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-transaction.dto */ "./src/components/transactions/dto/update-transaction.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/transactions/dto/update-transaction.dto.ts":
 /*!*******************************************************************!*\
   !*** ./src/components/transactions/dto/update-transaction.dto.ts ***!
@@ -23133,6 +26474,37 @@ const create_transaction_dto_1 = __webpack_require__(/*! ./create-transaction.dt
 class UpdateTransactionDto extends (0, swagger_1.PartialType)(create_transaction_dto_1.CreateTransactionDto) {
 }
 exports.UpdateTransactionDto = UpdateTransactionDto;
+
+
+/***/ }),
+
+/***/ "./src/components/transactions/index.ts":
+/*!**********************************************!*\
+  !*** ./src/components/transactions/index.ts ***!
+  \**********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./transaction.controller */ "./src/components/transactions/transaction.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./transaction.module */ "./src/components/transactions/transaction.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./transaction.service */ "./src/components/transactions/transaction.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas/transaction.schema */ "./src/components/transactions/schemas/transaction.schema.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/transactions/dto/index.ts"), exports);
 
 
 /***/ }),
@@ -23737,6 +27109,36 @@ exports.TransactionService = TransactionService = TransactionService_1 = __decor
 
 /***/ }),
 
+/***/ "./src/components/upi-ids/index.ts":
+/*!*****************************************!*\
+  !*** ./src/components/upi-ids/index.ts ***!
+  \*****************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./upi-ids.controller */ "./src/components/upi-ids/upi-ids.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./upi-ids.module */ "./src/components/upi-ids/upi-ids.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./upi-ids.service */ "./src/components/upi-ids/upi-ids.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./upi-ids.schema */ "./src/components/upi-ids/upi-ids.schema.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/upi-ids/upi-ids.controller.ts":
 /*!******************************************************!*\
   !*** ./src/components/upi-ids/upi-ids.controller.ts ***!
@@ -24194,6 +27596,35 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/user-data/dto/index.ts":
+/*!***********************************************!*\
+  !*** ./src/components/user-data/dto/index.ts ***!
+  \***********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-user-data.dto */ "./src/components/user-data/dto/create-user-data.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-user-data.dto */ "./src/components/user-data/dto/search-user-data.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-user-data.dto */ "./src/components/user-data/dto/update-user-data.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/user-data/dto/search-user-data.dto.ts":
 /*!**************************************************************!*\
   !*** ./src/components/user-data/dto/search-user-data.dto.ts ***!
@@ -24300,6 +27731,64 @@ const create_user_data_dto_1 = __webpack_require__(/*! ./create-user-data.dto */
 class UpdateUserDataDto extends (0, swagger_1.PartialType)(create_user_data_dto_1.CreateUserDataDto) {
 }
 exports.UpdateUserDataDto = UpdateUserDataDto;
+
+
+/***/ }),
+
+/***/ "./src/components/user-data/index.ts":
+/*!*******************************************!*\
+  !*** ./src/components/user-data/index.ts ***!
+  \*******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/user-data/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/user-data/schemas/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./user-data.controller */ "./src/components/user-data/user-data.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./user-data.module */ "./src/components/user-data/user-data.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./user-data.service */ "./src/components/user-data/user-data.service.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/user-data/schemas/index.ts":
+/*!***************************************************!*\
+  !*** ./src/components/user-data/schemas/index.ts ***!
+  \***************************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts"), exports);
 
 
 /***/ }),
@@ -24694,8 +28183,8 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const user_data_schema_1 = __webpack_require__(/*! ./schemas/user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
-const TelegramBots_config_1 = __webpack_require__(/*! ../../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let UserDataService = UserDataService_1 = class UserDataService {
     constructor(userDataModel) {
         this.userDataModel = userDataModel;
@@ -24748,7 +28237,10 @@ let UserDataService = UserDataService_1 = class UserDataService {
             .exec();
     }
     async remove(profile, chatId) {
-        TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
+        const botsService = (0, utils_1.getBotsServiceInstance)();
+        if (botsService) {
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
+        }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
@@ -25025,6 +28517,35 @@ __decorate([
 
 /***/ }),
 
+/***/ "./src/components/users/dto/index.ts":
+/*!*******************************************!*\
+  !*** ./src/components/users/dto/index.ts ***!
+  \*******************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./create-user.dto */ "./src/components/users/dto/create-user.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./search-user.dto */ "./src/components/users/dto/search-user.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-user.dto */ "./src/components/users/dto/update-user.dto.ts"), exports);
+
+
+/***/ }),
+
 /***/ "./src/components/users/dto/search-user.dto.ts":
 /*!*****************************************************!*\
   !*** ./src/components/users/dto/search-user.dto.ts ***!
@@ -25200,6 +28721,64 @@ const create_user_dto_1 = __webpack_require__(/*! ./create-user.dto */ "./src/co
 class UpdateUserDto extends (0, mapped_types_1.PartialType)(create_user_dto_1.CreateUserDto) {
 }
 exports.UpdateUserDto = UpdateUserDto;
+
+
+/***/ }),
+
+/***/ "./src/components/users/index.ts":
+/*!***************************************!*\
+  !*** ./src/components/users/index.ts ***!
+  \***************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/users/dto/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schemas */ "./src/components/users/schemas/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./users.controller */ "./src/components/users/users.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./users.module */ "./src/components/users/users.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./users.service */ "./src/components/users/users.service.ts"), exports);
+
+
+/***/ }),
+
+/***/ "./src/components/users/schemas/index.ts":
+/*!***********************************************!*\
+  !*** ./src/components/users/schemas/index.ts ***!
+  \***********************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./user.schema */ "./src/components/users/schemas/user.schema.ts"), exports);
 
 
 /***/ }),
@@ -25791,8 +29370,8 @@ var AuthGuard_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AuthGuard = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
-const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+const components_1 = __webpack_require__(/*! ../components */ "./src/components/index.ts");
 const ALLOWED_IPS = [
     '31.97.59.2',
     '148.230.84.50',
@@ -25968,7 +29547,15 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     notifyUnauthorized(clientIp, origin, originalUrl) {
         try {
-            TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+            const botsService = (0, utils_1.getBotsServiceInstance)();
+            if (!botsService) {
+                this.logger.warn(`BotsService instance not available for notifications`);
+                return;
+            }
+            else {
+                botsService.sendMessageByCategory(components_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+                return;
+            }
         }
         catch (err) {
             this.logger.error(`Notifbot failed: ${err.message}`);
@@ -26360,8 +29947,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.LoggerMiddleware = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
-const TelegramBots_config_1 = __webpack_require__(/*! ../utils/TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
 const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+const components_1 = __webpack_require__(/*! ../components */ "./src/components/index.ts");
 let LoggerMiddleware = class LoggerMiddleware {
     constructor() {
         this.logger = new utils_1.Logger('HTTP');
@@ -26382,12 +29969,17 @@ let LoggerMiddleware = class LoggerMiddleware {
                 const { statusCode } = res;
                 const duration = Date.now() - startTime;
                 const durationStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
                 if (statusCode >= 500) {
-                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 400) {
-                    TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
                     this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 300) {
@@ -26399,7 +29991,12 @@ let LoggerMiddleware = class LoggerMiddleware {
             });
             res.on('error', (error) => {
                 const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
-                TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
             });
         }
         else {
@@ -26418,557 +30015,26 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 
 /***/ }),
 
-/***/ "./src/utils/TelegramBots.config.ts":
-/*!******************************************!*\
-  !*** ./src/utils/TelegramBots.config.ts ***!
-  \******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+/***/ "./src/utils/bot.service.instance.ts":
+/*!*******************************************!*\
+  !*** ./src/utils/bot.service.instance.ts ***!
+  \*******************************************/
+/***/ ((__unused_webpack_module, exports) => {
 
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BotConfig = exports.ChannelCategory = void 0;
-const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
-const form_data_1 = __importDefault(__webpack_require__(/*! form-data */ "form-data"));
-const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
-var ChannelCategory;
-(function (ChannelCategory) {
-    ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
-    ChannelCategory["USER_WARNINGS"] = "USER_WARNINGS";
-    ChannelCategory["VC_WARNINGS"] = "VC_WARNINGS";
-    ChannelCategory["USER_REQUESTS"] = "USER_REQUESTS";
-    ChannelCategory["VC_NOTIFICATIONS"] = "VC_NOTIFICATIONS";
-    ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
-    ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
-    ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
-    ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
-    ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
-    ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
-    ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
-    ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
-    ChannelCategory["UNVDS"] = "UNVDS";
-    ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
-    ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
-    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
-})(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
-class BotConfig {
-    constructor() {
-        this.categoryMap = new Map();
-        this.initialized = false;
-        this.initializing = false;
-        this.initPromise = null;
-        this.initRetries = 0;
-        this.MAX_RETRIES = 3;
-        this.RETRY_DELAY = 2000;
-        this.initPromise = this.initialize();
-    }
-    static getInstance() {
-        if (!BotConfig.instance) {
-            BotConfig.instance = new BotConfig();
-        }
-        return BotConfig.instance;
-    }
-    static async initializeAndGetInstance() {
-        const instance = BotConfig.getInstance();
-        await instance.ready();
-        return instance;
-    }
-    async ready() {
-        if (this.initialized) {
-            return;
-        }
-        if (!this.initPromise) {
-            this.initPromise = this.initialize();
-        }
-        return this.initPromise;
-    }
-    async initialize() {
-        if (this.initialized || this.initializing) {
-            return;
-        }
-        try {
-            this.initializing = true;
-            console.debug('Initializing Telegram channel configuration...');
-            const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_CHANNEL_CONFIG_'));
-            await Promise.all(envKeys.map(async (key) => {
-                const value = process.env[key];
-                if (!value)
-                    return;
-                try {
-                    const [channelId, description = '', botTokensStr] = value.split('::');
-                    const botTokens = botTokensStr?.split(',').map(t => t.trim()).filter(Boolean);
-                    if (!channelId || !botTokens || botTokens.length === 0) {
-                        console.warn(`Invalid configuration for ${key}: missing channelId or botTokens`);
-                        return;
-                    }
-                    const category = this.getCategoryFromDescription(description);
-                    if (!category) {
-                        console.warn(`Invalid category in description for ${key}: ${description}`);
-                        return;
-                    }
-                    const results = await Promise.all(botTokens.map(async (token) => {
-                        try {
-                            const username = await this.fetchUsername(token);
-                            if (!username) {
-                                console.warn(`Invalid bot token in ${category}`);
-                                return null;
-                            }
-                            return username;
-                        }
-                        catch (error) {
-                            console.error(`Error fetching username for token in ${category}:`, error);
-                            return null;
-                        }
-                    }));
-                    const botUsernames = results.filter(Boolean);
-                    if (botUsernames.length === 0) {
-                        console.warn(`No valid bot usernames found for ${category}`);
-                        return;
-                    }
-                    this.categoryMap.set(category, {
-                        botTokens,
-                        botUsernames,
-                        lastUsedIndex: -1,
-                        channelId,
-                    });
-                }
-                catch (error) {
-                    console.error(`Error processing configuration for ${key}:`, error);
-                }
-            }));
-            await this.initializeBots();
-            this.initialized = true;
-            console.info(`BotConfig initialized successfully with ${this.categoryMap.size} categories.`);
-        }
-        catch (error) {
-            console.error('Failed to initialize BotConfig:', error);
-            if (this.initRetries < this.MAX_RETRIES) {
-                this.initRetries++;
-                console.info(`Retrying initialization (attempt ${this.initRetries}/${this.MAX_RETRIES})...`);
-                this.initializing = false;
-                this.initPromise = null;
-                await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
-                return this.initialize();
-            }
-            else {
-                console.error(`Failed to initialize after ${this.MAX_RETRIES} attempts`);
-                throw error;
-            }
-        }
-        finally {
-            this.initializing = false;
-        }
-    }
-    getCategoryFromDescription(desc) {
-        if (!desc)
-            return null;
-        const normalized = desc.trim().toUpperCase();
-        return Object.values(ChannelCategory).find(cat => normalized.includes(cat) || cat.includes(normalized)) ?? null;
-    }
-    async fetchUsername(token) {
-        if (!token || typeof token !== 'string' || token.length < 10) {
-            return '';
-        }
-        try {
-            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
-                timeout: 5000
-            });
-            return res.data?.ok ? res.data.result.username : '';
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, 'Failed fetching bot username:');
-            return '';
-        }
-    }
-    async getBotUsername(category) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots configured for ${category}`);
-        }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
-        return data.botUsernames[data.lastUsedIndex];
-    }
-    async getChannelId(category) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data) {
-            throw new Error(`No configuration found for ${category}`);
-        }
-        return data.channelId;
-    }
-    async getBotAndChannel(category) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data || data.botUsernames.length === 0) {
-            throw new Error(`No valid bots configured for ${category}`);
-        }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botUsernames.length;
-        return {
-            username: data.botUsernames[data.lastUsedIndex],
-            channelId: data.channelId,
-            token: data.botTokens[data.lastUsedIndex],
-        };
-    }
-    async sendMessage(category, message, options = {}) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data || data.botTokens.length === 0) {
-            throw new Error(`No valid bots configured for ${category}`);
-        }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
-        const botIndex = data.lastUsedIndex;
-        const token = data.botTokens[botIndex];
-        const channelId = data.channelId;
-        const params = new URLSearchParams({
-            chat_id: channelId,
-            text: `${process.env.clientId?.toUpperCase()}:\n\n${message}`,
-        });
-        if (options.parseMode)
-            params.append('parse_mode', options.parseMode);
-        if (options.disableWebPagePreview)
-            params.append('disable_web_page_preview', 'true');
-        if (options.disableNotification)
-            params.append('disable_notification', 'true');
-        if (options.replyToMessageId)
-            params.append('reply_to_message_id', options.replyToMessageId.toString());
-        if (options.allowSendingWithoutReply)
-            params.append('allow_sending_without_reply', 'true');
-        if (options.protectContent)
-            params.append('protect_content', 'true');
-        if (options.linkPreviewOptions) {
-            const { isDisabled, url, preferSmallMedia, preferLargeMedia, showAboveText } = options.linkPreviewOptions;
-            if (isDisabled)
-                params.append('disable_web_page_preview', 'true');
-            if (url)
-                params.append('link_preview_url', url);
-            if (preferSmallMedia)
-                params.append('prefer_small_media', 'true');
-            if (preferLargeMedia)
-                params.append('prefer_large_media', 'true');
-            if (showAboveText)
-                params.append('show_above_text', 'true');
-        }
-        const url = `https://api.telegram.org/bot${token}/sendMessage`;
-        try {
-            const response = await axios_1.default.post(url, params, {
-                timeout: 10000
-            });
-            return response.data?.ok === true;
-        }
-        catch (error) {
-            console.error(`Failed to send message to ${channelId} using bot at index ${botIndex}:`, error);
-            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
-                console.debug(`Retrying with next available bot for ${category}`);
-                data.lastUsedIndex = botIndex;
-                return this.sendMessage(category, message, options);
-            }
-            return false;
-        }
-    }
-    async sendPhoto(category, photo, options = {}) {
-        return this.sendMedia(category, 'sendPhoto', photo, options);
-    }
-    async sendVideo(category, video, options = {}) {
-        return this.sendMedia(category, 'sendVideo', video, options);
-    }
-    async sendAudio(category, audio, options = {}) {
-        return this.sendMedia(category, 'sendAudio', audio, options);
-    }
-    async sendDocument(category, document, options = {}) {
-        return this.sendMedia(category, 'sendDocument', document, options);
-    }
-    async sendVoice(category, voice, options = {}) {
-        return this.sendMedia(category, 'sendVoice', voice, options);
-    }
-    async sendVideoNote(category, videoNote, options = {}) {
-        return this.sendMedia(category, 'sendVideoNote', videoNote, options);
-    }
-    async sendAnimation(category, animation, options = {}) {
-        return this.sendMedia(category, 'sendAnimation', animation, options);
-    }
-    async sendSticker(category, sticker, options = {}) {
-        return this.sendMedia(category, 'sendSticker', sticker, options);
-    }
-    async sendMediaGroup(category, media, options = {}) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data || data.botTokens.length === 0) {
-            throw new Error(`No valid bots configured for ${category}`);
-        }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
-        const botIndex = data.lastUsedIndex;
-        const token = data.botTokens[botIndex];
-        const channelId = data.channelId;
-        const formData = new form_data_1.default();
-        formData.append('chat_id', channelId);
-        const mediaArray = [];
-        for (let i = 0; i < media.length; i++) {
-            const item = media[i];
-            const mediaObj = {
-                type: item.type,
-                media: Buffer.isBuffer(item.media) ? `attach://file${i}` : item.media,
-            };
-            mediaObj.caption = `${process.env.clientId.toUpperCase()}:\n\n${item.caption || ''}`;
-            if (item.parseMode)
-                mediaObj.parse_mode = item.parseMode;
-            if (item.hasSpoiler)
-                mediaObj.has_spoiler = true;
-            if (item.type === 'video') {
-                if (item.duration)
-                    mediaObj.duration = item.duration;
-                if (item.width)
-                    mediaObj.width = item.width;
-                if (item.height)
-                    mediaObj.height = item.height;
-                if (item.supportsStreaming)
-                    mediaObj.supports_streaming = true;
-            }
-            if (item.type === 'audio') {
-                if (item.duration)
-                    mediaObj.duration = item.duration;
-                if (item.performer)
-                    mediaObj.performer = item.performer;
-                if (item.title)
-                    mediaObj.title = item.title;
-            }
-            if (item.type === 'document') {
-                if (item.thumbnail && Buffer.isBuffer(item.thumbnail)) {
-                    mediaObj.thumbnail = `attach://thumb${i}`;
-                }
-            }
-            mediaArray.push(mediaObj);
-            if (Buffer.isBuffer(item.media)) {
-                let filename = `file${i}`;
-                if (item.extension) {
-                    filename = `file${i}.${item.extension}`;
-                }
-                else {
-                    switch (item.type) {
-                        case 'photo':
-                            filename = `file${i}.jpg`;
-                            break;
-                        case 'video':
-                            filename = `file${i}.mp4`;
-                            break;
-                        case 'audio':
-                            filename = `file${i}.mp3`;
-                            break;
-                        case 'document':
-                            filename = `file${i}.bin`;
-                            break;
-                    }
-                }
-                formData.append(`file${i}`, item.media, filename);
-            }
-            if (item.type === 'document' && item.thumbnail && Buffer.isBuffer(item.thumbnail)) {
-                formData.append(`thumb${i}`, item.thumbnail, `thumb${i}.jpg`);
-            }
-        }
-        formData.append('media', JSON.stringify(mediaArray));
-        if (options.disableNotification)
-            formData.append('disable_notification', 'true');
-        if (options.replyToMessageId)
-            formData.append('reply_to_message_id', options.replyToMessageId.toString());
-        if (options.allowSendingWithoutReply)
-            formData.append('allow_sending_without_reply', 'true');
-        if (options.protectContent)
-            formData.append('protect_content', 'true');
-        const url = `https://api.telegram.org/bot${token}/sendMediaGroup`;
-        try {
-            const response = await axios_1.default.post(url, formData, {
-                timeout: 30000,
-                headers: {
-                    ...formData.getHeaders(),
-                },
-            });
-            return response.data?.ok === true;
-        }
-        catch (error) {
-            console.error(`Failed to send media group to ${channelId} using bot at index ${botIndex}:`, error);
-            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
-                console.debug(`Retrying with next available bot for ${category}`);
-                data.lastUsedIndex = botIndex;
-                return this.sendMediaGroup(category, media, options);
-            }
-            return false;
-        }
-    }
-    async sendMedia(category, method, media, options = {}) {
-        await this.ensureInitialized();
-        const data = this.categoryMap.get(category);
-        if (!data || data.botTokens.length === 0) {
-            throw new Error(`No valid bots configured for ${category}`);
-        }
-        data.lastUsedIndex = (data.lastUsedIndex + 1) % data.botTokens.length;
-        const botIndex = data.lastUsedIndex;
-        const token = data.botTokens[botIndex];
-        const channelId = data.channelId;
-        const formData = new form_data_1.default();
-        formData.append('chat_id', channelId);
-        const mediaField = method.replace('send', '').toLowerCase();
-        if (Buffer.isBuffer(media)) {
-            formData.append(mediaField, media, `${mediaField}.dat`);
-        }
-        else {
-            formData.append(mediaField, media);
-        }
-        if (options.caption)
-            formData.append('caption', `${process.env.clientId.toUpperCase()}:\n\n${options.caption}`);
-        if (options.parseMode)
-            formData.append('parse_mode', options.parseMode);
-        if (options.disableNotification)
-            formData.append('disable_notification', 'true');
-        if (options.replyToMessageId)
-            formData.append('reply_to_message_id', options.replyToMessageId.toString());
-        if (options.allowSendingWithoutReply)
-            formData.append('allow_sending_without_reply', 'true');
-        if (options.protectContent)
-            formData.append('protect_content', 'true');
-        if (options.hasSpoiler)
-            formData.append('has_spoiler', 'true');
-        if (method === 'sendVideo') {
-            if (options.duration)
-                formData.append('duration', options.duration.toString());
-            if (options.width)
-                formData.append('width', options.width.toString());
-            if (options.height)
-                formData.append('height', options.height.toString());
-            if (options.supportsStreaming)
-                formData.append('supports_streaming', 'true');
-            if (options.thumbnail) {
-                if (Buffer.isBuffer(options.thumbnail)) {
-                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
-                }
-                else {
-                    formData.append('thumbnail', options.thumbnail);
-                }
-            }
-        }
-        if (method === 'sendAudio') {
-            if (options.duration)
-                formData.append('duration', options.duration.toString());
-            if (options.performer)
-                formData.append('performer', options.performer);
-            if (options.title)
-                formData.append('title', options.title);
-            if (options.thumbnail) {
-                if (Buffer.isBuffer(options.thumbnail)) {
-                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
-                }
-                else {
-                    formData.append('thumbnail', options.thumbnail);
-                }
-            }
-        }
-        if (method === 'sendDocument') {
-            if (options.thumbnail) {
-                if (Buffer.isBuffer(options.thumbnail)) {
-                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
-                }
-                else {
-                    formData.append('thumbnail', options.thumbnail);
-                }
-            }
-            if (options.disableContentTypeDetection)
-                formData.append('disable_content_type_detection', 'true');
-        }
-        if (method === 'sendVoice') {
-            if (options.duration)
-                formData.append('duration', options.duration.toString());
-        }
-        if (method === 'sendVideoNote') {
-            if (options.duration)
-                formData.append('duration', options.duration.toString());
-            if (options.length)
-                formData.append('length', options.length.toString());
-            if (options.thumbnail) {
-                if (Buffer.isBuffer(options.thumbnail)) {
-                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
-                }
-                else {
-                    formData.append('thumbnail', options.thumbnail);
-                }
-            }
-        }
-        if (method === 'sendAnimation') {
-            if (options.duration)
-                formData.append('duration', options.duration.toString());
-            if (options.width)
-                formData.append('width', options.width.toString());
-            if (options.height)
-                formData.append('height', options.height.toString());
-            if (options.thumbnail) {
-                if (Buffer.isBuffer(options.thumbnail)) {
-                    formData.append('thumbnail', options.thumbnail, 'thumbnail.jpg');
-                }
-                else {
-                    formData.append('thumbnail', options.thumbnail);
-                }
-            }
-        }
-        if (method === 'sendSticker') {
-            if (options.emoji)
-                formData.append('emoji', options.emoji);
-        }
-        const url = `https://api.telegram.org/bot${token}/${method}`;
-        try {
-            const response = await axios_1.default.post(url, formData, {
-                timeout: 30000,
-                headers: {
-                    ...formData.getHeaders(),
-                },
-            });
-            return response.data?.ok === true;
-        }
-        catch (error) {
-            console.error(`Failed to send ${method} to ${channelId} using bot at index ${botIndex}:`, error);
-            if (data.botTokens.length > 1 && data.botTokens.length > botIndex + 1) {
-                console.debug(`Retrying with next available bot for ${category}`);
-                data.lastUsedIndex = botIndex;
-                return this.sendMedia(category, method, media, options);
-            }
-            return false;
-        }
-    }
-    async initializeBots() {
-        console.debug("Initializing bots with /start command...");
-        const initPromises = Array.from(this.categoryMap.entries()).flatMap(([category, data]) => data.botTokens.map(async (token) => {
-            const url = `https://api.telegram.org/bot${token}/getMe`;
-            try {
-                const botInfo = await axios_1.default.get(url, { timeout: 5000 });
-                if (!botInfo.data?.ok) {
-                    console.error(`Failed to get bot info for ${category}`);
-                    return;
-                }
-                console.log(`✅ Successfully initialized bot for ${category}`);
-            }
-            catch (error) {
-                (0, parseError_1.parseError)(error, `❌ Failed to initialize bot for ${category} | URL: ${url}`, false);
-            }
-        }));
-        await Promise.allSettled(initPromises);
-    }
-    async ensureInitialized() {
-        if (!this.initialized) {
-            await this.ready();
-            if (!this.initialized) {
-                throw new Error('BotConfig initialization failed. Unable to proceed.');
-            }
-        }
-    }
-    async hasCategory(category) {
-        await this.ensureInitialized();
-        return this.categoryMap.has(category);
-    }
-    async getConfiguredCategories() {
-        await this.ensureInitialized();
-        return Array.from(this.categoryMap.keys());
-    }
+exports.setBotsServiceInstance = setBotsServiceInstance;
+exports.getBotsServiceInstance = getBotsServiceInstance;
+let botsServiceInstance = null;
+function setBotsServiceInstance(instance) {
+    botsServiceInstance = instance;
 }
-exports.BotConfig = BotConfig;
+function getBotsServiceInstance() {
+    if (!botsServiceInstance) {
+        throw new Error('BotsService instance not initialized. Make sure to call setBotsServiceInstance first.');
+    }
+    return botsServiceInstance;
+}
 
 
 /***/ }),
@@ -27154,7 +30220,8 @@ exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
 const common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
-const TelegramBots_config_1 = __webpack_require__(/*! ./TelegramBots.config */ "./src/utils/TelegramBots.config.ts");
+const bots_service_1 = __webpack_require__(/*! ../components/bots/bots.service */ "./src/components/bots/bots.service.ts");
+const bot_service_instance_1 = __webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.service.instance.ts");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
     baseDelay: 500,
@@ -27184,7 +30251,8 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `${prefix}\n\n${formattedMessage}`;
         try {
-            await TelegramBots_config_1.BotConfig.getInstance().sendMessage(TelegramBots_config_1.ChannelCategory.HTTP_FAILURES, notificationText);
+            const botsService = (0, bot_service_instance_1.getBotsServiceInstance)();
+            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText);
         }
         catch (error) {
             console.error('Failed to send notification:', error.response?.data || error.message || error.code);
@@ -27460,6 +30528,7 @@ __exportStar(__webpack_require__(/*! ./obfuscateText */ "./src/utils/obfuscateTe
 __exportStar(__webpack_require__(/*! ./tg-apps */ "./src/utils/tg-apps.ts"), exports);
 __exportStar(__webpack_require__(/*! ./telegram-utils */ "./src/utils/telegram-utils/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./logger */ "./src/utils/logger.ts"), exports);
+__exportStar(__webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.service.instance.ts"), exports);
 
 
 /***/ }),
@@ -28767,6 +31836,16 @@ module.exports = require("mongoose");
 /***/ ((module) => {
 
 module.exports = require("multer");
+
+/***/ }),
+
+/***/ "node-cache":
+/*!*****************************!*\
+  !*** external "node-cache" ***!
+  \*****************************/
+/***/ ((module) => {
+
+module.exports = require("node-cache");
 
 /***/ }),
 
