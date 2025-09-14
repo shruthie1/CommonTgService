@@ -1,3 +1,4 @@
+import { OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Bot, BotDocument } from './schemas/bot.schema';
 export declare enum ChannelCategory {
@@ -91,18 +92,25 @@ export interface MediaGroupItem {
 }
 export interface MediaGroupOptions extends Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'> {
 }
-export declare class BotsService {
+export declare class BotsService implements OnModuleInit {
     private botModel;
+    private cache;
+    private readonly flushInterval;
+    private readonly maxPendingUpdates;
     constructor(botModel: Model<BotDocument>);
+    onModuleInit(): Promise<void>;
+    private initializeCache;
+    private startPeriodicFlush;
+    private flushPendingStats;
     createBot(createBotDto: {
         token: string;
         category: ChannelCategory;
         channelId: string;
         description?: string;
-    }): Promise<Bot>;
-    getBots(category?: ChannelCategory): Promise<Bot[]>;
+    }): Promise<BotDocument>;
+    getBots(category?: ChannelCategory): Promise<BotDocument[]>;
     getBotById(id: string): Promise<BotDocument>;
-    updateBot(id: string, updateBotDto: Partial<Bot>): Promise<Bot>;
+    updateBot(id: string, updateBotDto: Partial<Bot>): Promise<BotDocument>;
     deleteBot(id: string): Promise<void>;
     private sendByCategoryWithFailover;
     sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions): Promise<boolean>;

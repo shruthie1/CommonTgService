@@ -9,10 +9,10 @@ import { SendMediaGroupDto } from './dto/media-group.dto';
 export declare class BotsController {
     private readonly botsService;
     constructor(botsService: BotsService);
-    createBot(createBotDto: CreateBotDto): Promise<Bot>;
-    getBots(category?: ChannelCategory): Promise<Bot[]>;
+    createBot(createBotDto: CreateBotDto): Promise<import("./schemas/bot.schema").BotDocument>;
+    getBots(category?: ChannelCategory): Promise<import("./schemas/bot.schema").BotDocument[]>;
     getBotById(id: string): Promise<import("./schemas/bot.schema").BotDocument>;
-    updateBot(id: string, updateBotDto: Partial<Bot>): Promise<Bot>;
+    updateBot(id: string, updateBotDto: Partial<Bot>): Promise<import("./schemas/bot.schema").BotDocument>;
     deleteBot(id: string): Promise<void>;
     sendMessageByCategory(category: ChannelCategory, botId: string, data: SendMessageDto): Promise<boolean>;
     sendPhotoByCategory(category: ChannelCategory, botId: string, data: SendPhotoDto): Promise<boolean>;

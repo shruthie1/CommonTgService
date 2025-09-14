@@ -21,6 +21,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
+const node_cache_1 = __importDefault(require("node-cache"));
 const utils_1 = require("../../utils");
 const bot_schema_1 = require("./schemas/bot.schema");
 var ChannelCategory;
@@ -46,13 +47,81 @@ var ChannelCategory;
 let BotsService = class BotsService {
     constructor(botModel) {
         this.botModel = botModel;
+        this.flushInterval = 300000;
+        this.maxPendingUpdates = 100;
+        this.cache = new node_cache_1.default({ stdTTL: 300, checkperiod: 60 });
+    }
+    async onModuleInit() {
+        await this.initializeCache();
+        this.startPeriodicFlush();
+    }
+    async initializeCache() {
+        try {
+            const bots = await this.botModel.find().lean().exec();
+            const botsByCategory = bots.reduce((acc, bot) => {
+                if (!acc[bot.category]) {
+                    acc[bot.category] = [];
+                }
+                acc[bot.category].push(bot);
+                return acc;
+            }, {});
+            for (const category in botsByCategory) {
+                const sortedBots = botsByCategory[category].sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+                this.cache.set(`category:${category}`, sortedBots);
+                sortedBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+            }
+            console.log('Bot cache initialized with', Object.keys(botsByCategory).length, 'categories');
+        }
+        catch (error) {
+            console.error('Failed to initialize bot cache:', error);
+        }
+    }
+    startPeriodicFlush() {
+        setInterval(async () => {
+            await this.flushPendingStats();
+        }, this.flushInterval);
+    }
+    async flushPendingStats() {
+        const pendingUpdates = this.cache.get('pendingStats') || {};
+        if (Object.keys(pendingUpdates).length === 0) {
+            return;
+        }
+        try {
+            const bulkOps = Object.entries(pendingUpdates).map(([botId, updates]) => ({
+                updateOne: {
+                    filter: { _id: botId },
+                    update: {
+                        $inc: {
+                            ...(updates.messagesSent ? { 'stats.messagesSent': updates.messagesSent } : {}),
+                            ...(updates.photosSent ? { 'stats.photosSent': updates.photosSent } : {}),
+                            ...(updates.videosSent ? { 'stats.videosSent': updates.videosSent } : {}),
+                            ...(updates.documentsSent ? { 'stats.documentsSent': updates.documentsSent } : {}),
+                            ...(updates.audiosSent ? { 'stats.audiosSent': updates.audiosSent } : {}),
+                            ...(updates.voicesSent ? { 'stats.voicesSent': updates.voicesSent } : {}),
+                            ...(updates.animationsSent ? { 'stats.animationsSent': updates.animationsSent } : {}),
+                            ...(updates.stickersSent ? { 'stats.stickersSent': updates.stickersSent } : {}),
+                            ...(updates.mediaGroupsSent ? { 'stats.mediaGroupsSent': updates.mediaGroupsSent } : {}),
+                        },
+                        ...(updates.lastUsed ? { $set: { lastUsed: updates.lastUsed } } : {}),
+                    },
+                },
+            }));
+            if (bulkOps.length > 0) {
+                await this.botModel.bulkWrite(bulkOps);
+                console.log(`Flushed ${bulkOps.length} pending stat updates to database`);
+            }
+            this.cache.del('pendingStats');
+        }
+        catch (error) {
+            console.error('Failed to flush pending stats:', error);
+        }
     }
     async createBot(createBotDto) {
         const username = await this.fetchUsername(createBotDto.token);
         if (!username) {
             throw new Error('Invalid bot token or unable to fetch bot username');
         }
-        const existingBot = await this.botModel.findOne({ token: createBotDto.token });
+        const existingBot = await this.botModel.findOne({ token: createBotDto.token }).exec();
         if (existingBot) {
             throw new Error('Bot with this token already exists');
         }
@@ -72,49 +141,125 @@ let BotsService = class BotsService {
                 mediaGroupsSent: 0
             }
         });
-        return createdBot.save();
+        const savedBot = await createdBot.save();
+        const cachedBots = this.cache.get(`category:${createBotDto.category}`) || [];
+        cachedBots.push(savedBot.toObject());
+        this.cache.set(`category:${createBotDto.category}`, cachedBots.sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()));
+        this.cache.set(`bot:${savedBot._id}`, savedBot.toObject());
+        return savedBot;
     }
     async getBots(category) {
         if (category) {
-            return this.botModel.find({ category }).exec();
+            const cachedBots = this.cache.get(`category:${category}`);
+            if (cachedBots) {
+                return cachedBots;
+            }
+            console.warn(`Cache miss for category: ${category}`);
+            const bots = await this.botModel.find({ category }).lean().exec();
+            this.cache.set(`category:${category}`, bots);
+            bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+            return bots;
         }
-        return this.botModel.find().exec();
+        const allCategories = Object.values(ChannelCategory);
+        const allBots = [];
+        for (const cat of allCategories) {
+            const bots = this.cache.get(`category:${cat}`) || [];
+            allBots.push(...bots);
+        }
+        if (allBots.length > 0) {
+            return allBots;
+        }
+        console.warn('Cache miss for all bots');
+        const bots = await this.botModel.find().lean().exec();
+        bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+        const botsByCategory = bots.reduce((acc, bot) => {
+            if (!acc[bot.category])
+                acc[bot.category] = [];
+            acc[bot.category].push(bot);
+            return acc;
+        }, {});
+        for (const category in botsByCategory) {
+            this.cache.set(`category:${category}`, botsByCategory[category]);
+        }
+        return bots;
     }
     async getBotById(id) {
-        const bot = await this.botModel.findById(id).exec();
+        const cachedBot = this.cache.get(`bot:${id}`);
+        if (cachedBot) {
+            return cachedBot;
+        }
+        console.warn(`Cache miss for bot ID: ${id}`);
+        const bot = await this.botModel.findById(id).lean().exec();
         if (!bot) {
             throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
+        }
+        this.cache.set(`bot:${id}`, bot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        if (!cachedBots.some(b => b._id.toString() === id)) {
+            cachedBots.push(bot);
+            this.cache.set(`category:${bot.category}`, cachedBots.sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()));
         }
         return bot;
     }
     async updateBot(id, updateBotDto) {
         const bot = await this.botModel
-            .findByIdAndUpdate(id, updateBotDto, { new: true })
+            .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { new: true })
+            .lean()
             .exec();
         if (!bot) {
             throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
         }
+        this.cache.set(`bot:${id}`, bot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .filter(b => b._id.toString() !== id)
+            .concat(bot)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
         return bot;
     }
     async deleteBot(id) {
-        const result = await this.botModel.findByIdAndDelete(id).exec();
-        if (!result) {
+        const bot = await this.botModel.findById(id).lean().exec();
+        if (!bot) {
             throw new common_1.NotFoundException(`Bot with ID ${id} not found`);
         }
+        await this.botModel.findByIdAndDelete(id).exec();
+        this.cache.del(`bot:${id}`);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .filter(b => b._id.toString() !== id)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
     }
     async sendByCategoryWithFailover(category, sender, ...args) {
-        const availableBots = await this.botModel
-            .find({ category })
-            .sort({ lastUsed: 'asc' })
-            .exec();
+        let availableBots = this.cache.get(`category:${category}`);
+        if (!availableBots || availableBots.length === 0) {
+            console.warn(`Cache miss for category: ${category}`);
+            availableBots = await this.botModel
+                .find({ category })
+                .sort({ lastUsed: 'asc' })
+                .lean()
+                .exec();
+            this.cache.set(`category:${category}`, availableBots);
+            availableBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+        }
         if (availableBots.length === 0) {
             console.error(`No bots found for category: ${category}`);
             return false;
         }
         for (const bot of availableBots) {
-            const success = await sender.call(this, bot.id, ...args);
+            const success = await sender.call(this, bot._id.toString(), ...args);
             if (success) {
-                await this.botModel.findByIdAndUpdate(bot.id, { lastUsed: new Date() });
+                const updatedBot = { ...bot, lastUsed: new Date() };
+                this.cache.set(`bot:${bot._id}`, updatedBot);
+                const updatedBots = availableBots
+                    .map(b => b._id.toString() === bot._id.toString() ? updatedBot : b)
+                    .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+                this.cache.set(`category:${category}`, updatedBots);
+                const pendingStats = this.cache.get('pendingStats') || {};
+                pendingStats[bot._id.toString()] = pendingStats[bot._id.toString()] || {};
+                pendingStats[bot._id.toString()].lastUsed = new Date();
+                this.cache.set('pendingStats', pendingStats);
                 return true;
             }
             console.warn(`Sending via bot ${bot.username} for category ${category} failed. Trying next available bot.`);
@@ -153,7 +298,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMessage(bot, message, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'messagesSent');
+            await this.updateBotStats(botId, 'messagesSent', bot);
         }
         return success;
     }
@@ -161,7 +306,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendPhoto', photo, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'photosSent');
+            await this.updateBotStats(botId, 'photosSent', bot);
         }
         return success;
     }
@@ -169,7 +314,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendVideo', video, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'videosSent');
+            await this.updateBotStats(botId, 'videosSent', bot);
         }
         return success;
     }
@@ -177,7 +322,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendAudio', audio, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'audiosSent');
+            await this.updateBotStats(botId, 'audiosSent', bot);
         }
         return success;
     }
@@ -185,7 +330,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendDocument', document, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'documentsSent');
+            await this.updateBotStats(botId, 'documentsSent', bot);
         }
         return success;
     }
@@ -193,7 +338,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendVoice', voice, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'voicesSent');
+            await this.updateBotStats(botId, 'voicesSent', bot);
         }
         return success;
     }
@@ -201,7 +346,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendAnimation', animation, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'animationsSent');
+            await this.updateBotStats(botId, 'animationsSent', bot);
         }
         return success;
     }
@@ -209,7 +354,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMedia(bot, 'sendSticker', sticker, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'stickersSent');
+            await this.updateBotStats(botId, 'stickersSent', bot);
         }
         return success;
     }
@@ -217,7 +362,7 @@ let BotsService = class BotsService {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMediaGroup(bot, media, options);
         if (success) {
-            await this.updateBotStats(bot.id, 'mediaGroupsSent');
+            await this.updateBotStats(botId, 'mediaGroupsSent', bot);
         }
         return success;
     }
@@ -233,7 +378,7 @@ let BotsService = class BotsService {
                 allow_sending_without_reply: options?.allowSendingWithoutReply,
                 protect_content: options?.protectContent,
                 link_preview_options: options?.linkPreviewOptions,
-            }, { timeout: 10000 });
+            }, { timeout: 15000 });
             if (!response.data?.ok) {
                 console.error(`Telegram API error for sendMessage with bot ${bot.username}:`, response.data.description);
             }
@@ -353,7 +498,7 @@ let BotsService = class BotsService {
         }
         try {
             const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, {
-                timeout: 5000
+                timeout: 10000
             });
             return res.data?.ok ? res.data.result.username : '';
         }
@@ -362,11 +507,29 @@ let BotsService = class BotsService {
             return '';
         }
     }
-    async updateBotStats(botId, statField) {
-        await this.botModel.findByIdAndUpdate(botId, {
-            $inc: { [`stats.${statField}`]: 1 },
+    async updateBotStats(botId, statField, bot) {
+        const updatedBot = {
+            ...bot,
+            stats: {
+                ...bot.stats,
+                [statField]: bot.stats[statField] + 1,
+            },
             lastUsed: new Date(),
-        });
+        };
+        this.cache.set(`bot:${botId}`, updatedBot);
+        const cachedBots = this.cache.get(`category:${bot.category}`) || [];
+        const updatedBots = cachedBots
+            .map(b => b._id.toString() === botId ? updatedBot : b)
+            .sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+        this.cache.set(`category:${bot.category}`, updatedBots);
+        const pendingStats = this.cache.get('pendingStats') || {};
+        pendingStats[botId] = pendingStats[botId] || {};
+        pendingStats[botId][statField] = (pendingStats[botId][statField] || 0) + 1;
+        pendingStats[botId].lastUsed = updatedBot.lastUsed;
+        this.cache.set('pendingStats', pendingStats);
+        if (Object.keys(pendingStats).length >= this.maxPendingUpdates) {
+            await this.flushPendingStats();
+        }
     }
     getDefaultExtension(type) {
         switch (type) {
@@ -419,6 +582,12 @@ let BotsService = class BotsService {
         }
     }
     async getBotStatsByCategory(category) {
+        const cacheKey = `stats:${category}`;
+        const cachedStats = this.cache.get(cacheKey);
+        if (cachedStats) {
+            return cachedStats;
+        }
+        console.warn(`Cache miss for stats: ${category}`);
         const stats = await this.botModel.aggregate([
             { $match: { category } },
             {
@@ -435,7 +604,9 @@ let BotsService = class BotsService {
                 }
             }
         ]);
-        return stats[0] || { _id: category, totalBots: 0 };
+        const result = stats[0] || { _id: category, totalBots: 0 };
+        this.cache.set(cacheKey, result);
+        return result;
     }
 };
 exports.BotsService = BotsService;
