@@ -822,7 +822,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 handler: false,
             });
             const me = await cli.getMe();
-            await this.telegramService.deleteProfilePhotos(doc.mobile);
             const hasPassword = await cli.hasPassword();
             if (!hasPassword) {
                 this.logger.warn(`Client ${doc.mobile} does not have password`);
