@@ -403,11 +403,73 @@ export function analyzeText(text: string): TextAnalysis {
 }
 
 /**
- * Reverse obfuscation attempt (limited success due to one-way nature)
+ * Enhanced reverse obfuscation with better character mapping
  * @param obfuscatedText - Text to attempt to reverse
- * @returns Partially cleaned text
+ * @returns Cleaned text with better character restoration
  */
 export function attemptReverse(obfuscatedText: string): string {
+    let cleaned = obfuscatedText;
+
+    // Remove invisible characters first
+    invisibleChars.forEach((char: string) => {
+        cleaned = cleaned.replace(new RegExp(escapeRegExp(char), 'g'), '');
+    });
+
+    // Create comprehensive reverse mapping
+    const reverseMap: Record<string, string> = {};
+
+    // Build reverse mapping for letters (including case variations)
+    Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute: string) => {
+            // Map lowercase substitute to lowercase original
+            reverseMap[substitute.toLowerCase()] = original.toLowerCase();
+            // Map uppercase substitute to uppercase original
+            reverseMap[substitute.toUpperCase()] = original.toUpperCase();
+            // Map the substitute as-is
+            reverseMap[substitute] = original;
+        });
+    });
+
+    // Build reverse mapping for numbers
+    Object.entries(numberMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute: string) => {
+            reverseMap[substitute] = original;
+        });
+    });
+
+    // Build reverse mapping for special characters
+    Object.entries(specialCharMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute: string) => {
+            reverseMap[substitute] = original;
+        });
+    });
+
+    // Sort by length (longest first) to avoid partial replacements
+    const sortedMappings = Object.entries(reverseMap)
+        .sort(([a], [b]) => b.length - a.length);
+
+    // Apply reverse mapping
+    for (const [obfuscated, original] of sortedMappings) {
+        if (obfuscated && original && cleaned.includes(obfuscated)) {
+            cleaned = cleaned.replace(new RegExp(escapeRegExp(obfuscated), 'g'), original);
+        }
+    }
+
+    // Additional cleanup for common Unicode normalizations
+    cleaned = cleaned.normalize('NFC');
+
+    // Remove extra formatting if maintainFormatting was used
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1');
+
+    return cleaned;
+}
+
+/**
+ * Alternative reverse function with fuzzy matching for better results
+ * @param obfuscatedText - Text to attempt to reverse
+ * @returns Cleaned text with fuzzy character restoration
+ */
+export function attemptReverseFuzzy(obfuscatedText: string): string {
     let cleaned = obfuscatedText;
 
     // Remove invisible characters
@@ -415,32 +477,102 @@ export function attemptReverse(obfuscatedText: string): string {
         cleaned = cleaned.replace(new RegExp(escapeRegExp(char), 'g'), '');
     });
 
-    // Create reverse mapping (first occurrence wins)
-    const reverseMap: Record<string, string> = {};
+    // Character-by-character replacement with similarity scoring
+    let result = '';
 
-    Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
-        substitutes.forEach((substitute: string) => {
-            if (!reverseMap[substitute]) {
-                reverseMap[substitute] = original;
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        let bestMatch = char;
+        let found = false;
+
+        // Check letters
+        for (const [original, substitutes] of Object.entries(homoglyphMap)) {
+            if (substitutes.includes(char.toLowerCase())) {
+                bestMatch = char === char.toUpperCase() ? original.toUpperCase() : original;
+                found = true;
+                break;
             }
-        });
-    });
+        }
 
-    Object.entries(numberMap).forEach(([original, substitutes]) => {
-        substitutes.forEach((substitute: string) => {
-            if (!reverseMap[substitute]) {
-                reverseMap[substitute] = original;
+        // Check numbers if not found
+        if (!found) {
+            for (const [original, substitutes] of Object.entries(numberMap)) {
+                if (substitutes.includes(char)) {
+                    bestMatch = original;
+                    found = true;
+                    break;
+                }
             }
-        });
-    });
+        }
 
-    // Apply reverse mapping
-    for (const [obfuscated, original] of Object.entries(reverseMap)) {
-        // Use global regex to replace all occurrences (for compatibility)
-        cleaned = cleaned.replace(new RegExp(escapeRegExp(obfuscated), 'g'), original);
+        // Check special characters if not found
+        if (!found) {
+            for (const [original, substitutes] of Object.entries(specialCharMap)) {
+                if (substitutes.includes(char)) {
+                    bestMatch = original;
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        result += bestMatch;
     }
 
-    return cleaned;
+    // Final cleanup
+    result = result.normalize('NFC');
+    result = result.replace(/\*\*(.*?)\*\*/g, '$1');
+
+    return result;
+}
+
+/**
+ * Test function to verify reverse mapping coverage
+ * @returns Object with coverage statistics
+ */
+export function testReverseCoverage(): {
+    letters: { total: number; mapped: number; coverage: number };
+    numbers: { total: number; mapped: number; coverage: number };
+    special: { total: number; mapped: number; coverage: number };
+} {
+    const reverseMap: Record<string, string> = {};
+
+    // Build reverse map
+    Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+    Object.entries(numberMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+    Object.entries(specialCharMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+
+    const letterSubs = Object.values(homoglyphMap).flat();
+    const numberSubs = Object.values(numberMap).flat();
+    const specialSubs = Object.values(specialCharMap).flat();
+
+    const lettersMapped = letterSubs.filter(sub => reverseMap[sub]).length;
+    const numbersMapped = numberSubs.filter(sub => reverseMap[sub]).length;
+    const specialMapped = specialSubs.filter(sub => reverseMap[sub]).length;
+
+    return {
+        letters: {
+            total: letterSubs.length,
+            mapped: lettersMapped,
+            coverage: (lettersMapped / letterSubs.length) * 100
+        },
+        numbers: {
+            total: numberSubs.length,
+            mapped: numbersMapped,
+            coverage: (numbersMapped / numberSubs.length) * 100
+        },
+        special: {
+            total: specialSubs.length,
+            mapped: specialMapped,
+            coverage: (specialMapped / specialSubs.length) * 100
+        }
+    };
 }
 /**
  * Escape RegExp special characters in a string

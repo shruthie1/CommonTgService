@@ -21,7 +21,9 @@ import { UsersService } from '../users/users.service';
 import {
   contains,
   fetchNumbersFromString,
+  getRandomEmoji,
   Logger,
+  obfuscateText,
   toBoolean,
 } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -985,7 +987,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         this.logger.log(
           `Updating first name for ${clientId} from ${me.firstName} to ${client.name}`,
         );
-        await telegramClient.updateProfile(client.name, `Genuine Paid Girl🥰, Best Services❤️`);
+        await telegramClient.updateProfile(client.name, obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, { maintainFormatting: false, preserveCase: true }));
       } else {
         this.logger.log(`First name for ${clientId} is already up to date`);
       }
