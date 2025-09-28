@@ -16134,7 +16134,7 @@ let ClientService = ClientService_1 = class ClientService {
                 session: newSession,
             });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
-            await this.bufferClientService.remove(newMobile);
+            await this.bufferClientService.remove(newMobile, 'Used for new client');
             setTimeout(async () => {
                 await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
@@ -16190,7 +16190,7 @@ let ClientService = ClientService_1 = class ClientService {
                             'user_deactivated_ban',
                         ])) {
                             this.logger.log('Deleting User: ', existingClientUser.mobile);
-                            await this.bufferClientService.remove(existingClientUser.mobile);
+                            await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
                         }
                         else {
                             this.logger.log('Not Deleting user');
