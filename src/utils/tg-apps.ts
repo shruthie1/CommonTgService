@@ -30,7 +30,7 @@ function pickRandomCredentials(): ITelegramCredentials {
  */
 export async function getCredentialsForMobile(
   mobile: string,
-  ttl?: number
+  ttl: number = 24 * 60 * 60 * 60
 ): Promise<ITelegramCredentials> {
   const redisKey = `tg:credentials:${mobile}`;
   // Try cache first

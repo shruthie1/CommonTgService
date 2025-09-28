@@ -24,8 +24,9 @@ function pickRandom<T>(arr: T[]): T {
  * Generates or fetches a persistent TG config per mobile.
  * 
  * @param mobile - Mobile number or unique identifier for the client.
+ * @param ttl - Time to live for the config in seconds.
  */
-export async function generateTGConfig(mobile: string): Promise<TelegramClientParams> {
+export async function generateTGConfig(mobile: string, ttl: number = 24 * 60 * 60 * 60): Promise<TelegramClientParams> {
   const redisKey = `tg:config:${mobile}`;
 
   // Try to fetch from Redis
@@ -53,7 +54,7 @@ export async function generateTGConfig(mobile: string): Promise<TelegramClientPa
 
   // Store in Redis with no expiry (or set TTL if desired)
   logger.log(`[generateTGConfig] Storing config in Redis for ${mobile}`);
-  await RedisClient.set(redisKey, config);
+  await RedisClient.set(redisKey, config, ttl);
 
   return config;
 }
