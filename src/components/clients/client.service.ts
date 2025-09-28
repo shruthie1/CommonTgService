@@ -766,6 +766,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             if (archiveOld) {
               const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
+                clientId: clientId,
                 mobile: existingMobile,
                 availableDate,
                 session: existingClient.session,
