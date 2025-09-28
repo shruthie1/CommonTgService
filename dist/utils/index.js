@@ -27,4 +27,5 @@ __exportStar(require("./tg-apps"), exports);
 __exportStar(require("./telegram-utils"), exports);
 __exportStar(require("./logger"), exports);
 __exportStar(require("./bot.service.instance"), exports);
+__exportStar(require("./getRandomEmoji"), exports);
 //# sourceMappingURL=index.js.map
