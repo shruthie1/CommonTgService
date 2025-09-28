@@ -1089,9 +1089,15 @@ export class BufferClientService implements OnModuleDestroy {
             const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
 
             // Privacy update for accounts older than 1 day
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) && updateCount < MAX_UPDATES_PER_RUN) {
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
+                (
+                    doc.privacyUpdatedAt === null ||
+                    (doc.privacyUpdatedAt && doc.privacyUpdatedAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))
+                ) &&
+                updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await cli.updatePrivacyforDeletedAccount();
+                    this.update(doc.mobile,{privacyUpdatedAt: new Date()})
                     updateCount++;
                     this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 30-45s delay
@@ -1104,11 +1110,13 @@ export class BufferClientService implements OnModuleDestroy {
                 }
             }
 
-            // Delete profile photos for accounts 2-5 days old
             if (
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
-                doc.createdAt > new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) &&
+                (
+                    doc.profilePicsDeletedAt === null ||
+                    (doc.profilePicsDeletedAt && doc.profilePicsDeletedAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+                ) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1120,6 +1128,7 @@ export class BufferClientService implements OnModuleDestroy {
                     );
                     if (photos.photos.length > 0) {
                         await cli.deleteProfilePhotos();
+                        this.update(doc.mobile,{profilePicsDeletedAt: new Date()})
                         updateCount++;
                         this.logger.debug(`Deleted profile photos for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 30-45s delay
@@ -1138,6 +1147,10 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 100 &&
+                (
+                    doc.nameBioUpdatedAt === null ||
+                    (doc.nameBioUpdatedAt && doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
+                ) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 if (me.firstName !== client.name) {
@@ -1150,6 +1163,7 @@ export class BufferClientService implements OnModuleDestroy {
                                 preserveCase: true,
                             })
                         );
+                        this.update(doc.mobile,{nameBioUpdatedAt: new Date()})
                         updateCount++;
                         this.logger.debug(`Updated name and bio for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 30-45s delay
@@ -1168,10 +1182,15 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 150 &&
+                (
+                    doc.usernameUpdatedAt === null ||
+                    (doc.usernameUpdatedAt && doc.usernameUpdatedAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+                ) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+                    this.update(doc.mobile,{usernameUpdatedAt: new Date()})
                     updateCount++;
                     this.logger.debug(`Updated username for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 30-45s delay
@@ -1189,6 +1208,10 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 170 &&
+                (
+                    doc.profilePicsUpdatedAt === null ||
+                    (doc.profilePicsUpdatedAt && doc.profilePicsUpdatedAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000))
+                ) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1211,6 +1234,7 @@ export class BufferClientService implements OnModuleDestroy {
                             this.logger.debug(`Updated profile photo ${photo} for ${doc.mobile}`);
                             await sleep(20000 + Math.random() * 15000); // 30-45s delay per photo
                         }
+                        this.update(doc.mobile,{profilePicsUpdatedAt: new Date()})
                     }
                 } catch (error: any) {
                     this.logger.warn(`Failed to update profile photos for ${doc.mobile}: ${error.message}`);

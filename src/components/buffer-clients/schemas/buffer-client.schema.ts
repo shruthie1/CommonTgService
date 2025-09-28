@@ -50,6 +50,21 @@ export class BufferClient {
   inUse: boolean;
 
   @Prop({ required: false, type: Date, default: null })
+  privacyUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  profilePicsUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  nameBioUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  profilePicsDeletedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  usernameUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
   createdAt: Date;
 
   @Prop({ required: false, type: Date, default: null })
