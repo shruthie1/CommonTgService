@@ -7,6 +7,7 @@ import { ConfigurationController } from './init.controller';
 import { Connection } from 'mongoose';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import path from 'path';
 
 @Global()
 @Module({
@@ -15,7 +16,7 @@ import { notifbot } from '../../utils/logbots';
       isGlobal: true,
       cache: true,
       expandVariables: true,
-      envFilePath: '.env',
+      envFilePath: [path.resolve(process.cwd(), '.env'), '.env']
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
@@ -62,7 +63,7 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
   constructor(
     @Inject(getConnectionToken()) private readonly connection: Connection,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async onModuleInit(): Promise<void> {
     if (InitModule.initializationStatus.isInitializing || InitModule.initializationStatus.isInitialized) {
