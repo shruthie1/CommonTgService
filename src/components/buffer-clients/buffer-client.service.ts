@@ -1182,7 +1182,7 @@ export class BufferClientService implements OnModuleDestroy {
             //     await sleep(2000);
             // }
 
-            await this.telegramService.deleteProfilePhotos(doc.mobile);
+            // await this.telegramService.deleteProfilePhotos(doc.mobile);
 
             const hasPassword = await cli.hasPassword();
             if (!hasPassword) {
