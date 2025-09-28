@@ -900,10 +900,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 doc.channels > 100 &&
                 (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
-                if (me.firstName !== client.name) {
+                const normalizeString = (str) => {
+                    return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+                };
+                const safeAttemptReverse = (val) => {
+                    try {
+                        return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
+                    }
+                    catch {
+                        return '';
+                    }
+                };
+                const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
+                const expectedName = normalizeString(client.name || '');
+                if (actualName !== expectedName) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+                        await cli.updateProfile((0, utils_1.obfuscateText)(client.name, {
+                            maintainFormatting: false,
+                            preserveCase: true,
+                            useInvisibleChars: false
+                        }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
                             maintainFormatting: false,
                             preserveCase: true,
                         }));

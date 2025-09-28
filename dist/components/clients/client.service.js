@@ -670,9 +670,22 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.update(client.clientId, { username: updatedUsername });
             }
             await (0, Helpers_1.sleep)(1000);
-            if (me.firstName !== client.name) {
+            const normalizeString = (str) => {
+                return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+            };
+            const safeAttemptReverse = (val) => {
+                try {
+                    return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
+                }
+                catch {
+                    return '';
+                }
+            };
+            const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
+            const expectedName = normalizeString(client.name || '');
+            if (actualName !== expectedName) {
                 this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
+                await telegramClient.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
             }
             else {
                 this.logger.log(`First name for ${clientId} is already up to date`);
