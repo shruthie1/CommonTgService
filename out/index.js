@@ -13405,14 +13405,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 handler: false,
             });
             const me = await cli.getMe();
-            if (me.username) {
-                await this.telegramService.updateUsername(doc.mobile, '');
-                await (0, Helpers_1.sleep)(2000);
-            }
-            if (me.firstName !== 'Deleted Account') {
-                await this.telegramService.updateNameandBio(doc.mobile, 'Deleted Account', '');
-                await (0, Helpers_1.sleep)(2000);
-            }
             await this.telegramService.deleteProfilePhotos(doc.mobile);
             const hasPassword = await cli.hasPassword();
             if (!hasPassword) {
@@ -13491,14 +13483,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
                         await (0, Helpers_1.sleep)(30000);
-                        await client.updateUsername('');
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updatePrivacyforDeletedAccount();
-                        await (0, Helpers_1.sleep)(3000);
-                        await client.updateProfile('Deleted Account', 'Deleted Account');
-                        await (0, Helpers_1.sleep)(3000);
                         await client.deleteProfilePhotos();
-                        await (0, Helpers_1.sleep)(2000);
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         this.logger.debug(`Creating buffer client document for ${document.mobile}`);
