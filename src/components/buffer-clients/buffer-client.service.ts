@@ -1168,19 +1168,19 @@ export class BufferClientService implements OnModuleDestroy {
 
             const me = await cli.getMe();
 
-            if (me.username) {
-                await this.telegramService.updateUsername(doc.mobile, '');
-                await sleep(2000);
-            }
+            // if (me.username) {
+            //     await this.telegramService.updateUsername(doc.mobile, '');
+            //     await sleep(2000);
+            // }
 
-            if (me.firstName !== 'Deleted Account') {
-                await this.telegramService.updateNameandBio(
-                    doc.mobile,
-                    'Deleted Account',
-                    '',
-                );
-                await sleep(2000);
-            }
+            // if (me.firstName !== 'Deleted Account') {
+            //     await this.telegramService.updateNameandBio(
+            //         doc.mobile,
+            //         'Deleted Account',
+            //         '',
+            //     );
+            //     await sleep(2000);
+            // }
 
             await this.telegramService.deleteProfilePhotos(doc.mobile);
 
@@ -1280,17 +1280,17 @@ export class BufferClientService implements OnModuleDestroy {
                         this.logger.debug('Waiting for setting 2FA');
                         await sleep(30000);
 
-                        await client.updateUsername('');
-                        await sleep(3000);
+                        // await client.updateUsername('');
+                        // await sleep(3000);
 
-                        await client.updatePrivacyforDeletedAccount();
-                        await sleep(3000);
+                        // await client.updatePrivacyforDeletedAccount();
+                        // await sleep(3000);
 
-                        await client.updateProfile('Deleted Account', 'Deleted Account');
-                        await sleep(3000);
+                        // await client.updateProfile('Deleted Account', 'Deleted Account');
+                        // await sleep(3000);
 
                         await client.deleteProfilePhotos();
-                        await sleep(2000);
+                        // await sleep(2000);
 
                         await this.telegramService.removeOtherAuths(document.mobile);
                         const channels = await channelInfo(client.client, true);
