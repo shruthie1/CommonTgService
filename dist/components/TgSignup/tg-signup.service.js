@@ -75,7 +75,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
+            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -142,7 +142,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
+                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
                         const newSession = new sessions_1.StringSession('');
                         const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,

@@ -15,7 +15,7 @@ const API_CREDENTIALS = [
 function pickRandomCredentials() {
     return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }
-async function getCredentialsForMobile(mobile) {
+async function getCredentialsForMobile(mobile, ttl) {
     const redisKey = `tg:credentials:${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (cached) {
@@ -23,7 +23,7 @@ async function getCredentialsForMobile(mobile) {
     }
     const creds = pickRandomCredentials();
     logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
-    await redisClient_1.RedisClient.set(redisKey, creds);
+    await redisClient_1.RedisClient.set(redisKey, creds, ttl);
     return creds;
 }
 //# sourceMappingURL=tg-apps.js.map

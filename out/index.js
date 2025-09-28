@@ -9183,7 +9183,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
+            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -9250,7 +9250,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
+                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
                         const newSession = new sessions_1.StringSession('');
                         const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,
@@ -32453,7 +32453,7 @@ const API_CREDENTIALS = [
 function pickRandomCredentials() {
     return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }
-async function getCredentialsForMobile(mobile) {
+async function getCredentialsForMobile(mobile, ttl) {
     const redisKey = `tg:credentials:${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (cached) {
@@ -32461,7 +32461,7 @@ async function getCredentialsForMobile(mobile) {
     }
     const creds = pickRandomCredentials();
     logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
-    await redisClient_1.RedisClient.set(redisKey, creds);
+    await redisClient_1.RedisClient.set(redisKey, creds, ttl);
     return creds;
 }
 
