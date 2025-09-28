@@ -1,4 +1,3 @@
-// src/activechannels/dto/create-activechannel.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateActiveChannelDto {

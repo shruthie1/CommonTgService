@@ -1,4 +1,3 @@
-// src/channels/dto/update-channel.dto.ts
 import { PartialType } from '@nestjs/swagger';
 import { CreateChannelDto } from './create-channel.dto';
 

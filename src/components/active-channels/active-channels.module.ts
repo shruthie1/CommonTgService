@@ -1,4 +1,3 @@
-// src/activechannels/activechannels.module.ts
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ActiveChannelsService } from './active-channels.service';

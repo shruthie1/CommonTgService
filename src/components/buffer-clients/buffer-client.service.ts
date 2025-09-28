@@ -37,7 +37,7 @@ import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import TelegramManager from '../Telegram/TelegramManager';
 import { Client } from '../clients';
 import path from 'path';
-import { CloudinaryService } from 'src/cloudinary';
+import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
 
 @Injectable()

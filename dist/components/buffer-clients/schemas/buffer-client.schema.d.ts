@@ -10,6 +10,7 @@ export declare class BufferClient {
     message: string;
     lastUsed: Date;
     status: 'active' | 'inactive';
+    inUse: boolean;
     createdAt: Date;
     updatedAt: Date;
 }

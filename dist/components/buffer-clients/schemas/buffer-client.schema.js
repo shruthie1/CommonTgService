@@ -57,6 +57,10 @@ __decorate([
     __metadata("design:type", String)
 ], BufferClient.prototype, "status", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], BufferClient.prototype, "inUse", void 0);
+__decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "createdAt", void 0);
@@ -65,7 +69,8 @@ __decorate([
     __metadata("design:type", Date)
 ], BufferClient.prototype, "updatedAt", void 0);
 exports.BufferClient = BufferClient = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
+    (0, mongoose_1.Schema)({
+        collection: 'bufferClients', versionKey: false, autoIndex: true,
         timestamps: true,
         toJSON: {
             virtuals: true,
@@ -76,4 +81,8 @@ exports.BufferClient = BufferClient = __decorate([
     })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
+exports.BufferClientSchema.index({ clientId: 1 }, {
+    unique: true,
+    partialFilterExpression: { inUse: true }
+});
 //# sourceMappingURL=buffer-client.schema.js.map

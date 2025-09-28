@@ -519,7 +519,7 @@ let ClientService = ClientService_1 = class ClientService {
             const existingClientMobile = existingClient.mobile;
             this.logger.log('setupClientQueryDto:', setupClientQueryDto);
             const today = new Date(Date.now()).toISOString().split('T')[0];
-            const query = { clientId: clientId, availableDate: { $lte: today }, channels: { $gt: 200 } };
+            const query = { clientId: clientId, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             if (newBufferClient) {
                 try {
@@ -559,7 +559,7 @@ let ClientService = ClientService_1 = class ClientService {
         try {
             this.logger.log('Updating Client Session');
             const setup = this.telegramService.getActiveClientSetup();
-            const { days, archiveOld, clientId, existingMobile, formalities, newMobile, } = setup;
+            const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
             await (0, Helpers_1.sleep)(2000);
             const existingClient = await this.findOne(clientId);
             const newTelegramClient = await connection_manager_1.connectionManager.getClient(newMobile, {
@@ -577,7 +577,9 @@ let ClientService = ClientService_1 = class ClientService {
                 session: newSession,
             });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
-            await this.bufferClientService.remove(newMobile, 'Used for new client');
+            await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date() });
+            this.logger.log('Updating buffer client to in use');
+            await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
             setTimeout(async () => {
                 await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
@@ -621,13 +623,7 @@ let ClientService = ClientService_1 = class ClientService {
                     catch (error) {
                         this.logger.log('Cannot Archive Old Client');
                         const errorDetails = (0, parseError_1.parseError)(error, 'Error in Archiving Old Client', true);
-                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), [
-                            'expired',
-                            'unregistered',
-                            'deactivated',
-                            'session_revoked',
-                            'user_deactivated_ban',
-                        ])) {
+                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
                             this.logger.log('Deleting User: ', existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
                         }

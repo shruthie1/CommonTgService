@@ -1,5 +1,4 @@
 import { PromoteMsgsService } from './../promote-msgs/promote-msgs.service';
-// src/activechannels/activechannels.service.ts
 import { BadRequestException, Inject, Injectable, InternalServerErrorException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';

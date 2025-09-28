@@ -1,4 +1,3 @@
-// src/channels/channels.controller.ts
 import { Controller, Get, Post, Body, Patch, Param, Delete, NotFoundException, Query, BadRequestException } from '@nestjs/common';
 import { ChannelsService } from './channels.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBody } from '@nestjs/swagger';

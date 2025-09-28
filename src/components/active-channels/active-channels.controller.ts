@@ -1,4 +1,3 @@
-// src/activechannels/activechannels.controller.ts
 import { Controller, Get, Post, Body, Patch, Param, Delete, NotFoundException, Query, BadRequestException } from '@nestjs/common';
 import { ActiveChannelsService } from './active-channels.service';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';

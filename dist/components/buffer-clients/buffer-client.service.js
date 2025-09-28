@@ -833,10 +833,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async processBufferClient(doc, client) {
+        if (doc.inUse && doc.lastUsed !== null) {
+            this.logger.debug(`Buffer client ${doc.mobile} is in already used by a client`);
+            return;
+        }
         let cli;
         try {
             cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                autoDisconnect: false,
+                autoDisconnect: true,
                 handler: false,
             });
             const me = await cli.getMe();
