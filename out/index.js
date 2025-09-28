@@ -501,6 +501,7 @@ const ip_management_module_1 = __webpack_require__(/*! ./components/ip-managemen
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const guards_1 = __webpack_require__(/*! ./guards */ "./src/guards/index.ts");
 const components_1 = __webpack_require__(/*! ./components */ "./src/components/index.ts");
+const interceptors_1 = __webpack_require__(/*! ./interceptors */ "./src/interceptors/index.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -538,6 +539,10 @@ exports.AppModule = AppModule = __decorate([
             {
                 provide: core_1.APP_GUARD,
                 useClass: guards_1.AuthGuard,
+            },
+            {
+                provide: core_1.APP_FILTER,
+                useClass: interceptors_1.ExceptionsFilter
             },
         ],
         controllers: [app_controller_1.AppController],
@@ -668,7 +673,7 @@ class CloudinaryService {
                 invalidate: true,
                 public_id: cloudinaryFileId
             });
-            console.log(result);
+            console.log('File overwritten successfully:', result);
         }
         catch (error) {
             (0, parseError_1.parseError)(error);
@@ -683,7 +688,7 @@ class CloudinaryService {
                     await saveFile(resource.url, resource.public_id.split('/')[1].split('_')[0]);
                 }
                 catch (error) {
-                    console.log(resource);
+                    console.log("Error in saving file from cloudinary");
                     (0, parseError_1.parseError)(error);
                 }
             }));
@@ -750,7 +755,7 @@ class CloudinaryService {
             return result || '';
         }
         catch (error) {
-            console.log(error);
+            console.log("Error in getting buffer");
         }
     }
 }
@@ -760,7 +765,7 @@ async function saveFile(url, name) {
         const extension = url.substring(url.lastIndexOf('.') + 1);
         const rootPath = process.cwd();
         const mypath = path.join(rootPath, `${name}.${extension}`);
-        console.log(mypath);
+        console.log(`Downloading file: ${mypath}`);
         const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
         if (res?.statusText === 'OK') {
             if (!fs.existsSync(mypath)) {
@@ -1104,6 +1109,7 @@ exports.InitModule = InitModule = InitModule_1 = __decorate([
                 useFactory: async (configService) => {
                     const uri = process.env.mongouri || configService.get('mongouri');
                     if (!uri) {
+                        console.error('MongoDB URI is not configured. Please set the "mongouri" environment variable.');
                         throw new Error('MongoDB URI is not configured');
                     }
                     return {
@@ -3351,6 +3357,7 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Add bots to channel', { channelIds });
         const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
         if (botTokens.length === 0) {
+            console.warn('No bot tokens configured. Please set BOT_TOKENS environment variable');
             throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
         }
         for (const token of botTokens) {
@@ -9655,7 +9662,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {
-        console.log(filter);
+        console.log("Search Filter:", filter);
         return this.activeChannelModel.find(filter).exec();
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
@@ -9747,7 +9754,7 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, parseError_1.parseError)(e));
+            (0, parseError_1.parseError)(e);
         }
     }
     async resetAvailableMsgs() {
@@ -9769,7 +9776,7 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, parseError_1.parseError)(e));
+            (0, parseError_1.parseError)(e);
         }
     }
     async updateBannedChannels() {
@@ -14358,7 +14365,6 @@ const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./
 let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
-        console.log(channel_schema_1.Channel.name);
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
@@ -29834,6 +29840,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+const processListeners_1 = __webpack_require__(/*! ./processListeners */ "./src/processListeners.ts");
+(0, processListeners_1.setProcessListeners)();
 __webpack_require__(/*! reflect-metadata */ "reflect-metadata");
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const mongoose_1 = __importDefault(__webpack_require__(/*! mongoose */ "mongoose"));
@@ -29845,88 +29853,56 @@ const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 const Exception_filter_1 = __webpack_require__(/*! ./interceptors/Exception-filter */ "./src/interceptors/Exception-filter.ts");
 const timeout_interceptor_1 = __webpack_require__(/*! ./interceptors/timeout.interceptor */ "./src/interceptors/timeout.interceptor.ts");
 async function bootstrap() {
-    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
-        logger: utils_1.Logger
-    });
-    const config = new swagger_1.DocumentBuilder()
-        .setTitle('NestJS and Express API')
-        .setDescription('API documentation')
-        .setVersion('1.0')
-        .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
-        .build();
-    app.use((req, res, next) => {
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
-        next();
-    });
-    app.enableCors({
-        allowedHeaders: "*",
-        origin: "*"
-    });
-    const document = swagger_1.SwaggerModule.createDocument(app, config, {
-        deepScanRoutes: true,
-    });
-    document.components ??= {};
-    document.components.securitySchemes ??= {};
-    document.security = [{ 'x-api-key': [] }];
-    fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
-    swagger_1.SwaggerModule.setup('apim', app, document, {
-        swaggerOptions: {
-            persistAuthorization: true,
-            authAction: {
-                'x-api-key': {
-                    name: 'x-api-key',
-                    schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
-                    value: process.env.API_KEY || 'santoor',
+    try {
+        const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+            logger: utils_1.Logger
+        });
+        const config = new swagger_1.DocumentBuilder()
+            .setTitle('NestJS and Express API')
+            .setDescription('API documentation')
+            .setVersion('1.0')
+            .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
+            .build();
+        app.enableCors({
+            allowedHeaders: "*",
+            origin: "*"
+        });
+        const document = swagger_1.SwaggerModule.createDocument(app, config, {
+            deepScanRoutes: true,
+        });
+        document.components ??= {};
+        document.components.securitySchemes ??= {};
+        document.security = [{ 'x-api-key': [] }];
+        fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
+        swagger_1.SwaggerModule.setup('apim', app, document, {
+            swaggerOptions: {
+                persistAuthorization: true,
+                authAction: {
+                    'x-api-key': {
+                        name: 'x-api-key',
+                        schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+                        value: process.env.API_KEY || 'santoor',
+                    },
                 },
             },
-        },
-    });
-    mongoose_1.default.set('debug', true);
-    app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
-    app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
-    app.useGlobalPipes(new common_1.ValidationPipe({
-        transform: true,
-        transformOptions: {
-            enableImplicitConversion: true
-        },
-    }));
-    process.on('unhandledRejection', (reason, promise) => {
-        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    });
-    process.on('uncaughtException', (reason, promise) => {
-        console.log('Uncaught Exception at:');
-        console.error(promise, reason);
-    });
-    let isShuttingDown = false;
-    const shutdown = async (signal) => {
-        if (isShuttingDown)
-            return;
-        isShuttingDown = true;
-        console.log(`${signal} received`);
-        console.log("CTS exit Request");
-        await app.close();
-        process.exit(0);
-    };
-    process.on('exit', async () => {
-        console.log('Application closed');
-    });
-    process.on('SIGINT', async () => {
-        console.log('SIGINT received');
-        await shutdown('SIGINT');
-    });
-    process.on('SIGTERM', async () => {
-        console.log('SIGTERM received');
-        await shutdown('SIGTERM');
-    });
-    process.on('SIGQUIT', async () => {
-        console.log('SIGQUIT received');
-        await shutdown('SIGQUIT');
-    });
-    await app.init();
-    await app.listen(process.env.PORT || 9002);
-    console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
+        });
+        mongoose_1.default.set('debug', true);
+        app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
+        app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
+        app.useGlobalPipes(new common_1.ValidationPipe({
+            transform: true,
+            transformOptions: {
+                enableImplicitConversion: true
+            },
+        }));
+        await app.init();
+        await app.listen(process.env.PORT || 9002);
+        console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
+    }
+    catch (error) {
+        console.error('Error during application bootstrap:', error);
+        process.exit(1);
+    }
 }
 bootstrap();
 
@@ -30014,6 +29990,43 @@ exports.LoggerMiddleware = LoggerMiddleware;
 exports.LoggerMiddleware = LoggerMiddleware = __decorate([
     (0, common_1.Injectable)()
 ], LoggerMiddleware);
+
+
+/***/ }),
+
+/***/ "./src/processListeners.ts":
+/*!*********************************!*\
+  !*** ./src/processListeners.ts ***!
+  \*********************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.setProcessListeners = setProcessListeners;
+function setProcessListeners() {
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    });
+    process.on('uncaughtException', (error) => {
+        console.error('❌ Uncaught Exception:', error.stack || error);
+        process.exit(1);
+    });
+    let isShuttingDown = false;
+    const shutdown = (signal) => {
+        if (isShuttingDown)
+            return;
+        isShuttingDown = true;
+        console.log(`⚡ ${signal} received, shutting down...`);
+        process.exit(0);
+    };
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGQUIT', () => shutdown('SIGQUIT'));
+    process.on('exit', (code) => {
+        console.log(`🛑 Application closed with exit code ${code}`);
+    });
+    console.log("✅ Process listeners set up successfully");
+}
 
 
 /***/ }),
@@ -30550,6 +30563,7 @@ exports.ppplbot = ppplbot;
 const getBotTokens = () => {
     const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
     if (botTokens.length === 0) {
+        console.error('No bot tokens configured. Please set BOT_TOKENS environment variable');
         throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
     }
     return botTokens;
