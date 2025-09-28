@@ -28232,7 +28232,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async updateAll(chatId, updateUserDataDto) {
         delete updateUserDataDto._id;
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .updateMany({ chatId }, { $set: updateUserDataDto }, { upsert: true })
             .exec();
     }
     async remove(profile, chatId) {
@@ -28321,7 +28321,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     }
     async bulkUpdateUsers(filter, update) {
         try {
-            return await this.userDataModel.updateMany(filter, update, { new: true }).exec();
+            return await this.userDataModel.updateMany(filter, update, { upsert: true }).exec();
         }
         catch (error) {
             throw new common_1.InternalServerErrorException((0, parseError_1.parseError)(error));
@@ -29216,7 +29216,7 @@ let UsersService = class UsersService {
     }
     async update(tgId, user) {
         delete user['_id'];
-        const result = await this.userModel.updateMany({ tgId }, { $set: user }, { new: true, upsert: true }).exec();
+        const result = await this.userModel.updateMany({ tgId }, { $set: user }, { upsert: true }).exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
         }
@@ -29224,7 +29224,7 @@ let UsersService = class UsersService {
     }
     async updateByFilter(filter, user) {
         delete user['_id'];
-        const result = await this.userModel.updateMany(filter, { $set: user }, { new: true, upsert: true }).exec();
+        const result = await this.userModel.updateMany(filter, { $set: user }, { upsert: true }).exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users with tgId ${JSON.stringify(filter)} not found`);
         }

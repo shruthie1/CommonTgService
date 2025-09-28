@@ -13,11 +13,11 @@ export declare class Channel {
     private: boolean;
     forbidden: boolean;
 }
-export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Channel, any, any, any, Document<unknown, any, Channel, any> & Channel & {
+export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Channel, any, any, any, Document<unknown, any, Channel, any, {}> & Channel & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, Channel, Document<unknown, {}, mongoose.FlatRecord<Channel>, {}> & mongoose.FlatRecord<Channel> & {
+}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, Channel, Document<unknown, {}, mongoose.FlatRecord<Channel>, {}, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & mongoose.FlatRecord<Channel> & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;

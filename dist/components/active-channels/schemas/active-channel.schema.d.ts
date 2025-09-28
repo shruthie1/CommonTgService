@@ -24,11 +24,11 @@ export declare class ActiveChannel {
     tempBan?: boolean;
     deletedCount?: number;
 }
-export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel, any> & ActiveChannel & {
+export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel, any, {}> & ActiveChannel & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>, {}> & mongoose.FlatRecord<ActiveChannel> & {
+}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>, {}, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & mongoose.FlatRecord<ActiveChannel> & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;

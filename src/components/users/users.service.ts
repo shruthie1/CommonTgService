@@ -59,7 +59,7 @@ export class UsersService {
 
   async update(tgId: string, user: UpdateUserDto): Promise<number> {
     delete user['_id']
-    const result = await this.userModel.updateMany({ tgId }, { $set: user }, { new: true, upsert: true }).exec();
+    const result = await this.userModel.updateMany({ tgId }, { $set: user }, { upsert: true }).exec();
     if (result.matchedCount === 0) {
       throw new NotFoundException(`Users with tgId ${tgId} not found`);
     }
@@ -68,7 +68,7 @@ export class UsersService {
 
   async updateByFilter(filter: any, user: UpdateUserDto): Promise<number> {
     delete user['_id']
-    const result = await this.userModel.updateMany(filter, { $set: user }, { new: true, upsert: true }).exec();
+    const result = await this.userModel.updateMany(filter, { $set: user }, { upsert: true }).exec();
     if (result.matchedCount === 0) {
       throw new NotFoundException(`Users with tgId ${JSON.stringify(filter)} not found`);
     }

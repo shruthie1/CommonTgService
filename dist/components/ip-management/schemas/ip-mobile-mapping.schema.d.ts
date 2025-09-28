@@ -6,11 +6,11 @@ export declare class IpMobileMapping {
     clientId: string;
     status: string;
 }
-export declare const IpMobileMappingSchema: import("mongoose").Schema<IpMobileMapping, import("mongoose").Model<IpMobileMapping, any, any, any, Document<unknown, any, IpMobileMapping, any> & IpMobileMapping & {
+export declare const IpMobileMappingSchema: import("mongoose").Schema<IpMobileMapping, import("mongoose").Model<IpMobileMapping, any, any, any, Document<unknown, any, IpMobileMapping, any, {}> & IpMobileMapping & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, IpMobileMapping, Document<unknown, {}, import("mongoose").FlatRecord<IpMobileMapping>, {}> & import("mongoose").FlatRecord<IpMobileMapping> & {
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, IpMobileMapping, Document<unknown, {}, import("mongoose").FlatRecord<IpMobileMapping>, {}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & import("mongoose").FlatRecord<IpMobileMapping> & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;

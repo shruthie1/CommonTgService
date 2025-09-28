@@ -34,11 +34,11 @@ export declare class SessionAudit {
     lastError?: string;
     lastErrorAt?: Date;
 }
-export declare const SessionAuditSchema: import("mongoose").Schema<SessionAudit, import("mongoose").Model<SessionAudit, any, any, any, Document<unknown, any, SessionAudit, any> & SessionAudit & {
+export declare const SessionAuditSchema: import("mongoose").Schema<SessionAudit, import("mongoose").Model<SessionAudit, any, any, any, Document<unknown, any, SessionAudit, any, {}> & SessionAudit & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, SessionAudit, Document<unknown, {}, import("mongoose").FlatRecord<SessionAudit>, {}> & import("mongoose").FlatRecord<SessionAudit> & {
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, SessionAudit, Document<unknown, {}, import("mongoose").FlatRecord<SessionAudit>, {}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & import("mongoose").FlatRecord<SessionAudit> & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;

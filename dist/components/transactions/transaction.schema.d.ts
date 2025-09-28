@@ -12,11 +12,11 @@ export declare class Transaction {
     signature?: string;
     currency?: string;
 }
-export declare const TransactionSchema: mongoose.Schema<Transaction, mongoose.Model<Transaction, any, any, any, mongoose.Document<unknown, any, Transaction, any> & Transaction & {
+export declare const TransactionSchema: mongoose.Schema<Transaction, mongoose.Model<Transaction, any, any, any, mongoose.Document<unknown, any, Transaction, any, {}> & Transaction & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, Transaction, mongoose.Document<unknown, {}, mongoose.FlatRecord<Transaction>, {}> & mongoose.FlatRecord<Transaction> & {
+}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, Transaction, mongoose.Document<unknown, {}, mongoose.FlatRecord<Transaction>, {}, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & mongoose.FlatRecord<Transaction> & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;

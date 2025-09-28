@@ -74,7 +74,7 @@ export class UserDataService {
         delete (updateUserDataDto as any)._id;
 
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .updateMany({ chatId }, { $set: updateUserDataDto }, { upsert: true })
             .exec();
     }
 
@@ -181,7 +181,7 @@ export class UserDataService {
 
     async bulkUpdateUsers(filter: any, update: UpdateQuery<UserDataDocument>) {
         try {
-            return await this.userDataModel.updateMany(filter, update, { new: true }).exec();
+            return await this.userDataModel.updateMany(filter, update, { upsert: true }).exec();
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }

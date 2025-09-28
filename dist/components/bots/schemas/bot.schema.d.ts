@@ -20,11 +20,11 @@ export declare class Bot {
         mediaGroupsSent: number;
     };
 }
-export declare const BotSchema: import("mongoose").Schema<Bot, import("mongoose").Model<Bot, any, any, any, Document<unknown, any, Bot, any> & Bot & {
+export declare const BotSchema: import("mongoose").Schema<Bot, import("mongoose").Model<Bot, any, any, any, Document<unknown, any, Bot, any, {}> & Bot & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Bot, Document<unknown, {}, import("mongoose").FlatRecord<Bot>, {}> & import("mongoose").FlatRecord<Bot> & {
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Bot, Document<unknown, {}, import("mongoose").FlatRecord<Bot>, {}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & import("mongoose").FlatRecord<Bot> & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;

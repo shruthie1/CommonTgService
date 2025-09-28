@@ -12,12 +12,12 @@ export declare class ActiveChannelsService {
     findAll(): Promise<ActiveChannel[]>;
     findOne(channelId: string): Promise<ActiveChannel>;
     update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel>;
-    removeFromAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument, {}> & ActiveChannel & import("mongoose").Document<unknown, any, any, Record<string, any>> & Required<{
+    removeFromAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument, {}, {}> & ActiveChannel & import("mongoose").Document<unknown, any, any, Record<string, any>, {}> & Required<{
         _id: unknown;
     }> & {
         __v: number;
     }>;
-    addToAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument, {}> & ActiveChannel & import("mongoose").Document<unknown, any, any, Record<string, any>> & Required<{
+    addToAvailableMsgs(channelId: string, msg: string): Promise<import("mongoose").Document<unknown, {}, ActiveChannelDocument, {}, {}> & ActiveChannel & import("mongoose").Document<unknown, any, any, Record<string, any>, {}> & Required<{
         _id: unknown;
     }> & {
         __v: number;
