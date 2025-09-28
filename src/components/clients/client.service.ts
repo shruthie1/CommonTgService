@@ -839,7 +839,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         session: newSession,
       });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
-      await this.bufferClientService.remove(newMobile);
+      await this.bufferClientService.remove(newMobile, 'Used for new client');
       setTimeout(async () => {
         await this.updateClient(
           clientId,
@@ -919,7 +919,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
               ])
             ) {
               this.logger.log('Deleting User: ', existingClientUser.mobile);
-              await this.bufferClientService.remove(existingClientUser.mobile);
+              await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
             } else {
               this.logger.log('Not Deleting user');
             }
