@@ -939,6 +939,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var InitModule_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.InitModule = void 0;
@@ -951,6 +954,7 @@ const init_controller_1 = __webpack_require__(/*! ./init.controller */ "./src/co
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
+const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 let InitModule = InitModule_1 = class InitModule {
     constructor(connection, configService) {
         this.connection = connection;
@@ -1093,7 +1097,7 @@ exports.InitModule = InitModule = InitModule_1 = __decorate([
                 isGlobal: true,
                 cache: true,
                 expandVariables: true,
-                envFilePath: '.env',
+                envFilePath: [path_1.default.resolve(process.cwd(), '.env'), '.env']
             }),
             mongoose_1.MongooseModule.forRootAsync({
                 imports: [config_1.ConfigModule],

@@ -1,0 +1,76 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LoggerMiddleware = void 0;
+const common_1 = require("@nestjs/common");
+const parseError_1 = require("../utils/parseError");
+const utils_1 = require("../utils");
+const components_1 = require("../components");
+let LoggerMiddleware = class LoggerMiddleware {
+    constructor() {
+        this.logger = new utils_1.Logger('HTTP');
+    }
+    use(req, res, next) {
+        const { method, originalUrl } = req;
+        const startTime = Date.now();
+        const ip = req.ip;
+        const excludedEndpoints = [
+            '/sendtochannel',
+            '/favicon.',
+            '/tgsignup',
+            '/timestamps',
+        ];
+        const isExcluded = (url) => excludedEndpoints.some((endpoint) => url.startsWith(endpoint));
+        if (!isExcluded(originalUrl) && originalUrl !== '/') {
+            res.on('finish', () => {
+                const { statusCode } = res;
+                const duration = Date.now() - startTime;
+                const durationStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
+                if (statusCode >= 500) {
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                }
+                else if (statusCode >= 400) {
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                }
+                else if (statusCode >= 300) {
+                    this.logger.verbose(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                }
+                else {
+                    this.logger.debug(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                }
+            });
+            res.on('error', (error) => {
+                const errorDetails = (0, parseError_1.parseError)(error, process.env.clientId);
+                const botsService = (0, utils_1.getBotsServiceInstance)();
+                if (!botsService) {
+                    this.logger.warn(`BotsService instance not available for notifications`);
+                    return;
+                }
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
+            });
+        }
+        else {
+            if (originalUrl.includes('Video')) {
+                this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+            }
+        }
+        next();
+    }
+};
+exports.LoggerMiddleware = LoggerMiddleware;
+exports.LoggerMiddleware = LoggerMiddleware = __decorate([
+    (0, common_1.Injectable)()
+], LoggerMiddleware);
+//# sourceMappingURL=logger.middleware.js.map
