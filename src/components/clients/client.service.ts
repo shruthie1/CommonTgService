@@ -41,6 +41,8 @@ import {
   PromoteClient,
   PromoteClientDocument,
 } from '../promote-clients/schemas/promote-client.schema';
+import path from 'path';
+import { Api } from 'telegram/tl';
 
 
 let settingupClient = Date.now() - 250000
@@ -821,7 +823,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const client = await this.findOne(clientId);
     try {
       this.lastUpdateMap.set(clientId, now);
-      await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
       const telegramClient = await connectionManager.getClient(client.mobile, {
         handler: false,
       });
@@ -864,6 +865,26 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await sleep(1000);
       await telegramClient.updatePrivacy();
       await sleep(1000);
+
+      const rootPath = process.cwd();
+      const photos = await telegramClient.client.invoke(
+        new Api.photos.GetUserPhotos({
+          userId: 'me',
+          offset: 0,
+        })
+      );
+      if (photos.photos.length < 1) {
+        await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+        await sleep(6000 + Math.random() * 3000); // 6-9s delay
+        // Add new profile photos with staggered delays
+        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+        for (const photo of photoPaths) {
+          await telegramClient.updateProfilePic(path.join(rootPath, photo));
+          this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${me.phone}`);
+          await sleep(20000 + Math.random() * 15000); // 20-35s delay per photo
+        }
+      }
+
       await fetchWithTimeout(`${notifbot()}&text=Updated Client: ${clientId} - ${message}`);
       await fetchWithTimeout(client.deployKey);
     } catch (error) {
