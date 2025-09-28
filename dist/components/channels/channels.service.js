@@ -20,7 +20,6 @@ const channel_schema_1 = require("./schemas/channel.schema");
 let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
-        console.log(channel_schema_1.Channel.name);
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);

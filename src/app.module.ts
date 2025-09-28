@@ -23,9 +23,10 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD , APP_FILTER} from '@nestjs/core';
 import { AuthGuard } from './guards';
 import { BotsModule } from './components';
+import { ExceptionsFilter } from './interceptors';
 
 @Module({
   imports: [
@@ -57,6 +58,10 @@ import { BotsModule } from './components';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: ExceptionsFilter
     },
   ],
   controllers: [AppController],

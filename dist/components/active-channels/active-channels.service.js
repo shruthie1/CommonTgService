@@ -64,7 +64,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {
-        console.log(filter);
+        console.log("Search Filter:", filter);
         return this.activeChannelModel.find(filter).exec();
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
@@ -156,7 +156,7 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, parseError_1.parseError)(e));
+            (0, parseError_1.parseError)(e);
         }
     }
     async resetAvailableMsgs() {
@@ -178,7 +178,7 @@ let ActiveChannelsService = class ActiveChannelsService {
             });
         }
         catch (e) {
-            console.log((0, parseError_1.parseError)(e));
+            (0, parseError_1.parseError)(e);
         }
     }
     async updateBannedChannels() {

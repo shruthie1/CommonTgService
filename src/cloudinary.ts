@@ -75,7 +75,7 @@ export class CloudinaryService {
                 invalidate: true,
                 public_id: cloudinaryFileId
             });
-            console.log(result);
+            console.log('File overwritten successfully:', result);
         } catch (error) {
             parseError(error)
         }
@@ -90,7 +90,7 @@ export class CloudinaryService {
                     this.resources.set(resource.public_id.split('/')[1].split('_')[0], resource.url);
                     await saveFile(resource.url, resource.public_id.split('/')[1].split('_')[0]);
                 } catch (error) {
-                    console.log(resource);
+                    console.log("Error in saving file from cloudinary");
                     parseError(error)
                 }
             }));
@@ -159,7 +159,7 @@ export class CloudinaryService {
             const result = this.resources.get(publicId)
             return result || '';
         } catch (error) {
-            console.log(error);
+            console.log("Error in getting buffer");
         }
     }
 }
@@ -169,7 +169,7 @@ async function saveFile(url: string, name: string) {
         const extension = url.substring(url.lastIndexOf('.') + 1);
         const rootPath = process.cwd();
         const mypath = path.join(rootPath, `${name}.${extension}`);
-        console.log(mypath);
+        console.log(`Downloading file: ${mypath}`);
 
         const res = await fetchWithTimeout(url, { responseType: 'arraybuffer' }, 2);
 

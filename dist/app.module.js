@@ -35,6 +35,7 @@ const ip_management_module_1 = require("./components/ip-management/ip-management
 const core_1 = require("@nestjs/core");
 const guards_1 = require("./guards");
 const components_1 = require("./components");
+const interceptors_1 = require("./interceptors");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -72,6 +73,10 @@ exports.AppModule = AppModule = __decorate([
             {
                 provide: core_1.APP_GUARD,
                 useClass: guards_1.AuthGuard,
+            },
+            {
+                provide: core_1.APP_FILTER,
+                useClass: interceptors_1.ExceptionsFilter
             },
         ],
         controllers: [app_controller_1.AppController],

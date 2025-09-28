@@ -36,6 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const processListeners_1 = require("./processListeners");
+(0, processListeners_1.setProcessListeners)();
 require("reflect-metadata");
 const core_1 = require("@nestjs/core");
 const mongoose_1 = __importDefault(require("mongoose"));
@@ -47,88 +49,56 @@ const utils_1 = require("./utils");
 const Exception_filter_1 = require("./interceptors/Exception-filter");
 const timeout_interceptor_1 = require("./interceptors/timeout.interceptor");
 async function bootstrap() {
-    const app = await core_1.NestFactory.create(app_module_1.AppModule, {
-        logger: utils_1.Logger
-    });
-    const config = new swagger_1.DocumentBuilder()
-        .setTitle('NestJS and Express API')
-        .setDescription('API documentation')
-        .setVersion('1.0')
-        .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
-        .build();
-    app.use((req, res, next) => {
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
-        next();
-    });
-    app.enableCors({
-        allowedHeaders: "*",
-        origin: "*"
-    });
-    const document = swagger_1.SwaggerModule.createDocument(app, config, {
-        deepScanRoutes: true,
-    });
-    document.components ??= {};
-    document.components.securitySchemes ??= {};
-    document.security = [{ 'x-api-key': [] }];
-    fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
-    swagger_1.SwaggerModule.setup('apim', app, document, {
-        swaggerOptions: {
-            persistAuthorization: true,
-            authAction: {
-                'x-api-key': {
-                    name: 'x-api-key',
-                    schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
-                    value: process.env.API_KEY || 'santoor',
+    try {
+        const app = await core_1.NestFactory.create(app_module_1.AppModule, {
+            logger: utils_1.Logger
+        });
+        const config = new swagger_1.DocumentBuilder()
+            .setTitle('NestJS and Express API')
+            .setDescription('API documentation')
+            .setVersion('1.0')
+            .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
+            .build();
+        app.enableCors({
+            allowedHeaders: "*",
+            origin: "*"
+        });
+        const document = swagger_1.SwaggerModule.createDocument(app, config, {
+            deepScanRoutes: true,
+        });
+        document.components ??= {};
+        document.components.securitySchemes ??= {};
+        document.security = [{ 'x-api-key': [] }];
+        fs.writeFileSync('./swagger-spec.json', JSON.stringify(document, null, 2));
+        swagger_1.SwaggerModule.setup('apim', app, document, {
+            swaggerOptions: {
+                persistAuthorization: true,
+                authAction: {
+                    'x-api-key': {
+                        name: 'x-api-key',
+                        schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+                        value: process.env.API_KEY || 'santoor',
+                    },
                 },
             },
-        },
-    });
-    mongoose_1.default.set('debug', true);
-    app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
-    app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
-    app.useGlobalPipes(new common_1.ValidationPipe({
-        transform: true,
-        transformOptions: {
-            enableImplicitConversion: true
-        },
-    }));
-    process.on('unhandledRejection', (reason, promise) => {
-        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    });
-    process.on('uncaughtException', (reason, promise) => {
-        console.log('Uncaught Exception at:');
-        console.error(promise, reason);
-    });
-    let isShuttingDown = false;
-    const shutdown = async (signal) => {
-        if (isShuttingDown)
-            return;
-        isShuttingDown = true;
-        console.log(`${signal} received`);
-        console.log("CTS exit Request");
-        await app.close();
-        process.exit(0);
-    };
-    process.on('exit', async () => {
-        console.log('Application closed');
-    });
-    process.on('SIGINT', async () => {
-        console.log('SIGINT received');
-        await shutdown('SIGINT');
-    });
-    process.on('SIGTERM', async () => {
-        console.log('SIGTERM received');
-        await shutdown('SIGTERM');
-    });
-    process.on('SIGQUIT', async () => {
-        console.log('SIGQUIT received');
-        await shutdown('SIGQUIT');
-    });
-    await app.init();
-    await app.listen(process.env.PORT || 9002);
-    console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
+        });
+        mongoose_1.default.set('debug', true);
+        app.useGlobalFilters(new Exception_filter_1.ExceptionsFilter());
+        app.useGlobalInterceptors(new timeout_interceptor_1.TimeoutInterceptor(60000));
+        app.useGlobalPipes(new common_1.ValidationPipe({
+            transform: true,
+            transformOptions: {
+                enableImplicitConversion: true
+            },
+        }));
+        await app.init();
+        await app.listen(process.env.PORT || 9002);
+        console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
+    }
+    catch (error) {
+        console.error('Error during application bootstrap:', error);
+        process.exit(1);
+    }
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

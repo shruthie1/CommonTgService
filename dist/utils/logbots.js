@@ -6,6 +6,7 @@ exports.ppplbot = ppplbot;
 const getBotTokens = () => {
     const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
     if (botTokens.length === 0) {
+        console.error('No bot tokens configured. Please set BOT_TOKENS environment variable');
         throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
     }
     return botTokens;

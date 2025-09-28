@@ -70,7 +70,7 @@ export class ActiveChannelsService {
   }
 
   async search(filter: any): Promise<ActiveChannel[]> {
-    console.log(filter)
+    console.log("Search Filter:", filter);
     return this.activeChannelModel.find(filter).exec();
   }
 
@@ -170,7 +170,7 @@ export class ActiveChannelsService {
         }
       })
     } catch (e) {
-      console.log(parseError(e))
+      parseError(e)
     }
   }
 
@@ -195,7 +195,7 @@ export class ActiveChannelsService {
         }
       );
     } catch (e) {
-      console.log(parseError(e))
+      parseError(e)
     }
   }
 

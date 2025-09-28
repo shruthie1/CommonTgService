@@ -100,7 +100,7 @@ class CloudinaryService {
                 invalidate: true,
                 public_id: cloudinaryFileId
             });
-            console.log(result);
+            console.log('File overwritten successfully:', result);
         }
         catch (error) {
             (0, parseError_1.parseError)(error);
@@ -115,7 +115,7 @@ class CloudinaryService {
                     await saveFile(resource.url, resource.public_id.split('/')[1].split('_')[0]);
                 }
                 catch (error) {
-                    console.log(resource);
+                    console.log("Error in saving file from cloudinary");
                     (0, parseError_1.parseError)(error);
                 }
             }));
@@ -182,7 +182,7 @@ class CloudinaryService {
             return result || '';
         }
         catch (error) {
-            console.log(error);
+            console.log("Error in getting buffer");
         }
     }
 }
@@ -192,7 +192,7 @@ async function saveFile(url, name) {
         const extension = url.substring(url.lastIndexOf('.') + 1);
         const rootPath = process.cwd();
         const mypath = path.join(rootPath, `${name}.${extension}`);
-        console.log(mypath);
+        console.log(`Downloading file: ${mypath}`);
         const res = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' }, 2);
         if (res?.statusText === 'OK') {
             if (!fs.existsSync(mypath)) {

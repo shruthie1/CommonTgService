@@ -11,7 +11,8 @@ import { PipelineStage } from 'mongoose';
 export class ChannelsService {
   constructor(
     @InjectModel(Channel.name) private ChannelModel: Model<ChannelDocument>,
-  ) { console.log(Channel.name) }
+  ) {
+  }
 
   async create(createChannelDto: CreateChannelDto): Promise<Channel> {
     const createdChannel = new this.ChannelModel(createChannelDto);

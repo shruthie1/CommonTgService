@@ -23,6 +23,7 @@ import path from 'path';
       useFactory: async (configService: ConfigService) => {
         const uri = process.env.mongouri || configService.get<string>('mongouri');
         if (!uri) {
+          console.error('MongoDB URI is not configured. Please set the "mongouri" environment variable.');
           throw new Error('MongoDB URI is not configured');
         }
 

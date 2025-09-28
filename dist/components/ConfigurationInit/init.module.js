@@ -176,6 +176,7 @@ exports.InitModule = InitModule = InitModule_1 = __decorate([
                 useFactory: async (configService) => {
                     const uri = process.env.mongouri || configService.get('mongouri');
                     if (!uri) {
+                        console.error('MongoDB URI is not configured. Please set the "mongouri" environment variable.');
                         throw new Error('MongoDB URI is not configured');
                     }
                     return {

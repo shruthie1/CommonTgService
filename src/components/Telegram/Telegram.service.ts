@@ -1007,6 +1007,7 @@ export class TelegramService implements OnModuleDestroy {
         this.logger.info(mobile, 'Add bots to channel', { channelIds });
         const botTokens = (process.env.BOT_TOKENS || '').split(',').filter(Boolean);
         if (botTokens.length === 0) {
+            console.warn('No bot tokens configured. Please set BOT_TOKENS environment variable');
             throw new Error('No bot tokens configured. Please set BOT_TOKENS environment variable');
         }
         for (const token of botTokens) {
