@@ -3,5 +3,10 @@ declare const UpdateBufferClientDto_base: import("@nestjs/common").Type<Partial<
 export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     inUse?: boolean;
     lastUsed?: Date;
+    privacyUpdatedAt?: Date;
+    profilePicsUpdatedAt?: Date;
+    nameBioUpdatedAt?: Date;
+    profilePicsDeletedAt?: Date;
+    usernameUpdatedAt?: Date;
 }
 export {};

@@ -847,9 +847,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
             let updateCount = 0;
             const MAX_UPDATES_PER_RUN = 2;
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) && updateCount < MAX_UPDATES_PER_RUN) {
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
+                (doc.privacyUpdatedAt === null ||
+                    (doc.privacyUpdatedAt && doc.privacyUpdatedAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))) &&
+                updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await cli.updatePrivacyforDeletedAccount();
+                    this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     updateCount++;
                     this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
@@ -864,7 +868,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
-                doc.createdAt > new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) &&
+                (doc.profilePicsDeletedAt === null ||
+                    (doc.profilePicsDeletedAt && doc.profilePicsDeletedAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
@@ -873,6 +878,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }));
                     if (photos.photos.length > 0) {
                         await cli.deleteProfilePhotos();
+                        this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
                         updateCount++;
                         this.logger.debug(`Deleted profile photos for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
@@ -889,6 +895,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 100 &&
+                (doc.nameBioUpdatedAt === null ||
+                    (doc.nameBioUpdatedAt && doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 if (me.firstName !== client.name) {
                     try {
@@ -897,6 +905,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             maintainFormatting: false,
                             preserveCase: true,
                         }));
+                        this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         updateCount++;
                         this.logger.debug(`Updated name and bio for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
@@ -913,9 +922,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 150 &&
+                (doc.usernameUpdatedAt === null ||
+                    (doc.usernameUpdatedAt && doc.usernameUpdatedAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+                    this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     updateCount++;
                     this.logger.debug(`Updated username for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
@@ -931,6 +943,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 170 &&
+                (doc.profilePicsUpdatedAt === null ||
+                    (doc.profilePicsUpdatedAt && doc.profilePicsUpdatedAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000))) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const rootPath = process.cwd();
@@ -950,6 +964,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             this.logger.debug(`Updated profile photo ${photo} for ${doc.mobile}`);
                             await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                         }
+                        this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
                     }
                 }
                 catch (error) {
