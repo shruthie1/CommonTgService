@@ -1,4 +1,3 @@
-console.log("in Cloudinary");
 import * as cloudinary from 'cloudinary';
 import * as path from 'path';
 import * as fs from 'fs';
