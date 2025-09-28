@@ -1,2 +1,2 @@
 import { TelegramClientParams } from "telegram/client/telegramBaseClient";
-export declare function generateTGConfig(mobile: string): Promise<TelegramClientParams>;
+export declare function generateTGConfig(mobile: string, ttl?: number): Promise<TelegramClientParams>;

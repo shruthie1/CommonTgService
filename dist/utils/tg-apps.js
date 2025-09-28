@@ -15,7 +15,7 @@ const API_CREDENTIALS = [
 function pickRandomCredentials() {
     return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }
-async function getCredentialsForMobile(mobile, ttl) {
+async function getCredentialsForMobile(mobile, ttl = 24 * 60 * 60 * 60) {
     const redisKey = `tg:credentials:${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (cached) {

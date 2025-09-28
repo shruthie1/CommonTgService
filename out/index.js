@@ -8617,7 +8617,7 @@ const APP_VERSIONS = ["1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"];
 function pickRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
-async function generateTGConfig(mobile) {
+async function generateTGConfig(mobile, ttl = 24 * 60 * 60 * 60) {
     const redisKey = `tg:config:${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (cached) {
@@ -8636,7 +8636,7 @@ async function generateTGConfig(mobile) {
         appVersion: pickRandom(APP_VERSIONS),
     };
     logger.log(`[generateTGConfig] Storing config in Redis for ${mobile}`);
-    await redisClient_1.RedisClient.set(redisKey, config);
+    await redisClient_1.RedisClient.set(redisKey, config, ttl);
     return config;
 }
 
@@ -32453,7 +32453,7 @@ const API_CREDENTIALS = [
 function pickRandomCredentials() {
     return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
 }
-async function getCredentialsForMobile(mobile, ttl) {
+async function getCredentialsForMobile(mobile, ttl = 24 * 60 * 60 * 60) {
     const redisKey = `tg:credentials:${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (cached) {
