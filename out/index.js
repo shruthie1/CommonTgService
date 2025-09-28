@@ -605,7 +605,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CloudinaryService = void 0;
-console.log("in Cloudinary");
 const cloudinary = __importStar(__webpack_require__(/*! cloudinary */ "cloudinary"));
 const path = __importStar(__webpack_require__(/*! path */ "path"));
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
@@ -29923,7 +29922,7 @@ async function bootstrap() {
     });
     await app.init();
     await app.listen(process.env.PORT || 9002);
-    console.log(`Application is running on: ${await app.getUrl()}`);
+    console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
 }
 bootstrap();
 
