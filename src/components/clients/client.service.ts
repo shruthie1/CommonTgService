@@ -18,6 +18,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import {
+  attemptReverseFuzzy,
   contains,
   fetchNumbersFromString,
   getRandomEmoji,
@@ -837,9 +838,26 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.update(client.clientId, { username: updatedUsername });
       }
       await sleep(1000);
-      if (me.firstName !== client.name) {
+      const normalizeString = (str: string | null | undefined): string => {
+        return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+      };
+
+      const safeAttemptReverse = (val: string | null | undefined): string => {
+        try {
+          return attemptReverseFuzzy(val ?? '') || '';
+        } catch {
+          return '';
+        }
+      };
+
+      const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
+      const expectedName = normalizeString(client.name || '');
+
+      if (actualName !== expectedName) {
         this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-        await telegramClient.updateProfile(client.name, obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, { maintainFormatting: false, preserveCase: true }));
+        await telegramClient.updateProfile(
+          obfuscateText(client.name, { maintainFormatting: false, preserveCase: true }),
+          obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, { maintainFormatting: false, preserveCase: true }));
       } else {
         this.logger.log(`First name for ${clientId} is already up to date`);
       }

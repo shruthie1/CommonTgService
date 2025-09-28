@@ -30,7 +30,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { contains, getRandomEmoji, Logger, obfuscateText } from '../../utils';
+import { attemptReverseFuzzy, contains, getRandomEmoji, Logger, obfuscateText } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
@@ -1149,11 +1149,31 @@ export class BufferClientService implements OnModuleDestroy {
                 (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
-                if (me.firstName !== client.name) {
+
+                const normalizeString = (str: string | null | undefined): string => {
+                    return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+                };
+    
+                const safeAttemptReverse = (val: string | null | undefined): string => {
+                    try {
+                        return attemptReverseFuzzy(val ?? '') || '';
+                    } catch {
+                        return '';
+                    }
+                };
+    
+                const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
+                const expectedName = normalizeString(client.name || '');
+    
+                if (actualName !== expectedName) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                         await cli.updateProfile(
-                            client.name,
+                            obfuscateText(client.name, {
+                                maintainFormatting: false,
+                                preserveCase: true,
+                                useInvisibleChars: false
+                            }),
                             obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
                                 maintainFormatting: false,
                                 preserveCase: true,
