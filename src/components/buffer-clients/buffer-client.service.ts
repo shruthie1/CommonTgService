@@ -1011,13 +1011,17 @@ export class BufferClientService implements OnModuleDestroy {
                 },
             },
         ]);
-
+        let totalUpdates = 0;
         for (const result of bufferClientCounts) {
             bufferClientsPerClient.set(result._id, result.count);
-            for (const bufferClientMobile of result.mobiles) {
-                const bufferClient = await this.findOne(bufferClientMobile);
-                const client = clients.find((c) => c.clientId === result._id);
-                await this.processBufferClient(bufferClient, client);
+            if (totalUpdates < 5) {
+                for (const bufferClientMobile of result.mobiles) {
+                    const bufferClient = await this.findOne(bufferClientMobile);
+                    const client = clients.find((c) => c.clientId === result._id);
+                    totalUpdates += await this.processBufferClient(bufferClient, client);
+                }
+            } else {
+                this.logger.warn(`Skipping buffer client ${result.mobiles.join(', ')} as total updates reached 5`);
             }
         }
 
@@ -1057,13 +1061,16 @@ export class BufferClientService implements OnModuleDestroy {
         }
     }
 
-    async processBufferClient(doc: BufferClient, client: Client) {
+    async processBufferClient(doc: BufferClient, client: Client): Promise<number> {
         if (doc.inUse && doc.lastUsed !== null) {
-            this.logger.debug(`Buffer client ${doc.mobile} is in already used by a client`);
-            return;
+            this.logger.debug(`[BufferClientService] Buffer client ${doc.mobile} is already in use`);
+            return 0;
         }
 
         let cli: TelegramManager;
+        let updateCount = 0; // Track number of updates performed
+        const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
+
         try {
             // Random initial delay to avoid patterned client connections
             await sleep(10000 + Math.random() * 5000); // 10-15s
@@ -1077,46 +1084,39 @@ export class BufferClientService implements OnModuleDestroy {
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
             if (lastUsed && now - lastUsed < 30 * 60 * 1000) { // 30-minute cooldown
-                this.logger.warn(`Client ${doc.mobile} was recently used, skipping to avoid rate limits`);
-                return;
+                this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
+                return 0;
             }
 
             const me = await cli.getMe();
             await sleep(5000 + Math.random() * 10000); // 5-15s delay after getting user info
 
-            // Counter to limit profile updates per execution
-            let updateCount = 0;
-            const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
-
             // Privacy update for accounts older than 1 day
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
-                (
-                    doc.privacyUpdatedAt === null ||
-                    (doc.privacyUpdatedAt && doc.privacyUpdatedAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000))
-                ) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
+                (!doc.privacyUpdatedAt || doc.privacyUpdatedAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
                 try {
                     await cli.updatePrivacyforDeletedAccount();
-                    this.update(doc.mobile,{privacyUpdatedAt: new Date()})
+                    await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     updateCount++;
-                    this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-                    await sleep(20000 + Math.random() * 15000); // 30-45s delay
+                    this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
+                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    this.logger.warn(`Failed to update privacy for ${doc.mobile}: ${error.message}`);
+                    this.logger.warn(`[BufferClientService] Failed to update privacy for ${doc.mobile}: ${error.message}`);
                     if (this.isPermanentError(error)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
-                        return;
                     }
                 }
             }
 
+            // Delete profile photos for accounts 2+ days old
             if (
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
-                (
-                    doc.profilePicsDeletedAt === null ||
-                    (doc.profilePicsDeletedAt && doc.profilePicsDeletedAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
-                ) &&
+                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1128,16 +1128,15 @@ export class BufferClientService implements OnModuleDestroy {
                     );
                     if (photos.photos.length > 0) {
                         await cli.deleteProfilePhotos();
-                        this.update(doc.mobile,{profilePicsDeletedAt: new Date()})
+                        await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
                         updateCount++;
-                        this.logger.debug(`Deleted profile photos for ${doc.mobile}`);
-                        await sleep(20000 + Math.random() * 15000); // 30-45s delay
+                        this.logger.debug(`[BufferClientService] Deleted profile photos for ${doc.mobile}`);
+                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     }
                 } catch (error: any) {
-                    this.logger.warn(`Failed to delete photos for ${doc.mobile}: ${error.message}`);
+                    this.logger.warn(`[BufferClientService] Failed to delete photos for ${doc.mobile}: ${error.message}`);
                     if (this.isPermanentError(error)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${error.message}`);
-                        return;
                     }
                 }
             }
@@ -1147,15 +1146,12 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 100 &&
-                (
-                    doc.nameBioUpdatedAt === null ||
-                    (doc.nameBioUpdatedAt && doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000))
-                ) &&
+                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 if (me.firstName !== client.name) {
                     try {
-                        this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                        this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                         await cli.updateProfile(
                             client.name,
                             obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
@@ -1163,15 +1159,14 @@ export class BufferClientService implements OnModuleDestroy {
                                 preserveCase: true,
                             })
                         );
-                        this.update(doc.mobile,{nameBioUpdatedAt: new Date()})
+                        await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         updateCount++;
-                        this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-                        await sleep(20000 + Math.random() * 15000); // 30-45s delay
+                        this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
+                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     } catch (error: any) {
-                        this.logger.warn(`Failed to update profile for ${doc.mobile}: ${error.message}`);
+                        this.logger.warn(`[BufferClientService] Failed to update profile for ${doc.mobile}: ${error.message}`);
                         if (this.isPermanentError(error)) {
                             await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${error.message}`);
-                            return;
                         }
                     }
                 }
@@ -1182,23 +1177,19 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 150 &&
-                (
-                    doc.usernameUpdatedAt === null ||
-                    (doc.usernameUpdatedAt && doc.usernameUpdatedAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-                ) &&
+                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
-                    this.update(doc.mobile,{usernameUpdatedAt: new Date()})
+                    await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     updateCount++;
-                    this.logger.debug(`Updated username for ${doc.mobile}`);
-                    await sleep(20000 + Math.random() * 15000); // 30-45s delay
+                    this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
+                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    this.logger.warn(`Failed to update username for ${doc.mobile}: ${error.message}`);
+                    this.logger.warn(`[BufferClientService] Failed to update username for ${doc.mobile}: ${error.message}`);
                     if (this.isPermanentError(error)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${error.message}`);
-                        return;
                     }
                 }
             }
@@ -1208,10 +1199,7 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 170 &&
-                (
-                    doc.profilePicsUpdatedAt === null ||
-                    (doc.profilePicsUpdatedAt && doc.profilePicsUpdatedAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000))
-                ) &&
+                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1231,37 +1219,37 @@ export class BufferClientService implements OnModuleDestroy {
                             if (updateCount >= MAX_UPDATES_PER_RUN) break;
                             await cli.updateProfilePic(path.join(rootPath, photo));
                             updateCount++;
-                            this.logger.debug(`Updated profile photo ${photo} for ${doc.mobile}`);
-                            await sleep(20000 + Math.random() * 15000); // 30-45s delay per photo
+                            this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${doc.mobile}`);
+                            await sleep(20000 + Math.random() * 15000); // 20-35s delay per photo
                         }
-                        this.update(doc.mobile,{profilePicsUpdatedAt: new Date()})
+                        await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
                     }
                 } catch (error: any) {
-                    this.logger.warn(`Failed to update profile photos for ${doc.mobile}: ${error.message}`);
+                    this.logger.warn(`[BufferClientService] Failed to update profile photos for ${doc.mobile}: ${error.message}`);
                     if (this.isPermanentError(error)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${error.message}`);
-                        return;
                     }
                 }
             }
+
+            return updateCount; // Return true if any updates were performed
         } catch (error: any) {
-            this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
+            this.logger.error(`[BufferClientService] Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = parseError(error);
             if (this.isPermanentError(errorDetails)) {
                 try {
                     await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
                     await sleep(6000 + Math.random() * 3000); // 6-9s delay
                 } catch (removeError) {
-                    this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
+                    this.logger.error(`[BufferClientService] Error removing client ${doc.mobile}: ${removeError}`);
                 }
-            } else if (error.message.includes('FLOOD_WAIT') || error.message.includes('TOO_MANY_REQUESTS')) {
-                await this.markAsInactive(doc.mobile, `Rate limit hit: ${error.message}`);
             }
+            return 0; // Return false on error
         } finally {
             try {
                 if (cli) await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError: any) {
-                this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+                this.logger.error(`[BufferClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
             await sleep(10000 + Math.random() * 5000); // 10-15s final delay
         }
