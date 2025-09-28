@@ -536,9 +536,7 @@ let ClientService = ClientService_1 = class ClientService {
                 catch (error) {
                     (0, parseError_1.parseError)(error);
                     this.logger.log('Removing buffer as error');
-                    const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
-                        .toISOString()
-                        .split('T')[0];
+                    const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                     await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
                     this.telegramService.setActiveClientSetup(undefined);
                 }
@@ -600,9 +598,7 @@ let ClientService = ClientService_1 = class ClientService {
                             this.logger.log('Formalities skipped');
                         }
                         if (archiveOld) {
-                            const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
-                                .toISOString()
-                                .split('T')[0];
+                            const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                             const bufferClientDto = {
                                 mobile: existingMobile,
                                 availableDate,
@@ -666,9 +662,7 @@ let ClientService = ClientService_1 = class ClientService {
             const me = await telegramClient.getMe();
             if (!me.username ||
                 me.username !== client.username ||
-                !me.username
-                    ?.toLowerCase()
-                    .startsWith(me.firstName.split(' ')[0].toLowerCase())) {
+                !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const client = await this.findOne(clientId);
                 const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
                 await (0, Helpers_1.sleep)(1000);
@@ -700,38 +694,6 @@ let ClientService = ClientService_1 = class ClientService {
         const clients = await this.findAll();
         for (const client of Object.values(clients)) {
             await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
-        }
-    }
-    async generateNewSession(phoneNumber, attempt = 1) {
-        try {
-            this.logger.log('String Generation started');
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=String Generation started for NewNumber:${phoneNumber}`);
-            await (0, Helpers_1.sleep)(1000);
-            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
-            if (response) {
-                this.logger.log(`Code Sent successfully`, response.data);
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Code Sent successfully`);
-                await this.bufferClientService.update(phoneNumber, {
-                    availableDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
-                        .toISOString()
-                        .split('T')[0],
-                });
-            }
-            else {
-                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Failed to send Code`);
-                this.logger.log('Failed to send Code', response);
-                if (attempt < 2) {
-                    await (0, Helpers_1.sleep)(8000);
-                    await this.generateNewSession(phoneNumber, attempt + 1);
-                }
-            }
-        }
-        catch (error) {
-            this.logger.log(error);
-            if (attempt < 2) {
-                await (0, Helpers_1.sleep)(8000);
-                await this.generateNewSession(phoneNumber, attempt + 1);
-            }
         }
     }
     async executeQuery(query, sort, limit, skip) {

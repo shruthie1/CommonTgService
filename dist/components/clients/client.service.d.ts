@@ -90,7 +90,6 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     updateClientSession(newSession: string): Promise<void>;
     updateClient(clientId: string, message?: string): Promise<void>;
     updateClients(): Promise<void>;
-    generateNewSession(phoneNumber: string, attempt?: number): Promise<void>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]>;
     getPromoteMobiles(clientId: string): Promise<string[]>;
     getAllPromoteMobiles(): Promise<string[]>;

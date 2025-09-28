@@ -122,4 +122,9 @@ export declare class BufferClientService implements OnModuleDestroy {
         averageUsageGap: number;
     }>;
     markAsUsed(mobile: string, message?: string): Promise<BufferClientDocument>;
+    isPermanentError(errorDetails: {
+        error: any;
+        message: string;
+        status: number;
+    }): Promise<boolean>;
 }
