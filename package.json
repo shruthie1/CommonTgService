@@ -60,6 +60,7 @@
     "cloudinary": "^2.7.0",
     "https": "^1.0.0",
     "imap": "^0.8.19",
+    "ioredis": "^5.8.0",
     "mongoose": "^8.18.2",
     "node-cache": "^5.1.2",
     "rxjs": "^7.8.2",

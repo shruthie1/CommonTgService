@@ -1,17 +1,47 @@
-interface ITelegramCredentials {
-    apiId: number;
-    apiHash: string;
+import { RedisClient } from "./redisClient";
+
+export interface ITelegramCredentials {
+  apiId: number;
+  apiHash: string;
 }
 
 const API_CREDENTIALS: ITelegramCredentials[] = [
-    { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
-    { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
-    { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
-    { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
-    { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
-    { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
+  { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
+  { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
+  { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
+  { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
+  { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
+  { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
 ];
 
-export function getRandomCredentials(): ITelegramCredentials {
-    return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
+/**
+ * Picks a random set of credentials.
+ */
+function pickRandomCredentials(): ITelegramCredentials {
+  return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
+}
+
+/**
+ * Gets credentials for a mobile, reusing cached ones if present.
+ *
+ * @param mobile - Unique identifier (e.g., phone number).
+ */
+export async function getCredentialsForMobile(
+  mobile: string
+): Promise<ITelegramCredentials> {
+  const redisKey = `tg:credentials:${mobile}`;
+
+  // Try cache first
+  const cached = await RedisClient.getObject<ITelegramCredentials>(redisKey);
+  if (cached) {
+    return cached;
+  }
+
+  // Otherwise pick random
+  const creds = pickRandomCredentials();
+
+  // Store in Redis (no TTL, or you can add TTL if desired)
+  await RedisClient.set(redisKey, creds);
+
+  return creds;
 }

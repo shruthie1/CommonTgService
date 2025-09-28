@@ -10,7 +10,7 @@ import { MailReader } from '../../IMap/IMap';
 import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { contains, getRandomCredentials, parseObjectToString } from '../../utils';
+import { contains, getCredentialsForMobile } from '../../utils';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
@@ -50,9 +50,10 @@ class TelegramManager {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        const tgCreds = getRandomCredentials();
-        this.apiHash = tgCreds.apiHash
-        this.apiId = tgCreds.apiId
+        getCredentialsForMobile(this.phoneNumber).then(tgCreds => {
+            this.apiHash = tgCreds.apiHash
+            this.apiId = tgCreds.apiId
+        })
     }
 
     public static getActiveClientSetup() {
@@ -373,7 +374,7 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-        const tgConfiguration = generateTGConfig();
+        const tgConfiguration = await generateTGConfig(this.phoneNumber);
         await withTimeout(async () => {
             this.client = new TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
             this.client.setLogLevel(LogLevel.ERROR);
@@ -1600,7 +1601,7 @@ class TelegramManager {
                 new StringSession(''),
                 parseInt(process.env.API_ID),
                 process.env.API_HASH,
-                generateTGConfig()
+                await generateTGConfig(this.phoneNumber)
             );
 
             this.logger.info(this.phoneNumber, "Starting Session Creation...");
