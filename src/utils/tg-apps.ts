@@ -1,5 +1,7 @@
 import { RedisClient } from "./redisClient";
+import { Logger } from "./logger";
 
+const logger = new Logger(__filename);
 export interface ITelegramCredentials {
   apiId: number;
   apiHash: string;
@@ -36,11 +38,8 @@ export async function getCredentialsForMobile(
   if (cached) {
     return cached;
   }
-
-  // Otherwise pick random
   const creds = pickRandomCredentials();
-
-  // Store in Redis (no TTL, or you can add TTL if desired)
+  logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
   await RedisClient.set(redisKey, creds);
 
   return creds;

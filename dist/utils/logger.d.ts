@@ -1,6 +1,9 @@
 import { Logger as NestLogger } from '@nestjs/common';
 export declare class Logger extends NestLogger {
-    constructor(context?: string);
+    context?: string;
+    private logFilePath;
+    constructor(contextFile?: string);
+    private writeToFile;
     log(message: any, data?: any): void;
     info(message: any, data?: any): void;
     error(message: any, data?: any, trace?: any): void;
@@ -19,11 +22,12 @@ export declare class Logger extends NestLogger {
     private formatMultiColorMessage;
     private formatObjectMessage;
     private parseColoredContext;
-    private getChalkColor;
+    private stripAnsi;
     static log(message: any, context?: string): void;
     static error(message: any, trace?: string, context?: string): void;
     static warn(message: any, context?: string): void;
     static debug(message: any, context?: string): void;
     static verbose(message: any, context?: string): void;
     static success(message: any, context?: string): void;
+    static overrideConsole(serviceName?: string): void;
 }

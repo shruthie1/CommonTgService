@@ -62,9 +62,10 @@ class TelegramManager {
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        const tgCreds = (0, utils_1.getRandomCredentials)();
-        this.apiHash = tgCreds.apiHash;
-        this.apiId = tgCreds.apiId;
+        (0, utils_1.getCredentialsForMobile)(this.phoneNumber).then(tgCreds => {
+            this.apiHash = tgCreds.apiHash;
+            this.apiId = tgCreds.apiId;
+        });
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -297,7 +298,7 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        const tgConfiguration = (0, generateTGConfig_1.generateTGConfig)();
+        const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber);
         await (0, withTimeout_1.withTimeout)(async () => {
             this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
             this.client.setLogLevel(Logger_1.LogLevel.ERROR);
@@ -1327,7 +1328,7 @@ class TelegramManager {
         const sessionPromise = (async () => {
             const me = await this.client.getMe();
             this.logger.info(this.phoneNumber, "Creating new session for: ", me.phone);
-            const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
+            const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber));
             this.logger.info(this.phoneNumber, "Starting Session Creation...");
             await newClient.start({
                 phoneNumber: me.phone,

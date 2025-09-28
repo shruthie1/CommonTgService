@@ -8,7 +8,7 @@ import { UsersService } from "../users/users.service";
 import { TgSignupResponse } from "./dto/tg-signup.dto";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { parseError } from "../../utils/parseError";
-import { getRandomCredentials } from "../../utils/tg-apps";
+import { getCredentialsForMobile } from "../../utils/tg-apps";
 import { Logger } from "../../utils";
 
 @Injectable()
@@ -93,7 +93,7 @@ export class TgSignupService implements OnModuleDestroy {
                 await this.disconnectClient(phone);
             }
 
-            const { apiId, apiHash } = getRandomCredentials();
+            const { apiId, apiHash } = await getCredentialsForMobile(phone);
             const session = new StringSession('');
             const client = new TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -174,7 +174,7 @@ export class TgSignupService implements OnModuleDestroy {
                     // Don't disconnect, just try to reconnect
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = getRandomCredentials();
+                        const { apiId, apiHash } = await getCredentialsForMobile(phone);
                         const newSession = new StringSession('');
                         const newClient = new TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,

@@ -1,6 +1,5 @@
-interface ITelegramCredentials {
+export interface ITelegramCredentials {
     apiId: number;
     apiHash: string;
 }
-export declare function getRandomCredentials(): ITelegramCredentials;
-export {};
+export declare function getCredentialsForMobile(mobile: string): Promise<ITelegramCredentials>;

@@ -1,5 +1,7 @@
 import { TelegramClientParams } from "telegram/client/telegramBaseClient";
 import { RedisClient } from "../../../utils/redisClient";
+import { Logger } from "../../../utils/logger";
+const logger = new Logger(__filename);
 // Constants
 const DEVICE_MODELS = [
   "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12", 
@@ -50,6 +52,7 @@ export async function generateTGConfig(mobile: string): Promise<TelegramClientPa
   };
 
   // Store in Redis with no expiry (or set TTL if desired)
+  logger.log(`[generateTGConfig] Storing config in Redis for ${mobile}`);
   await RedisClient.set(redisKey, config);
 
   return config;
