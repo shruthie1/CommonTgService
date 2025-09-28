@@ -93,7 +93,7 @@ export class TgSignupService implements OnModuleDestroy {
                 await this.disconnectClient(phone);
             }
 
-            const { apiId, apiHash } = await getCredentialsForMobile(phone);
+            const { apiId, apiHash } = await getCredentialsForMobile(phone, 600);
             const session = new StringSession('');
             const client = new TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -174,7 +174,7 @@ export class TgSignupService implements OnModuleDestroy {
                     // Don't disconnect, just try to reconnect
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await getCredentialsForMobile(phone);
+                        const { apiId, apiHash } = await getCredentialsForMobile(phone, 600);
                         const newSession = new StringSession('');
                         const newClient = new TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,

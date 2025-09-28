@@ -29,10 +29,10 @@ function pickRandomCredentials(): ITelegramCredentials {
  * @param mobile - Unique identifier (e.g., phone number).
  */
 export async function getCredentialsForMobile(
-  mobile: string
+  mobile: string,
+  ttl?: number
 ): Promise<ITelegramCredentials> {
   const redisKey = `tg:credentials:${mobile}`;
-
   // Try cache first
   const cached = await RedisClient.getObject<ITelegramCredentials>(redisKey);
   if (cached) {
@@ -40,7 +40,7 @@ export async function getCredentialsForMobile(
   }
   const creds = pickRandomCredentials();
   logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
-  await RedisClient.set(redisKey, creds);
+  await RedisClient.set(redisKey, creds, ttl);
 
   return creds;
 }
