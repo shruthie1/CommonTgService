@@ -16251,7 +16251,7 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             if (me.firstName !== client.name) {
                 this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(client.name, `Genuine Paid Girl🥰, Best Services❤️`);
+                await telegramClient.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
             }
             else {
                 this.logger.log(`First name for ${clientId} is already up to date`);
@@ -30510,6 +30510,24 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
 
 /***/ }),
 
+/***/ "./src/utils/getRandomEmoji.ts":
+/*!*************************************!*\
+  !*** ./src/utils/getRandomEmoji.ts ***!
+  \*************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getRandomEmoji = getRandomEmoji;
+function getRandomEmoji() {
+    const eroticEmojis = ["🔥", "💋", "👅", "🍆", "🔥", "💋", " 🙈", "👅", "🍑", "🍆", "💦", "🍑", "😚", "😏", "💦", "🥕", "🥖"];
+    const randomIndex = Math.floor(Math.random() * eroticEmojis.length);
+    return eroticEmojis[randomIndex];
+}
+
+
+/***/ }),
+
 /***/ "./src/utils/index.ts":
 /*!****************************!*\
   !*** ./src/utils/index.ts ***!
@@ -30545,6 +30563,7 @@ __exportStar(__webpack_require__(/*! ./tg-apps */ "./src/utils/tg-apps.ts"), exp
 __exportStar(__webpack_require__(/*! ./telegram-utils */ "./src/utils/telegram-utils/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./logger */ "./src/utils/logger.ts"), exports);
 __exportStar(__webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.service.instance.ts"), exports);
+__exportStar(__webpack_require__(/*! ./getRandomEmoji */ "./src/utils/getRandomEmoji.ts"), exports);
 
 
 /***/ }),
@@ -30827,6 +30846,8 @@ exports.invisibleChars = exports.specialCharMap = exports.numberMap = exports.ho
 exports.obfuscateText = obfuscateText;
 exports.analyzeText = analyzeText;
 exports.attemptReverse = attemptReverse;
+exports.attemptReverseFuzzy = attemptReverseFuzzy;
+exports.testReverseCoverage = testReverseCoverage;
 exports.batchObfuscate = batchObfuscate;
 exports.generateVariants = generateVariants;
 exports.validateConfig = validateConfig;
@@ -31126,22 +31147,107 @@ function attemptReverse(obfuscatedText) {
     const reverseMap = {};
     Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
         substitutes.forEach((substitute) => {
-            if (!reverseMap[substitute]) {
-                reverseMap[substitute] = original;
-            }
+            reverseMap[substitute.toLowerCase()] = original.toLowerCase();
+            reverseMap[substitute.toUpperCase()] = original.toUpperCase();
+            reverseMap[substitute] = original;
         });
     });
     Object.entries(numberMap).forEach(([original, substitutes]) => {
         substitutes.forEach((substitute) => {
-            if (!reverseMap[substitute]) {
-                reverseMap[substitute] = original;
-            }
+            reverseMap[substitute] = original;
         });
     });
-    for (const [obfuscated, original] of Object.entries(reverseMap)) {
-        cleaned = cleaned.replace(new RegExp(escapeRegExp(obfuscated), 'g'), original);
+    Object.entries(specialCharMap).forEach(([original, substitutes]) => {
+        substitutes.forEach((substitute) => {
+            reverseMap[substitute] = original;
+        });
+    });
+    const sortedMappings = Object.entries(reverseMap)
+        .sort(([a], [b]) => b.length - a.length);
+    for (const [obfuscated, original] of sortedMappings) {
+        if (obfuscated && original && cleaned.includes(obfuscated)) {
+            cleaned = cleaned.replace(new RegExp(escapeRegExp(obfuscated), 'g'), original);
+        }
     }
+    cleaned = cleaned.normalize('NFC');
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1');
     return cleaned;
+}
+function attemptReverseFuzzy(obfuscatedText) {
+    let cleaned = obfuscatedText;
+    invisibleChars.forEach((char) => {
+        cleaned = cleaned.replace(new RegExp(escapeRegExp(char), 'g'), '');
+    });
+    let result = '';
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        let bestMatch = char;
+        let found = false;
+        for (const [original, substitutes] of Object.entries(homoglyphMap)) {
+            if (substitutes.includes(char.toLowerCase())) {
+                bestMatch = char === char.toUpperCase() ? original.toUpperCase() : original;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            for (const [original, substitutes] of Object.entries(numberMap)) {
+                if (substitutes.includes(char)) {
+                    bestMatch = original;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            for (const [original, substitutes] of Object.entries(specialCharMap)) {
+                if (substitutes.includes(char)) {
+                    bestMatch = original;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        result += bestMatch;
+    }
+    result = result.normalize('NFC');
+    result = result.replace(/\*\*(.*?)\*\*/g, '$1');
+    return result;
+}
+function testReverseCoverage() {
+    const reverseMap = {};
+    Object.entries(homoglyphMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+    Object.entries(numberMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+    Object.entries(specialCharMap).forEach(([original, substitutes]) => {
+        substitutes.forEach(sub => { reverseMap[sub] = original; });
+    });
+    const letterSubs = Object.values(homoglyphMap).flat();
+    const numberSubs = Object.values(numberMap).flat();
+    const specialSubs = Object.values(specialCharMap).flat();
+    const lettersMapped = letterSubs.filter(sub => reverseMap[sub]).length;
+    const numbersMapped = numberSubs.filter(sub => reverseMap[sub]).length;
+    const specialMapped = specialSubs.filter(sub => reverseMap[sub]).length;
+    return {
+        letters: {
+            total: letterSubs.length,
+            mapped: lettersMapped,
+            coverage: (lettersMapped / letterSubs.length) * 100
+        },
+        numbers: {
+            total: numberSubs.length,
+            mapped: numbersMapped,
+            coverage: (numbersMapped / numberSubs.length) * 100
+        },
+        special: {
+            total: specialSubs.length,
+            mapped: specialMapped,
+            coverage: (specialMapped / specialSubs.length) * 100
+        }
+    };
 }
 function escapeRegExp(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

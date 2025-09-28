@@ -60,6 +60,24 @@ declare class SeededRandom {
 export declare function obfuscateText(text: string, config?: ObfuscationOptions | ObfuscationConfig): string;
 export declare function analyzeText(text: string): TextAnalysis;
 export declare function attemptReverse(obfuscatedText: string): string;
+export declare function attemptReverseFuzzy(obfuscatedText: string): string;
+export declare function testReverseCoverage(): {
+    letters: {
+        total: number;
+        mapped: number;
+        coverage: number;
+    };
+    numbers: {
+        total: number;
+        mapped: number;
+        coverage: number;
+    };
+    special: {
+        total: number;
+        mapped: number;
+        coverage: number;
+    };
+};
 export declare function batchObfuscate(text: string, configArray: (ObfuscationOptions | ObfuscationConfig)[]): BatchResult[];
 export declare function generateVariants(text: string, baseConfig?: ObfuscationOptions, variants?: number): string[];
 export declare function validateConfig(config: ObfuscationOptions): void;
