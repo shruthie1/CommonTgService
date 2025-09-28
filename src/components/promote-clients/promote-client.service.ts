@@ -605,11 +605,15 @@ export class PromoteClientService implements OnModuleDestroy {
 
                     try {
                         await sleep(2000);
-                        const channelsInfo = await this.telegramService.getChannelInfo(
-                            mobile,
-                            true,
-                        );
-                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            await this.update(mobile, { channels: 400 });
+                        } else {
+                            const channelsInfo = await this.telegramService.getChannelInfo(
+                                mobile,
+                                true,
+                            );
+                            await this.update(mobile, { channels: channelsInfo.ids.length });
+                        }
                     } catch (updateError) {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }

@@ -702,11 +702,16 @@ export class BufferClientService implements OnModuleDestroy {
 
                     try {
                         await sleep(4000 + Math.random() * 2000);
-                        const channelsInfo = await this.telegramService.getChannelInfo(
-                            mobile,
-                            true,
-                        );
-                        await this.update(mobile, { channels: channelsInfo.ids.length });
+
+                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            await this.update(mobile, { channels: 400 });
+                        } else {
+                            const channelsInfo = await this.telegramService.getChannelInfo(
+                                mobile,
+                                true,
+                            );
+                            await this.update(mobile, { channels: channelsInfo.ids.length });
+                        }
                     } catch (updateError) {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
@@ -1153,7 +1158,7 @@ export class BufferClientService implements OnModuleDestroy {
                 const normalizeString = (str: string | null | undefined): string => {
                     return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
                 };
-    
+
                 const safeAttemptReverse = (val: string | null | undefined): string => {
                     try {
                         return attemptReverseFuzzy(val ?? '') || '';
@@ -1161,10 +1166,10 @@ export class BufferClientService implements OnModuleDestroy {
                         return '';
                     }
                 };
-    
+
                 const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
                 const expectedName = normalizeString(client.name || '');
-    
+
                 if (actualName !== expectedName) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
