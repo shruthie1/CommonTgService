@@ -11,6 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var ClientService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientService = void 0;
@@ -31,6 +34,8 @@ const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const ip_management_service_1 = require("../ip-management/ip-management.service");
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
+const path_1 = __importDefault(require("path"));
+const tl_1 = require("telegram/tl");
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, ipManagementService, npointService) {
@@ -655,7 +660,6 @@ let ClientService = ClientService_1 = class ClientService {
         const client = await this.findOne(clientId);
         try {
             this.lastUpdateMap.set(clientId, now);
-            await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             const telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, {
                 handler: false,
             });
@@ -693,6 +697,21 @@ let ClientService = ClientService_1 = class ClientService {
             await (0, Helpers_1.sleep)(1000);
             await telegramClient.updatePrivacy();
             await (0, Helpers_1.sleep)(1000);
+            const rootPath = process.cwd();
+            const photos = await telegramClient.client.invoke(new tl_1.Api.photos.GetUserPhotos({
+                userId: 'me',
+                offset: 0,
+            }));
+            if (photos.photos.length < 1) {
+                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+                const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+                for (const photo of photoPaths) {
+                    await telegramClient.updateProfilePic(path_1.default.join(rootPath, photo));
+                    this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${me.phone}`);
+                    await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
+                }
+            }
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
         }
