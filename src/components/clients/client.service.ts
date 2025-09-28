@@ -28,7 +28,6 @@ import {
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
-import * as path from 'path';
 import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
 import { NpointService } from '../n-point/npoint.service';
@@ -36,7 +35,6 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
-import { SessionService } from '../session-manager';
 import { IpManagementService } from '../ip-management/ip-management.service';
 import {
   PromoteClient,
@@ -705,13 +703,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         } catch (error) {
           parseError(error);
           this.logger.log('Removing buffer as error');
-          const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0];
-          await this.bufferClientService.createOrUpdate(
-            newBufferClient.mobile,
-            { availableDate },
-          );
+          const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
           this.telegramService.setActiveClientSetup(undefined);
         } finally {
           await connectionManager.unregisterClient(newBufferClient.mobile);
@@ -771,9 +764,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
               this.logger.log('Formalities skipped');
             }
             if (archiveOld) {
-              const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .split('T')[0];
+              const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
                 mobile: existingMobile,
                 availableDate,
@@ -837,9 +828,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (
         !me.username ||
         me.username !== client.username ||
-        !me.username
-          ?.toLowerCase()
-          .startsWith(me.firstName.split(' ')[0].toLowerCase())
+        !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())
       ) {
         const client = await this.findOne(clientId);
         const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
@@ -870,37 +859,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const clients = await this.findAll();
     for (const client of Object.values(clients)) {
       await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
-    }
-  }
-
-  async generateNewSession(phoneNumber: string, attempt: number = 1) {
-    try {
-      this.logger.log('String Generation started');
-      await fetchWithTimeout(`${notifbot()}&text=String Generation started for NewNumber:${phoneNumber}`);
-      await sleep(1000);
-      const response = await fetchWithTimeout(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
-      if (response) {
-        this.logger.log(`Code Sent successfully`, response.data);
-        await fetchWithTimeout(`${notifbot()}&text=Code Sent successfully`);
-        await this.bufferClientService.update(phoneNumber, {
-          availableDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
-        });
-      } else {
-        await fetchWithTimeout(`${notifbot()}&text=Failed to send Code`);
-        this.logger.log('Failed to send Code', response);
-        if (attempt < 2) {
-          await sleep(8000);
-          await this.generateNewSession(phoneNumber, attempt + 1);
-        }
-      }
-    } catch (error) {
-      this.logger.log(error);
-      if (attempt < 2) {
-        await sleep(8000);
-        await this.generateNewSession(phoneNumber, attempt + 1);
-      }
     }
   }
 

@@ -352,15 +352,14 @@ export class TelegramService implements OnModuleDestroy {
         const [firstName, middleName = ''] = clientName.split(' ');
         const firstPart = firstName.slice(0, 4);
         const middlePart = middleName.slice(0, 3);
-        const firstNameCaps = firstPart[0].toUpperCase() + firstPart.slice(1);
-        const middleNameCaps = middlePart
-            ? middlePart[0].toUpperCase() + middlePart.slice(1)
-            : '';
+
         // Build regex dynamically
         const pattern = `^${firstPart}${middlePart}\\d+$`;
         const usernameRegex = new RegExp(pattern, 'i');
-        const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + fetchNumbersFromString(clientId) + Math.floor(Math.random() * 1000);
         if (!usernameRegex.test(currentUsername)) {
+            const firstNameCaps = firstPart[0].toUpperCase() + firstPart.slice(1);
+            const middleNameCaps = middlePart ? middlePart[0].toUpperCase() + middlePart.slice(1) : '';
+            const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + fetchNumbersFromString(clientId) + Math.floor(Math.random() * 1000);
             return await telegramClient.updateUsername(baseUsername);
         }
         return currentUsername;
