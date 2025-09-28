@@ -3547,9 +3547,10 @@ class TelegramManager {
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        const tgCreds = (0, utils_1.getRandomCredentials)();
-        this.apiHash = tgCreds.apiHash;
-        this.apiId = tgCreds.apiId;
+        (0, utils_1.getCredentialsForMobile)(this.phoneNumber).then(tgCreds => {
+            this.apiHash = tgCreds.apiHash;
+            this.apiId = tgCreds.apiId;
+        });
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -3782,7 +3783,7 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
-        const tgConfiguration = (0, generateTGConfig_1.generateTGConfig)();
+        const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber);
         await (0, withTimeout_1.withTimeout)(async () => {
             this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
             this.client.setLogLevel(Logger_1.LogLevel.ERROR);
@@ -4812,7 +4813,7 @@ class TelegramManager {
         const sessionPromise = (async () => {
             const me = await this.client.getMe();
             this.logger.info(this.phoneNumber, "Creating new session for: ", me.phone);
-            const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, (0, generateTGConfig_1.generateTGConfig)());
+            const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber));
             this.logger.info(this.phoneNumber, "Starting Session Creation...");
             await newClient.start({
                 phoneNumber: me.phone,
@@ -8596,25 +8597,33 @@ async function deleteProfilePhotos(client, photos) {
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/utils/generateTGConfig.ts ***!
   \***********************************************************/
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.generateTGConfig = generateTGConfig;
-function generateTGConfig() {
-    const deviceModels = [
-        "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12", "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
-    ];
-    const systemVersions = [
-        "Android 13", "iOS 16.6", "Windows 10", "Windows 11", "macOS 13.5", "Ubuntu 22.04", "Arch Linux"
-    ];
-    const appVersions = [
-        "1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"
-    ];
-    function pickRandom(arr) {
-        return arr[Math.floor(Math.random() * arr.length)];
+const redisClient_1 = __webpack_require__(/*! ../../../utils/redisClient */ "./src/utils/redisClient.ts");
+const logger_1 = __webpack_require__(/*! ../../../utils/logger */ "./src/utils/logger.ts");
+const logger = new logger_1.Logger(__filename);
+const DEVICE_MODELS = [
+    "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12",
+    "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
+];
+const SYSTEM_VERSIONS = [
+    "Android 13", "iOS 16.6", "Windows 10", "Windows 11",
+    "macOS 13.5", "Ubuntu 22.04", "Arch Linux"
+];
+const APP_VERSIONS = ["1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"];
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+async function generateTGConfig(mobile) {
+    const redisKey = `tg:config:${mobile}`;
+    const cached = await redisClient_1.RedisClient.getObject(redisKey);
+    if (cached) {
+        return cached;
     }
-    return {
+    const config = {
         connectionRetries: 10,
         requestRetries: 5,
         retryDelay: 1000,
@@ -8622,7 +8631,13 @@ function generateTGConfig() {
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
+        deviceModel: `${pickRandom(DEVICE_MODELS)}-ssk`,
+        systemVersion: pickRandom(SYSTEM_VERSIONS),
+        appVersion: pickRandom(APP_VERSIONS),
     };
+    logger.log(`[generateTGConfig] Storing config in Redis for ${mobile}`);
+    await redisClient_1.RedisClient.set(redisKey, config);
+    return config;
 }
 
 
@@ -9168,7 +9183,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = (0, tg_apps_1.getRandomCredentials)();
+            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
             const session = new sessions_1.StringSession('');
             const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
                 connectionRetries: 5,
@@ -9235,7 +9250,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = (0, tg_apps_1.getRandomCredentials)();
+                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone);
                         const newSession = new sessions_1.StringSession('');
                         const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
                             connectionRetries: 5,
@@ -31242,181 +31257,158 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Logger = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const chalk_1 = __importDefault(__webpack_require__(/*! chalk */ "chalk"));
+const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 class Logger extends common_1.Logger {
-    constructor(context) {
-        super(context);
+    constructor(contextFile) {
+        let localContext = contextFile;
+        try {
+            if (contextFile && typeof contextFile === "string") {
+                localContext = path_1.default.basename(contextFile, path_1.default.extname(contextFile));
+            }
+        }
+        catch (err) {
+            localContext = "Unknown";
+        }
+        super(localContext);
         chalk_1.default.level = 3;
     }
-    log(message, data = '') {
-        console.log(this.formatMessage('LOG', message, this.getLogColors(), data));
+    writeToFile(line) {
     }
-    info(message, data = '') {
-        console.log(this.formatMessage('INFO', message, this.getInfoColors(), data));
+    log(message, data = "") {
+        const line = this.formatMessage("LOG", message, this.getLogColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
     }
-    error(message, data = '', trace) {
-        console.error(this.formatMessage('ERROR', message, this.getErrorColors(), data), trace ? '\n' + chalk_1.default.red.bold(trace) : '');
+    info(message, data = "") {
+        const line = this.formatMessage("INFO", message, this.getInfoColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
     }
-    warn(message, data = '') {
-        console.warn(this.formatMessage('WARN', message, this.getWarnColors(), data));
+    error(message, data = "", trace) {
+        const line = this.formatMessage("ERROR", message, this.getErrorColors(), data);
+        process.stderr.write(line + (trace ? "\n" + chalk_1.default.red.bold(trace) : "") + "\n");
+        this.writeToFile(this.stripAnsi(line + (trace ? "\n" + trace : "")));
     }
-    debug(message, data = '') {
-        console.debug(this.formatMessage('DEBUG', message, this.getDebugColors(), data));
+    warn(message, data = "") {
+        const line = this.formatMessage("WARN", message, this.getWarnColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
     }
-    verbose(message, data = '') {
-        console.debug(this.formatMessage('VERBOSE', message, this.getVerboseColors(), data));
+    debug(message, data = "") {
+        const line = this.formatMessage("DEBUG", message, this.getDebugColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
     }
-    success(message, data = '') {
-        console.log(this.formatMessage('SUCCESS', message, this.getSuccessColors(), data));
+    verbose(message, data = "") {
+        const line = this.formatMessage("VERBOSE", message, this.getVerboseColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
+    }
+    success(message, data = "") {
+        const line = this.formatMessage("SUCCESS", message, this.getSuccessColors(), data);
+        process.stdout.write(line + "\n");
+        this.writeToFile(this.stripAnsi(line));
     }
     getLogColors() {
-        return {
-            level: chalk_1.default.green,
-            message: chalk_1.default.green.bold,
-            context: chalk_1.default.cyan.bold,
-        };
+        return { level: chalk_1.default.green, message: chalk_1.default.green, context: chalk_1.default.cyan.bold };
     }
     getInfoColors() {
-        return {
-            level: chalk_1.default.blue,
-            message: chalk_1.default.blue.bold,
-            context: chalk_1.default.blueBright.bold,
-        };
+        return { level: chalk_1.default.blue, message: chalk_1.default.blue, context: chalk_1.default.blue.bold };
     }
     getErrorColors() {
-        return {
-            level: chalk_1.default.red,
-            message: chalk_1.default.red.bold,
-            context: chalk_1.default.redBright.bold,
-        };
+        return { level: chalk_1.default.red, message: chalk_1.default.red, context: chalk_1.default.red.bold };
     }
     getWarnColors() {
-        return {
-            level: chalk_1.default.yellow,
-            message: chalk_1.default.yellow.bold,
-            context: chalk_1.default.yellowBright.bold,
-        };
+        return { level: chalk_1.default.yellow, message: chalk_1.default.yellow, context: chalk_1.default.yellow.bold };
     }
     getDebugColors() {
-        return {
-            level: chalk_1.default.magenta,
-            message: chalk_1.default.magenta.bold,
-            context: chalk_1.default.magentaBright.bold,
-        };
+        return { level: chalk_1.default.magenta, message: chalk_1.default.grey, context: chalk_1.default.magenta.bold };
     }
     getVerboseColors() {
-        return {
-            level: chalk_1.default.gray,
-            message: chalk_1.default.gray.bold,
-            context: chalk_1.default.white.dim,
-        };
+        return { level: chalk_1.default.gray, message: chalk_1.default.magenta, context: chalk_1.default.white.dim };
     }
     getSuccessColors() {
-        return {
-            level: chalk_1.default.greenBright,
-            message: chalk_1.default.greenBright.bold,
-            context: chalk_1.default.green.bold,
-        };
+        return { level: chalk_1.default.greenBright, message: chalk_1.default.green.bold, context: chalk_1.default.green.bold };
     }
     formatMessage(level, message, colors, data) {
-        const safeLevel = typeof level === 'string' && level.trim() !== '' ? level : 'UNKNOWN';
+        const safeLevel = typeof level === "string" && level.trim() !== "" ? level : "UNKNOWN";
         const safeColors = {
-            level: (colors?.level && typeof colors.level === 'function')
-                ? colors.level
-                : (txt) => txt,
-            message: (colors?.message && typeof colors.message === 'function')
-                ? colors.message
-                : (txt) => txt,
+            level: typeof colors?.level === "function" ? colors.level : (txt) => txt,
+            message: typeof colors?.message === "function" ? colors.message : (txt) => txt,
         };
         const formattedMessage = message !== undefined && message !== null
             ? this.formatMultiColorMessage(message, safeColors.message)
-            : safeColors.message('[EMPTY MESSAGE]');
-        const serviceCtx = this.context ? chalk_1.default.yellow(`[${this.context}]`) : '';
-        let extraCtx = '';
-        if (typeof data === 'object') {
+            : safeColors.message("[EMPTY MESSAGE]");
+        const serviceCtx = this.context ? chalk_1.default.yellow(`[${this.context}]`) : "";
+        let extraCtx = "";
+        if (typeof data === "object" && data !== null) {
             try {
                 extraCtx = this.formatObjectMessage(data);
             }
             catch {
-                extraCtx = '[Invalid Context Object]';
+                extraCtx = chalk_1.default.red("[Invalid Context Object]");
             }
         }
-        else if (typeof data === 'string') {
+        else if (typeof data === "string") {
             extraCtx = this.parseColoredContext(data);
         }
-        else {
+        else if (data !== "" && data !== undefined) {
             extraCtx = chalk_1.default.yellow.bold(String(data));
         }
-        extraCtx = ' ' + extraCtx;
+        if (extraCtx)
+            extraCtx = " " + extraCtx;
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
         return `${levelFormatted} ${serviceCtx} ${formattedMessage}${extraCtx}`;
     }
     formatMultiColorMessage(message, levelColor) {
-        if (typeof message === 'object') {
-            return '\n' + this.formatObjectMessage(message);
+        if (typeof message === "object" && message !== null) {
+            return "\n" + this.formatObjectMessage(message);
         }
         let formatted = String(message);
-        formatted = formatted.replace(/\[([^\]]+)\]/g, chalk_1.default.cyan.bold('[$1]'));
-        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk_1.default.white.bold('$1'));
-        formatted = formatted.replace(/\*([^*]+)\*/g, chalk_1.default.yellow('$1'));
-        formatted = formatted.replace(/_([^_]+)_/g, chalk_1.default.underline('$1'));
+        formatted = formatted.replace(/\[([^\]]+)\]/g, chalk_1.default.cyan.bold("[$1]"));
+        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk_1.default.white.bold("$1"));
+        formatted = formatted.replace(/\*([^*]+)\*/g, chalk_1.default.yellow("$1"));
+        formatted = formatted.replace(/_([^_]+)_/g, chalk_1.default.underline("$1"));
         return levelColor(formatted);
     }
-    formatObjectMessage(obj, indent = 2) {
-        if (Array.isArray(obj)) {
-            return '[\n' + obj.map((el) => ' '.repeat(indent) + this.formatObjectMessage(el, indent + 2)).join(',\n') + '\n]';
-        }
-        if (obj && typeof obj === 'object') {
-            const entries = Object.entries(obj).map(([key, value]) => {
-                const coloredKey = chalk_1.default.cyan(`"${key}"`) + chalk_1.default.white(': ');
-                const formattedValue = this.formatObjectMessage(value, indent + 2);
-                return ' '.repeat(indent) + coloredKey + formattedValue;
-            });
-            return '{\n' + entries.join(',\n') + '\n' + ' '.repeat(indent - 2) + '}';
-        }
-        if (typeof obj === 'string')
-            return chalk_1.default.blueBright.bold(`"${obj}"`);
-        if (typeof obj === 'number')
-            return chalk_1.default.yellow.bold(obj);
-        if (typeof obj === 'boolean')
-            return chalk_1.default.magenta.bold(obj);
+    formatObjectMessage(obj, indent = 2, seen = new WeakSet()) {
         if (obj === null)
-            return chalk_1.default.gray.bold('null');
-        return chalk_1.default.cyanBright.bold(String(obj));
+            return chalk_1.default.gray.bold("null");
+        if (typeof obj !== "object") {
+            if (typeof obj === "string")
+                return chalk_1.default.blueBright.bold(`"${obj}"`);
+            if (typeof obj === "number")
+                return chalk_1.default.yellow.bold(obj);
+            if (typeof obj === "boolean")
+                return chalk_1.default.magenta.bold(obj);
+            return chalk_1.default.cyanBright.bold(String(obj));
+        }
+        if (seen.has(obj))
+            return chalk_1.default.red("[Circular]");
+        seen.add(obj);
+        if (Array.isArray(obj)) {
+            return ("[\n" +
+                obj.map((el) => " ".repeat(indent) + this.formatObjectMessage(el, indent + 2, seen)).join(",\n") +
+                "\n" +
+                " ".repeat(indent - 2) +
+                "]");
+        }
+        const entries = Object.entries(obj).map(([key, value]) => {
+            const coloredKey = chalk_1.default.cyan(`"${key}"`) + chalk_1.default.white(": ");
+            const formattedValue = this.formatObjectMessage(value, indent + 2, seen);
+            return " ".repeat(indent) + coloredKey + formattedValue;
+        });
+        return "{\n" + entries.join(",\n") + "\n" + " ".repeat(indent - 2) + "}";
     }
     parseColoredContext(context) {
-        if (/^\d+$/.test(context)) {
+        if (/^\d+$/.test(context))
             return chalk_1.default.magentaBright.bold(context);
-        }
-        if (context === context.toUpperCase()) {
+        if (context === context.toUpperCase())
             return chalk_1.default.yellow.bold(context);
-        }
         return chalk_1.default.cyanBright.bold(context);
     }
-    getChalkColor(colorName) {
-        const colorMap = {
-            red: chalk_1.default.red,
-            green: chalk_1.default.green,
-            blue: chalk_1.default.blue,
-            yellow: chalk_1.default.yellow,
-            magenta: chalk_1.default.magenta,
-            cyan: chalk_1.default.cyan,
-            white: chalk_1.default.white,
-            gray: chalk_1.default.gray,
-            grey: chalk_1.default.gray,
-            black: chalk_1.default.black,
-            redBright: chalk_1.default.redBright,
-            greenBright: chalk_1.default.greenBright,
-            blueBright: chalk_1.default.blueBright,
-            yellowBright: chalk_1.default.yellowBright,
-            magentaBright: chalk_1.default.magentaBright,
-            cyanBright: chalk_1.default.cyanBright,
-            whiteBright: chalk_1.default.whiteBright,
-            bold: chalk_1.default.bold,
-            dim: chalk_1.default.dim,
-            underline: chalk_1.default.underline,
-            inverse: chalk_1.default.inverse,
-        };
-        return colorMap[colorName];
+    stripAnsi(str) {
+        return str.replace(/\x1B\[[0-9;]*m/g, "");
     }
     static log(message, context) {
         new Logger(context).log(message, context);
@@ -31436,8 +31428,18 @@ class Logger extends common_1.Logger {
     static success(message, context) {
         new Logger(context).success(message, context);
     }
+    static overrideConsole(serviceName = "Console") {
+        const instance = new Logger(serviceName);
+        console.log = (...args) => instance.log(args[0], args[1]);
+        console.info = (...args) => instance.info(args[0], args[1]);
+        console.error = (...args) => instance.error(args[0], args[1], args[2]);
+        console.warn = (...args) => instance.warn(args[0], args[1]);
+        console.debug = (...args) => instance.debug(args[0], args[1]);
+        console.success = (...args) => instance.success(args[0], args[1]);
+    }
 }
 exports.Logger = Logger;
+const logger = new Logger();
 
 
 /***/ }),
@@ -32154,6 +32156,202 @@ exports.ErrorUtils = {
 
 /***/ }),
 
+/***/ "./src/utils/redisClient.ts":
+/*!**********************************!*\
+  !*** ./src/utils/redisClient.ts ***!
+  \**********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.RedisClient = void 0;
+const ioredis_1 = __importDefault(__webpack_require__(/*! ioredis */ "ioredis"));
+const logger_1 = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+const logger = new logger_1.Logger(__filename);
+class RedisClient {
+    constructor() {
+    }
+    static getClient() {
+        if (!RedisClient.instance) {
+            const isRemote = process.env.REDIS_MODE === "remote";
+            const config = {
+                host: process.env.REDIS_HOST || (isRemote ? "0.0.0.0" : "127.0.0.1"),
+                port: Number(process.env.REDIS_PORT) || 6379,
+                password: process.env.REDIS_PASSWORD?.trim() || undefined,
+                db: Number(process.env.REDIS_DB) || 0,
+                retryStrategy: (times) => {
+                    const delay = Math.min(times * 100, 3000);
+                    logger.warn(`Retrying Redis connection (${times}) after ${delay}ms`);
+                    return delay;
+                },
+            };
+            try {
+                RedisClient.instance = new ioredis_1.default(config);
+                RedisClient.instance.on("connect", () => {
+                    logger.log(`Connected to Redis at ${config.host}:${config.port}, DB: ${config.db}`);
+                });
+                RedisClient.instance.on("error", (err) => {
+                    logger.error("Redis connection error:", err.message);
+                });
+                RedisClient.instance.on("close", () => {
+                    logger.log("Redis connection closed");
+                });
+            }
+            catch (error) {
+                logger.error("Failed to initialize Redis client:", error);
+                throw new Error(`Redis initialization failed: ${error.message}`);
+            }
+        }
+        return RedisClient.instance;
+    }
+    static async disconnect() {
+        if (RedisClient.instance) {
+            try {
+                await RedisClient.instance.quit();
+                logger.log("Redis client disconnected successfully");
+            }
+            catch (error) {
+                logger.error("Error during Redis disconnection:", error);
+            }
+            finally {
+                RedisClient.instance = null;
+            }
+        }
+    }
+    static async set(key, value, ttl) {
+        const client = RedisClient.getClient();
+        try {
+            const finalValue = typeof value === "string" || typeof value === "number"
+                ? String(value)
+                : JSON.stringify(value);
+            if (ttl) {
+                return await client.set(key, finalValue, "EX", ttl);
+            }
+            return await client.set(key, finalValue);
+        }
+        catch (error) {
+            logger.error(`Error setting key ${key}:`, error);
+            throw error;
+        }
+    }
+    static async get(key) {
+        const client = RedisClient.getClient();
+        try {
+            return await client.get(key);
+        }
+        catch (error) {
+            logger.error(`Error getting key ${key}:`, error);
+            throw error;
+        }
+    }
+    static async getObject(key) {
+        const value = await RedisClient.get(key);
+        if (!value)
+            return null;
+        try {
+            return JSON.parse(value);
+        }
+        catch {
+            logger.warn(`Failed to parse JSON for key ${key}`);
+            return null;
+        }
+    }
+    static async incr(key, step = 1) {
+        const client = RedisClient.getClient();
+        try {
+            return step === 1
+                ? await client.incr(key)
+                : await client.incrby(key, step);
+        }
+        catch (error) {
+            logger.error(`Error incrementing key ${key}:`, error);
+            throw error;
+        }
+    }
+    static async decr(key, step = 1) {
+        const client = RedisClient.getClient();
+        try {
+            return step === 1
+                ? await client.decr(key)
+                : await client.decrby(key, step);
+        }
+        catch (error) {
+            logger.error(`Error decrementing key ${key}:`, error);
+            throw error;
+        }
+    }
+    static async rpush(key, values) {
+        const client = RedisClient.getClient();
+        try {
+            return Array.isArray(values)
+                ? await client.rpush(key, ...values)
+                : await client.rpush(key, values);
+        }
+        catch (error) {
+            logger.error(`Error pushing to list ${key}:`, error);
+            throw error;
+        }
+    }
+    static async lrange(key, start, end) {
+        const client = RedisClient.getClient();
+        return client.lrange(key, start, end);
+    }
+    static async hset(key, field, value) {
+        const client = RedisClient.getClient();
+        const val = typeof value === "string" || typeof value === "number"
+            ? String(value)
+            : JSON.stringify(value);
+        return client.hset(key, field, val);
+    }
+    static async hget(key, field) {
+        return RedisClient.getClient().hget(key, field);
+    }
+    static async hgetObject(key, field) {
+        const val = await RedisClient.hget(key, field);
+        if (!val)
+            return null;
+        try {
+            return JSON.parse(val);
+        }
+        catch {
+            return null;
+        }
+    }
+    static async hgetall(key) {
+        return RedisClient.getClient().hgetall(key);
+    }
+    static async sadd(key, members) {
+        return Array.isArray(members)
+            ? RedisClient.getClient().sadd(key, ...members)
+            : RedisClient.getClient().sadd(key, members);
+    }
+    static async smembers(key) {
+        return RedisClient.getClient().smembers(key);
+    }
+    static async del(keys) {
+        return Array.isArray(keys)
+            ? RedisClient.getClient().del(...keys)
+            : RedisClient.getClient().del(keys);
+    }
+    static async exists(key) {
+        return (await RedisClient.getClient().exists(key)) === 1;
+    }
+    static async expire(key, seconds) {
+        return RedisClient.getClient().expire(key, seconds);
+    }
+    static async ttl(key) {
+        return RedisClient.getClient().ttl(key);
+    }
+}
+exports.RedisClient = RedisClient;
+RedisClient.instance = null;
+
+
+/***/ }),
+
 /***/ "./src/utils/telegram-utils/channelinfo.ts":
 /*!*************************************************!*\
   !*** ./src/utils/telegram-utils/channelinfo.ts ***!
@@ -32236,11 +32434,14 @@ __exportStar(__webpack_require__(/*! ./channelinfo */ "./src/utils/telegram-util
 /*!******************************!*\
   !*** ./src/utils/tg-apps.ts ***!
   \******************************/
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getRandomCredentials = getRandomCredentials;
+exports.getCredentialsForMobile = getCredentialsForMobile;
+const redisClient_1 = __webpack_require__(/*! ./redisClient */ "./src/utils/redisClient.ts");
+const logger_1 = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+const logger = new logger_1.Logger(__filename);
 const API_CREDENTIALS = [
     { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
     { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
@@ -32249,8 +32450,19 @@ const API_CREDENTIALS = [
     { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
     { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
 ];
-function getRandomCredentials() {
+function pickRandomCredentials() {
     return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
+}
+async function getCredentialsForMobile(mobile) {
+    const redisKey = `tg:credentials:${mobile}`;
+    const cached = await redisClient_1.RedisClient.getObject(redisKey);
+    if (cached) {
+        return cached;
+    }
+    const creds = pickRandomCredentials();
+    logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
+    await redisClient_1.RedisClient.set(redisKey, creds);
+    return creds;
 }
 
 
@@ -32537,6 +32749,16 @@ module.exports = require("https");
 /***/ ((module) => {
 
 module.exports = require("imap");
+
+/***/ }),
+
+/***/ "ioredis":
+/*!**************************!*\
+  !*** external "ioredis" ***!
+  \**************************/
+/***/ ((module) => {
+
+module.exports = require("ioredis");
 
 /***/ }),
 
