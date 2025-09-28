@@ -3001,6 +3001,23 @@ let TelegramService = class TelegramService {
             throw new Error("Failed to update username");
         }
     }
+    async updateUsernameForAClient(mobile, clientId, clientName, currentUsername) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        const [firstName, middleName = ''] = clientName.split(' ');
+        const firstPart = firstName.slice(0, 4);
+        const middlePart = middleName.slice(0, 3);
+        const firstNameCaps = firstPart[0].toUpperCase() + firstPart.slice(1);
+        const middleNameCaps = middlePart
+            ? middlePart[0].toUpperCase() + middlePart.slice(1)
+            : '';
+        const pattern = `^${firstPart}${middlePart}\\d+$`;
+        const usernameRegex = new RegExp(pattern, 'i');
+        const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId) + Math.floor(Math.random() * 1000);
+        if (!usernameRegex.test(currentUsername)) {
+            return await telegramClient.updateUsername(baseUsername);
+        }
+        return currentUsername;
+    }
     async getMediaMetadata(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         if (params) {
@@ -4259,7 +4276,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueAllowAll()
+                    new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
             this.logger.info(this.phoneNumber, "PP Updated");
@@ -4279,7 +4296,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyAbout(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueAllowAll()
+                    new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
             this.logger.info(this.phoneNumber, "LAstSeen Updated");
@@ -12354,22 +12371,58 @@ let BufferClientController = class BufferClientController {
         this.clientService.updateInfo();
         return 'initiated Checking';
     }
-    async joinChannelsforBufferClients() {
-        return this.clientService.joinchannelForBufferClients();
+    async joinChannelsforBufferClients(clientId) {
+        return this.clientService.joinchannelForBufferClients(true, clientId);
     }
     async checkbufferClients() {
         this.clientService.checkBufferClients();
         return 'initiated Checking';
     }
     async addNewUserstoBufferClients(body) {
-        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds);
+        if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
+            throw new common_1.BadRequestException('goodIds and badIds must be arrays');
+        }
+        if (body.clientsNeedingBufferClients && !Array.isArray(body.clientsNeedingBufferClients)) {
+            throw new common_1.BadRequestException('clientsNeedingBufferClients must be an array');
+        }
+        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds, body.clientsNeedingBufferClients || [], undefined);
         return 'initiated Checking';
     }
-    async findAll() {
-        return this.clientService.findAll();
+    async findAll(status) {
+        return this.clientService.findAll(status);
     }
-    async setAsBufferClient(mobile) {
-        return this.clientService.setAsBufferClient(mobile);
+    async setAsBufferClient(mobile, clientId) {
+        return this.clientService.setAsBufferClient(mobile, clientId);
+    }
+    async executeQuery(query) {
+        return this.clientService.executeQuery(query);
+    }
+    async getBufferClientDistribution() {
+        return this.clientService.getBufferClientDistribution();
+    }
+    async getBufferClientsByClientId(clientId, status) {
+        return this.clientService.getBufferClientsByClientId(clientId, status);
+    }
+    async getBufferClientsByStatus(status) {
+        return this.clientService.findAll(status);
+    }
+    async updateStatus(mobile, body) {
+        return this.clientService.updateStatus(mobile, body.status, body.message);
+    }
+    async markAsActive(mobile, body = {}) {
+        return this.clientService.updateStatus(mobile, 'active', body.message);
+    }
+    async markAsInactive(mobile, body) {
+        return this.clientService.markAsInactive(mobile, body.reason);
+    }
+    async markAsUsed(mobile, body = {}) {
+        return this.clientService.markAsUsed(mobile, body.message);
+    }
+    async getNextAvailable(clientId) {
+        return this.clientService.getNextAvailableBufferClient(clientId);
+    }
+    async getUnusedBufferClients(hoursAgo, clientId) {
+        return this.clientService.getUnusedBufferClients(hoursAgo || 24, clientId);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -12382,9 +12435,6 @@ let BufferClientController = class BufferClientController {
     }
     async remove(mobile) {
         return this.clientService.remove(mobile);
-    }
-    async executeQuery(query) {
-        return this.clientService.executeQuery(query);
     }
 };
 exports.BufferClientController = BufferClientController;
@@ -12400,7 +12450,14 @@ __decorate([
 ], BufferClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search buffer client data' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
+    (0, swagger_1.ApiQuery)({ name: 'name', required: false, description: 'Name' }),
+    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
+    (0, swagger_1.ApiQuery)({ name: 'repl', required: false, description: 'Repl link' }),
+    (0, swagger_1.ApiQuery)({ name: 'isActive', required: false, description: 'Filter by active status' }),
     (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -12418,9 +12475,11 @@ __decorate([
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
     (0, swagger_1.ApiResponse)({ type: String }),
+    __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "joinChannelsforBufferClients", null);
 __decorate([
@@ -12434,7 +12493,16 @@ __decorate([
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Buffer Clients' }),
-    (0, swagger_1.ApiBody)({ type: Object, schema: { type: 'object', properties: { goodIds: { type: 'array', items: { type: 'string' } }, badIds: { type: 'array', items: { type: 'string' } } } } }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                goodIds: { type: 'array', items: { type: 'string' } },
+                badIds: { type: 'array', items: { type: 'string' } },
+                clientsNeedingBufferClients: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    }),
     (0, swagger_1.ApiResponse)({ type: String }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -12443,22 +12511,166 @@ __decorate([
 ], BufferClientController.prototype, "addNewUserstoBufferClients", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all buffer client data' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
     (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], BufferClientController.prototype, "findAll", null);
-__decorate([
-    (0, common_1.Get)('SetAsBufferClient/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Set as Buffer Client' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
-    __param(0, (0, common_1.Param)('mobile')),
+    __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('SetAsBufferClient/:mobile/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Set as Buffer Client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to assign buffer client to', type: String }),
+    (0, swagger_1.ApiResponse)({ type: String }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "setAsBufferClient", null);
+__decorate([
+    (0, common_1.Post)('query'),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
+    (0, swagger_1.ApiBody)({ type: Object }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Get)('distribution'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get buffer client distribution per client' }),
+    (0, swagger_1.ApiResponse)({ type: Object }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "getBufferClientDistribution", null);
+__decorate([
+    (0, common_1.Get)('client/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get buffer clients by client ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get buffer clients for', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "getBufferClientsByClientId", null);
+__decorate([
+    (0, common_1.Get)('status/:status'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get buffer clients by status' }),
+    (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    __param(0, (0, common_1.Param)('status')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "getBufferClientsByStatus", null);
+__decorate([
+    (0, common_1.Patch)('status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update status of a buffer client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', description: 'New status (active/inactive)' },
+                message: { type: 'string', description: 'Status message (optional)' }
+            },
+            required: ['status']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "updateStatus", null);
+__decorate([
+    (0, common_1.Patch)('activate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as active' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Activation message (optional)' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "markAsActive", null);
+__decorate([
+    (0, common_1.Patch)('deactivate/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as inactive' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                reason: { type: 'string', description: 'Reason for deactivation' }
+            },
+            required: ['reason']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "markAsInactive", null);
+__decorate([
+    (0, common_1.Patch)('mark-used/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as used (update lastUsed timestamp)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', description: 'Usage message (optional)' }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Get)('next-available/:clientId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get next available buffer client for a specific client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available buffer client for', type: String }),
+    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "getNextAvailable", null);
+__decorate([
+    (0, common_1.Get)('unused'),
+    (0, swagger_1.ApiOperation)({ summary: "Get buffer clients that haven't been used for a specified time period" }),
+    (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
+    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    __param(0, (0, common_1.Query)('hoursAgo')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "getUnusedBufferClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
@@ -12503,16 +12715,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "remove", null);
-__decorate([
-    (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], BufferClientController.prototype, "executeQuery", null);
 exports.BufferClientController = BufferClientController = __decorate([
     (0, swagger_1.ApiTags)('Buffer Clients'),
     (0, common_1.Controller)('bufferclients'),
@@ -12594,6 +12796,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var BufferClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BufferClientService = void 0;
@@ -12614,6 +12819,9 @@ const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connectio
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
+const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
+const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -12640,6 +12848,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.MAX_MAP_SIZE = 100;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
         this.MAX_NEEDED = 160;
+        this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER = 10;
+        this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT = 10;
         this.cleanupIntervalId = null;
     }
     async onModuleDestroy() {
@@ -12887,7 +13097,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         this.logger.debug('Completed updating info for all buffer clients');
     }
-    async joinchannelForBufferClients(skipExisting = true) {
+    async joinchannelForBufferClients(skipExisting = true, clientId) {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return 'Active client setup exists, skipping buffer promotion';
@@ -12901,11 +13111,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const existingKeys = skipExisting
             ? []
             : Array.from(this.joinChannelMap.keys());
-        const clients = await this.bufferClientModel
-            .find({
+        const query = {
             channels: { $lt: 350 },
             mobile: { $nin: existingKeys },
-        })
+            status: 'active',
+        };
+        if (clientId) {
+            query.clientId = clientId;
+        }
+        const clients = await this.bufferClientModel
+            .find(query)
             .sort({ channels: 1 })
             .limit(8);
         this.logger.debug(`Found ${clients.length} buffer clients to process`);
@@ -13281,10 +13496,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.isLeaveChannelProcessing = false;
         this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
-    async setAsBufferClient(mobile, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    async setAsBufferClient(mobile, clientId, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
         .toISOString()
         .split('T')[0]) {
-        const user = (await this.usersService.search({ mobile }))[0];
+        const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
         }
@@ -13294,26 +13509,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        const allPromoteMobiles = [];
-        for (const client of clients) {
-            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
-            allPromoteMobiles.push(...clientPromoteMobiles);
-        }
-        if (!allPromoteMobiles.includes(mobile) &&
-            !clientMobiles.includes(mobile)) {
+        const existingAssignment = await this.bufferClientModel.findOne({
+            mobile,
+            clientId: { $exists: true },
+        });
+        if (!clientMobiles.includes(mobile) && !existingAssignment) {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                autoDisconnect: false,
+            });
             try {
-                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                });
                 await telegramClient.set2fa();
-                await (0, Helpers_1.sleep)(10000);
-                await telegramClient.updateUsername('');
-                await (0, Helpers_1.sleep)(3000);
-                await telegramClient.updatePrivacyforDeletedAccount();
-                await (0, Helpers_1.sleep)(3000);
-                await telegramClient.updateProfile('Deleted Account', 'Deleted Account');
-                await (0, Helpers_1.sleep)(3000);
-                await telegramClient.deleteProfilePhotos();
                 const channels = await this.telegramService.getChannelInfo(mobile, true);
                 const newSession = await this.telegramService.createNewSession(user.mobile);
                 const bufferClient = {
@@ -13322,10 +13527,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     mobile: user.mobile,
                     availableDate,
                     channels: channels.ids.length,
+                    clientId,
                     status: 'active',
+                    message: 'Manually configured as buffer client',
+                    lastUsed: null,
                 };
                 await this.bufferClientModel
-                    .findOneAndUpdate({ tgId: user.tgId }, { $set: bufferClient }, { new: true, upsert: true })
+                    .findOneAndUpdate({ mobile: user.mobile }, { $set: bufferClient }, { new: true, upsert: true })
                     .exec();
             }
             catch (error) {
@@ -13336,7 +13544,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return 'Client set as buffer successfully';
         }
         else {
-            throw new common_1.BadRequestException('Number is a Active Client');
+            throw new common_1.BadRequestException('Number is an Active Client');
         }
     }
     async checkBufferClients() {
@@ -13344,60 +13552,76 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
-        await (0, Helpers_1.sleep)(3000);
-        const bufferclients = await this.findAll('active');
-        const badIds = [];
-        let goodIds = [];
-        if (bufferclients.length < 80) {
-            for (let i = 0; i < 80 - bufferclients.length; i++) {
-                badIds.push(i.toString());
-            }
-        }
         const clients = await this.clientService.findAll();
-        const promoteclients = await this.promoteClientService.findAll();
+        const promoteClients = await this.promoteClientService.findAll();
         const clientMainMobiles = clients.map((c) => c.mobile);
-        const allPromoteMobiles = [];
+        const assignedBufferMobiles = await this.bufferClientModel
+            .find({ clientId: { $exists: true }, status: 'active' })
+            .distinct('mobile');
+        const goodIds = [
+            ...clientMainMobiles,
+            ...promoteClients.map((c) => c.mobile),
+            ...assignedBufferMobiles,
+        ].filter(Boolean);
+        const bufferClientsPerClient = new Map();
+        const clientNeedingBufferClients = [];
+        const bufferClientCounts = await this.bufferClientModel.aggregate([
+            {
+                $match: {
+                    clientId: { $exists: true, $ne: null },
+                    status: 'active',
+                },
+            },
+            {
+                $group: {
+                    _id: '$clientId',
+                    count: { $sum: 1 },
+                    mobiles: { $push: '$mobile' },
+                },
+            },
+        ]);
+        for (const result of bufferClientCounts) {
+            bufferClientsPerClient.set(result._id, result.count);
+            for (const bufferClientMobile of result.mobiles) {
+                const bufferClient = await this.findOne(bufferClientMobile);
+                const client = clients.find((c) => c.clientId === result._id);
+                await this.processBufferClient(bufferClient, client);
+            }
+        }
         for (const client of clients) {
-            const clientPromoteMobiles = await this.clientService.getPromoteMobiles(client.clientId);
-            allPromoteMobiles.push(...clientPromoteMobiles);
-        }
-        const clientIds = [...clientMainMobiles, ...allPromoteMobiles].filter(Boolean);
-        const promoteclientIds = promoteclients.map((c) => c.mobile);
-        const toProcess = bufferclients.filter((doc) => !clientIds.includes(doc.mobile) &&
-            !promoteclientIds.includes(doc.mobile));
-        this.logger.debug(`Processing ${toProcess.length} buffer clients sequentially`);
-        for (let i = 0; i < toProcess.length; i++) {
-            const doc = toProcess[i];
-            this.logger.debug(`Processing buffer client ${i + 1}/${toProcess.length}: ${doc.mobile}`);
-            try {
-                await this.processBufferClient(doc, badIds, goodIds);
-            }
-            catch (error) {
-                this.logger.error(`Error processing buffer client ${doc.mobile}:`, error);
-            }
-            if (i < toProcess.length - 1) {
-                await (0, Helpers_1.sleep)(5000);
+            const assignedCount = bufferClientsPerClient.get(client.clientId) || 0;
+            bufferClientsPerClient.set(client.clientId, assignedCount);
+            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - assignedCount);
+            if (needed > 0) {
+                clientNeedingBufferClients.push(client.clientId);
             }
         }
-        for (const doc of bufferclients) {
-            if (clientIds.includes(doc.mobile) || promoteclientIds.includes(doc.mobile)) {
-                this.logger.warn(`Number ${doc.mobile} is an Active Client`);
-                goodIds.push(doc.mobile);
-                try {
-                    await this.remove(doc.mobile, `CheckPoint: Already ActiveClient`);
-                    await (0, Helpers_1.sleep)(1000);
-                }
-                catch (removeError) {
-                    this.logger.error(`Error removing active client ${doc.mobile}:`, removeError);
-                }
-            }
+        let totalSlotsNeeded = 0;
+        for (const clientId of clientNeedingBufferClients) {
+            if (totalSlotsNeeded >= this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER)
+                break;
+            const assignedCount = bufferClientsPerClient.get(clientId) || 0;
+            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - assignedCount);
+            const allocatedForThisClient = Math.min(needed, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+            totalSlotsNeeded += allocatedForThisClient;
         }
-        goodIds = [...new Set([...goodIds, ...clientIds, ...promoteclientIds])];
-        this.logger.debug(`GoodIds: ${goodIds.length}, BadIds: ${badIds.length}`);
-        await (0, Helpers_1.sleep)(2000);
-        await this.addNewUserstoBufferClients(badIds, goodIds);
+        this.logger.debug(`Buffer clients per client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}`);
+        this.logger.debug(`Clients needing buffer clients: ${clientNeedingBufferClients.join(', ')}`);
+        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
+        const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
+        this.logger.debug(`Total active buffer clients: ${totalActiveBufferClients}`);
+        if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
+            await this.addNewUserstoBufferClients([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+        }
+        else {
+            this.logger.debug('No new buffer clients needed - all clients have sufficient buffer clients');
+        }
     }
-    async processBufferClient(doc, badIds, goodIds) {
+    async processBufferClient(doc, client) {
+        if (doc.inUse && doc.lastUsed !== null) {
+            this.logger.debug(`Buffer client ${doc.mobile} is in already used by a client`);
+            return;
+        }
         let cli;
         try {
             cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
@@ -13405,14 +13629,40 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 handler: false,
             });
             const me = await cli.getMe();
-            const hasPassword = await cli.hasPassword();
-            if (!hasPassword) {
-                this.logger.warn(`Client ${doc.mobile} does not have password`);
-                badIds.push(doc.mobile);
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)) {
+                await cli.updatePrivacyforDeletedAccount();
             }
-            else {
-                this.logger.debug(`${doc.mobile}: ALL Good`);
-                goodIds.push(doc.mobile);
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) && doc.createdAt > new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)) {
+                const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
+                    userId: 'me',
+                    offset: 0,
+                }));
+                if (photos.photos.length > 0) {
+                    await cli.deleteProfilePhotos();
+                }
+            }
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) && doc.channels > 100) {
+                if (me.firstName !== client.name) {
+                    this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                    cli.updateProfile(client.name, (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
+                }
+            }
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && doc.channels > 150) {
+                await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            }
+            if (doc.createdAt && doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) {
+                const rootPath = process.cwd();
+                const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
+                    userId: 'me',
+                    offset: 0,
+                }));
+                if (photos.photos.length < 1) {
+                    await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                    await (0, Helpers_1.sleep)(2000);
+                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp1.jpg'));
+                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp2.jpg'));
+                    await cli.updateProfilePic(path_1.default.join(rootPath, 'dp3.jpg'));
+                }
             }
         }
         catch (error) {
@@ -13425,7 +13675,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 'USER_DEACTIVATED_BAN',
                 'FROZEN_METHOD_INVALID',
             ])) {
-                badIds.push(doc.mobile);
                 try {
                     await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
                     await (0, Helpers_1.sleep)(1500);
@@ -13446,30 +13695,77 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             await (0, Helpers_1.sleep)(3000);
         }
     }
-    async addNewUserstoBufferClients(badIds, goodIds) {
+    async addNewUserstoBufferClients(badIds, goodIds, clientsNeedingBufferClients = [], bufferClientsPerClient) {
         const sixMonthsAgo = new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split('T')[0];
+        let totalNeededFromClients = 0;
+        for (const clientId of clientsNeedingBufferClients) {
+            let needed = 0;
+            if (bufferClientsPerClient) {
+                const currentCount = bufferClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
+            }
+            else {
+                const currentCount = await this.bufferClientModel.countDocuments({
+                    clientId,
+                    status: 'active',
+                });
+                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
+            }
+            totalNeededFromClients += needed;
+        }
+        const totalNeeded = Math.min(totalNeededFromClients, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER);
+        if (totalNeeded === 0) {
+            this.logger.debug('No buffer clients needed - all clients have sufficient buffer clients or limit reached');
+            return;
+        }
+        this.logger.debug(`Limited to creating ${totalNeeded} new buffer clients (max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
             twoFA: false,
             lastActive: { $lt: sixMonthsAgo },
             totalChats: { $gt: 150 },
-        }, { tgId: 1 }, badIds.length + 3);
-        this.logger.debug(`New buffer documents to be added: ${documents.length}`);
+        }, { tgId: 1 }, totalNeeded + 5);
+        this.logger.debug(`New buffer documents to be added: ${documents.length} for ${clientsNeedingBufferClients.length} clients needing buffer clients (limited to ${totalNeeded})`);
         let processedCount = 0;
-        while (badIds.length > 0 && documents.length > 0) {
+        const clientAssignmentTracker = new Map();
+        for (const clientId of clientsNeedingBufferClients) {
+            let needed = 0;
+            if (bufferClientsPerClient) {
+                const currentCount = bufferClientsPerClient.get(clientId) || 0;
+                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
+            }
+            else {
+                const currentCount = await this.bufferClientModel.countDocuments({
+                    clientId,
+                    status: 'active',
+                });
+                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
+            }
+            clientAssignmentTracker.set(clientId, needed);
+        }
+        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER) &&
+            documents.length > 0 &&
+            clientsNeedingBufferClients.length > 0) {
             const document = documents.shift();
-            processedCount++;
-            if (!document ||
-                !document.mobile ||
-                !document.tgId ||
-                !document.session) {
+            if (!document || !document.mobile || !document.tgId) {
                 this.logger.warn('Invalid document found, skipping');
                 continue;
             }
-            this.logger.debug(`Processing new buffer client ${processedCount}: ${document.mobile}`);
+            let targetClientId = null;
+            for (const clientId of clientsNeedingBufferClients) {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                if (needed > 0) {
+                    targetClientId = clientId;
+                    break;
+                }
+            }
+            if (!targetClientId) {
+                this.logger.debug('All clients have sufficient buffer clients assigned');
+                break;
+            }
             try {
                 const client = await connection_manager_1.connectionManager.getClient(document.mobile, {
                     autoDisconnect: false,
@@ -13479,45 +13775,64 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
                     if (!hasPassword) {
                         await client.removeOtherAuths();
+                        await (0, Helpers_1.sleep)(10000);
                         await client.set2fa();
                         this.logger.debug('Waiting for setting 2FA');
                         await (0, Helpers_1.sleep)(30000);
-                        await client.deleteProfilePhotos();
-                        await this.telegramService.removeOtherAuths(document.mobile);
-                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                        this.logger.debug(`Creating buffer client document for ${document.mobile}`);
+                        const channels = await this.telegramService.getChannelInfo(document.mobile, true);
                         const newSession = await this.telegramService.createNewSession(document.mobile);
+                        this.logger.debug(`Inserting Document for client ${targetClientId}`);
                         const bufferClient = {
                             tgId: document.tgId,
                             session: newSession,
                             mobile: document.mobile,
+                            lastUsed: null,
                             availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000)
                                 .toISOString()
                                 .split('T')[0],
                             channels: channels.ids.length,
+                            clientId: targetClientId,
                             status: 'active',
+                            message: 'Account successfully configured as buffer client',
                         };
-                        await (0, Helpers_1.sleep)(1000);
                         await this.create(bufferClient);
-                        await (0, Helpers_1.sleep)(1000);
-                        await this.usersService.update(document.tgId, { twoFA: true });
-                        this.logger.debug(`Created BufferClient for ${document.mobile}`);
-                        badIds.pop();
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
+                        this.logger.log(`=============Created BufferClient for ${targetClientId}==============`);
                     }
                     else {
                         this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
-                        await (0, Helpers_1.sleep)(1000);
-                        await this.usersService.update(document.tgId, { twoFA: true });
+                        try {
+                            await this.usersService.update(document.tgId, { twoFA: true });
+                        }
+                        catch (userUpdateError) {
+                            this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
+                        }
                     }
+                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
+                    const newNeeded = Math.max(0, currentNeeded - 1);
+                    clientAssignmentTracker.set(targetClientId, newNeeded);
+                    if (newNeeded === 0) {
+                        const index = clientsNeedingBufferClients.indexOf(targetClientId);
+                        if (index > -1) {
+                            clientsNeedingBufferClients.splice(index, 1);
+                        }
+                    }
+                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    processedCount++;
                 }
                 catch (error) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
                     (0, parseError_1.parseError)(error);
+                    processedCount++;
                 }
                 finally {
                     try {
                         await connection_manager_1.connectionManager.unregisterClient(document.mobile);
-                        await (0, Helpers_1.sleep)(1500);
                     }
                     catch (unregisterError) {
                         this.logger.error(`Error unregistering client ${document.mobile}: ${unregisterError.message}`);
@@ -13528,39 +13843,248 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
                 (0, parseError_1.parseError)(error);
             }
-            if (badIds.length > 0 && documents.length > 0) {
-                await (0, Helpers_1.sleep)(8000);
-            }
         }
-        this.createTimeout(() => {
-            this.logger.log('Starting next join channel process after adding new users');
-            this.joinchannelForBufferClients();
-        }, 5 * 60 * 1000);
+        this.logger.log(`✅ Batch completed: Created ${processedCount} new buffer clients (max ${totalNeeded} per trigger)`);
+        if (clientsNeedingBufferClients.length > 0) {
+            const stillNeeded = clientsNeedingBufferClients
+                .map((clientId) => {
+                const needed = clientAssignmentTracker.get(clientId) || 0;
+                return `${clientId}:${needed}`;
+            })
+                .join(', ');
+            this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
+        }
+        else {
+            this.logger.log(`🎉 All clients now have sufficient buffer clients!`);
+        }
     }
     async updateAllClientSessions() {
         const bufferClients = await this.findAll('active');
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             try {
-                this.logger.log(`Creating new session for mobile : ${bufferClient.mobile} (${i}/${bufferClients.length})`);
-                await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
-                    autoDisconnect: true,
-                    handler: true
+                this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
+                const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
+                    autoDisconnect: false,
+                    handler: true,
                 });
-                await (0, Helpers_1.sleep)(3000);
-                const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
-                await this.update(bufferClient.mobile, {
-                    session: newSession
-                });
+                try {
+                    const hasPassword = await client.hasPassword();
+                    if (!hasPassword) {
+                        await client.removeOtherAuths();
+                        await (0, Helpers_1.sleep)(10000);
+                        await client.set2fa();
+                        await (0, Helpers_1.sleep)(30000);
+                    }
+                    const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                    await this.update(bufferClient.mobile, {
+                        session: newSession,
+                        lastUsed: null,
+                        message: 'Session updated successfully',
+                    });
+                }
+                catch (error) {
+                    this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
+                    const errorDetails = (0, parseError_1.parseError)(error);
+                    await this.update(bufferClient.mobile, {
+                        status: 'inactive',
+                        message: `Session update failed: ${errorDetails.message}`,
+                    });
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(bufferClient.mobile);
+                    await (0, Helpers_1.sleep)(5000);
+                }
             }
-            catch (e) {
-                this.logger.error("Failed to Create new session", e);
-            }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(bufferClient.mobile);
-                await (0, Helpers_1.sleep)(5000);
+            catch (error) {
+                this.logger.error(`Error creating client connection for ${bufferClient.mobile}: ${error.message}`);
+                (0, parseError_1.parseError)(error);
             }
         }
+    }
+    async getBufferClientsByClientId(clientId, status) {
+        const filter = { clientId };
+        if (status) {
+            filter.status = status;
+        }
+        return this.bufferClientModel.find(filter).exec();
+    }
+    async getBufferClientDistribution() {
+        const clients = await this.clientService.findAll();
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const [totalBufferClients, unassignedBufferClients, activeBufferClients, inactiveBufferClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts,] = await Promise.all([
+            this.bufferClientModel.countDocuments(),
+            this.bufferClientModel.countDocuments({ clientId: { $exists: false } }),
+            this.bufferClientModel.countDocuments({ status: 'active' }),
+            this.bufferClientModel.countDocuments({ status: 'inactive' }),
+            this.bufferClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null } } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
+            this.bufferClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
+            this.bufferClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
+            this.bufferClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+                    },
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
+            this.bufferClientModel.aggregate([
+                {
+                    $match: {
+                        clientId: { $exists: true, $ne: null },
+                        status: 'active',
+                        lastUsed: { $gte: last24Hours },
+                    },
+                },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]),
+        ]);
+        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
+        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
+        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
+        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
+        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
+        const distributionPerClient = [];
+        let clientsWithSufficient = 0;
+        let clientsNeedingMore = 0;
+        let totalNeeded = 0;
+        for (const client of clients) {
+            const assignedCount = assignedCountMap.get(client.clientId) || 0;
+            const activeCount = activeCountMap.get(client.clientId) || 0;
+            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
+            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
+            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
+            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - activeCount);
+            const status = needed === 0 ? 'sufficient' : 'needs_more';
+            distributionPerClient.push({
+                clientId: client.clientId,
+                assignedCount,
+                activeCount,
+                inactiveCount,
+                needed,
+                status,
+                neverUsed,
+                usedInLast24Hours,
+            });
+            if (status === 'sufficient') {
+                clientsWithSufficient++;
+            }
+            else {
+                clientsNeedingMore++;
+                totalNeeded += needed;
+            }
+        }
+        const maxPerTrigger = this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER;
+        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
+        return {
+            totalBufferClients,
+            unassignedBufferClients,
+            activeBufferClients,
+            inactiveBufferClients,
+            distributionPerClient,
+            summary: {
+                clientsWithSufficientBufferClients: clientsWithSufficient,
+                clientsNeedingBufferClients: clientsNeedingMore,
+                totalBufferClientsNeeded: totalNeeded,
+                maxBufferClientsPerTrigger: maxPerTrigger,
+                triggersNeededToSatisfyAll: triggersNeeded,
+            },
+        };
+    }
+    async getBufferClientsByStatus(status) {
+        return this.bufferClientModel.find({ status }).exec();
+    }
+    async getBufferClientsWithMessages() {
+        return this.bufferClientModel
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .exec();
+    }
+    async getLeastRecentlyUsedBufferClients(clientId, limit = 1) {
+        return this.bufferClientModel
+            .find({ clientId, status: 'active' })
+            .sort({ lastUsed: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+    }
+    async getNextAvailableBufferClient(clientId) {
+        const clients = await this.getLeastRecentlyUsedBufferClients(clientId, 1);
+        return clients.length > 0 ? clients[0] : null;
+    }
+    async getUnusedBufferClients(hoursAgo = 24, clientId) {
+        const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+        const filter = {
+            status: 'active',
+            $or: [
+                { lastUsed: { $lt: cutoffDate } },
+                { lastUsed: { $exists: false } },
+                { lastUsed: null },
+            ],
+        };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        return this.bufferClientModel.find(filter).exec();
+    }
+    async getUsageStatistics(clientId) {
+        const filter = { status: 'active' };
+        if (clientId) {
+            filter.clientId = clientId;
+        }
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
+            this.bufferClientModel.countDocuments(filter),
+            this.bufferClientModel.countDocuments({
+                ...filter,
+                $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+            }),
+            this.bufferClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: last24Hours },
+            }),
+            this.bufferClientModel.countDocuments({
+                ...filter,
+                lastUsed: { $gte: lastWeek },
+            }),
+            this.bufferClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec(),
+        ]);
+        let totalGap = 0;
+        let gapCount = 0;
+        for (const client of allClients) {
+            if (client.lastUsed) {
+                const gap = now.getTime() - new Date(client.lastUsed).getTime();
+                totalGap += gap;
+                gapCount++;
+            }
+        }
+        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
+        return {
+            totalClients,
+            neverUsed,
+            usedInLast24Hours,
+            usedInLastWeek,
+            averageUsageGap,
+        };
+    }
+    async markAsUsed(mobile, message) {
+        const updateData = { lastUsed: new Date() };
+        if (message) {
+            updateData.message = message;
+        }
+        return this.update(mobile, updateData);
     }
 };
 exports.BufferClientService = BufferClientService;
@@ -13653,6 +14177,14 @@ __decorate([
 ], CreateBufferClientDto.prototype, "channels", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
+        description: 'Client ID that this buffer client belongs to',
+        example: 'client123',
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBufferClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
         description: 'Status of the buffer client',
         example: 'active',
         enum: ['active', 'inactive'],
@@ -13662,6 +14194,27 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBufferClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreateBufferClientDto.prototype, "lastUsed", void 0);
 
 
 /***/ }),
@@ -13858,6 +14411,18 @@ __decorate([
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "lastUsed", void 0);
+__decorate([
     (0, mongoose_1.Prop)({
         required: true,
         enum: ['active', 'inactive'],
@@ -13867,8 +14432,21 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], BufferClient.prototype, "inUse", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "createdAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "updatedAt", void 0);
 exports.BufferClient = BufferClient = __decorate([
-    (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
+    (0, mongoose_1.Schema)({
+        collection: 'bufferClients', versionKey: false, autoIndex: true,
         timestamps: true,
         toJSON: {
             virtuals: true,
@@ -13879,6 +14457,10 @@ exports.BufferClient = BufferClient = __decorate([
     })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
+exports.BufferClientSchema.index({ clientId: 1 }, {
+    unique: true,
+    partialFilterExpression: { inUse: true }
+});
 
 
 /***/ }),
@@ -14977,9 +15559,6 @@ let ClientController = class ClientController {
     async findAll() {
         return await this.clientService.findAll();
     }
-    async syncNpoint() {
-        await this.clientService.checkNpoint();
-    }
     async findOne(clientId) {
         return await this.clientService.findOne(clientId);
     }
@@ -15172,14 +15751,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
-__decorate([
-    (0, common_1.Get)('sync-npoint'),
-    (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
-    (0, swagger_1.ApiResponse)({ description: 'Clients synchronized successfully with npoint.' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "syncNpoint", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
@@ -15483,45 +16054,12 @@ exports.ClientModule = ClientModule = __decorate([
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -15540,7 +16078,6 @@ const buffer_client_service_1 = __webpack_require__(/*! ../buffer-clients/buffer
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-const path = __importStar(__webpack_require__(/*! path */ "path"));
 const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
 const npoint_service_1 = __webpack_require__(/*! ../n-point/npoint.service */ "./src/components/n-point/npoint.service.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
@@ -15634,7 +16171,6 @@ let ClientService = ClientService_1 = class ClientService {
             try {
                 await Promise.allSettled([
                     this.performPeriodicRefresh(),
-                    this.checkNpoint()
                 ]);
             }
             catch (error) {
@@ -15685,13 +16221,6 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             this.logger.error('Failed to refresh cache from database', error.stack);
             throw error;
-        }
-    }
-    async checkNpoint() {
-        try {
-        }
-        catch (error) {
-            this.logger.error('Error checking npoint', error.stack);
         }
     }
     async create(createClientDto) {
@@ -15949,7 +16478,6 @@ let ClientService = ClientService_1 = class ClientService {
         setImmediate(async () => {
             try {
                 await Promise.allSettled([
-                    this.checkNpoint(),
                     this.refreshExternalMaps()
                 ]);
             }
@@ -16040,14 +16568,13 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async setupClient(clientId, setupClientQueryDto) {
         this.logger.log(`Received New Client Request for - ${clientId}`, settingupClient);
-        if ((0, utils_1.toBoolean)(process.env.AUTO_CLIENT_SETUP) &&
-            Date.now() > settingupClient + 240000) {
+        if ((0, utils_1.toBoolean)(process.env.AUTO_CLIENT_SETUP) && Date.now() > settingupClient + 240000) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
             this.logger.log('setupClientQueryDto:', setupClientQueryDto);
             const today = new Date(Date.now()).toISOString().split('T')[0];
-            const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
+            const query = { clientId: clientId, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             if (newBufferClient) {
                 try {
@@ -16085,30 +16612,17 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async updateClientSession(newSession) {
         try {
-            let updatedUsername = '';
             this.logger.log('Updating Client Session');
             const setup = this.telegramService.getActiveClientSetup();
-            const { days, archiveOld, clientId, existingMobile, formalities, newMobile, } = setup;
+            const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
             await (0, Helpers_1.sleep)(2000);
             const existingClient = await this.findOne(clientId);
-            await connection_manager_1.connectionManager.getClient(newMobile, {
+            const newTelegramClient = await connection_manager_1.connectionManager.getClient(newMobile, {
                 handler: true,
                 autoDisconnect: false,
             });
-            const firstName = existingClient.name.split(' ')[0];
-            const middleName = existingClient.name.split(' ')[1];
-            const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-            const middleNameCaps = middleName
-                ? middleName[0].toUpperCase() + middleName.slice(1)
-                : '';
-            const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-                (0, utils_1.fetchNumbersFromString)(clientId);
-            try {
-                updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
-            }
-            catch (error) {
-                (0, parseError_1.parseError)(error, 'Error in updating username', true);
-            }
+            const me = await newTelegramClient.getMe();
+            const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
@@ -16118,7 +16632,9 @@ let ClientService = ClientService_1 = class ClientService {
                 session: newSession,
             });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
-            await this.bufferClientService.remove(newMobile, 'Used for new client');
+            await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date() });
+            this.logger.log('Updating buffer client to in use');
+            await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
             setTimeout(async () => {
                 await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
@@ -16130,10 +16646,6 @@ let ClientService = ClientService_1 = class ClientService {
                                 handler: true,
                                 autoDisconnect: false,
                             });
-                            this.logger.log('Started Formalities');
-                            await this.telegramService.updateNameandBio(existingMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
-                            await this.telegramService.deleteProfilePhotos(existingMobile);
-                            await this.telegramService.updateUsername(existingMobile, '');
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             this.logger.log('Formalities finished');
                             await connection_manager_1.connectionManager.unregisterClient(existingMobile);
@@ -16166,13 +16678,7 @@ let ClientService = ClientService_1 = class ClientService {
                     catch (error) {
                         this.logger.log('Cannot Archive Old Client');
                         const errorDetails = (0, parseError_1.parseError)(error, 'Error in Archiving Old Client', true);
-                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), [
-                            'expired',
-                            'unregistered',
-                            'deactivated',
-                            'session_revoked',
-                            'user_deactivated_ban',
-                        ])) {
+                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
                             this.logger.log('Deleting User: ', existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
                         }
@@ -16213,23 +16719,14 @@ let ClientService = ClientService_1 = class ClientService {
             });
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
-            const rootPath = process.cwd();
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             if (!me.username ||
                 me.username !== client.username ||
                 !me.username
                     ?.toLowerCase()
                     .startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const client = await this.findOne(clientId);
-                const firstName = client.name.split(' ')[0];
-                const middleName = client.name.split(' ')[1];
-                const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-                const middleNameCaps = middleName
-                    ? middleName[0].toUpperCase() + middleName.slice(1)
-                    : '';
-                const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-                    (0, utils_1.fetchNumbersFromString)(clientId);
-                const updatedUsername = await telegramClient.updateUsername(baseUsername);
+                const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+                await (0, Helpers_1.sleep)(1000);
                 await this.update(client.clientId, { username: updatedUsername });
             }
             await (0, Helpers_1.sleep)(1000);
@@ -16241,16 +16738,7 @@ let ClientService = ClientService_1 = class ClientService {
                 this.logger.log(`First name for ${clientId} is already up to date`);
             }
             await (0, Helpers_1.sleep)(1000);
-            await telegramClient.deleteProfilePhotos();
-            await (0, Helpers_1.sleep)(1000);
             await telegramClient.updatePrivacy();
-            await (0, Helpers_1.sleep)(1000);
-            this.logger.log(rootPath, 'trying to update dp');
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
-            await (0, Helpers_1.sleep)(1000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
-            await (0, Helpers_1.sleep)(1000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
