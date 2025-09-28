@@ -13305,8 +13305,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.removeFromBufferMap(mobile);
                     try {
                         await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
-                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            await this.update(mobile, { channels: 400 });
+                        }
+                        else {
+                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                            await this.update(mobile, { channels: channelsInfo.ids.length });
+                        }
                     }
                     catch (updateError) {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
@@ -22138,8 +22143,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     this.removeFromPromoteMap(mobile);
                     try {
                         await (0, Helpers_1.sleep)(2000);
-                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            await this.update(mobile, { channels: 400 });
+                        }
+                        else {
+                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                            await this.update(mobile, { channels: channelsInfo.ids.length });
+                        }
                     }
                     catch (updateError) {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
