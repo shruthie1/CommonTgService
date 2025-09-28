@@ -2,7 +2,7 @@ import { ChannelsService } from './../channels/channels.service';
 import { OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
-import { BufferClientDocument } from './schemas/buffer-client.schema';
+import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
@@ -11,6 +11,7 @@ import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { SessionService } from '../session-manager';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
+import { Client } from '../clients';
 export declare class BufferClientService implements OnModuleDestroy {
     private bufferClientModel;
     private telegramService;
@@ -36,6 +37,8 @@ export declare class BufferClientService implements OnModuleDestroy {
     private readonly MAX_MAP_SIZE;
     private readonly CLEANUP_INTERVAL;
     private readonly MAX_NEEDED;
+    private readonly MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER;
+    private readonly MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT;
     private cleanupIntervalId;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService);
     onModuleDestroy(): Promise<void>;
@@ -60,7 +63,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     updateStatus(mobile: string, status: string, message?: string): Promise<BufferClientDocument>;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument>;
     updateInfo(): Promise<void>;
-    joinchannelForBufferClients(skipExisting?: boolean): Promise<string>;
+    joinchannelForBufferClients(skipExisting?: boolean, clientId?: string): Promise<string>;
     joinChannelQueue(): Promise<void>;
     private processJoinChannelInterval;
     private processJoinChannelSequentially;
@@ -71,9 +74,52 @@ export declare class BufferClientService implements OnModuleDestroy {
     private processLeaveChannelInterval;
     private processLeaveChannelSequentially;
     clearLeaveChannelInterval(): void;
-    setAsBufferClient(mobile: string, availableDate?: string): Promise<string>;
+    setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
-    private processBufferClient;
-    addNewUserstoBufferClients(badIds: string[], goodIds: string[]): Promise<void>;
+    processBufferClient(doc: BufferClient, client: Client): Promise<void>;
+    addNewUserstoBufferClients(badIds: string[], goodIds: string[], clientsNeedingBufferClients?: string[], bufferClientsPerClient?: Map<string, number>): Promise<void>;
     updateAllClientSessions(): Promise<void>;
+    getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]>;
+    getBufferClientDistribution(): Promise<{
+        totalBufferClients: number;
+        unassignedBufferClients: number;
+        activeBufferClients: number;
+        inactiveBufferClients: number;
+        distributionPerClient: Array<{
+            clientId: string;
+            assignedCount: number;
+            activeCount: number;
+            inactiveCount: number;
+            needed: number;
+            status: 'sufficient' | 'needs_more';
+            neverUsed: number;
+            usedInLast24Hours: number;
+        }>;
+        summary: {
+            clientsWithSufficientBufferClients: number;
+            clientsNeedingBufferClients: number;
+            totalBufferClientsNeeded: number;
+            maxBufferClientsPerTrigger: number;
+            triggersNeededToSatisfyAll: number;
+        };
+    }>;
+    getBufferClientsByStatus(status: string): Promise<BufferClient[]>;
+    getBufferClientsWithMessages(): Promise<Array<{
+        mobile: string;
+        status: string;
+        message: string;
+        clientId?: string;
+        lastUsed?: Date;
+    }>>;
+    getLeastRecentlyUsedBufferClients(clientId: string, limit?: number): Promise<BufferClient[]>;
+    getNextAvailableBufferClient(clientId: string): Promise<BufferClientDocument | null>;
+    getUnusedBufferClients(hoursAgo?: number, clientId?: string): Promise<BufferClientDocument[]>;
+    getUsageStatistics(clientId?: string): Promise<{
+        totalClients: number;
+        neverUsed: number;
+        usedInLast24Hours: number;
+        usedInLastWeek: number;
+        averageUsageGap: number;
+    }>;
+    markAsUsed(mobile: string, message?: string): Promise<BufferClientDocument>;
 }

@@ -128,13 +128,6 @@ export class ClientController {
     return await this.clientService.findAll();
   }
 
-  @Get('sync-npoint')
-  @ApiOperation({ summary: 'Sync clients with npoint service' })
-  @ApiResponse({ description: 'Clients synchronized successfully with npoint.' })
-  async syncNpoint(): Promise<void> {
-    await this.clientService.checkNpoint();
-  }
-
   @Get(':clientId')
   @ApiOperation({ summary: 'Get user data by ID' })
   @ApiParam({ name: 'clientId', description: 'Client ID' })

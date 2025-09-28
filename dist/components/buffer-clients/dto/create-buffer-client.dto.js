@@ -58,6 +58,14 @@ __decorate([
 ], CreateBufferClientDto.prototype, "channels", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
+        description: 'Client ID that this buffer client belongs to',
+        example: 'client123',
+    }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBufferClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
         description: 'Status of the buffer client',
         example: 'active',
         enum: ['active', 'inactive'],
@@ -67,4 +75,25 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Status message for the promote client',
+        example: 'Account is functioning properly',
+        default: 'Account is functioning properly',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBufferClientDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Last used timestamp for the promote client',
+        example: '2023-06-22T10:30:00.000Z',
+        required: false
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    __metadata("design:type", Date)
+], CreateBufferClientDto.prototype, "lastUsed", void 0);
 //# sourceMappingURL=create-buffer-client.dto.js.map

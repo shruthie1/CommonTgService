@@ -35,6 +35,18 @@ __decorate([
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: true }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "message", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "lastUsed", void 0);
+__decorate([
     (0, mongoose_1.Prop)({
         required: true,
         enum: ['active', 'inactive'],
@@ -44,6 +56,14 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "status", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "createdAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "updatedAt", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({ collection: 'bufferClients', versionKey: false, autoIndex: true,
         timestamps: true,

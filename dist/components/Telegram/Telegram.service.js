@@ -343,6 +343,23 @@ let TelegramService = class TelegramService {
             throw new Error("Failed to update username");
         }
     }
+    async updateUsernameForAClient(mobile, clientId, clientName, currentUsername) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        const [firstName, middleName = ''] = clientName.split(' ');
+        const firstPart = firstName.slice(0, 4);
+        const middlePart = middleName.slice(0, 3);
+        const firstNameCaps = firstPart[0].toUpperCase() + firstPart.slice(1);
+        const middleNameCaps = middlePart
+            ? middlePart[0].toUpperCase() + middlePart.slice(1)
+            : '';
+        const pattern = `^${firstPart}${middlePart}\\d+$`;
+        const usernameRegex = new RegExp(pattern, 'i');
+        const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` + (0, utils_1.fetchNumbersFromString)(clientId) + Math.floor(Math.random() * 1000);
+        if (!usernameRegex.test(currentUsername)) {
+            return await telegramClient.updateUsername(baseUsername);
+        }
+        return currentUsername;
+    }
     async getMediaMetadata(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         if (params) {

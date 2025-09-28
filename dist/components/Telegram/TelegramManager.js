@@ -789,7 +789,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueAllowAll()
+                    new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
             this.logger.info(this.phoneNumber, "PP Updated");
@@ -809,7 +809,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyAbout(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueAllowAll()
+                    new telegram_1.Api.InputPrivacyValueDisallowAll()
                 ],
             }));
             this.logger.info(this.phoneNumber, "LAstSeen Updated");

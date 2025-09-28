@@ -971,7 +971,7 @@ class TelegramManager {
                 new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyProfilePhoto(),
                     rules: [
-                        new Api.InputPrivacyValueAllowAll()
+                        new Api.InputPrivacyValueDisallowAll()
                     ],
                 })
             );
@@ -1000,7 +1000,7 @@ class TelegramManager {
                 new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyAbout(),
                     rules: [
-                        new Api.InputPrivacyValueAllowAll()
+                        new Api.InputPrivacyValueDisallowAll()
                     ],
                 })
             );

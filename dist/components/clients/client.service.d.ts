@@ -50,7 +50,6 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private performPeriodicRefresh;
     private updateCacheMetadata;
     private refreshCacheFromDatabase;
-    checkNpoint(): Promise<void>;
     create(createClientDto: CreateClientDto): Promise<Client>;
     findAll(): Promise<Client[]>;
     findAllMasked(): Promise<Partial<Client>[]>;

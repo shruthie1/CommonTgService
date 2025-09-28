@@ -6,7 +6,6 @@ import {
   InternalServerErrorException,
   NotFoundException,
   forwardRef,
-  Query,
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
@@ -171,7 +170,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       try {
         await Promise.allSettled([
           this.performPeriodicRefresh(),
-          this.checkNpoint()
         ]);
       } catch (error) {
         this.logger.error('Error during periodic tasks', error.stack);
@@ -229,44 +227,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       this.logger.error('Failed to refresh cache from database', error.stack);
       throw error;
-    }
-  }
-
-  async checkNpoint(): Promise<void> {
-    try {
-      // Commented out implementation - implement when needed
-      /*
-      const npointIdFull = '7c2682f37bb93ef486ba';
-      const npointIdMasked = 'f0d1e44d82893490bbde';
-      
-      const [maskedResponse, fullResponse] = await Promise.allSettled([
-        fetchWithTimeout(`https://api.npoint.io/${npointIdMasked}`, { timeout: 10000 }),
-        fetchWithTimeout(`https://api.npoint.io/${npointIdFull}`, { timeout: 10000 })
-      ]);
-
-      if (maskedResponse.status === 'fulfilled') {
-        const npointMaskedClients = maskedResponse.value.data;
-        const existingMaskedClients = await this.findAllMaskedObject();
-        
-        if (areJsonsNotSame(npointMaskedClients, existingMaskedClients)) {
-          await this.npointService.updateDocument(npointIdMasked, existingMaskedClients);
-          this.logger.log('Updated Masked Clients from Npoint');
-        }
-      }
-
-      if (fullResponse.status === 'fulfilled') {
-        const npointClients = fullResponse.value.data;
-        const existingClients = await this.findAllObject();
-        
-        if (areJsonsNotSame(npointClients, existingClients)) {
-          await this.npointService.updateDocument(npointIdFull, existingClients);
-          this.logger.log('Updated Full Clients from Npoint');
-        }
-      }
-      */
-    } catch (error) {
-      this.logger.error('Error checking npoint', error.stack);
-      // Don't throw - this is a background task
     }
   }
 
@@ -600,7 +560,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     setImmediate(async () => {
       try {
         await Promise.allSettled([
-          this.checkNpoint(),
           this.refreshExternalMaps()
         ]);
       } catch (error) {
@@ -723,28 +682,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     clientId: string,
     setupClientQueryDto: SetupClientQueryDto,
   ) {
-    this.logger.log(
-      `Received New Client Request for - ${clientId}`,
-      settingupClient,
-    );
-    if (
-      toBoolean(process.env.AUTO_CLIENT_SETUP) &&
-      Date.now() > settingupClient + 240000
-    ) {
+    this.logger.log(`Received New Client Request for - ${clientId}`, settingupClient);
+    if (toBoolean(process.env.AUTO_CLIENT_SETUP) && Date.now() > settingupClient + 240000) {
       settingupClient = Date.now();
       const existingClient = await this.findOne(clientId);
       const existingClientMobile = existingClient.mobile;
       this.logger.log('setupClientQueryDto:', setupClientQueryDto);
       const today = new Date(Date.now()).toISOString().split('T')[0];
-      const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
-      const newBufferClient = (
-        await this.bufferClientService.executeQuery(query, { tgId: 1 })
-      )[0];
+      const query = { clientId: clientId, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
+      const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
       if (newBufferClient) {
         try {
-          await fetchWithTimeout(
-            `${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`,
-          );
+          await fetchWithTimeout(`${notifbot()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
           this.telegramService.setActiveClientSetup({
             ...setupClientQueryDto,
             clientId,
@@ -752,16 +701,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             newMobile: newBufferClient.mobile,
           });
           await connectionManager.getClient(newBufferClient.mobile);
-
           await this.updateClientSession(newBufferClient.session);
-          // const archivedClient = await this.archivedClientService.findOne(newBufferClient.mobile)
-          // if (archivedClient) {
-          //     await fetchWithTimeout(`${notifbot()}&text=Using Old Session from Archived Clients- NewNumber:${newBufferClient.mobile}`);
-          //     await this.updateClientSession(archivedClient.session)
-          // } else {
-          //     await connectionManager.getClient(newBufferClient.mobile, false, true);
-          //     await this.generateNewSession(newBufferClient.mobile)
-          // }
         } catch (error) {
           parseError(error);
           this.logger.log('Removing buffer as error');
@@ -777,74 +717,42 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           await connectionManager.unregisterClient(newBufferClient.mobile);
         }
       } else {
-        await fetchWithTimeout(
-          `${notifbot()}&text=Buffer Clients not available, Requested by ${clientId}`,
-        );
+        await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available, Requested by ${clientId}`);
         this.logger.log('Buffer Clients not available');
       }
     } else {
-      this.logger.log(
-        'Profile Setup Recently tried, wait ::',
-        settingupClient - Date.now(),
-      );
+      this.logger.log('Profile Setup Recently tried, wait ::', settingupClient - Date.now());
     }
   }
 
   async updateClientSession(newSession: string) {
     try {
-      let updatedUsername = '';
       this.logger.log('Updating Client Session');
       const setup = this.telegramService.getActiveClientSetup();
-      const {
-        days,
-        archiveOld,
-        clientId,
-        existingMobile,
-        formalities,
-        newMobile,
-      } = setup;
+      const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
       await sleep(2000);
       const existingClient = await this.findOne(clientId);
-      await connectionManager.getClient(newMobile, {
+      const newTelegramClient = await connectionManager.getClient(newMobile, {
         handler: true,
         autoDisconnect: false,
       });
-      const firstName = existingClient.name.split(' ')[0];
-      const middleName = existingClient.name.split(' ')[1];
-      const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-      const middleNameCaps = middleName
-        ? middleName[0].toUpperCase() + middleName.slice(1)
-        : '';
-      const baseUsername =
-        `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-        fetchNumbersFromString(clientId);
-      try {
-        updatedUsername = await this.telegramService.updateUsername(
-          newMobile,
-          baseUsername,
-        );
-      } catch (error) {
-        parseError(error, 'Error in updating username', true);
-      }
-      await fetchWithTimeout(
-        `${notifbot()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`,
-      );
+      const me = await newTelegramClient.getMe();
+      const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
+      await fetchWithTimeout(`${notifbot()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
       await connectionManager.unregisterClient(newMobile);
-      const existingClientUser = (
-        await this.usersService.search({ mobile: existingMobile })
-      )[0];
+      const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       await this.update(clientId, {
         mobile: newMobile,
         username: updatedUsername,
         session: newSession,
       });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
-      await this.bufferClientService.remove(newMobile, 'Used for new client');
+      // await this.bufferClientService.remove(newMobile, 'Used for new client');
+      await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date() });
+      this.logger.log('Updating buffer client to in use');
+      await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
       setTimeout(async () => {
-        await this.updateClient(
-          clientId,
-          'Delayed update after buffer removal',
-        );
+        await this.updateClient(clientId, 'Delayed update after buffer removal');
       }, 15000);
 
       try {
@@ -855,17 +763,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
                 handler: true,
                 autoDisconnect: false,
               });
-              this.logger.log('Started Formalities');
-              await this.telegramService.updateNameandBio(
-                existingMobile,
-                'Deleted Account',
-                `New Acc: @${updatedUsername}`,
-              );
-              await this.telegramService.deleteProfilePhotos(existingMobile);
-              await this.telegramService.updateUsername(existingMobile, '');
-              await this.telegramService.updatePrivacyforDeletedAccount(
-                existingMobile,
-              );
+              await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
               this.logger.log('Formalities finished');
               await connectionManager.unregisterClient(existingMobile);
               await fetchWithTimeout(`${notifbot()}&text=Formalities finished`);
@@ -873,14 +771,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
               this.logger.log('Formalities skipped');
             }
             if (archiveOld) {
-              const availableDate = new Date(
-                Date.now() + (days + 1) * 24 * 60 * 60 * 1000,
-              )
+              const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
                 .toISOString()
                 .split('T')[0];
-              const bufferClientDto:
-                | CreateBufferClientDto
-                | UpdateBufferClientDto = {
+              const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
                 mobile: existingMobile,
                 availableDate,
                 session: existingClient.session,
@@ -889,35 +783,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
                 status: days > 35 ? 'inactive' : 'active',
               };
               const updatedBufferClient =
-                await this.bufferClientService.createOrUpdate(
-                  existingMobile,
-                  bufferClientDto,
-                );
+                await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
               // await this.archivedClientService.update(existingMobile, existingClient);
               this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
               await fetchWithTimeout(`${notifbot()}&text=Client Archived`);
             } else {
               this.logger.log('Client Archive Skipped');
-              await fetchWithTimeout(
-                `${notifbot()}&text=Client Archive Skipped`,
-              );
+              await fetchWithTimeout(`${notifbot()}&text=Client Archive Skipped`);
             }
           } catch (error) {
             this.logger.log('Cannot Archive Old Client');
-            const errorDetails = parseError(
-              error,
-              'Error in Archiving Old Client',
-              true,
-            );
-            if (
-              contains(errorDetails.message.toLowerCase(), [
-                'expired',
-                'unregistered',
-                'deactivated',
-                'session_revoked',
-                'user_deactivated_ban',
-              ])
-            ) {
+            const errorDetails = parseError(error, 'Error in Archiving Old Client', true);
+            if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
               this.logger.log('Deleting User: ', existingClientUser.mobile);
               await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
             } else {
@@ -944,9 +821,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
     const cooldownPeriod = 30000;
     if (now - lastUpdate < cooldownPeriod) {
-      this.logger.log(
-        `Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`,
-      );
+      this.logger.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
       return;
     }
 
@@ -959,8 +834,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
       await sleep(2000);
       const me = await telegramClient.getMe();
-      const rootPath = process.cwd();
-      await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
       if (
         !me.username ||
         me.username !== client.username ||
@@ -969,43 +842,21 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           .startsWith(me.firstName.split(' ')[0].toLowerCase())
       ) {
         const client = await this.findOne(clientId);
-        const firstName = client.name.split(' ')[0];
-        const middleName = client.name.split(' ')[1];
-        const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-        const middleNameCaps = middleName
-          ? middleName[0].toUpperCase() + middleName.slice(1)
-          : '';
-        const baseUsername =
-          `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-          fetchNumbersFromString(clientId);
-        const updatedUsername =
-          await telegramClient.updateUsername(baseUsername);
+        const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+        await sleep(1000);
         await this.update(client.clientId, { username: updatedUsername });
       }
       await sleep(1000);
       if (me.firstName !== client.name) {
-        this.logger.log(
-          `Updating first name for ${clientId} from ${me.firstName} to ${client.name}`,
-        );
+        this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
         await telegramClient.updateProfile(client.name, obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, { maintainFormatting: false, preserveCase: true }));
       } else {
         this.logger.log(`First name for ${clientId} is already up to date`);
       }
       await sleep(1000);
-      await telegramClient.deleteProfilePhotos();
-      await sleep(1000);
       await telegramClient.updatePrivacy();
       await sleep(1000);
-      this.logger.log(rootPath, 'trying to update dp');
-      await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
-      await sleep(1000);
-      await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
-      await sleep(1000);
-      await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
-      await sleep(1000);
-      await fetchWithTimeout(
-        `${notifbot()}&text=Updated Client: ${clientId} - ${message}`,
-      );
+      await fetchWithTimeout(`${notifbot()}&text=Updated Client: ${clientId} - ${message}`);
       await fetchWithTimeout(client.deployKey);
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
@@ -1018,25 +869,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   async updateClients() {
     const clients = await this.findAll();
     for (const client of Object.values(clients)) {
-      await this.updateClient(
-        client.clientId,
-        `Force Updating Client: ${client.clientId}`,
-      );
+      await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
     }
   }
 
   async generateNewSession(phoneNumber: string, attempt: number = 1) {
     try {
       this.logger.log('String Generation started');
-      await fetchWithTimeout(
-        `${notifbot()}&text=String Generation started for NewNumber:${phoneNumber}`,
-      );
+      await fetchWithTimeout(`${notifbot()}&text=String Generation started for NewNumber:${phoneNumber}`);
       await sleep(1000);
-      const response = await fetchWithTimeout(
-        `${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`,
-        { timeout: 15000 },
-        1,
-      );
+      const response = await fetchWithTimeout(`${process.env.uptimebot}/login?phone=${phoneNumber}&force=${true}`, { timeout: 15000 }, 1);
       if (response) {
         this.logger.log(`Code Sent successfully`, response.data);
         await fetchWithTimeout(`${notifbot()}&text=Code Sent successfully`);
@@ -1148,13 +990,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       .lean();
     if (existingPromoteClient) {
       if (existingPromoteClient.clientId === clientId) {
-        throw new BadRequestException(
-          `Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`,
-        );
+        throw new BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
       } else if (existingPromoteClient.clientId) {
-        throw new BadRequestException(
-          `Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`,
-        );
+        throw new BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
       } else {
         // Mobile exists but not assigned to any client, assign it to this client
         await this.promoteClientModel.updateOne(
@@ -1163,9 +1001,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         );
       }
     } else {
-      throw new NotFoundException(
-        `Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`,
-      );
+      throw new NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
     }
 
     return client;
@@ -1188,9 +1024,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     );
 
     if (result.matchedCount === 0) {
-      throw new NotFoundException(
-        `Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`,
-      );
+      throw new NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
     }
 
     return client;
@@ -1211,9 +1045,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       throw new BadRequestException('Mobile number is required');
     }
 
-    this.logger.debug(
-      `Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`,
-    );
+    this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
 
     try {
       // Use the simplified IP management service to get IP for mobile
@@ -1227,10 +1059,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.debug(`No IP found for mobile ${mobile}`);
       return null;
     } catch (error) {
-      this.logger.error(
-        `Failed to get IP for mobile ${mobile}: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to get IP for mobile ${mobile}: ${error.message}`, error.stack);
       return null;
     }
   }
@@ -1254,9 +1083,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     mainMobile?: string;
     promoteMobiles: string[];
   }> {
-    this.logger.debug(
-      `Getting mobiles needing IP assignment for client: ${clientId}`,
-    );
+    this.logger.debug(`Getting mobiles needing IP assignment for client: ${clientId}`);
 
     const client = await this.findOne(clientId);
     const result = {
@@ -1277,10 +1104,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
     }
 
-    this.logger.debug(
-      `Mobiles needing IP assignment for client ${clientId}:`,
-      result,
-    );
+    this.logger.debug(`Mobiles needing IP assignment for client ${clientId}:`, result);
     return result;
   }
 
@@ -1305,9 +1129,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       errors: string[];
     };
   }> {
-    this.logger.debug(
-      `Auto-assigning IPs to all mobiles for client: ${clientId}`,
-    );
+    this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
 
     const client = await this.findOne(clientId);
     const errors: string[] = [];
@@ -1377,9 +1199,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
     const totalMobiles = 1 + promoteMobiles.length;
 
-    this.logger.log(
-      `Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`,
-    );
+    this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
 
     return {
       clientId,

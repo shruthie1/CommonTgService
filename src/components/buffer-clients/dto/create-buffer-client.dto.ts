@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {  IsNumber, IsString } from 'class-validator';
+import {  IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateBufferClientDto {
   @ApiProperty({
@@ -39,6 +39,13 @@ export class CreateBufferClientDto {
   readonly channels: number;
 
   @ApiProperty({
+    description: 'Client ID that this buffer client belongs to',
+    example: 'client123',
+  })
+  @IsString()
+  readonly clientId: string;
+
+  @ApiProperty({
     description: 'Status of the buffer client',
     example: 'active',
     enum: ['active', 'inactive'],
@@ -47,4 +54,24 @@ export class CreateBufferClientDto {
   })
   @IsString()
   readonly status?: 'active' | 'inactive';
+
+
+  @ApiProperty({
+    description: 'Status message for the promote client',
+    example: 'Account is functioning properly',
+    default: 'Account is functioning properly',
+    required: false
+  })
+  @IsOptional()
+  @IsString()
+  readonly message?: string;
+
+  @ApiProperty({
+    description: 'Last used timestamp for the promote client',
+    example: '2023-06-22T10:30:00.000Z',
+    required: false
+  })
+  @IsOptional()
+  @IsDateString()
+  readonly lastUsed?: Date;
 }

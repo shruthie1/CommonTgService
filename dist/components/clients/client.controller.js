@@ -62,9 +62,6 @@ let ClientController = class ClientController {
     async findAll() {
         return await this.clientService.findAll();
     }
-    async syncNpoint() {
-        await this.clientService.checkNpoint();
-    }
     async findOne(clientId) {
         return await this.clientService.findOne(clientId);
     }
@@ -257,14 +254,6 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
-__decorate([
-    (0, common_1.Get)('sync-npoint'),
-    (0, swagger_1.ApiOperation)({ summary: 'Sync clients with npoint service' }),
-    (0, swagger_1.ApiResponse)({ description: 'Clients synchronized successfully with npoint.' }),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "syncNpoint", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),

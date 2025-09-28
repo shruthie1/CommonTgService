@@ -1,43 +1,10 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -56,7 +23,6 @@ const buffer_client_service_1 = require("../buffer-clients/buffer-client.service
 const Helpers_1 = require("telegram/Helpers");
 const users_service_1 = require("../users/users.service");
 const utils_1 = require("../../utils");
-const path = __importStar(require("path"));
 const cloudinary_1 = require("../../cloudinary");
 const npoint_service_1 = require("../n-point/npoint.service");
 const parseError_1 = require("../../utils/parseError");
@@ -150,7 +116,6 @@ let ClientService = ClientService_1 = class ClientService {
             try {
                 await Promise.allSettled([
                     this.performPeriodicRefresh(),
-                    this.checkNpoint()
                 ]);
             }
             catch (error) {
@@ -201,13 +166,6 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             this.logger.error('Failed to refresh cache from database', error.stack);
             throw error;
-        }
-    }
-    async checkNpoint() {
-        try {
-        }
-        catch (error) {
-            this.logger.error('Error checking npoint', error.stack);
         }
     }
     async create(createClientDto) {
@@ -465,7 +423,6 @@ let ClientService = ClientService_1 = class ClientService {
         setImmediate(async () => {
             try {
                 await Promise.allSettled([
-                    this.checkNpoint(),
                     this.refreshExternalMaps()
                 ]);
             }
@@ -556,14 +513,13 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async setupClient(clientId, setupClientQueryDto) {
         this.logger.log(`Received New Client Request for - ${clientId}`, settingupClient);
-        if ((0, utils_1.toBoolean)(process.env.AUTO_CLIENT_SETUP) &&
-            Date.now() > settingupClient + 240000) {
+        if ((0, utils_1.toBoolean)(process.env.AUTO_CLIENT_SETUP) && Date.now() > settingupClient + 240000) {
             settingupClient = Date.now();
             const existingClient = await this.findOne(clientId);
             const existingClientMobile = existingClient.mobile;
             this.logger.log('setupClientQueryDto:', setupClientQueryDto);
             const today = new Date(Date.now()).toISOString().split('T')[0];
-            const query = { availableDate: { $lte: today }, channels: { $gt: 200 } };
+            const query = { clientId: clientId, availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             if (newBufferClient) {
                 try {
@@ -601,30 +557,17 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async updateClientSession(newSession) {
         try {
-            let updatedUsername = '';
             this.logger.log('Updating Client Session');
             const setup = this.telegramService.getActiveClientSetup();
             const { days, archiveOld, clientId, existingMobile, formalities, newMobile, } = setup;
             await (0, Helpers_1.sleep)(2000);
             const existingClient = await this.findOne(clientId);
-            await connection_manager_1.connectionManager.getClient(newMobile, {
+            const newTelegramClient = await connection_manager_1.connectionManager.getClient(newMobile, {
                 handler: true,
                 autoDisconnect: false,
             });
-            const firstName = existingClient.name.split(' ')[0];
-            const middleName = existingClient.name.split(' ')[1];
-            const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-            const middleNameCaps = middleName
-                ? middleName[0].toUpperCase() + middleName.slice(1)
-                : '';
-            const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-                (0, utils_1.fetchNumbersFromString)(clientId);
-            try {
-                updatedUsername = await this.telegramService.updateUsername(newMobile, baseUsername);
-            }
-            catch (error) {
-                (0, parseError_1.parseError)(error, 'Error in updating username', true);
-            }
+            const me = await newTelegramClient.getMe();
+            const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
@@ -646,10 +589,6 @@ let ClientService = ClientService_1 = class ClientService {
                                 handler: true,
                                 autoDisconnect: false,
                             });
-                            this.logger.log('Started Formalities');
-                            await this.telegramService.updateNameandBio(existingMobile, 'Deleted Account', `New Acc: @${updatedUsername}`);
-                            await this.telegramService.deleteProfilePhotos(existingMobile);
-                            await this.telegramService.updateUsername(existingMobile, '');
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             this.logger.log('Formalities finished');
                             await connection_manager_1.connectionManager.unregisterClient(existingMobile);
@@ -729,23 +668,14 @@ let ClientService = ClientService_1 = class ClientService {
             });
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
-            const rootPath = process.cwd();
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
             if (!me.username ||
                 me.username !== client.username ||
                 !me.username
                     ?.toLowerCase()
                     .startsWith(me.firstName.split(' ')[0].toLowerCase())) {
                 const client = await this.findOne(clientId);
-                const firstName = client.name.split(' ')[0];
-                const middleName = client.name.split(' ')[1];
-                const firstNameCaps = firstName[0].toUpperCase() + firstName.slice(1);
-                const middleNameCaps = middleName
-                    ? middleName[0].toUpperCase() + middleName.slice(1)
-                    : '';
-                const baseUsername = `${firstNameCaps.slice(0, 4)}${middleNameCaps.slice(0, 3)}` +
-                    (0, utils_1.fetchNumbersFromString)(clientId);
-                const updatedUsername = await telegramClient.updateUsername(baseUsername);
+                const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+                await (0, Helpers_1.sleep)(1000);
                 await this.update(client.clientId, { username: updatedUsername });
             }
             await (0, Helpers_1.sleep)(1000);
@@ -757,16 +687,7 @@ let ClientService = ClientService_1 = class ClientService {
                 this.logger.log(`First name for ${clientId} is already up to date`);
             }
             await (0, Helpers_1.sleep)(1000);
-            await telegramClient.deleteProfilePhotos();
-            await (0, Helpers_1.sleep)(1000);
             await telegramClient.updatePrivacy();
-            await (0, Helpers_1.sleep)(1000);
-            this.logger.log(rootPath, 'trying to update dp');
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
-            await (0, Helpers_1.sleep)(1000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
-            await (0, Helpers_1.sleep)(1000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
             await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
