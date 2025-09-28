@@ -11,6 +11,11 @@ export declare class BufferClient {
     lastUsed: Date;
     status: 'active' | 'inactive';
     inUse: boolean;
+    privacyUpdatedAt: Date;
+    profilePicsUpdatedAt: Date;
+    nameBioUpdatedAt: Date;
+    profilePicsDeletedAt: Date;
+    usernameUpdatedAt: Date;
     createdAt: Date;
     updatedAt: Date;
 }
