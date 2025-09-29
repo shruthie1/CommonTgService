@@ -1,5 +1,4 @@
 import { Document } from 'mongoose';
-import * as mongoose from 'mongoose';
 export type ActiveChannelDocument = ActiveChannel & Document;
 export declare class ActiveChannel {
     channelId: string;
@@ -24,12 +23,12 @@ export declare class ActiveChannel {
     tempBan?: boolean;
     deletedCount?: number;
 }
-export declare const ActiveChannelSchema: mongoose.Schema<ActiveChannel, mongoose.Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel, any, {}> & ActiveChannel & {
-    _id: mongoose.Types.ObjectId;
+export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChannel, import("mongoose").Model<ActiveChannel, any, any, any, Document<unknown, any, ActiveChannel, any, {}> & ActiveChannel & {
+    _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, any>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, mongoose.FlatRecord<ActiveChannel>, {}, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & mongoose.FlatRecord<ActiveChannel> & {
-    _id: mongoose.Types.ObjectId;
+}, any>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, import("mongoose").FlatRecord<ActiveChannel>, {}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & import("mongoose").FlatRecord<ActiveChannel> & {
+    _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
 }>;
