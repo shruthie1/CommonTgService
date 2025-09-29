@@ -24,7 +24,7 @@ export class ActiveChannelsService {
   }
 
 
-  async createMultiple(createChannelDtos: CreateActiveChannelDto[]): Promise<string> {
+  async createMultiple(createChannelDtos: Partial<CreateActiveChannelDto[]>): Promise<string> {
     const bulkOps = createChannelDtos.map((dto) => ({
       updateOne: {
         filter: { channelId: dto.channelId },
