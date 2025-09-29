@@ -16,26 +16,35 @@ const APP_VERSIONS = ["1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"];
 function pickRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
-async function generateTGConfig(mobile, ttl = 24 * 60 * 60 * 60) {
+async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
     const redisKey = `tg:config:${mobile}`;
-    const cached = await redisClient_1.RedisClient.getObject(redisKey);
-    if (cached) {
-        return cached;
-    }
-    const config = {
+    const commonConfig = {
         connectionRetries: 10,
         requestRetries: 5,
-        retryDelay: 1000,
-        timeout: 10,
+        retryDelay: 2000,
+        timeout: 30,
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
+        useWSS: true,
+        useIPV6: false,
+    };
+    const cached = await redisClient_1.RedisClient.getObject(redisKey);
+    if (cached) {
+        return {
+            ...cached,
+            ...commonConfig
+        };
+    }
+    const variableConfig = {
         deviceModel: `${pickRandom(DEVICE_MODELS)}-ssk`,
         systemVersion: pickRandom(SYSTEM_VERSIONS),
         appVersion: pickRandom(APP_VERSIONS),
     };
-    logger.log(`[generateTGConfig] Storing config in Redis for ${mobile}`);
-    await redisClient_1.RedisClient.set(redisKey, config, ttl);
-    return config;
+    await redisClient_1.RedisClient.set(redisKey, variableConfig, ttl);
+    return {
+        ...commonConfig,
+        ...variableConfig
+    };
 }
 //# sourceMappingURL=generateTGConfig.js.map
