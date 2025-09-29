@@ -6,7 +6,7 @@ export declare class ChannelsService {
     private ChannelModel;
     constructor(ChannelModel: Model<ChannelDocument>);
     create(createChannelDto: CreateChannelDto): Promise<Channel>;
-    createMultiple(createChannelDtos: Partial<CreateChannelDto[]>): Promise<string>;
+    createMultiple(createChannelDtos: Partial<CreateChannelDto>[]): Promise<string>;
     findAll(): Promise<Channel[]>;
     findOne(channelId: string): Promise<Channel>;
     update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel>;
