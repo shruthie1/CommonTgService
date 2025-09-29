@@ -1,12 +1,14 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
-import * as mongoose from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { defaultMessages, defaultReactions } from '../../../utils';
 
 export type ActiveChannelDocument = ActiveChannel & Document;
 
-@Schema({ collection: 'activeChannels', versionKey: false, autoIndex: true,
+@Schema({
+  collection: 'activeChannels',
+  versionKey: false,
+  autoIndex: true,
   timestamps: true,
   toJSON: {
     virtuals: true,
@@ -14,7 +16,7 @@ export type ActiveChannelDocument = ActiveChannel & Document;
       delete ret._id;
     },
   },
- })
+})
 export class ActiveChannel {
   @ApiProperty({ required: true })
   @Prop({ required: true, unique: true })
@@ -25,11 +27,11 @@ export class ActiveChannel {
   title: string;
 
   @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
   participantsCount: number;
 
   @ApiProperty({ required: false, default: null })
-  @Prop({ required: false, default: null })
+  @Prop({ default: null })
   username: string;
 
   @ApiProperty({ default: false })
@@ -53,11 +55,11 @@ export class ActiveChannel {
   megagroup?: boolean;
 
   @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
   wordRestriction?: number;
 
   @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
   dMRestriction?: number;
 
   @ApiProperty({ type: [String], default: defaultMessages })
@@ -80,16 +82,16 @@ export class ActiveChannel {
   @Prop({ default: false })
   private?: boolean;
 
-  @ApiProperty({ type: Number, default: null, required: false })
-  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  @ApiProperty({ type: Number, default: null })
+  @Prop({ type: Number, default: null })
   lastMessageTime?: number;
 
-  @ApiProperty({ type: Number, default: null, required: false })
-  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  @ApiProperty({ type: Number, default: null })
+  @Prop({ type: Number, default: null })
   messageIndex?: number;
 
-  @ApiProperty({ type: Number, default: null, required: false })
-  @Prop({ type: mongoose.Schema.Types.Number, default: null })
+  @ApiProperty({ type: Number, default: null })
+  @Prop({ type: Number, default: null })
   messageId?: number;
 
   @ApiProperty({ default: false })
@@ -97,10 +99,8 @@ export class ActiveChannel {
   tempBan?: boolean;
 
   @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
   deletedCount?: number;
-
 }
-
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);
