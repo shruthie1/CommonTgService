@@ -18,7 +18,7 @@ export class ChannelsService {
     return createdChannel.save();
   }
 
-  async createMultiple(createChannelDtos: Partial<CreateChannelDto[]>): Promise<string> {
+  async createMultiple(createChannelDtos: Partial<CreateChannelDto>[]): Promise<string> {
     const bulkOps = createChannelDtos.map((dto) => ({
       updateOne: {
         filter: { channelId: dto.channelId },
