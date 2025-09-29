@@ -8,7 +8,7 @@ export declare class ActiveChannelsService {
     private promoteMsgsService;
     constructor(activeChannelModel: Model<ActiveChannelDocument>, promoteMsgsService: PromoteMsgsService);
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
-    createMultiple(createChannelDtos: CreateActiveChannelDto[]): Promise<string>;
+    createMultiple(createChannelDtos: Partial<CreateActiveChannelDto[]>): Promise<string>;
     findAll(): Promise<ActiveChannel[]>;
     findOne(channelId: string): Promise<ActiveChannel>;
     update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel>;
