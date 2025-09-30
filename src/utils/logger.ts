@@ -152,7 +152,7 @@ export class Logger extends NestLogger {
         formatted = formatted.replace(/\[([^\]]+)\]/g, chalk.cyan.bold("[$1]"));
         formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk.white.bold("$1"));
         formatted = formatted.replace(/\*([^*]+)\*/g, chalk.yellow("$1"));
-        formatted = formatted.replace(/_([^_]+)_/g, chalk.underline("$1"));
+        // formatted = formatted.replace(/_([^_]+)_/g, chalk.underline("$1"));
 
         return levelColor(formatted);
     }
