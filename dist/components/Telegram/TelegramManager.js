@@ -804,7 +804,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueDisallowAll(),
+                    new telegram_1.Api.InputPrivacyValueAllowAll(),
                 ],
             }));
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
