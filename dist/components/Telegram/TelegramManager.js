@@ -55,6 +55,7 @@ const message_search_dto_1 = require("./dto/message-search.dto");
 const generateTGConfig_1 = require("./utils/generateTGConfig");
 const telegram_logger_1 = require("./utils/telegram-logger");
 const withTimeout_1 = require("../../utils/withTimeout");
+const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 class TelegramManager {
     constructor(sessionString, phoneNumber) {
         this.logger = new telegram_logger_1.TelegramLogger('TgManager');
@@ -484,13 +485,7 @@ class TelegramManager {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${this.phoneNumber} Failed to leave channel  ${channelId}:`, false);
-                if ((0, utils_1.contains)(errorDetails.message, [
-                    'SESSION_REVOKED',
-                    'AUTH_KEY_UNREGISTERED',
-                    'USER_DEACTIVATED',
-                    'USER_DEACTIVATED_BAN',
-                    'FROZEN_METHOD_INVALID',
-                ])) {
+                if ((0, isPermanentError_1.default)(errorDetails)) {
                     throw error;
                 }
                 if (errorDetails.message.includes('CHANNEL_INVALID')) {

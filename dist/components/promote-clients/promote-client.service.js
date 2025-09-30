@@ -11,6 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var PromoteClientService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoteClientService = void 0;
@@ -34,6 +37,7 @@ const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const getProfilePics_1 = require("../Telegram/utils/getProfilePics");
 const deleteProfilePics_1 = require("../Telegram/utils/deleteProfilePics");
+const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -251,7 +255,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
-                if (this.isPermanentError(errorDetails)) {
+                if ((0, isPermanentError_1.default)(errorDetails)) {
                     await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
                 this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
@@ -348,17 +352,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     failCount++;
                     const errorDetails = (0, parseError_1.parseError)(error);
                     this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
-                    const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    if (this.isPermanentError(errorDetails)) {
-                        try {
-                            await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
-                            await (0, Helpers_1.sleep)(1000);
-                        }
-                        catch (statusUpdateError) {
-                            this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
-                        }
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await (0, Helpers_1.sleep)(1000);
-                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
+                        await this.markAsInactive(mobile, `${errorDetails.message}`);
                     }
                     else {
                         this.logger.warn(`[${mobile}]: Non-fatal error encountered, will retry later`);
@@ -488,16 +484,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
                 }
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromPromoteMap(mobile);
-                    try {
-                        await this.remove(mobile, `ProcessJoinChannel:${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(2000);
-                    }
-                    catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
             }
             finally {
@@ -619,15 +608,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] Leave Channel ERR: `, false);
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
-                    try {
-                        await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(2000);
-                    }
-                    catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                     this.removeFromLeaveMap(mobile);
                 }
                 else {
@@ -1155,15 +1137,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }, delay);
         this.activeTimeouts.add(timeout);
         return timeout;
-    }
-    async isPermanentError(errorDetails) {
-        return (0, utils_1.contains)(errorDetails.message, [
-            'SESSION_REVOKED',
-            'AUTH_KEY_UNREGISTERED',
-            'USER_DEACTIVATED',
-            'USER_DEACTIVATED_BAN',
-            'FROZEN_METHOD_INVALID',
-        ]);
     }
 };
 exports.PromoteClientService = PromoteClientService;

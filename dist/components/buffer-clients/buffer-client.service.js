@@ -37,6 +37,7 @@ const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const path_1 = __importDefault(require("path"));
 const cloudinary_1 = require("../../cloudinary");
 const telegram_1 = require("telegram");
+const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -287,7 +288,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error);
-                if (this.isPermanentError(errorDetails)) {
+                if ((0, isPermanentError_1.default)(errorDetails)) {
                     try {
                         await this.markAsInactive(mobile, `${errorDetails.message}`);
                     }
@@ -395,15 +396,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 failCount++;
                 const errorDetails = (0, parseError_1.parseError)(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
-                    try {
-                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
-                    }
-                    catch (removeErr) {
-                        this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
-                    }
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
                 else {
                     this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
@@ -528,16 +522,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
                 }
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromBufferMap(mobile);
-                    try {
-                        await this.remove(mobile, `Process JoinChannelError: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
-                    }
-                    catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
             }
             finally {
@@ -655,15 +642,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `${mobile} Leave Channel ERR: `, false);
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
-                    try {
-                        await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
-                        await (0, Helpers_1.sleep)(4000 + Math.random() * 2000);
-                    }
-                    catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                     this.removeFromLeaveMap(mobile);
                 }
                 else {
@@ -853,7 +833,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 catch (error) {
                     const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Privacy', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
                     }
                 }
@@ -878,7 +858,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 catch (error) {
                     const errorDetails = (0, parseError_1.parseError)(error, 'Error in Deleting Photos', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${errorDetails.message}`);
                     }
                 }
@@ -920,7 +900,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                     catch (error) {
                         const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Profile', true);
-                        if (this.isPermanentError(errorDetails)) {
+                        if ((0, isPermanentError_1.default)(errorDetails)) {
                             await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${errorDetails.message}`);
                         }
                     }
@@ -941,7 +921,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 catch (error) {
                     const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Username', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${errorDetails.message}`);
                     }
                 }
@@ -975,7 +955,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 catch (error) {
                     const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Profile Photos', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${errorDetails.message}`);
                     }
                 }
@@ -985,14 +965,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         catch (error) {
             this.logger.error(`[BufferClientService] Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = (0, parseError_1.parseError)(error);
-            if (this.isPermanentError(errorDetails)) {
-                try {
-                    await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
-                    await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
-                }
-                catch (removeError) {
-                    this.logger.error(`[BufferClientService] Error removing client ${doc.mobile}: ${removeError}`);
-                }
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
             }
             return 0;
         }
@@ -1196,8 +1170,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 catch (error) {
                     this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
                     const errorDetails = (0, parseError_1.parseError)(error);
-                    if (this.isPermanentError(errorDetails)) {
-                        this.logger.error(`Session invalid for ${bufferClient.mobile}, removing client`);
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.update(bufferClient.mobile, {
                             status: 'inactive',
                             message: `Session update failed: ${errorDetails.message}`,
@@ -1398,15 +1371,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             updateData.message = message;
         }
         return this.update(mobile, updateData);
-    }
-    async isPermanentError(errorDetails) {
-        return (0, utils_1.contains)(errorDetails.message, [
-            'SESSION_REVOKED',
-            'AUTH_KEY_UNREGISTERED',
-            'USER_DEACTIVATED',
-            'USER_DEACTIVATED_BAN',
-            'FROZEN_METHOD_INVALID',
-        ]);
     }
 };
 exports.BufferClientService = BufferClientService;

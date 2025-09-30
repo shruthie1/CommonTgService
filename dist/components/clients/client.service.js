@@ -36,6 +36,7 @@ const ip_management_service_1 = require("../ip-management/ip-management.service"
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
 const path_1 = __importDefault(require("path"));
 const tl_1 = require("telegram/tl");
+const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 let settingupClient = Date.now() - 250000;
 let ClientService = ClientService_1 = class ClientService {
     constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService, ipManagementService, npointService) {
@@ -625,7 +626,7 @@ let ClientService = ClientService_1 = class ClientService {
                         this.logger.log('Cannot Archive Old Client');
                         const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
                         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(errorDetails.message)}`);
-                        if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
+                        if ((0, isPermanentError_1.default)(errorDetails)) {
                             this.logger.log('Deleting User: ', existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
                         }

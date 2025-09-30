@@ -115,9 +115,4 @@ export declare class PromoteClientService implements OnModuleDestroy {
         averageUsageGap: number;
     }>;
     private createTimeout;
-    isPermanentError(errorDetails: {
-        error: any;
-        message: string;
-        status: number;
-    }): Promise<boolean>;
 }

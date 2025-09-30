@@ -13,6 +13,7 @@ const withTimeout_1 = require("../../../utils/withTimeout");
 const Helpers_1 = require("telegram/Helpers");
 const utils_1 = require("../../../utils");
 const bots_service_1 = require("../../../components/bots/bots.service");
+const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
@@ -119,8 +120,7 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
         const errorDetails = (0, parseError_1.parseError)(error, mobile, false);
         let markedAsExpired = false;
-        const permanentErrors = ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'];
-        if ((0, utils_1.contains)(errorDetails.message, permanentErrors)) {
+        if ((0, isPermanentError_1.default)(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
                 const users = await this.usersService.search({ mobile });
