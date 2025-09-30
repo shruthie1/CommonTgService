@@ -744,9 +744,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
       // await this.bufferClientService.remove(newMobile, 'Used for new client');
-      await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date() });
-      this.logger.log('Updating buffer client to in use');
-      await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
       setTimeout(async () => {
         await this.updateClient(clientId, 'Delayed update after buffer removal');
       }, 15000);
@@ -776,6 +773,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
                 tgId: existingClientUser.tgId,
                 channels: 170,
                 status: days > 35 ? 'inactive' : 'active',
+                inUse: false,
               };
               const updatedBufferClient =
                 await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
@@ -783,6 +781,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
               this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
               await fetchWithTimeout(`${notifbot()}&text=Client Archived`);
             } else {
+              await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date(), status: 'inactive' });
               this.logger.log('Client Archive Skipped');
               await fetchWithTimeout(`${notifbot()}&text=Client Archive Skipped`);
             }
@@ -801,6 +800,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         parseError(error, 'Error in Archiving Old Client outer', true);
         this.logger.log('Error in Archiving Old Client');
       }
+      this.logger.log('Updating buffer client to in use');
+      await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
+
       this.telegramService.setActiveClientSetup(undefined);
       this.logger.log('Update finished Exitting Exiiting TG Service');
       await fetchWithTimeout(`${notifbot()}&text=Update finished`);

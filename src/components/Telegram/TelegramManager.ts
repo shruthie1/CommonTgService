@@ -992,7 +992,7 @@ class TelegramManager {
                 new Api.account.SetPrivacy({
                     key: new Api.InputPrivacyKeyStatusTimestamp(),
                     rules: [
-                        new Api.InputPrivacyValueDisallowAll(),
+                        new Api.InputPrivacyValueAllowAll(),
                     ],
                 })
             );
