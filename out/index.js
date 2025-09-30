@@ -13636,7 +13636,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
-                (!doc.privacyUpdatedAt || doc.privacyUpdatedAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
+                (!doc.privacyUpdatedAt || doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await cli.updatePrivacyforDeletedAccount();
@@ -13654,7 +13655,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
-                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
+                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
@@ -13678,8 +13680,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 100 &&
-                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)) &&
+                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 const normalizeString = (str) => {
                     return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
@@ -13720,8 +13723,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 150 &&
-                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) &&
+                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
@@ -13739,8 +13743,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             if (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 170 &&
-                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) &&
+                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const rootPath = process.cwd();
