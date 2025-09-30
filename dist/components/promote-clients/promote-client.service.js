@@ -251,7 +251,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
-                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                if (this.isPermanentError(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
+                }
                 this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
             }
             finally {
@@ -347,15 +349,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     const errorDetails = (0, parseError_1.parseError)(error);
                     this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
                     const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    if ((0, utils_1.contains)(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                        'not found'
-                    ])) {
-                        this.logger.warn(`[${mobile}]: Fatal session error (${errorMsg}), marking as inactive and removing`);
+                    if (this.isPermanentError(errorDetails)) {
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             await (0, Helpers_1.sleep)(1000);
@@ -494,13 +488,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
                     }
                 }
-                if ((0, utils_1.contains)(errorDetails.message, [
-                    'SESSION_REVOKED',
-                    'AUTH_KEY_UNREGISTERED',
-                    'USER_DEACTIVATED',
-                    'USER_DEACTIVATED_BAN',
-                    'FROZEN_METHOD_INVALID',
-                ])) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromPromoteMap(mobile);
                     try {
@@ -631,13 +619,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] Leave Channel ERR: `, false);
-                if ((0, utils_1.contains)(errorDetails.message, [
-                    'SESSION_REVOKED',
-                    'AUTH_KEY_UNREGISTERED',
-                    'USER_DEACTIVATED',
-                    'USER_DEACTIVATED_BAN',
-                    'FROZEN_METHOD_INVALID',
-                ])) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
                         await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
@@ -1173,6 +1155,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }, delay);
         this.activeTimeouts.add(timeout);
         return timeout;
+    }
+    async isPermanentError(errorDetails) {
+        return (0, utils_1.contains)(errorDetails.message, [
+            'SESSION_REVOKED',
+            'AUTH_KEY_UNREGISTERED',
+            'USER_DEACTIVATED',
+            'USER_DEACTIVATED_BAN',
+            'FROZEN_METHOD_INVALID',
+        ]);
     }
 };
 exports.PromoteClientService = PromoteClientService;
