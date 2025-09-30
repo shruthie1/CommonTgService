@@ -39,6 +39,7 @@ import { Client } from '../clients';
 import path from 'path';
 import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
+import isPermanentError from '../../utils/isPermanentError';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -279,9 +280,7 @@ export class BufferClientService implements OnModuleDestroy {
                 );
             }
             this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`,
-            );
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`);
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         } catch (error) {
             const errorDetails = parseError(error);
@@ -414,7 +413,7 @@ export class BufferClientService implements OnModuleDestroy {
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
                 const errorDetails = parseError(error);
-                if (this.isPermanentError(errorDetails)) {
+                if (isPermanentError(errorDetails)) {
                     try {
                         await this.markAsInactive(mobile, `${errorDetails.message}`);
                     } catch (markError) {
@@ -547,14 +546,8 @@ export class BufferClientService implements OnModuleDestroy {
                 failCount++;
                 const errorDetails = parseError(error);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
-                    try {
-                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
-                        await sleep(4000 + Math.random() * 2000); // Delay after removal
-                    } catch (removeErr) {
-                        this.logger.error(`Failed to remove client ${mobile}:`, removeErr);
-                    }
+                if (isPermanentError(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 } else {
                     this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
                 }
@@ -706,15 +699,9 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 }
 
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                if (isPermanentError(errorDetails)) {
                     this.removeFromBufferMap(mobile);
-                    try {
-                        await this.remove(mobile, `Process JoinChannelError: ${errorDetails.message}`);
-                        await sleep(4000 + Math.random() * 2000);
-                    } catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
             } finally {
                 try {
@@ -859,14 +846,8 @@ export class BufferClientService implements OnModuleDestroy {
                     false,
                 );
 
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
-                    try {
-                        await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
-                        await sleep(4000 + Math.random() * 2000);
-                    } catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                if (isPermanentError(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                     this.removeFromLeaveMap(mobile);
                 } else {
                     this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
@@ -1084,7 +1065,7 @@ export class BufferClientService implements OnModuleDestroy {
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
                     const errorDetails = parseError(error, 'Error in Updating Privacy', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
                     }
                 }
@@ -1114,7 +1095,7 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 } catch (error: any) {
                     const errorDetails = parseError(error, 'Error in Deleting Photos', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${errorDetails.message}`);
                     }
                 }
@@ -1165,7 +1146,7 @@ export class BufferClientService implements OnModuleDestroy {
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     } catch (error: any) {
                         const errorDetails = parseError(error, 'Error in Updating Profile', true);
-                        if (this.isPermanentError(errorDetails)) {
+                        if (isPermanentError(errorDetails)) {
                             await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${errorDetails.message}`);
                         }
                     }
@@ -1189,7 +1170,7 @@ export class BufferClientService implements OnModuleDestroy {
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
                     const errorDetails = parseError(error, 'Error in Updating Username', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${errorDetails.message}`);
                     }
                 }
@@ -1228,7 +1209,7 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 } catch (error: any) {
                     const errorDetails = parseError(error, 'Error in Updating Profile Photos', true);
-                    if (this.isPermanentError(errorDetails)) {
+                    if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${errorDetails.message}`);
                     }
                 }
@@ -1238,13 +1219,8 @@ export class BufferClientService implements OnModuleDestroy {
         } catch (error: any) {
             this.logger.error(`[BufferClientService] Error with client ${doc.mobile}: ${error.message}`);
             const errorDetails = parseError(error);
-            if (this.isPermanentError(errorDetails)) {
-                try {
-                    await this.remove(doc.mobile, `Process BufferClient Error: ${error.message}`);
-                    await sleep(6000 + Math.random() * 3000); // 6-9s delay
-                } catch (removeError) {
-                    this.logger.error(`[BufferClientService] Error removing client ${doc.mobile}: ${removeError}`);
-                }
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
             }
             return 0; // Return false on error
         } finally {
@@ -1463,8 +1439,7 @@ export class BufferClientService implements OnModuleDestroy {
                 } catch (error: any) {
                     this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
                     const errorDetails = parseError(error);
-                    if (this.isPermanentError(errorDetails)) {
-                        this.logger.error(`Session invalid for ${bufferClient.mobile}, removing client`);
+                    if (isPermanentError(errorDetails)) {
                         await this.update(bufferClient.mobile, {
                             status: 'inactive',
                             message: `Session update failed: ${errorDetails.message}`,
@@ -1740,15 +1715,5 @@ export class BufferClientService implements OnModuleDestroy {
         }
 
         return this.update(mobile, updateData);
-    }
-
-    async isPermanentError(errorDetails: { error: any, message: string, status: number }): Promise<boolean> {
-        return contains(errorDetails.message, [
-            'SESSION_REVOKED',
-            'AUTH_KEY_UNREGISTERED',
-            'USER_DEACTIVATED',
-            'USER_DEACTIVATED_BAN',
-            'FROZEN_METHOD_INVALID',
-        ])
     }
 }

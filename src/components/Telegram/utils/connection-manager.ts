@@ -8,6 +8,7 @@ import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
 import { contains, getBotsServiceInstance } from '../../../utils';
 import { ChannelCategory } from '../../../components/bots/bots.service';
+import isPermanentError from '../../../utils/isPermanentError';
 
 interface User {
     mobile: string;
@@ -174,8 +175,7 @@ class ConnectionManager {
         const errorDetails = parseError(error, mobile, false);
         let markedAsExpired: boolean = false
         // Handle permanent failures
-        const permanentErrors = ['expired', 'unregistered', 'deactivated', 'revoked', 'user_deactivated_ban'];
-        if (contains(errorDetails.message, permanentErrors)) {
+        if (isPermanentError(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
                 const users = await this.usersService!.search({ mobile });

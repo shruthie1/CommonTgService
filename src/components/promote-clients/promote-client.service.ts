@@ -35,6 +35,7 @@ import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { getProfilePics } from '../Telegram/utils/getProfilePics';
 import { deleteProfilePhotos } from '../Telegram/utils/deleteProfilePics';
+import isPermanentError from '../../utils/isPermanentError';
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
     private readonly logger = new Logger(PromoteClientService.name);
@@ -338,7 +339,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
                 const errorDetails = parseError(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
-                if (this.isPermanentError(errorDetails)) {
+                if (isPermanentError(errorDetails)) {
                     await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
                 this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
@@ -447,17 +448,9 @@ export class PromoteClientService implements OnModuleDestroy {
                     failCount++;
                     const errorDetails = parseError(error);
                     this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
-                    const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
-                    if (this.isPermanentError(errorDetails)) {
-                        try {
-                            await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
-                            await sleep(1000); // Delay after status update
-                        } catch (statusUpdateError) {
-                            this.logger.error(`Failed to update status for ${mobile}:`, statusUpdateError);
-                        }
-
+                    if (isPermanentError(errorDetails)) {
                         await sleep(1000); // Delay before removal
-                        await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
+                        await this.markAsInactive(mobile, `${errorDetails.message}`);
                     } else {
                         this.logger.warn(`[${mobile}]: Non-fatal error encountered, will retry later`);
                     }
@@ -608,15 +601,9 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                 }
 
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
+                if (isPermanentError(errorDetails)) {
                     this.removeFromPromoteMap(mobile);
-                    try {
-                        await this.remove(mobile, `ProcessJoinChannel:${errorDetails.message}`);
-                        await sleep(2000);
-                    } catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                 }
             } finally {
                 try {
@@ -761,14 +748,8 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.logger.debug(`[${mobile}] left ${channelsToProcess.length} channels successfully`);
             } catch (error: any) {
                 const errorDetails = parseError(error, `[${mobile}] Leave Channel ERR: `, false,);
-                if (this.isPermanentError(errorDetails)) {
-                    this.logger.error(`Session invalid for ${mobile}, removing client`);
-                    try {
-                        await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
-                        await sleep(2000);
-                    } catch (removeError) {
-                        this.logger.error(`Error removing client ${mobile}:`, removeError);
-                    }
+                if (isPermanentError(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
                     this.removeFromLeaveMap(mobile);
                 } else {
                     this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
@@ -1520,14 +1501,5 @@ export class PromoteClientService implements OnModuleDestroy {
         }, delay);
         this.activeTimeouts.add(timeout);
         return timeout;
-    }
-    async isPermanentError(errorDetails: { error: any, message: string, status: number }): Promise<boolean> {
-        return contains(errorDetails.message, [
-            'SESSION_REVOKED',
-            'AUTH_KEY_UNREGISTERED',
-            'USER_DEACTIVATED',
-            'USER_DEACTIVATED_BAN',
-            'FROZEN_METHOD_INVALID',
-        ])
     }
 }

@@ -8,3 +8,4 @@ export * from './telegram-utils'
 export * from './logger'
 export * from './bot.service.instance';
 export * from './getRandomEmoji';
+export * from './isPermanentError';

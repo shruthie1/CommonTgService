@@ -43,6 +43,7 @@ import {
 } from '../promote-clients/schemas/promote-client.schema';
 import path from 'path';
 import { Api } from 'telegram/tl';
+import isPermanentError from '../../utils/isPermanentError';
 
 
 let settingupClient = Date.now() - 250000
@@ -789,7 +790,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
             this.logger.log('Cannot Archive Old Client');
             const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
             await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(errorDetails.message)}`);
-            if (contains(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
+            if (isPermanentError(errorDetails)) {
               this.logger.log('Deleting User: ', existingClientUser.mobile);
               await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
             } else {

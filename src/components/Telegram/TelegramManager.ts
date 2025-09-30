@@ -24,6 +24,7 @@ import { MessageMediaType, SearchMessagesDto, SearchMessagesResponseDto } from '
 import { generateTGConfig } from './utils/generateTGConfig';
 import { TelegramLogger } from './utils/telegram-logger';
 import { withTimeout } from '../../utils/withTimeout';
+import isPermanentError from '../../utils/isPermanentError';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -598,15 +599,7 @@ class TelegramManager {
                 }
             } catch (error) {
                 const errorDetails = parseError(error, `${this.phoneNumber} Failed to leave channel  ${channelId}:`, false);
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
+                if (isPermanentError(errorDetails)) {
                     throw error
                 }
                 if (errorDetails.message.includes('CHANNEL_INVALID')) {
