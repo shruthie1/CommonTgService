@@ -524,11 +524,11 @@ let ClientService = ClientService_1 = class ClientService {
             const existingClientMobile = existingClient.mobile;
             this.logger.log('setupClientQueryDto:', setupClientQueryDto);
             const today = new Date(Date.now()).toISOString().split('T')[0];
-            const query = { clientId: clientId, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
+            const query = { clientId: clientId, mobile: { $ne: existingClientMobile }, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
             const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
             if (newBufferClient) {
                 try {
-                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Received New Client Request for - ${clientId} - OldNumber: ${existingClient.mobile} || ${existingClient.username}`);
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: ${existingClient.username}`)}`);
                     this.telegramService.setActiveClientSetup({
                         ...setupClientQueryDto,
                         clientId,
@@ -571,7 +571,7 @@ let ClientService = ClientService_1 = class ClientService {
             });
             const me = await newTelegramClient.getMe();
             const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated username for NewNumber:${newMobile} || ${updatedUsername}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Updated username for NewNumber: ${newMobile}\nNewUsername: ${updatedUsername}`)}`);
             await connection_manager_1.connectionManager.unregisterClient(newMobile);
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             await this.update(clientId, {
@@ -594,7 +594,7 @@ let ClientService = ClientService_1 = class ClientService {
                             await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
                             this.logger.log('Formalities finished');
                             await connection_manager_1.connectionManager.unregisterClient(existingMobile);
-                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Formalities finished`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent('Formalities finished')}`);
                         }
                         else {
                             this.logger.log('Formalities skipped');
@@ -613,17 +613,18 @@ let ClientService = ClientService_1 = class ClientService {
                             };
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
-                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Client Archived`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent('old Client Archived')}`);
                         }
                         else {
                             await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date(), status: 'inactive' });
                             this.logger.log('Client Archive Skipped');
-                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Client Archive Skipped`);
+                            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent('Skipped Old Client Archival')}`);
                         }
                     }
                     catch (error) {
                         this.logger.log('Cannot Archive Old Client');
-                        const errorDetails = (0, parseError_1.parseError)(error, 'Error in Archiving Old Client', true);
+                        const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
+                        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(errorDetails.message)}`);
                         if ((0, utils_1.contains)(errorDetails.message.toLowerCase(), ['expired', 'unregistered', 'deactivated', 'session_revoked', 'user_deactivated_ban'])) {
                             this.logger.log('Deleting User: ', existingClientUser.mobile);
                             await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
@@ -642,7 +643,7 @@ let ClientService = ClientService_1 = class ClientService {
             await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
             this.telegramService.setActiveClientSetup(undefined);
             this.logger.log('Update finished Exitting Exiiting TG Service');
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Update finished`)}`);
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error in updating client session', true);
