@@ -545,20 +545,9 @@ export class BufferClientService implements OnModuleDestroy {
                 successCount++;
             } catch (error) {
                 failCount++;
-
                 const errorDetails = parseError(error);
-                const errorMsg =
-                    errorDetails?.message || error?.errorMessage || 'Unknown error';
-
-                if (
-                    contains(errorMsg, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
+                const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile} due to ${errorMsg}, removing client`);
                     try {
                         await this.remove(mobile, `JoinChannelError: ${errorDetails.message}`);
@@ -717,16 +706,7 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 }
 
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                        'not found'
-                    ])
-                ) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromBufferMap(mobile);
                     try {
@@ -879,15 +859,7 @@ export class BufferClientService implements OnModuleDestroy {
                     false,
                 );
 
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
                         await this.remove(mobile, `Process LeaveChannel: ${errorDetails.message}`);
@@ -1111,8 +1083,8 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    this.logger.warn(`[BufferClientService] Failed to update privacy for ${doc.mobile}: ${error.message}`);
-                    if (this.isPermanentError(error)) {
+                    const errorDetails = parseError(error, 'Error in Updating Privacy', true);
+                    if (this.isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
                     }
                 }
@@ -1141,9 +1113,9 @@ export class BufferClientService implements OnModuleDestroy {
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     }
                 } catch (error: any) {
-                    this.logger.warn(`[BufferClientService] Failed to delete photos for ${doc.mobile}: ${error.message}`);
-                    if (this.isPermanentError(error)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${error.message}`);
+                    const errorDetails = parseError(error, 'Error in Deleting Photos', true);
+                    if (this.isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${errorDetails.message}`);
                     }
                 }
             }
@@ -1192,9 +1164,9 @@ export class BufferClientService implements OnModuleDestroy {
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     } catch (error: any) {
-                        this.logger.warn(`[BufferClientService] Failed to update profile for ${doc.mobile}: ${error.message}`);
-                        if (this.isPermanentError(error)) {
-                            await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${error.message}`);
+                        const errorDetails = parseError(error, 'Error in Updating Profile', true);
+                        if (this.isPermanentError(errorDetails)) {
+                            await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${errorDetails.message}`);
                         }
                     }
                 }
@@ -1216,9 +1188,9 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    this.logger.warn(`[BufferClientService] Failed to update username for ${doc.mobile}: ${error.message}`);
-                    if (this.isPermanentError(error)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${error.message}`);
+                    const errorDetails = parseError(error, 'Error in Updating Username', true);
+                    if (this.isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${errorDetails.message}`);
                     }
                 }
             }
@@ -1255,9 +1227,9 @@ export class BufferClientService implements OnModuleDestroy {
                         await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
                     }
                 } catch (error: any) {
-                    this.logger.warn(`[BufferClientService] Failed to update profile photos for ${doc.mobile}: ${error.message}`);
-                    if (this.isPermanentError(error)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${error.message}`);
+                    const errorDetails = parseError(error, 'Error in Updating Profile Photos', true);
+                    if (this.isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${errorDetails.message}`);
                     }
                 }
             }
@@ -1491,10 +1463,13 @@ export class BufferClientService implements OnModuleDestroy {
                 } catch (error: any) {
                     this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
                     const errorDetails = parseError(error);
-                    await this.update(bufferClient.mobile, {
-                        status: 'inactive',
-                        message: `Session update failed: ${errorDetails.message}`,
-                    });
+                    if (this.isPermanentError(errorDetails)) {
+                        this.logger.error(`Session invalid for ${bufferClient.mobile}, removing client`);
+                        await this.update(bufferClient.mobile, {
+                            status: 'inactive',
+                            message: `Session update failed: ${errorDetails.message}`,
+                        });
+                    }
                 } finally {
                     await connectionManager.unregisterClient(bufferClient.mobile);
                     await sleep(10000 + Math.random() * 5000); // Increased to 10-15s

@@ -338,7 +338,9 @@ export class PromoteClientService implements OnModuleDestroy {
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
                 const errorDetails = parseError(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
-                await this.markAsInactive(mobile, `${errorDetails.message}`);
+                if (this.isPermanentError(errorDetails)) {
+                    await this.markAsInactive(mobile, `${errorDetails.message}`);
+                }
                 this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
             } finally {
                 await connectionManager.unregisterClient(mobile);
@@ -445,21 +447,8 @@ export class PromoteClientService implements OnModuleDestroy {
                     failCount++;
                     const errorDetails = parseError(error);
                     this.logger.error(`[${mobile}] Error processing client: `, errorDetails);
-
-                    const errorMsg =
-                        error?.errorMessage || errorDetails?.message || 'Unknown error';
-
-                    if (
-                        contains(errorDetails.message, [
-                            'SESSION_REVOKED',
-                            'AUTH_KEY_UNREGISTERED',
-                            'USER_DEACTIVATED',
-                            'USER_DEACTIVATED_BAN',
-                            'FROZEN_METHOD_INVALID',
-                            'not found'
-                        ])
-                    ) {
-                        this.logger.warn(`[${mobile}]: Fatal session error (${errorMsg}), marking as inactive and removing`,);
+                    const errorMsg = error?.errorMessage || errorDetails?.message || 'Unknown error';
+                    if (this.isPermanentError(errorDetails)) {
                         try {
                             await this.markAsInactive(mobile, `Session error: ${errorMsg}`);
                             await sleep(1000); // Delay after status update
@@ -619,15 +608,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                 }
 
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     this.removeFromPromoteMap(mobile);
                     try {
@@ -780,15 +761,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.logger.debug(`[${mobile}] left ${channelsToProcess.length} channels successfully`);
             } catch (error: any) {
                 const errorDetails = parseError(error, `[${mobile}] Leave Channel ERR: `, false,);
-                if (
-                    contains(errorDetails.message, [
-                        'SESSION_REVOKED',
-                        'AUTH_KEY_UNREGISTERED',
-                        'USER_DEACTIVATED',
-                        'USER_DEACTIVATED_BAN',
-                        'FROZEN_METHOD_INVALID',
-                    ])
-                ) {
+                if (this.isPermanentError(errorDetails)) {
                     this.logger.error(`Session invalid for ${mobile}, removing client`);
                     try {
                         await this.remove(mobile, `LeaveChannelErr: ${errorDetails.message}`);
@@ -1547,5 +1520,14 @@ export class PromoteClientService implements OnModuleDestroy {
         }, delay);
         this.activeTimeouts.add(timeout);
         return timeout;
+    }
+    async isPermanentError(errorDetails: { error: any, message: string, status: number }): Promise<boolean> {
+        return contains(errorDetails.message, [
+            'SESSION_REVOKED',
+            'AUTH_KEY_UNREGISTERED',
+            'USER_DEACTIVATED',
+            'USER_DEACTIVATED_BAN',
+            'FROZEN_METHOD_INVALID',
+        ])
     }
 }
