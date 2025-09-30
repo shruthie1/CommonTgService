@@ -117,7 +117,6 @@ class Logger extends common_1.Logger {
         formatted = formatted.replace(/\[([^\]]+)\]/g, chalk_1.default.cyan.bold("[$1]"));
         formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk_1.default.white.bold("$1"));
         formatted = formatted.replace(/\*([^*]+)\*/g, chalk_1.default.yellow("$1"));
-        formatted = formatted.replace(/_([^_]+)_/g, chalk_1.default.underline("$1"));
         return levelColor(formatted);
     }
     formatObjectMessage(obj, indent = 2, seen = new WeakSet()) {
