@@ -4289,7 +4289,7 @@ class TelegramManager {
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(),
                 rules: [
-                    new telegram_1.Api.InputPrivacyValueDisallowAll(),
+                    new telegram_1.Api.InputPrivacyValueAllowAll(),
                 ],
             }));
             await this.client.invoke(new telegram_1.Api.account.SetPrivacy({
@@ -16764,9 +16764,6 @@ let ClientService = ClientService_1 = class ClientService {
                 session: newSession,
             });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
-            await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date() });
-            this.logger.log('Updating buffer client to in use');
-            await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
             setTimeout(async () => {
                 await this.updateClient(clientId, 'Delayed update after buffer removal');
             }, 15000);
@@ -16796,12 +16793,14 @@ let ClientService = ClientService_1 = class ClientService {
                                 tgId: existingClientUser.tgId,
                                 channels: 170,
                                 status: days > 35 ? 'inactive' : 'active',
+                                inUse: false,
                             };
                             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
                             this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
                             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Client Archived`);
                         }
                         else {
+                            await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date(), status: 'inactive' });
                             this.logger.log('Client Archive Skipped');
                             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Client Archive Skipped`);
                         }
@@ -16823,6 +16822,8 @@ let ClientService = ClientService_1 = class ClientService {
                 (0, parseError_1.parseError)(error, 'Error in Archiving Old Client outer', true);
                 this.logger.log('Error in Archiving Old Client');
             }
+            this.logger.log('Updating buffer client to in use');
+            await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
             this.telegramService.setActiveClientSetup(undefined);
             this.logger.log('Update finished Exitting Exiiting TG Service');
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Update finished`);
