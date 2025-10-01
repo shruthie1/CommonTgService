@@ -25,13 +25,41 @@ export class ActiveChannelsService {
 
 
   async createMultiple(createChannelDtos: Partial<CreateActiveChannelDto>[]): Promise<string> {
-    const bulkOps = createChannelDtos.map((dto) => ({
-      updateOne: {
-        filter: { channelId: dto.channelId },
-        update: { $set: dto },
-        upsert: true
-      }
-    }));
+    const bulkOps = createChannelDtos.map((dto) => {
+      // Remove undefined fields to avoid overwriting existing data
+      const cleanDto = Object.fromEntries(
+        Object.entries(dto).filter(([_, value]) => value !== undefined)
+      );
+
+      return {
+        updateOne: {
+          filter: { channelId: dto.channelId },
+          update: {
+            $set: {
+                title: { $ifNull: [dto.title, "$title"] },
+                username: { $ifNull: [dto.username, "$username"] },
+                participantsCount: { $ifNull: [dto.participantsCount, "$participantsCount"] },
+            },
+            $setOnInsert: {
+              channelId: dto.channelId,
+              broadcast: false,
+              canSendMsgs: true,
+              participantsCount: cleanDto.participantsCount,
+              restricted: false,
+              sendMessages: true,
+              reactRestricted: false,
+              wordRestriction: 0,
+              dMRestriction: 0,
+              availableMsgs: [],
+              banned: false,
+              megagroup: cleanDto.megagroup !== undefined ? cleanDto.megagroup : true,
+              private: false,
+            }
+          },
+          upsert: true
+        }
+      };
+    });
 
     await this.activeChannelModel.bulkWrite(bulkOps, { ordered: false });
     return 'Channels Saved';
