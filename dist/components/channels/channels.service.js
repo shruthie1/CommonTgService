@@ -171,7 +171,6 @@ let ChannelsService = class ChannelsService {
                     username: { $ne: null },
                     canSendMsgs: true,
                     restricted: false,
-                    forbidden: false
                 }
             ]
         };
