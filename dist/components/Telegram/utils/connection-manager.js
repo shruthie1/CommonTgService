@@ -17,6 +17,7 @@ const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentEr
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
+        this.ongoingConnections = new Map();
         this.logger = new telegram_logger_1.TelegramLogger('ConnectionManager');
         this.cleanupTimer = null;
         this.usersService = null;
