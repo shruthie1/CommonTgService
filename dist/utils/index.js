@@ -29,4 +29,5 @@ __exportStar(require("./logger"), exports);
 __exportStar(require("./bot.service.instance"), exports);
 __exportStar(require("./getRandomEmoji"), exports);
 __exportStar(require("./isPermanentError"), exports);
+__exportStar(require("./readbleTimeDifference"), exports);
 //# sourceMappingURL=index.js.map

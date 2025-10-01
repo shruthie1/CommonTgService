@@ -17,14 +17,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./ip-management.module"), exports);
 __exportStar(require("./ip-management.service"), exports);
 __exportStar(require("./ip-management.controller"), exports);
-__exportStar(require("./client-ip-integration.service"), exports);
-__exportStar(require("./client-ip-integration.controller"), exports);
 __exportStar(require("./schemas/proxy-ip.schema"), exports);
-__exportStar(require("./schemas/ip-mobile-mapping.schema"), exports);
 __exportStar(require("./dto/create-proxy-ip.dto"), exports);
 __exportStar(require("./dto/update-proxy-ip.dto"), exports);
-__exportStar(require("./dto/create-ip-mobile-mapping.dto"), exports);
-__exportStar(require("./dto/update-ip-mobile-mapping.dto"), exports);
 __exportStar(require("./dto/search-ip.dto"), exports);
-__exportStar(require("./dto/assign-ip.dto"), exports);
 //# sourceMappingURL=index.js.map

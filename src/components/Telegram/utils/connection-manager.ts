@@ -6,7 +6,7 @@ import { UsersService } from '../../../components/users/users.service';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
-import { contains, getBotsServiceInstance } from '../../../utils';
+import { getBotsServiceInstance } from '../../../utils';
 import { ChannelCategory } from '../../../components/bots/bots.service';
 import isPermanentError from '../../../utils/isPermanentError';
 
@@ -35,6 +35,7 @@ interface GetClientOptions {
 class ConnectionManager {
     private static instance: ConnectionManager | null = null;
     private clients = new Map<string, ClientInfo>();
+    private ongoingConnections = new Map<string, Promise<TelegramManager>>();
     private logger = new TelegramLogger('ConnectionManager');
     private cleanupTimer: NodeJS.Timeout | null = null;
     private usersService: UsersService | null = null;
@@ -79,24 +80,41 @@ class ConnectionManager {
 
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
 
-        // Check existing client
-        const existingClient = this.clients.get(mobile);
-        if (existingClient && !forceReconnect) {
-            if (existingClient.state === 'connected' && this.isClientHealthy(existingClient)) {
-                this.updateLastUsed(mobile);
-                this.logger.info(mobile, 'Reusing healthy client');
-                return existingClient.client;
+        let ongoing = this.ongoingConnections.get(mobile);
+        if (ongoing && !forceReconnect) {
+            this.logger.info(mobile, 'Waiting for ongoing connection');
+            return await ongoing;
+        }
+
+        const connectPromise = (async () => {
+            try {
+                // Check existing client
+                const existingClient = this.clients.get(mobile);
+                if (existingClient && !forceReconnect) {
+                    if (existingClient.state === 'connected' && this.isClientHealthy(existingClient)) {
+                        this.updateLastUsed(mobile);
+                        this.logger.info(mobile, 'Reusing healthy client');
+                        return existingClient.client;
+                    }
+                }
+
+                // Clean up old client if exists
+                if (existingClient) {
+                    this.logger.info(mobile, 'Cleaning up old client');
+                    await this.unregisterClient(mobile);
+                    await sleep(3000);
+                }
+
+                return await this.createNewClient(mobile, { autoDisconnect, handler });
+            } catch (error) {
+                throw error;
+            } finally {
+                this.ongoingConnections.delete(mobile);
             }
-        }
+        })();
 
-        // Clean up old client if exists
-        if (existingClient) {
-            this.logger.info(mobile, 'Cleaning up old client');
-            await this.unregisterClient(mobile);
-            await sleep(3000)
-        }
-
-        return await this.createNewClient(mobile, { autoDisconnect, handler });
+        this.ongoingConnections.set(mobile, connectPromise);
+        return await connectPromise;
     }
 
     private async createNewClient(mobile: string, options: { autoDisconnect: boolean; handler: boolean }): Promise<TelegramManager> {
@@ -128,10 +146,10 @@ class ConnectionManager {
 
         try {
             // Create client with timeout
-            await telegramManager.createClient(options.handler)
+            await telegramManager.createClient(options.handler);
 
             // Validate connection
-            await this.validateConnection(mobile, telegramManager)
+            await this.validateConnection(mobile, telegramManager);
 
             // Update client state
             clientInfo.state = 'connected';
@@ -155,7 +173,7 @@ class ConnectionManager {
             errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
             throwErr: true
-        })
+        });
     }
 
     private isClientHealthy(clientInfo: ClientInfo): boolean {
@@ -173,7 +191,7 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
 
         const errorDetails = parseError(error, mobile, false);
-        let markedAsExpired: boolean = false
+        let markedAsExpired: boolean = false;
         // Handle permanent failures
         if (isPermanentError(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
@@ -185,7 +203,7 @@ class ConnectionManager {
                         { $or: [{ tgId: user.tgId }, { mobile: mobile }] },
                         { expired: true }
                     );
-                    markedAsExpired = true
+                    markedAsExpired = true;
                 }
             } catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
@@ -215,7 +233,7 @@ class ConnectionManager {
             await withTimeout(() => clientInfo.client.destroy(), {
                 timeout: 30000,
                 errorMessage: "Client destroy timeout"
-            })
+            });
         } catch (error) {
             this.logger.error(mobile, 'Error destroying client', error);
         } finally {

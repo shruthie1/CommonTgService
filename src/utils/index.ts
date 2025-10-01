@@ -9,3 +9,4 @@ export * from './logger'
 export * from './bot.service.instance';
 export * from './getRandomEmoji';
 export * from './isPermanentError';
+export * from './readbleTimeDifference'

@@ -39,45 +39,4 @@ export declare class ClientController {
     removePromoteMobile(clientId: string, body: {
         mobileNumber: string;
     }): Promise<Client>;
-    getClientIpInfo(clientId: string): Promise<{
-        clientId: string;
-        mobiles: {
-            mainMobile?: {
-                mobile: string;
-                hasIp: boolean;
-                ipAddress?: string;
-            };
-            promoteMobiles: {
-                mobile: string;
-                hasIp: boolean;
-                ipAddress?: string;
-            }[];
-        };
-        needingAssignment: {
-            mainMobile?: string;
-            promoteMobiles: string[];
-        };
-    }>;
-    getIpForMobile(mobile: string, clientId?: string): Promise<{
-        mobile: string;
-        ipAddress: string | null;
-        hasAssignment: boolean;
-    }>;
-    autoAssignIpsToClient(clientId: string): Promise<any>;
-    getMobilesNeedingIpAssignment(clientId: string): Promise<{
-        clientId: string;
-        mobilesNeedingIps: {
-            mainMobile?: string;
-            promoteMobiles: string[];
-        };
-        summary: {
-            totalNeedingAssignment: number;
-            mainMobileNeedsIp: boolean;
-            promoteMobilesNeedingIp: number;
-        };
-    }>;
-    releaseIpFromMobile(mobile: string): Promise<{
-        success: boolean;
-        message: string;
-    }>;
 }

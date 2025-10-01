@@ -1,4 +1,3 @@
-import { TelegramService } from './../Telegram/Telegram.service';
 import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
@@ -8,9 +7,8 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
-import { NpointService } from '../n-point/npoint.service';
-import { IpManagementService } from '../ip-management/ip-management.service';
 import { PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
+import { TelegramService } from '../Telegram/Telegram.service';
 interface SearchResult {
     clients: Client[];
     searchType: 'direct' | 'promoteMobile' | 'mixed';
@@ -25,27 +23,19 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly telegramService;
     private readonly bufferClientService;
     private readonly usersService;
-    private readonly ipManagementService;
-    private readonly npointService;
     private readonly logger;
     private lastUpdateMap;
+    private setupCooldownMap;
     private clientsMap;
     private cacheMetadata;
     private checkInterval;
     private refreshInterval;
     private isInitialized;
     private isShuttingDown;
-    private readonly REFRESH_INTERVAL;
-    private readonly CACHE_TTL;
-    private readonly MAX_RETRIES;
-    private readonly RETRY_DELAY;
-    private readonly CACHE_WARMUP_THRESHOLD;
     private refreshPromise;
-    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService, ipManagementService: IpManagementService, npointService: NpointService);
+    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService);
     onModuleInit(): Promise<void>;
     onModuleDestroy(): Promise<void>;
-    private initializeService;
-    private warmupCache;
     private startPeriodicTasks;
     private performPeriodicRefresh;
     private updateCacheMetadata;
@@ -63,9 +53,11 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     search(filter: any): Promise<Client[]>;
     searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]>;
     enhancedSearch(filter: any): Promise<SearchResult>;
+    private handleErrors;
     private ensureInitialized;
     private cleanUpdateObject;
     private notifyClientUpdate;
+    private notify;
     private performPostUpdateTasks;
     private refreshExternalMaps;
     private processPromoteMobileFilter;
@@ -87,8 +79,18 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
         memoryUsage: number;
     }>;
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;
+    private canSetupClient;
+    private handleSetupClient;
     updateClientSession(newSession: string): Promise<void>;
+    private handleClientArchival;
+    private handleFormalities;
+    private archiveOldClient;
     updateClient(clientId: string, message?: string): Promise<void>;
+    private canUpdateClient;
+    private updateClientUsername;
+    private updateClientName;
+    private updateClientPrivacy;
+    private updateClientPhotos;
     updateClients(): Promise<void>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]>;
     getPromoteMobiles(clientId: string): Promise<string[]>;
@@ -99,54 +101,5 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     }>;
     addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
     removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
-    getIpForMobile(mobile: string, clientId?: string): Promise<string | null>;
-    hasMobileAssignedIp(mobile: string): Promise<boolean>;
-    getMobilesNeedingIpAssignment(clientId: string): Promise<{
-        mainMobile?: string;
-        promoteMobiles: string[];
-    }>;
-    autoAssignIpsToClient(clientId: string): Promise<{
-        clientId: string;
-        mainMobile: {
-            mobile: string;
-            ipAddress: string | null;
-            status: string;
-        };
-        promoteMobiles: Array<{
-            mobile: string;
-            ipAddress: string | null;
-            status: string;
-        }>;
-        summary: {
-            totalMobiles: number;
-            assigned: number;
-            failed: number;
-            errors: string[];
-        };
-    }>;
-    getClientIpInfo(clientId: string): Promise<{
-        clientId: string;
-        clientName: string;
-        mainMobile: {
-            mobile: string;
-            ipAddress: string | null;
-            hasIp: boolean;
-        };
-        promoteMobiles: Array<{
-            mobile: string;
-            ipAddress: string | null;
-            hasIp: boolean;
-        }>;
-        dedicatedIps: string[];
-        summary: {
-            totalMobiles: number;
-            mobilesWithIp: number;
-            mobilesWithoutIp: number;
-        };
-    }>;
-    releaseIpFromMobile(mobile: string): Promise<{
-        success: boolean;
-        message: string;
-    }>;
 }
 export {};

@@ -1,4 +1,3 @@
-import { TelegramService } from './../Telegram/Telegram.service';
 import {
   BadRequestException,
   Inject,
@@ -19,9 +18,8 @@ import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import {
   attemptReverseFuzzy,
-  contains,
-  fetchNumbersFromString,
   getRandomEmoji,
+  getReadableTimeDifference,
   Logger,
   obfuscateText,
   toBoolean,
@@ -31,12 +29,10 @@ import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-clien
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
-import { NpointService } from '../n-point/npoint.service';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
-import { IpManagementService } from '../ip-management/ip-management.service';
 import {
   PromoteClient,
   PromoteClientDocument,
@@ -44,9 +40,20 @@ import {
 import path from 'path';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
+import { TelegramService } from '../Telegram/Telegram.service';
 
+// Configuration constants
+const CONFIG = {
+  REFRESH_INTERVAL: 5 * 60 * 1000, // 5 minutes
+  CACHE_TTL: 10 * 60 * 1000, // 10 minutes
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 1000, // 1 second
+  CACHE_WARMUP_THRESHOLD: 20,
+  COOLDOWN_PERIOD: 240000, // 4 minutes
+  UPDATE_CLIENT_COOLDOWN: 30000, // 30 seconds
+  PHOTO_PATHS: ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'],
+};
 
-let settingupClient = Date.now() - 250000
 interface CacheMetadata {
   lastUpdated: number;
   isStale: boolean;
@@ -61,28 +68,14 @@ interface SearchResult {
 @Injectable()
 export class ClientService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(ClientService.name);
-  private lastUpdateMap: Map<string, number> = new Map(); // Track last update times
-
-  // Cache management
+  private lastUpdateMap: Map<string, number> = new Map();
+  private setupCooldownMap: Map<string, number> = new Map();
   private clientsMap: Map<string, Client> = new Map();
-  private cacheMetadata: CacheMetadata = {
-    lastUpdated: 0,
-    isStale: true
-  };
-
-  // Intervals and flags
+  private cacheMetadata: CacheMetadata = { lastUpdated: 0, isStale: true };
   private checkInterval: NodeJS.Timeout | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   private isInitialized = false;
   private isShuttingDown = false;
-
-  // Configuration
-  private readonly REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-  private readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000; // 1 second
-  private readonly CACHE_WARMUP_THRESHOLD = 20;
-
   private refreshPromise: Promise<void> | null = null;
 
   constructor(
@@ -95,94 +88,37 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly bufferClientService: BufferClientService,
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
-    @Inject(forwardRef(() => IpManagementService))
-    private readonly ipManagementService: IpManagementService,
-    private readonly npointService: NpointService,
   ) { }
 
   async onModuleInit(): Promise<void> {
-    try {
-      await this.initializeService();
-    } catch (error) {
-      this.logger.error('Failed to initialize Client Service', error.stack);
-      throw error;
-    }
+    await this.handleErrors('initialize service', async () => {
+      await this.refreshCacheFromDatabase();
+      this.startPeriodicTasks();
+      this.isInitialized = true;
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
-    // this.logger.log('Client Service shutting down...');
     this.isShuttingDown = true;
-
-    try {
-      // Clear intervals
-      if (this.checkInterval) {
-        clearInterval(this.checkInterval);
-        this.checkInterval = null;
-      }
-
-      if (this.refreshInterval) {
-        clearInterval(this.refreshInterval);
-        this.refreshInterval = null;
-      }
-
-      // Wait for any ongoing refresh to complete
-      if (this.refreshPromise) {
-        await this.refreshPromise;
-      }
-
-      // Handle connection shutdown
+    await this.handleErrors('shutdown service', async () => {
+      if (this.checkInterval) clearInterval(this.checkInterval);
+      if (this.refreshInterval) clearInterval(this.refreshInterval);
+      if (this.refreshPromise) await this.refreshPromise;
       await connectionManager.shutdown();
-
-      // Clear cache
       this.clientsMap.clear();
-    } catch (error) {
-      this.logger.error('Error during service shutdown', error.stack);
-    }
-  }
-
-  private async initializeService(): Promise<void> {
-    try {
-      // Warm up cache
-      await this.warmupCache();
-
-      // Start periodic tasks
-      this.startPeriodicTasks();
-
-      this.isInitialized = true;
-    } catch (error) {
-      this.logger.error('Service initialization failed', error.stack);
-      throw new Error('Client Service initialization failed');
-    }
-  }
-
-  private async warmupCache(): Promise<void> {
-    try {
-      await this.refreshCacheFromDatabase();
-    } catch (error) {
-      this.logger.error('Cache warmup failed', error.stack);
-      throw error;
-    }
+    });
   }
 
   private startPeriodicTasks(): void {
-    // Main periodic check
     this.checkInterval = setInterval(async () => {
       if (this.isShuttingDown) return;
+      await this.performPeriodicRefresh();
+    }, CONFIG.REFRESH_INTERVAL);
 
-      try {
-        await Promise.allSettled([
-          this.performPeriodicRefresh(),
-        ]);
-      } catch (error) {
-        this.logger.error('Error during periodic tasks', error.stack);
-      }
-    }, this.REFRESH_INTERVAL);
-
-    // Cache staleness check
     this.refreshInterval = setInterval(() => {
       if (this.isShuttingDown) return;
       this.updateCacheMetadata();
-    }, 60000); // Check every minute
+    }, 60000);
   }
 
   private async performPeriodicRefresh(): Promise<void> {
@@ -190,7 +126,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.debug('Refresh already in progress, skipping...');
       return;
     }
-
     this.refreshPromise = this.refreshCacheFromDatabase();
     try {
       await this.refreshPromise;
@@ -200,94 +135,55 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private updateCacheMetadata(): void {
-    const now = Date.now();
-    this.cacheMetadata.isStale = (now - this.cacheMetadata.lastUpdated) > this.CACHE_TTL;
+    this.cacheMetadata.isStale = Date.now() - this.cacheMetadata.lastUpdated > CONFIG.CACHE_TTL;
   }
 
   private async refreshCacheFromDatabase(): Promise<void> {
-    try {
-      const documents = await this.executeWithRetry(async () => {
-        return await this.clientModel
-          .find({}, { _id: 0, updatedAt: 0 })
-          .lean()
-          .exec();
-      });
-
-      // Create new map to avoid race conditions
+    await this.handleErrors('refresh cache', async () => {
+      const documents = await this.executeWithRetry(() =>
+        this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec(),
+      );
       const newClientsMap = new Map<string, Client>();
-
-      documents.forEach((client) => {
-        newClientsMap.set(client.clientId, client);
-      });
-
-      // Atomic replacement
+      documents.forEach((client) => newClientsMap.set(client.clientId, client));
       this.clientsMap = newClientsMap;
-      this.cacheMetadata = {
-        lastUpdated: Date.now(),
-        isStale: false
-      };
-    } catch (error) {
-      this.logger.error('Failed to refresh cache from database', error.stack);
-      throw error;
-    }
+      this.cacheMetadata = { lastUpdated: Date.now(), isStale: false };
+    });
   }
 
   async create(createClientDto: CreateClientDto): Promise<Client> {
-    try {
-      const createdUser = await this.executeWithRetry(async () => {
+    return this.handleErrors('create client', async () => {
+      const createdClient = await this.executeWithRetry(() => {
         const client = new this.clientModel(createClientDto);
-        return await client.save();
+        return client.save();
       });
-
-      // Update cache
-      if (createdUser) {
-        this.clientsMap.set(createdUser.clientId, createdUser.toObject());
-        this.logger.log(`Client created: ${createdUser.clientId}`);
-      }
-
-      return createdUser;
-    } catch (error) {
-      this.logger.error('Error creating client', error.stack);
-      throw error;
-    }
+      this.clientsMap.set(createdClient.clientId, createdClient.toObject());
+      this.logger.log(`Client created: ${createdClient.clientId}`);
+      return createdClient;
+    });
   }
 
   async findAll(): Promise<Client[]> {
     this.ensureInitialized();
-
-    try {
-      // Use cache if available and fresh
-      if (this.clientsMap.size >= this.CACHE_WARMUP_THRESHOLD && !this.cacheMetadata.isStale) {
-        this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
-        return Array.from(this.clientsMap.values());
-      }
-
-      // Refresh cache if needed
-      if (this.cacheMetadata.isStale || this.clientsMap.size === 0) {
-        await this.refreshCacheFromDatabase();
-      }
-
+    if (
+      this.clientsMap.size >= CONFIG.CACHE_WARMUP_THRESHOLD &&
+      !this.cacheMetadata.isStale
+    ) {
+      this.logger.debug(`Retrieved ${this.clientsMap.size} clients from cache`);
       return Array.from(this.clientsMap.values());
-
-    } catch (error) {
-      this.logger.error('Failed to retrieve all clients', error.stack);
-      parseError(error, 'Failed to retrieve all clients: ', true);
-      throw error;
     }
+    await this.refreshCacheFromDatabase();
+    return Array.from(this.clientsMap.values());
   }
 
   async findAllMasked(): Promise<Partial<Client>[]> {
     const clients = await this.findAll();
-    return clients.map((client) => {
-      const { session, mobile, password, ...maskedClient } = client;
-      return { ...maskedClient };
-    });
+    return clients.map(({ session, mobile, password, ...maskedClient }) => maskedClient);
   }
 
   async findOneMasked(clientId: string): Promise<Partial<Client>> {
     const client = await this.findOne(clientId, true);
     const { session, mobile, password, ...maskedClient } = client;
-    return { ...maskedClient };
+    return maskedClient;
   }
 
   async findAllObject(): Promise<Record<string, Client>> {
@@ -299,15 +195,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   async findAllMaskedObject(query?: SearchClientDto): Promise<Record<string, Partial<Client>>> {
-    let filteredClients: Client[];
-
-    if (query) {
-      const searchResult = await this.enhancedSearch(query);
-      filteredClients = searchResult.clients;
-    } else {
-      filteredClients = await this.findAll();
-    }
-
+    const filteredClients = query ? (await this.enhancedSearch(query)).clients : await this.findAll();
     return filteredClients.reduce((acc, client) => {
       const { session, mobile, password, ...maskedClient } = client;
       acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
@@ -322,219 +210,129 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async findOne(clientId: string, throwErr: boolean = true): Promise<Client | null> {
     this.ensureInitialized();
-
-    try {
-      // Check cache first
-      const cachedClient = this.clientsMap.get(clientId);
-      if (cachedClient) {
-        return cachedClient;
-      }
-
-      // Fallback to database
-      const user = await this.executeWithRetry(async () => {
-        return await this.clientModel
-          .findOne({ clientId }, { _id: 0, updatedAt: 0 })
-          .lean()
-          .exec();
-      });
-
-      if (!user && throwErr) {
-        throw new NotFoundException(`Client with ID "${clientId}" not found`);
-      }
-
-      // Cache the result if found
-      if (user) {
-        this.clientsMap.set(clientId, user);
-      }
-
-      return user;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      this.logger.error(`Error finding client ${clientId}`, error.stack);
-      throw error;
+    const cachedClient = this.clientsMap.get(clientId);
+    if (cachedClient) return cachedClient;
+    const client = await this.executeWithRetry(() =>
+      this.clientModel.findOne({ clientId }, { _id: 0, updatedAt: 0 }).lean().exec(),
+    );
+    if (!client && throwErr) {
+      throw new NotFoundException(`Client with ID "${clientId}" not found`);
     }
+    if (client) this.clientsMap.set(clientId, client);
+    return client;
   }
 
   async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
     this.ensureInitialized();
-
-    try {
-      // Clean the update object
+    return this.handleErrors(`update client ${clientId}`, async () => {
       const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
-
-      // Notify about update
       await this.notifyClientUpdate(clientId);
-
-      const updatedUser = await this.executeWithRetry(async () => {
-        return await this.clientModel
+      const updatedClient = await this.executeWithRetry(() =>
+        this.clientModel
           .findOneAndUpdate(
             { clientId },
             { $set: cleanUpdateDto },
-            { new: true, upsert: true, runValidators: true }
+            { new: true, upsert: true, runValidators: true },
           )
           .lean()
-          .exec();
-      });
-
-      if (!updatedUser) {
+          .exec(),
+      );
+      if (!updatedClient) {
         throw new NotFoundException(`Client with ID "${clientId}" not found`);
       }
-
-      // Update cache
-      this.clientsMap.set(clientId, updatedUser);
-
-      // Background tasks
-      this.performPostUpdateTasks(updatedUser);
-
+      this.clientsMap.set(clientId, updatedClient);
+      this.performPostUpdateTasks(updatedClient);
       this.logger.log(`Client updated: ${clientId}`);
-      return updatedUser;
-
-    } catch (error) {
-      this.logger.error(`Error updating client ${clientId}`, error.stack);
-      throw error;
-    }
+      return updatedClient;
+    });
   }
 
   async remove(clientId: string): Promise<Client> {
     this.ensureInitialized();
-
-    try {
-      const deletedUser = await this.executeWithRetry(async () => {
-        return await this.clientModel
-          .findOneAndDelete({ clientId })
-          .lean()
-          .exec();
-      });
-
-      if (!deletedUser) {
+    return this.handleErrors(`remove client ${clientId}`, async () => {
+      const deletedClient = await this.executeWithRetry(() =>
+        this.clientModel.findOneAndDelete({ clientId }).lean().exec(),
+      );
+      if (!deletedClient) {
         throw new NotFoundException(`Client with ID "${clientId}" not found`);
       }
-
-      // Remove from cache
       this.clientsMap.delete(clientId);
-
       this.logger.log(`Client removed: ${clientId}`);
-      return deletedUser;
-
-    } catch (error) {
-      this.logger.error(`Error removing client ${clientId}`, error.stack);
-      throw error;
-    }
+      return deletedClient;
+    });
   }
 
   async search(filter: any): Promise<Client[]> {
-    try {
-      this.logger.debug('Search filter:', JSON.stringify(filter, null, 2));
-
-      // Handle promote mobile relationship
+    return this.handleErrors('search clients', async () => {
       if (filter.hasPromoteMobiles !== undefined) {
         filter = await this.processPromoteMobileFilter(filter);
       }
-
-      // Process text search fields
       filter = this.processTextSearchFields(filter);
-
-      this.logger.debug('Processed filter:', JSON.stringify(filter, null, 2));
-
-      return await this.executeWithRetry(async () => {
-        return await this.clientModel.find(filter).lean().exec();
-      });
-
-    } catch (error) {
-      this.logger.error('Error in search', error.stack);
-      throw error;
-    }
+      return this.executeWithRetry(() => this.clientModel.find(filter).lean().exec());
+    });
   }
 
   async searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]> {
-    try {
-      if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0) {
-        return [];
-      }
-
-      const promoteClients = await this.executeWithRetry(async () => {
-        return await this.promoteClientModel
-          .find({
-            mobile: { $in: mobileNumbers },
-            clientId: { $exists: true },
-          })
-          .lean()
-          .exec();
-      });
-
-      const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
-
-      return await this.executeWithRetry(async () => {
-        return await this.clientModel
-          .find({ clientId: { $in: clientIds } })
-          .lean()
-          .exec();
-      });
-
-    } catch (error) {
-      this.logger.error('Error searching by promote mobile', error.stack);
-      throw error;
-    }
+    if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0) return [];
+    const promoteClients = await this.executeWithRetry(() =>
+      this.promoteClientModel
+        .find({ mobile: { $in: mobileNumbers }, clientId: { $exists: true } })
+        .lean()
+        .exec(),
+    );
+    const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
+    return this.executeWithRetry(() =>
+      this.clientModel.find({ clientId: { $in: clientIds } }).lean().exec(),
+    );
   }
 
   async enhancedSearch(filter: any): Promise<SearchResult> {
-    try {
+    return this.handleErrors('enhanced search', async () => {
       let searchType: 'direct' | 'promoteMobile' | 'mixed' = 'direct';
       let promoteMobileMatches: Array<{ clientId: string; mobile: string }> = [];
-
-      // Handle promote mobile search
       if (filter.promoteMobileNumber) {
         searchType = 'promoteMobile';
         const mobileNumber = filter.promoteMobileNumber;
         delete filter.promoteMobileNumber;
-
-        const promoteClients = await this.executeWithRetry(async () => {
-          return await this.promoteClientModel
+        const promoteClients = await this.executeWithRetry(() =>
+          this.promoteClientModel
             .find({
-              mobile: {
-                $regex: new RegExp(
-                  this.escapeRegex(mobileNumber),
-                  'i',
-                ),
-              },
+              mobile: { $regex: new RegExp(this.escapeRegex(mobileNumber), 'i') },
               clientId: { $exists: true },
             })
             .lean()
-            .exec();
-        });
-
+            .exec(),
+        );
         promoteMobileMatches = promoteClients.map((pc) => ({
           clientId: pc.clientId,
           mobile: pc.mobile,
         }));
-
-        const clientIds = promoteClients.map((pc) => pc.clientId);
-        filter.clientId = { $in: clientIds };
+        filter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
       }
-
       const clients = await this.search(filter);
-
       return {
         clients,
         searchType,
         promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
       };
+    });
+  }
 
+  private async handleErrors<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
     } catch (error) {
-      this.logger.error('Error in enhanced search', error.stack);
+      const errorDetails = parseError(error, `Error in ${operation}`, true);
+      this.logger.error(`Error in ${operation}`, error.stack);
       throw error;
     }
   }
 
-  // Private helper methods
   private ensureInitialized(): void {
     if (!this.isInitialized) {
       throw new Error('Service not initialized. Please wait for initialization to complete.');
     }
   }
-
 
   private cleanUpdateObject(updateDto: any): any {
     const cleaned = { ...updateDto };
@@ -547,72 +345,52 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async notifyClientUpdate(clientId: string): Promise<void> {
+    await this.notify(`Updating the Existing client: ${clientId}`);
+  }
+
+  private async notify(message: string): Promise<void> {
     try {
-      await fetchWithTimeout(
-        `${notifbot()}&text=Updating the Existing client: ${clientId}`,
-        { timeout: 5000 }
-      );
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(message)}`, {
+        timeout: 5000,
+      });
     } catch (error) {
-      this.logger.warn('Failed to send update notification', error.message);
+      this.logger.warn('Failed to send notification', error.message);
     }
   }
 
-  private performPostUpdateTasks(updatedUser: Client): void {
-    // Run background tasks without blocking the response
+  private performPostUpdateTasks(updatedClient: Client): void {
     setImmediate(async () => {
-      try {
-        await Promise.allSettled([
-          this.refreshExternalMaps()
-        ]);
-      } catch (error) {
-        this.logger.error('Error in post-update tasks', error.stack);
-      }
+      await this.handleErrors('post-update tasks', () => this.refreshExternalMaps());
     });
   }
 
   private async refreshExternalMaps(): Promise<void> {
-    try {
-      await Promise.allSettled([
-        fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`, { timeout: 5000 }),
-        fetchWithTimeout(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 })
-      ]);
-      this.logger.debug('External maps refreshed');
-    } catch (error) {
-      this.logger.warn('Failed to refresh external maps', error.message);
-    }
+    await Promise.allSettled([
+      fetchWithTimeout(`${process.env.uptimeChecker}/refreshmap`, { timeout: 5000 }),
+      fetchWithTimeout(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 }),
+    ]);
+    this.logger.debug('External maps refreshed');
   }
 
   private async processPromoteMobileFilter(filter: any): Promise<any> {
     const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
     delete filter.hasPromoteMobiles;
-
-    const clientsWithPromoteMobiles = await this.executeWithRetry(async () => {
-      return await this.promoteClientModel
-        .find({ clientId: { $exists: true } })
-        .distinct('clientId')
-        .lean();
-    });
-
-    if (hasPromoteMobiles) {
-      filter.clientId = { $in: clientsWithPromoteMobiles };
-    } else {
-      filter.clientId = { $nin: clientsWithPromoteMobiles };
-    }
-
+    const clientsWithPromoteMobiles = await this.executeWithRetry(() =>
+      this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean(),
+    );
+    filter.clientId = hasPromoteMobiles
+      ? { $in: clientsWithPromoteMobiles }
+      : { $nin: clientsWithPromoteMobiles };
     return filter;
   }
 
   private processTextSearchFields(filter: any): any {
     const textFields = ['firstName', 'name'];
-
-    textFields.forEach(field => {
+    textFields.forEach((field) => {
       if (filter[field]) {
-        filter[field] = {
-          $regex: new RegExp(this.escapeRegex(filter[field]), 'i')
-        };
+        filter[field] = { $regex: new RegExp(this.escapeRegex(filter[field]), 'i') };
       }
     });
-
     return filter;
   }
 
@@ -620,33 +398,24 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  private async executeWithRetry<T>(
-    operation: () => Promise<T>,
-    retries: number = this.MAX_RETRIES
-  ): Promise<T> {
+  private async executeWithRetry<T>(operation: () => Promise<T>, retries = CONFIG.MAX_RETRIES): Promise<T> {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         return await operation();
       } catch (error) {
         this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
-
-        if (attempt === retries) {
-          throw error;
-        }
-
-        const delay = this.RETRY_DELAY * Math.pow(2, attempt - 1);
+        if (attempt === retries) throw error;
+        const delay = CONFIG.RETRY_DELAY * Math.pow(2, attempt - 1);
         await this.sleep(delay);
       }
     }
-
     throw new Error('All retry attempts failed');
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // Health check and monitoring
   getServiceStatus(): {
     isInitialized: boolean;
     cacheSize: number;
@@ -670,353 +439,330 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     memoryUsage: number;
   }> {
     const totalClients = await this.clientModel.countDocuments().exec();
-
     return {
       totalClients,
       cacheHitRate: this.clientsMap.size > 0 ? (this.clientsMap.size / totalClients) * 100 : 0,
       lastRefresh: new Date(this.cacheMetadata.lastUpdated),
-      memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024, // MB
+      memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
     };
   }
 
-
-  async setupClient(
-    clientId: string,
-    setupClientQueryDto: SetupClientQueryDto,
-  ) {
-    this.logger.log(`Received New Client Request for - ${clientId}`, settingupClient);
-    if (toBoolean(process.env.AUTO_CLIENT_SETUP) && Date.now() > settingupClient + 240000) {
-      settingupClient = Date.now();
-      const existingClient = await this.findOne(clientId);
-      const existingClientMobile = existingClient.mobile;
-      this.logger.log('setupClientQueryDto:', setupClientQueryDto);
-      const today = new Date(Date.now()).toISOString().split('T')[0];
-      const query = { clientId: clientId, mobile: { $ne: existingClientMobile }, createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) }, availableDate: { $lte: today }, channels: { $gt: 200 } };
-      const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
-      if (newBufferClient) {
-        try {
-          await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: ${existingClient.username}`)}`);
-          this.telegramService.setActiveClientSetup({
-            ...setupClientQueryDto,
-            clientId,
-            existingMobile: existingClientMobile,
-            newMobile: newBufferClient.mobile,
-          });
-          await connectionManager.getClient(newBufferClient.mobile);
-          await this.updateClientSession(newBufferClient.session);
-        } catch (error) {
-          parseError(error);
-          this.logger.log('Removing buffer as error');
-          const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
-          this.telegramService.setActiveClientSetup(undefined);
-        } finally {
-          await connectionManager.unregisterClient(newBufferClient.mobile);
-        }
-      } else {
-        await fetchWithTimeout(`${notifbot()}&text=Buffer Clients not available, Requested by ${clientId}`);
-        this.logger.log('Buffer Clients not available');
-      }
-    } else {
-      this.logger.log('Profile Setup Recently tried, wait ::', settingupClient - Date.now());
+  async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
+    this.logger.log(`Received New Client Request for - ${clientId}`);
+    if (!toBoolean(process.env.AUTO_CLIENT_SETUP)) {
+      this.logger.log('Auto client setup disabled');
+      return;
     }
+    if (!this.canSetupClient(clientId)) {
+      this.logger.log(
+        `Profile Setup Recently tried for ${clientId}, wait ::`,
+        getReadableTimeDifference(this.setupCooldownMap.get(clientId)!),
+      );
+      return;
+    }
+    await this.handleSetupClient(clientId, setupClientQueryDto);
+  }
+
+  private canSetupClient(clientId: string): boolean {
+    const lastSetup = this.setupCooldownMap.get(clientId) || 0;
+    return Date.now() > lastSetup + CONFIG.COOLDOWN_PERIOD;
+  }
+
+  private async handleSetupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
+    this.setupCooldownMap.set(clientId, Date.now());
+    const existingClient = await this.findOne(clientId);
+    if (!existingClient) {
+      this.logger.error(`Client not found: ${clientId}`);
+      return;
+    }
+    const existingClientMobile = existingClient.mobile;
+    this.logger.log('setupClientQueryDto:', setupClientQueryDto);
+    const today = new Date().toISOString().split('T')[0];
+    const query = {
+      clientId,
+      mobile: { $ne: existingClientMobile },
+      createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+      availableDate: { $lte: today },
+      channels: { $gt: 200 },
+    };
+    const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
+    if (!newBufferClient) {
+      await this.notify(`Buffer Clients not available, Requested by ${clientId}`);
+      this.logger.log('Buffer Clients not available');
+      return;
+    }
+    await this.handleErrors('setup client', async () => {
+      await this.notify(
+        `Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: ${existingClient.username}`,
+      );
+      this.telegramService.setActiveClientSetup({
+        ...setupClientQueryDto,
+        clientId,
+        existingMobile: existingClientMobile,
+        newMobile: newBufferClient.mobile,
+      });
+      await connectionManager.getClient(newBufferClient.mobile);
+      await this.updateClientSession(newBufferClient.session);
+    }).catch(async (error) => {
+      const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+      this.telegramService.setActiveClientSetup(undefined);
+    }).finally(async () => {
+      await connectionManager.unregisterClient(newBufferClient.mobile);
+    });
   }
 
   async updateClientSession(newSession: string) {
+    const setup = this.telegramService.getActiveClientSetup();
+    const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+    this.logger.log('Updating Client Session');
+    await sleep(2000);
+    const existingClient = await this.findOne(clientId);
+    if (!existingClient) throw new NotFoundException(`Client ${clientId} not found`);
+    const newTelegramClient = await connectionManager.getClient(newMobile, {
+      handler: true,
+      autoDisconnect: false,
+    });
     try {
-      this.logger.log('Updating Client Session');
-      const setup = this.telegramService.getActiveClientSetup();
-      const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
-      await sleep(2000);
-      const existingClient = await this.findOne(clientId);
-      const newTelegramClient = await connectionManager.getClient(newMobile, {
-        handler: true,
-        autoDisconnect: false,
-      });
       const me = await newTelegramClient.getMe();
-      const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Updated username for NewNumber: ${newMobile}\nNewUsername: ${updatedUsername}`)}`);
-      await connectionManager.unregisterClient(newMobile);
-      const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-      await this.update(clientId, {
-        mobile: newMobile,
-        username: updatedUsername,
-        session: newSession,
-      });
+      const updatedUsername = await this.telegramService.updateUsernameForAClient(
+        newMobile,
+        clientId,
+        existingClient.name,
+        me.username,
+      );
+      await this.notify(`Updated username for NewNumber: ${newMobile}\nNewUsername: ${updatedUsername}`);
+      await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
-      // await this.bufferClientService.remove(newMobile, 'Used for new client');
-      setTimeout(async () => {
-        await this.updateClient(clientId, 'Delayed update after buffer removal');
-      }, 15000);
-
-      try {
-        if (existingClientUser) {
-          try {
-            if (toBoolean(formalities)) {
-              await connectionManager.getClient(existingMobile, {
-                handler: true,
-                autoDisconnect: false,
-              });
-              await this.telegramService.updatePrivacyforDeletedAccount(existingMobile);
-              this.logger.log('Formalities finished');
-              await connectionManager.unregisterClient(existingMobile);
-              await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent('Formalities finished')}`);
-            } else {
-              this.logger.log('Formalities skipped');
-            }
-            if (archiveOld) {
-              const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-              const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
-                clientId: clientId,
-                mobile: existingMobile,
-                availableDate,
-                session: existingClient.session,
-                tgId: existingClientUser.tgId,
-                channels: 170,
-                status: days > 35 ? 'inactive' : 'active',
-                inUse: false,
-              };
-              const updatedBufferClient =
-                await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
-              // await this.archivedClientService.update(existingMobile, existingClient);
-              this.logger.log('client Archived: ', updatedBufferClient["_doc"]);
-              await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent('old Client Archived')}`);
-            } else {
-              await this.bufferClientService.update(existingMobile, { inUse: false, lastUsed: new Date(), status: 'inactive' });
-              this.logger.log('Client Archive Skipped');
-              await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent('Skipped Old Client Archival')}`);
-            }
-          } catch (error) {
-            this.logger.log('Cannot Archive Old Client');
-            const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
-            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(errorDetails.message)}`);
-            if (isPermanentError(errorDetails)) {
-              this.logger.log('Deleting User: ', existingClientUser.mobile);
-              await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
-            } else {
-              this.logger.log('Not Deleting user');
-            }
-          }
-        }
-      } catch (error) {
-        parseError(error, 'Error in Archiving Old Client outer', true);
-        this.logger.log('Error in Archiving Old Client');
-      }
-      this.logger.log('Updating buffer client to in use');
+      setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
+      await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
       await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
+      await this.notify('Update finished');
+    } catch (error) {
+      parseError(error, 'Error in updating client session', true);
+      throw error;
+    } finally {
+      await connectionManager.unregisterClient(newMobile);
+      this.telegramService.setActiveClientSetup(undefined);
+    }
+  }
 
-      this.telegramService.setActiveClientSetup(undefined);
-      this.logger.log('Update finished Exitting Exiiting TG Service');
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Update finished`)}`);
-    } catch (e) {
-      parseError(e, 'Error in updating client session', true);
-      this.telegramService.setActiveClientSetup(undefined);
+  private async handleClientArchival(
+    existingClient: Client,
+    existingMobile: string,
+    formalities: boolean,
+    archiveOld: boolean,
+    days: number,
+  ) {
+    const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
+    if (!existingClientUser) return;
+    if (toBoolean(formalities)) {
+      await this.handleFormalities(existingMobile);
+    } else {
+      this.logger.log('Formalities skipped');
+    }
+    if (archiveOld) {
+      await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
+    } else {
+      await this.bufferClientService.update(existingMobile, {
+        inUse: false,
+        lastUsed: new Date(),
+        status: 'inactive',
+      });
+      this.logger.log('Client Archive Skipped');
+      await this.notify('Skipped Old Client Archival');
+    }
+  }
+
+  private async handleFormalities(mobile: string) {
+    const client = await connectionManager.getClient(mobile, { handler: true, autoDisconnect: false });
+    await this.telegramService.updatePrivacyforDeletedAccount(mobile);
+    this.logger.log('Formalities finished');
+    await connectionManager.unregisterClient(mobile);
+    await this.notify('Formalities finished');
+  }
+
+  private async archiveOldClient(
+    existingClient: Client,
+    existingClientUser: any,
+    existingMobile: string,
+    days: number,
+  ) {
+    try {
+      const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+      const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
+        clientId: existingClient.clientId,
+        mobile: existingMobile,
+        availableDate,
+        session: existingClient.session,
+        tgId: existingClientUser.tgId,
+        channels: 170,
+        status: days > 35 ? 'inactive' : 'active',
+        inUse: false,
+      };
+      const updatedBufferClient = await this.bufferClientService.createOrUpdate(
+        existingMobile,
+        bufferClientDto,
+      );
+      this.logger.log('client Archived: ', updatedBufferClient['_doc']);
+      await this.notify('old Client Archived');
+    } catch (error) {
+      const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
+      await this.notify(errorDetails.message);
+      if (isPermanentError(errorDetails)) {
+        this.logger.log('Deleting User: ', existingClientUser.mobile);
+        await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
+      } else {
+        this.logger.log('Not Deleting user');
+      }
     }
   }
 
   async updateClient(clientId: string, message: string = '') {
     this.logger.log(`Updating Client: ${clientId} - ${message}`);
-
-    const now = Date.now();
-    const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
-    const cooldownPeriod = 30000;
-
-    // Cooldown handling
-    if (now - lastUpdate < cooldownPeriod) {
-      const waitTime = Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000);
-      this.logger.log(`Skipping update for ${clientId} - cooldown not elapsed. Try again in ${waitTime} seconds`);
-      return;
-    }
-
+    if (!this.canUpdateClient(clientId)) return;
     const client = await this.findOne(clientId);
     if (!client) {
       this.logger.error(`Client not found: ${clientId}`);
       return;
     }
-
     let telegramClient: any;
     try {
-      this.lastUpdateMap.set(clientId, now);
-
+      this.lastUpdateMap.set(clientId, Date.now());
       telegramClient = await connectionManager.getClient(client.mobile, { handler: false });
-      if (!telegramClient) {
-        throw new Error(`Unable to fetch Telegram client for ${client.mobile}`);
-      }
-
+      if (!telegramClient) throw new Error(`Unable to fetch Telegram client for ${client.mobile}`);
       await sleep(2000);
-
       const me = await telegramClient.getMe();
       if (!me) throw new Error(`Unable to fetch 'me' for ${clientId}`);
-
-      const normalize = (str: string | null | undefined): string =>
-        (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-
-      const safeAttemptReverse = (val: string | null | undefined): string => {
-        try {
-          return attemptReverseFuzzy(val ?? '') || '';
-        } catch {
-          return '';
-        }
-      };
-
-      // -------------------
-      // USERNAME VALIDATION
-      // -------------------
-      const actualUsername = normalize(me.username || '');
-      const expectedUsername = normalize(client.username || '');
-
-      if (!actualUsername || actualUsername !== expectedUsername) {
-        this.logger.log(`[${clientId}] Username mismatch. Actual: ${me.username}, Expected: ${client.username}`);
-
-        const updatedUsername = await this.telegramService.updateUsernameForAClient(
-          client.mobile,
-          client.clientId,
-          client.name,
-          me.username
-        );
-
-        if (updatedUsername) {
-          await this.update(client.clientId, { username: updatedUsername });
-          await sleep(10000);
-          this.logger.log(`[${clientId}] Username updated to: ${updatedUsername}`);
-        } else {
-          this.logger.warn(`[${clientId}] Failed to update username`);
-        }
-
-      } else {
-        this.logger.log(`[${clientId}] Username already correct`);
-      }
-
-      // -------------------
-      // NAME VALIDATION
-      // -------------------
-      const actualName = normalize(safeAttemptReverse(me.firstName || ''));
-      const expectedName = normalize(client.name || '');
-
-      if (actualName !== expectedName) {
-        this.logger.log(`[${clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-        await telegramClient.updateProfile(
-          obfuscateText(client.name, { maintainFormatting: false, preserveCase: true }),
-          obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
-            maintainFormatting: false,
-            preserveCase: true,
-          })
-        );
-        await sleep(5000)
-      } else {
-        this.logger.log(`[${clientId}] Name already correct`);
-      }
-
-
-      // -------------------
-      // PRIVACY SETTINGS
-      // -------------------
-      await telegramClient.updatePrivacy();
-      this.logger.log(`[${clientId}] Privacy settings updated`);
-
-      await sleep(5000);
-
-      // -------------------
-      // PROFILE PHOTOS
-      // -------------------
-      const photos = await telegramClient.client.invoke(
-        new Api.photos.GetUserPhotos({
-          userId: 'me',
-          offset: 0,
-        })
-      );
-
-      const photoCount = photos?.photos?.length || 0;
-      if (photoCount < 1) {
-        this.logger.warn(`[${clientId}] No profile photos found. Uploading new ones...`);
-        await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-
-        await sleep(6000 + Math.random() * 3000); // 6–9s delay
-
-        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-        for (const photo of photoPaths) {
-          await telegramClient.updateProfilePic(path.join(process.cwd(), photo));
-          this.logger.debug(`[${clientId}] Uploaded profile photo: ${photo}`);
-          await sleep(20000 + Math.random() * 15000); // 20–35s per photo
-        }
-      } else {
-        this.logger.log(`[${clientId}] Profile photos already exist (${photoCount})`);
-      }
-
-      // -------------------
-      // NOTIFICATIONS
-      // -------------------
-      await fetchWithTimeout(`${notifbot()}&text=Updated Client: ${clientId} - ${message}`);
-      if (client.deployKey) {
-        await fetchWithTimeout(client.deployKey);
-      }
-
+      await this.updateClientUsername(client, me);
+      await this.updateClientName(client, me);
+      await this.updateClientPrivacy(client);
+      await this.updateClientPhotos(client, telegramClient);
+      await this.notify(`Updated Client: ${clientId} - ${message}`);
+      if (client.deployKey) await fetchWithTimeout(client.deployKey);
     } catch (error) {
-      this.lastUpdateMap.delete(clientId); // allow retry after error
+      this.lastUpdateMap.delete(clientId);
       parseError(error, `[${clientId}] updateClient failed`);
     } finally {
-      if (telegramClient) {
-        connectionManager.unregisterClient(client.mobile);
-      }
+      if (telegramClient) await connectionManager.unregisterClient(client.mobile);
     }
   }
 
+  private canUpdateClient(clientId: string): boolean {
+    const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
+    if (Date.now() - lastUpdate < CONFIG.UPDATE_CLIENT_COOLDOWN) {
+      const waitTime = Math.ceil((CONFIG.UPDATE_CLIENT_COOLDOWN - (Date.now() - lastUpdate)) / 1000);
+      this.logger.log(
+        `Skipping update for ${clientId} - cooldown not elapsed. Try again in ${waitTime} seconds`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  private async updateClientUsername(client: Client, me: any) {
+    const normalize = (str: string | null | undefined): string =>
+      (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+    const actualUsername = normalize(me.username || '');
+    const expectedUsername = normalize(client.username || '');
+    if (!actualUsername || actualUsername !== expectedUsername) {
+      this.logger.log(
+        `[${client.clientId}] Username mismatch. Actual: ${me.username}, Expected: ${client.username}`,
+      );
+      const updatedUsername = await this.telegramService.updateUsernameForAClient(
+        client.mobile,
+        client.clientId,
+        client.name,
+        me.username,
+      );
+      if (updatedUsername) {
+        await this.update(client.clientId, { username: updatedUsername });
+        this.logger.log(`[${client.clientId}] Username updated to: ${updatedUsername}`);
+        await sleep(10000);
+      } else {
+        this.logger.warn(`[${client.clientId}] Failed to update username`);
+      }
+    } else {
+      this.logger.log(`[${client.clientId}] Username already correct`);
+    }
+  }
+
+  private async updateClientName(client: Client, me: any) {
+    const normalize = (str: string | null | undefined): string =>
+      (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+    const safeAttemptReverse = (val: string | null | undefined): string => {
+      try {
+        return attemptReverseFuzzy(val ?? '') || '';
+      } catch {
+        return '';
+      }
+    };
+    const actualName = normalize(safeAttemptReverse(me.firstName || ''));
+    const expectedName = normalize(client.name || '');
+    if (actualName !== expectedName) {
+      this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
+      await (client as any).updateProfile(
+        obfuscateText(client.name, { maintainFormatting: false, preserveCase: true }),
+        obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
+          maintainFormatting: false,
+          preserveCase: true,
+        }),
+      );
+      await sleep(5000);
+    } else {
+      this.logger.log(`[${client.clientId}] Name already correct`);
+    }
+  }
+
+  private async updateClientPrivacy(client: Client) {
+    await (client as any).updatePrivacy();
+    this.logger.log(`[${client.clientId}] Privacy settings updated`);
+    await sleep(5000);
+  }
+
+  private async updateClientPhotos(client: Client, telegramClient: any) {
+    const photos = await telegramClient.client.invoke(
+      new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }),
+    );
+    const photoCount = photos?.photos?.length || 0;
+    if (photoCount < 1) {
+      this.logger.warn(`[${client.clientId}] No profile photos found. Uploading new ones...`);
+      await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+      await sleep(6000 + Math.random() * 3000);
+      for (const photo of CONFIG.PHOTO_PATHS) {
+        await telegramClient.updateProfilePic(path.join(process.cwd(), photo));
+        this.logger.debug(`[${client.clientId}] Uploaded profile photo: ${photo}`);
+        await sleep(20000 + Math.random() * 15000);
+      }
+    } else {
+      this.logger.log(`[${client.clientId}] Profile photos already exist (${photoCount})`);
+    }
+  }
 
   async updateClients() {
     const clients = await this.findAll();
-    for (const client of Object.values(clients)) {
+    for (const client of clients) {
       await this.updateClient(client.clientId, `Force Updating Client: ${client.clientId}`);
     }
   }
 
-  async executeQuery(
-    query: any,
-    sort?: any,
-    limit?: number,
-    skip?: number,
-  ): Promise<Client[]> {
-    try {
-      if (!query) {
-        throw new BadRequestException('Query is invalid.');
-      }
-      const queryExec = this.clientModel.find(query);
-
-      if (sort) {
-        queryExec.sort(sort);
-      }
-
-      if (limit) {
-        queryExec.limit(limit);
-      }
-
-      if (skip) {
-        queryExec.skip(skip);
-      }
-
-      return await queryExec.exec();
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
-    }
+  async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]> {
+    if (!query) throw new BadRequestException('Query is invalid.');
+    const queryExec = this.clientModel.find(query);
+    if (sort) queryExec.sort(sort);
+    if (limit) queryExec.limit(limit);
+    if (skip) queryExec.skip(skip);
+    return queryExec.exec();
   }
 
-  // ==================== PROMOTE MOBILE MANAGEMENT ====================
-
-  /**
-   * Get all promote mobiles for a client from PromoteClient collection
-   */
   async getPromoteMobiles(clientId: string): Promise<string[]> {
-    if (!clientId) {
-      throw new BadRequestException('ClientId is required');
-    }
-    const promoteClients = await this.promoteClientModel
-      .find({ clientId })
-      .lean();
-    return promoteClients.map((pc) => pc.mobile).filter((mobile) => mobile); // Filter out null/undefined mobiles
+    if (!clientId) throw new BadRequestException('ClientId is required');
+    const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
+    return promoteClients.map((pc) => pc.mobile).filter((mobile) => mobile);
   }
 
-  /**
-   * Get all promote mobiles for all clients (utility for other services)
-   */
   async getAllPromoteMobiles(): Promise<string[]> {
     const allPromoteClients = await this.promoteClientModel
       .find({ clientId: { $exists: true } })
@@ -1024,362 +770,50 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return allPromoteClients.map((pc) => pc.mobile);
   }
 
-  /**
-   * Check if a mobile is a promote mobile for any client
-   */
-  async isPromoteMobile(
-    mobile: string,
-  ): Promise<{ isPromote: boolean; clientId?: string }> {
-    const promoteClient = await this.promoteClientModel
-      .findOne({ mobile })
-      .lean();
+  async isPromoteMobile(mobile: string): Promise<{ isPromote: boolean; clientId?: string }> {
+    const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
     return {
-      isPromote: !!promoteClient && !!promoteClient.clientId, // Only true if assigned to a client
+      isPromote: !!promoteClient && !!promoteClient.clientId,
       clientId: promoteClient?.clientId,
     };
   }
 
-  async addPromoteMobile(
-    clientId: string,
-    mobileNumber: string,
-  ): Promise<Client> {
-    // Verify client exists
+  async addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
     const client = await this.clientModel.findOne({ clientId }).lean();
-    if (!client) {
-      throw new NotFoundException(`Client ${clientId} not found`);
-    }
-
-    // Check if mobile is already a promote mobile for this or another client
-    const existingPromoteClient = await this.promoteClientModel
-      .findOne({ mobile: mobileNumber })
-      .lean();
+    if (!client) throw new NotFoundException(`Client ${clientId} not found`);
+    const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
     if (existingPromoteClient) {
       if (existingPromoteClient.clientId === clientId) {
-        throw new BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
-      } else if (existingPromoteClient.clientId) {
-        throw new BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
-      } else {
-        // Mobile exists but not assigned to any client, assign it to this client
-        await this.promoteClientModel.updateOne(
-          { mobile: mobileNumber },
-          { $set: { clientId } },
+        throw new BadRequestException(
+          `Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`,
         );
+      } else if (existingPromoteClient.clientId) {
+        throw new BadRequestException(
+          `Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`,
+        );
+      } else {
+        await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
       }
     } else {
-      throw new NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
+      throw new NotFoundException(
+        `Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`,
+      );
     }
-
     return client;
   }
 
-  async removePromoteMobile(
-    clientId: string,
-    mobileNumber: string,
-  ): Promise<Client> {
-    // Verify client exists
+  async removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
     const client = await this.clientModel.findOne({ clientId }).lean();
-    if (!client) {
-      throw new NotFoundException(`Client ${clientId} not found`);
-    }
-
-    // Remove clientId from the PromoteClient document (making it unassigned)
+    if (!client) throw new NotFoundException(`Client ${clientId} not found`);
     const result = await this.promoteClientModel.updateOne(
       { mobile: mobileNumber, clientId },
       { $unset: { clientId: 1 } },
     );
-
     if (result.matchedCount === 0) {
-      throw new NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
-    }
-
-    return client;
-  }
-
-  /**
-   * Get IP address for a mobile number
-   * This method uses the simplified IP management system (no mobileType needed)
-   * @param mobile Mobile number to get IP for
-   * @param clientId Optional client ID for context
-   * @returns IP address string or null if none found/assigned
-   */
-  async getIpForMobile(
-    mobile: string,
-    clientId?: string,
-  ): Promise<string | null> {
-    if (!mobile) {
-      throw new BadRequestException('Mobile number is required');
-    }
-
-    this.logger.debug(`Getting IP for mobile: ${mobile}${clientId ? ` (client: ${clientId})` : ''}`);
-
-    try {
-      // Use the simplified IP management service to get IP for mobile
-      const ipAddress = await this.ipManagementService.getIpForMobile(mobile);
-
-      if (ipAddress) {
-        this.logger.debug(`Found IP for mobile ${mobile}: ${ipAddress}`);
-        return ipAddress;
-      }
-
-      this.logger.debug(`No IP found for mobile ${mobile}`);
-      return null;
-    } catch (error) {
-      this.logger.error(`Failed to get IP for mobile ${mobile}: ${error.message}`, error.stack);
-      return null;
-    }
-  }
-
-  /**
-   * Check if a mobile number has an assigned IP
-   * @param mobile Mobile number to check
-   * @returns boolean indicating if IP is assigned
-   */
-  async hasMobileAssignedIp(mobile: string): Promise<boolean> {
-    const ip = await this.getIpForMobile(mobile);
-    return ip !== null;
-  }
-
-  /**
-   * Get all mobile numbers (main + promote) for a client that need IP assignment
-   * @param clientId Client ID
-   * @returns Array of mobile numbers without IP assignments
-   */
-  async getMobilesNeedingIpAssignment(clientId: string): Promise<{
-    mainMobile?: string;
-    promoteMobiles: string[];
-  }> {
-    this.logger.debug(`Getting mobiles needing IP assignment for client: ${clientId}`);
-
-    const client = await this.findOne(clientId);
-    const result = {
-      mainMobile: undefined as string | undefined,
-      promoteMobiles: [] as string[],
-    };
-
-    // Check main mobile
-    if (client.mobile && !(await this.hasMobileAssignedIp(client.mobile))) {
-      result.mainMobile = client.mobile;
-    }
-
-    // Get promote mobiles from PromoteClient collection and check for IP assignment
-    const promoteMobiles = await this.getPromoteMobiles(clientId);
-    for (const mobile of promoteMobiles) {
-      if (!(await this.hasMobileAssignedIp(mobile))) {
-        result.promoteMobiles.push(mobile);
-      }
-    }
-
-    this.logger.debug(`Mobiles needing IP assignment for client ${clientId}:`, result);
-    return result;
-  }
-
-  /**
-   * Auto-assign IPs to all mobile numbers for a client
-   * Uses the simplified IP management system (no mobileType field needed)
-   * @param clientId Client ID
-   * @returns Assignment result summary
-   */
-  async autoAssignIpsToClient(clientId: string): Promise<{
-    clientId: string;
-    mainMobile: { mobile: string; ipAddress: string | null; status: string };
-    promoteMobiles: Array<{
-      mobile: string;
-      ipAddress: string | null;
-      status: string;
-    }>;
-    summary: {
-      totalMobiles: number;
-      assigned: number;
-      failed: number;
-      errors: string[];
-    };
-  }> {
-    this.logger.debug(`Auto-assigning IPs to all mobiles for client: ${clientId}`);
-
-    const client = await this.findOne(clientId);
-    const errors: string[] = [];
-    let assigned = 0;
-    let failed = 0;
-
-    // Handle main mobile - no mobileType needed in simplified system
-    let mainMobileResult: {
-      mobile: string;
-      ipAddress: string | null;
-      status: string;
-    };
-    try {
-      const mainMapping = await this.ipManagementService.assignIpToMobile({
-        mobile: client.mobile,
-        clientId: client.clientId,
-        // Note: No mobileType field - simplified!
-      });
-      mainMobileResult = {
-        mobile: client.mobile,
-        ipAddress: mainMapping.ipAddress,
-        status: 'assigned',
-      };
-      assigned++;
-    } catch (error) {
-      mainMobileResult = {
-        mobile: client.mobile,
-        ipAddress: null,
-        status: 'failed',
-      };
-      errors.push(`Main mobile ${client.mobile}: ${error.message}`);
-      failed++;
-    }
-
-    // Handle promote mobiles - no mobileType needed in simplified system
-    const promoteMobileResults: Array<{
-      mobile: string;
-      ipAddress: string | null;
-      status: string;
-    }> = [];
-
-    // Get promote mobiles from PromoteClient collection
-    const promoteMobiles = await this.getPromoteMobiles(clientId);
-    for (const promoteMobile of promoteMobiles) {
-      try {
-        const promoteMapping = await this.ipManagementService.assignIpToMobile({
-          mobile: promoteMobile,
-          clientId: client.clientId,
-          // Note: No mobileType field - simplified!
-        });
-        promoteMobileResults.push({
-          mobile: promoteMobile,
-          ipAddress: promoteMapping.ipAddress,
-          status: 'assigned',
-        });
-        assigned++;
-      } catch (error) {
-        promoteMobileResults.push({
-          mobile: promoteMobile,
-          ipAddress: null,
-          status: 'failed',
-        });
-        errors.push(`Promote mobile ${promoteMobile}: ${error.message}`);
-        failed++;
-      }
-    }
-
-    const totalMobiles = 1 + promoteMobiles.length;
-
-    this.logger.log(`Auto-assignment completed for ${clientId}: ${assigned}/${totalMobiles} assigned`);
-
-    return {
-      clientId,
-      mainMobile: mainMobileResult,
-      promoteMobiles: promoteMobileResults,
-      summary: {
-        totalMobiles,
-        assigned,
-        failed,
-        errors,
-      },
-    };
-  }
-
-  /**
-   * Get client IP information summary
-   * Shows which mobiles have IPs and which don't
-   * @param clientId Client ID
-   * @returns Comprehensive IP summary for the client
-   */
-  async getClientIpInfo(clientId: string): Promise<{
-    clientId: string;
-    clientName: string;
-    mainMobile: {
-      mobile: string;
-      ipAddress: string | null;
-      hasIp: boolean;
-    };
-    promoteMobiles: Array<{
-      mobile: string;
-      ipAddress: string | null;
-      hasIp: boolean;
-    }>;
-    dedicatedIps: string[];
-    summary: {
-      totalMobiles: number;
-      mobilesWithIp: number;
-      mobilesWithoutIp: number;
-    };
-  }> {
-    this.logger.debug(`Getting IP info for client: ${clientId}`);
-
-    const client = await this.findOne(clientId);
-
-    // Get IP for main mobile
-    const mainMobileIp = await this.getIpForMobile(client.mobile, clientId);
-    const mainMobile = {
-      mobile: client.mobile,
-      ipAddress: mainMobileIp,
-      hasIp: mainMobileIp !== null,
-    };
-
-    // Get IPs for promote mobiles
-    const promoteMobiles = [];
-    let mobilesWithIp = mainMobile.hasIp ? 1 : 0;
-
-    // Get promote mobiles from PromoteClient collection
-    const clientPromoteMobiles = await this.getPromoteMobiles(clientId);
-    for (const mobile of clientPromoteMobiles) {
-      const ip = await this.getIpForMobile(mobile, clientId);
-      const hasIp = ip !== null;
-
-      promoteMobiles.push({
-        mobile,
-        ipAddress: ip,
-        hasIp,
-      });
-
-      if (hasIp) mobilesWithIp++;
-    }
-
-    const totalMobiles = 1 + clientPromoteMobiles.length;
-    const mobilesWithoutIp = totalMobiles - mobilesWithIp;
-
-    return {
-      clientId,
-      clientName: client.name,
-      mainMobile,
-      promoteMobiles,
-      dedicatedIps: client.dedicatedIps || [],
-      summary: {
-        totalMobiles,
-        mobilesWithIp,
-        mobilesWithoutIp,
-      },
-    };
-  }
-
-  /**
-   * Release IP from a mobile number
-   * @param mobile Mobile number to release IP from
-   * @returns Success status
-   */
-  async releaseIpFromMobile(
-    mobile: string,
-  ): Promise<{ success: boolean; message: string }> {
-    this.logger.debug(`Releasing IP from mobile: ${mobile}`);
-
-    try {
-      await this.ipManagementService.releaseIpFromMobile({ mobile });
-
-      this.logger.log(`Successfully released IP from mobile: ${mobile}`);
-      return {
-        success: true,
-        message: `IP released from mobile ${mobile}`,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to release IP from mobile ${mobile}: ${error.message}`,
-        error.stack,
+      throw new NotFoundException(
+        `Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`,
       );
-      return {
-        success: false,
-        message: `Failed to release IP: ${error.message}`,
-      };
     }
+    return client;
   }
 }
