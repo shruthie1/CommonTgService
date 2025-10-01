@@ -657,29 +657,27 @@ let ClientService = ClientService_1 = class ClientService {
         const lastUpdate = this.lastUpdateMap.get(clientId) || 0;
         const cooldownPeriod = 30000;
         if (now - lastUpdate < cooldownPeriod) {
-            this.logger.log(`Skipping update for ${clientId} - cooldown period not elapsed. Try again in ${Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000)} seconds`);
+            const waitTime = Math.ceil((cooldownPeriod - (now - lastUpdate)) / 1000);
+            this.logger.log(`Skipping update for ${clientId} - cooldown not elapsed. Try again in ${waitTime} seconds`);
             return;
         }
         const client = await this.findOne(clientId);
+        if (!client) {
+            this.logger.error(`Client not found: ${clientId}`);
+            return;
+        }
+        let telegramClient;
         try {
             this.lastUpdateMap.set(clientId, now);
-            const telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, {
-                handler: false,
-            });
+            telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, { handler: false });
+            if (!telegramClient) {
+                throw new Error(`Unable to fetch Telegram client for ${client.mobile}`);
+            }
             await (0, Helpers_1.sleep)(2000);
             const me = await telegramClient.getMe();
-            if (!me.username ||
-                me.username !== client.username ||
-                !me.username?.toLowerCase().startsWith(me.firstName.split(' ')[0].toLowerCase())) {
-                const client = await this.findOne(clientId);
-                const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
-                await (0, Helpers_1.sleep)(1000);
-                await this.update(client.clientId, { username: updatedUsername });
-            }
-            await (0, Helpers_1.sleep)(1000);
-            const normalizeString = (str) => {
-                return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-            };
+            if (!me)
+                throw new Error(`Unable to fetch 'me' for ${clientId}`);
+            const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
             const safeAttemptReverse = (val) => {
                 try {
                     return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
@@ -688,42 +686,71 @@ let ClientService = ClientService_1 = class ClientService {
                     return '';
                 }
             };
-            const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
-            const expectedName = normalizeString(client.name || '');
-            if (actualName !== expectedName) {
-                this.logger.log(`Updating first name for ${clientId} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, { maintainFormatting: false, preserveCase: true }));
+            const actualUsername = normalize(me.username || '');
+            const expectedUsername = normalize(client.username || '');
+            if (!actualUsername || actualUsername !== expectedUsername) {
+                this.logger.log(`[${clientId}] Username mismatch. Actual: ${me.username}, Expected: ${client.username}`);
+                const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+                if (updatedUsername) {
+                    await this.update(client.clientId, { username: updatedUsername });
+                    await (0, Helpers_1.sleep)(10000);
+                    this.logger.log(`[${clientId}] Username updated to: ${updatedUsername}`);
+                }
+                else {
+                    this.logger.warn(`[${clientId}] Failed to update username`);
+                }
             }
             else {
-                this.logger.log(`First name for ${clientId} is already up to date`);
+                this.logger.log(`[${clientId}] Username already correct`);
             }
-            await (0, Helpers_1.sleep)(1000);
+            const actualName = normalize(safeAttemptReverse(me.firstName || ''));
+            const expectedName = normalize(client.name || '');
+            if (actualName !== expectedName) {
+                this.logger.log(`[${clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
+                await telegramClient.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+                    maintainFormatting: false,
+                    preserveCase: true,
+                }));
+                await (0, Helpers_1.sleep)(5000);
+            }
+            else {
+                this.logger.log(`[${clientId}] Name already correct`);
+            }
             await telegramClient.updatePrivacy();
-            await (0, Helpers_1.sleep)(1000);
-            const rootPath = process.cwd();
+            this.logger.log(`[${clientId}] Privacy settings updated`);
+            await (0, Helpers_1.sleep)(5000);
             const photos = await telegramClient.client.invoke(new tl_1.Api.photos.GetUserPhotos({
                 userId: 'me',
                 offset: 0,
             }));
-            if (photos.photos.length < 1) {
+            const photoCount = photos?.photos?.length || 0;
+            if (photoCount < 1) {
+                this.logger.warn(`[${clientId}] No profile photos found. Uploading new ones...`);
                 await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                 await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
                 const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
                 for (const photo of photoPaths) {
-                    await telegramClient.updateProfilePic(path_1.default.join(rootPath, photo));
-                    this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${me.phone}`);
+                    await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), photo));
+                    this.logger.debug(`[${clientId}] Uploaded profile photo: ${photo}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
             }
+            else {
+                this.logger.log(`[${clientId}] Profile photos already exist (${photoCount})`);
+            }
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Updated Client: ${clientId} - ${message}`);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
+            if (client.deployKey) {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
+            }
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
-            (0, parseError_1.parseError)(error);
+            (0, parseError_1.parseError)(error, `[${clientId}] updateClient failed`);
         }
         finally {
-            connection_manager_1.connectionManager.unregisterClient(client.mobile);
+            if (telegramClient) {
+                connection_manager_1.connectionManager.unregisterClient(client.mobile);
+            }
         }
     }
     async updateClients() {
