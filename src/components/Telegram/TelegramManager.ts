@@ -51,10 +51,6 @@ class TelegramManager {
         this.session = new StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        getCredentialsForMobile(this.phoneNumber).then(tgCreds => {
-            this.apiHash = tgCreds.apiHash
-            this.apiId = tgCreds.apiId
-        })
     }
 
     public static getActiveClientSetup() {
@@ -375,6 +371,9 @@ class TelegramManager {
     }
 
     async createClient(handler = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
+        const tgCreds = await getCredentialsForMobile(this.phoneNumber);
+        this.apiHash = tgCreds.apiHash
+        this.apiId = tgCreds.apiId
         const tgConfiguration = await generateTGConfig(this.phoneNumber);
         await withTimeout(async () => {
             this.client = new TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);

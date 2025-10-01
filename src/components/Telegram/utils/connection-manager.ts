@@ -35,7 +35,6 @@ interface GetClientOptions {
 class ConnectionManager {
     private static instance: ConnectionManager | null = null;
     private clients = new Map<string, ClientInfo>();
-    private ongoingConnections = new Map<string, Promise<TelegramManager>>();
     private logger = new TelegramLogger('ConnectionManager');
     private cleanupTimer: NodeJS.Timeout | null = null;
     private usersService: UsersService | null = null;
@@ -80,15 +79,8 @@ class ConnectionManager {
 
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
 
-        let ongoing = this.ongoingConnections.get(mobile);
-        if (ongoing && !forceReconnect) {
-            this.logger.info(mobile, 'Waiting for ongoing connection');
-            return await ongoing;
-        }
-
         const connectPromise = (async () => {
             try {
-                // Check existing client
                 const existingClient = this.clients.get(mobile);
                 if (existingClient && !forceReconnect) {
                     if (existingClient.state === 'connected' && this.isClientHealthy(existingClient)) {
@@ -108,12 +100,8 @@ class ConnectionManager {
                 return await this.createNewClient(mobile, { autoDisconnect, handler });
             } catch (error) {
                 throw error;
-            } finally {
-                this.ongoingConnections.delete(mobile);
             }
         })();
-
-        this.ongoingConnections.set(mobile, connectPromise);
         return await connectPromise;
     }
 
