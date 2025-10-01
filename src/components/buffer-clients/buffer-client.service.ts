@@ -1012,6 +1012,8 @@ export class BufferClientService implements OnModuleDestroy {
         const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
         this.logger.debug(`Total active buffer clients: ${totalActiveBufferClients}`);
 
+        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\nClients Needing Buffer Clients: ${clientNeedingBufferClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             await this.addNewUserstoBufferClients([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         } else {
@@ -1064,9 +1066,10 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    const errorDetails = parseError(error, 'Error in Updating Privacy', true);
+                    const errorDetails = parseError(error, `Error in Updating Privacy: ${doc.mobile}`, true);
                     if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -1094,9 +1097,10 @@ export class BufferClientService implements OnModuleDestroy {
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     }
                 } catch (error: any) {
-                    const errorDetails = parseError(error, 'Error in Deleting Photos', true);
+                    const errorDetails = parseError(error, `Error in Deleting Photos: ${doc.mobile}`, true);
                     if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -1145,9 +1149,10 @@ export class BufferClientService implements OnModuleDestroy {
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     } catch (error: any) {
-                        const errorDetails = parseError(error, 'Error in Updating Profile', true);
+                        const errorDetails = parseError(error, `Error in Updating Profile: ${doc.mobile}`, true);
                         if (isPermanentError(errorDetails)) {
-                            await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${errorDetails.message}`);
+                            await this.markAsInactive(doc.mobile, errorDetails.message);
+                            return updateCount;
                         }
                     }
                 }
@@ -1169,9 +1174,10 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
-                    const errorDetails = parseError(error, 'Error in Updating Username', true);
+                    const errorDetails = parseError(error, `Error in Updating Username: ${doc.mobile}`, true);
                     if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -1208,9 +1214,10 @@ export class BufferClientService implements OnModuleDestroy {
                         await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
                     }
                 } catch (error: any) {
-                    const errorDetails = parseError(error, 'Error in Updating Profile Photos', true);
+                    const errorDetails = parseError(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
                     if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }

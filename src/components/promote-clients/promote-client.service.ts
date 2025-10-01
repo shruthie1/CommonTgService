@@ -939,6 +939,8 @@ export class PromoteClientService implements OnModuleDestroy {
                 await this.promoteClientModel.countDocuments({ status: 'active' });
             this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
 
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\nClients Needing Promote Clients: ${clientNeedingPromoteClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+
             // Only proceed with creating new promote clients if we have clients that need them
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
                 await this.addNewUserstoPromoteClients(
