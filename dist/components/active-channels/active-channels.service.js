@@ -21,6 +21,8 @@ const active_channel_schema_1 = require("./schemas/active-channel.schema");
 const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
+const utils_1 = require("../../utils");
+const bots_1 = require("../bots");
 let ActiveChannelsService = class ActiveChannelsService {
     constructor(activeChannelModel, promoteMsgsService) {
         this.activeChannelModel = activeChannelModel;
@@ -85,6 +87,10 @@ let ActiveChannelsService = class ActiveChannelsService {
         return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $addToSet: { availableMsgs: msg } });
     }
     async remove(channelId) {
+        const botsService = (0, utils_1.getBotsServiceInstance)();
+        if (botsService) {
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing Active Channel: ${channelId}`);
+        }
         const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {
