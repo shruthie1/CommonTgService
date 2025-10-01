@@ -5,6 +5,8 @@ import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import { Channel, ChannelDocument } from './schemas/channel.schema';
 import { PipelineStage } from 'mongoose';
+import { ChannelCategory } from '../bots';
+import { getBotsServiceInstance } from '../../utils';
 
 @Injectable()
 export class ChannelsService {
@@ -78,6 +80,10 @@ export class ChannelsService {
   }
 
   async remove(channelId: string): Promise<void> {
+    const botsService = getBotsServiceInstance();
+    if (botsService) {
+      botsService.sendMessageByCategory(ChannelCategory.PROM_LOGS2, `Removing Channel: ${channelId}`);
+    }
     const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
   }
 

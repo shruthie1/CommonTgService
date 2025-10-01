@@ -8,6 +8,8 @@ import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.s
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
+import { getBotsServiceInstance } from '../../utils';
+import { ChannelCategory } from '../bots';
 
 @Injectable()
 export class ActiveChannelsService {
@@ -36,9 +38,9 @@ export class ActiveChannelsService {
           filter: { channelId: dto.channelId },
           update: {
             $set: {
-                title: { $ifNull: [dto.title, "$title"] },
-                username: { $ifNull: [dto.username, "$username"] },
-                participantsCount: { $ifNull: [dto.participantsCount, "$participantsCount"] },
+              title: { $ifNull: [dto.title, "$title"] },
+              username: { $ifNull: [dto.username, "$username"] },
+              participantsCount: { $ifNull: [dto.participantsCount, "$participantsCount"] },
             },
             $setOnInsert: {
               channelId: dto.channelId,
@@ -93,6 +95,10 @@ export class ActiveChannelsService {
   }
 
   async remove(channelId: string): Promise<void> {
+    const botsService = getBotsServiceInstance();
+    if (botsService) {
+      botsService.sendMessageByCategory(ChannelCategory.PROM_LOGS2, `Removing Active Channel: ${channelId}`);
+    }
     const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
   }
 
