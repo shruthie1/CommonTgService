@@ -192,7 +192,7 @@ export class ChannelsService {
             canSendMsgs: true,
             // banned: false,
             restricted: false,
-            forbidden: false
+            // forbidden: false
           }
         ]
     }
