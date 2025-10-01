@@ -17,6 +17,8 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const channel_schema_1 = require("./schemas/channel.schema");
+const bots_1 = require("../bots");
+const utils_1 = require("../../utils");
 let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
@@ -72,6 +74,10 @@ let ChannelsService = class ChannelsService {
         return updatedChannel;
     }
     async remove(channelId) {
+        const botsService = (0, utils_1.getBotsServiceInstance)();
+        if (botsService) {
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing Channel: ${channelId}`);
+        }
         const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {

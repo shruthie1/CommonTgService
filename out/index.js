@@ -9653,6 +9653,8 @@ const active_channel_schema_1 = __webpack_require__(/*! ./schemas/active-channel
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let ActiveChannelsService = class ActiveChannelsService {
     constructor(activeChannelModel, promoteMsgsService) {
         this.activeChannelModel = activeChannelModel;
@@ -9717,6 +9719,10 @@ let ActiveChannelsService = class ActiveChannelsService {
         return await this.activeChannelModel.findOneAndUpdate({ channelId }, { $addToSet: { availableMsgs: msg } });
     }
     async remove(channelId) {
+        const botsService = (0, utils_1.getBotsServiceInstance)();
+        if (botsService) {
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing Active Channel: ${channelId}`);
+        }
         const result = await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {
@@ -15035,6 +15041,8 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./src/components/channels/schemas/channel.schema.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
@@ -15090,6 +15098,10 @@ let ChannelsService = class ChannelsService {
         return updatedChannel;
     }
     async remove(channelId) {
+        const botsService = (0, utils_1.getBotsServiceInstance)();
+        if (botsService) {
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing Channel: ${channelId}`);
+        }
         const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
     }
     async search(filter) {
