@@ -3548,10 +3548,6 @@ class TelegramManager {
         this.session = new sessions_1.StringSession(sessionString);
         this.phoneNumber = phoneNumber;
         this.client = null;
-        (0, utils_1.getCredentialsForMobile)(this.phoneNumber).then(tgCreds => {
-            this.apiHash = tgCreds.apiHash;
-            this.apiId = tgCreds.apiId;
-        });
     }
     static getActiveClientSetup() {
         return TelegramManager.activeClientSetup;
@@ -3784,6 +3780,9 @@ class TelegramManager {
         }
     }
     async createClient(handler = true, handlerFn) {
+        const tgCreds = await (0, utils_1.getCredentialsForMobile)(this.phoneNumber);
+        this.apiHash = tgCreds.apiHash;
+        this.apiId = tgCreds.apiId;
         const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber);
         await (0, withTimeout_1.withTimeout)(async () => {
             this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
@@ -8269,7 +8268,6 @@ const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../util
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
-        this.ongoingConnections = new Map();
         this.logger = new telegram_logger_1.TelegramLogger('ConnectionManager');
         this.cleanupTimer = null;
         this.usersService = null;
@@ -8303,11 +8301,6 @@ class ConnectionManager {
             }
         }
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
-        let ongoing = this.ongoingConnections.get(mobile);
-        if (ongoing && !forceReconnect) {
-            this.logger.info(mobile, 'Waiting for ongoing connection');
-            return await ongoing;
-        }
         const connectPromise = (async () => {
             try {
                 const existingClient = this.clients.get(mobile);
@@ -8328,11 +8321,7 @@ class ConnectionManager {
             catch (error) {
                 throw error;
             }
-            finally {
-                this.ongoingConnections.delete(mobile);
-            }
         })();
-        this.ongoingConnections.set(mobile, connectPromise);
         return await connectPromise;
     }
     async createNewClient(mobile, options) {
