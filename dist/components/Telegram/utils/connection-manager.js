@@ -17,6 +17,7 @@ const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentEr
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
+        this.ongoingConnections = new Map();
         this.logger = new telegram_logger_1.TelegramLogger('ConnectionManager');
         this.cleanupTimer = null;
         this.usersService = null;
@@ -50,20 +51,37 @@ class ConnectionManager {
             }
         }
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
-        const existingClient = this.clients.get(mobile);
-        if (existingClient && !forceReconnect) {
-            if (existingClient.state === 'connected' && this.isClientHealthy(existingClient)) {
-                this.updateLastUsed(mobile);
-                this.logger.info(mobile, 'Reusing healthy client');
-                return existingClient.client;
+        let ongoing = this.ongoingConnections.get(mobile);
+        if (ongoing && !forceReconnect) {
+            this.logger.info(mobile, 'Waiting for ongoing connection');
+            return await ongoing;
+        }
+        const connectPromise = (async () => {
+            try {
+                const existingClient = this.clients.get(mobile);
+                if (existingClient && !forceReconnect) {
+                    if (existingClient.state === 'connected' && this.isClientHealthy(existingClient)) {
+                        this.updateLastUsed(mobile);
+                        this.logger.info(mobile, 'Reusing healthy client');
+                        return existingClient.client;
+                    }
+                }
+                if (existingClient) {
+                    this.logger.info(mobile, 'Cleaning up old client');
+                    await this.unregisterClient(mobile);
+                    await (0, Helpers_1.sleep)(3000);
+                }
+                return await this.createNewClient(mobile, { autoDisconnect, handler });
             }
-        }
-        if (existingClient) {
-            this.logger.info(mobile, 'Cleaning up old client');
-            await this.unregisterClient(mobile);
-            await (0, Helpers_1.sleep)(3000);
-        }
-        return await this.createNewClient(mobile, { autoDisconnect, handler });
+            catch (error) {
+                throw error;
+            }
+            finally {
+                this.ongoingConnections.delete(mobile);
+            }
+        })();
+        this.ongoingConnections.set(mobile, connectPromise);
+        return await connectPromise;
     }
     async createNewClient(mobile, options) {
         if (!this.usersService) {

@@ -10,6 +10,7 @@ interface GetClientOptions {
 declare class ConnectionManager {
     private static instance;
     private clients;
+    private ongoingConnections;
     private logger;
     private cleanupTimer;
     private usersService;
