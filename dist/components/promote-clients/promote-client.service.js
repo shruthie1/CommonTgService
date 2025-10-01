@@ -752,6 +752,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
             const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
             this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\nClients Needing Promote Clients: ${clientNeedingPromoteClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
                 await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
             }

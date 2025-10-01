@@ -13561,6 +13561,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
         const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
         this.logger.debug(`Total active buffer clients: ${totalActiveBufferClients}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\nClients Needing Buffer Clients: ${clientNeedingBufferClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             await this.addNewUserstoBufferClients([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
@@ -13603,9 +13604,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
                 catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Privacy', true);
+                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Privacy: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during privacy update: ${error.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -13628,9 +13630,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                 }
                 catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, 'Error in Deleting Photos', true);
+                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Deleting Photos: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo deletion: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -13670,9 +13673,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                     }
                     catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Profile', true);
+                        const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile: ${doc.mobile}`, true);
                         if ((0, isPermanentError_1.default)(errorDetails)) {
-                            await this.markAsInactive(doc.mobile, `Rate limit hit during profile update: ${errorDetails.message}`);
+                            await this.markAsInactive(doc.mobile, errorDetails.message);
+                            return updateCount;
                         }
                     }
                 }
@@ -13691,9 +13695,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
                 catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Username', true);
+                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Username: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during username update: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -13725,9 +13730,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     }
                 }
                 catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, 'Error in Updating Profile Photos', true);
+                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, `Rate limit hit during photo update: ${errorDetails.message}`);
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
                     }
                 }
             }
@@ -22357,6 +22363,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
             const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
             this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\nClients Needing Promote Clients: ${clientNeedingPromoteClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
             if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
                 await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
             }
