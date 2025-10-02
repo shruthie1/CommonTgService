@@ -1084,7 +1084,7 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
+                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1116,7 +1116,7 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
                 doc.channels > 100 &&
-                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
+                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
 
@@ -1169,7 +1169,7 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
                 doc.channels > 150 &&
-                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
+                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
@@ -1193,7 +1193,7 @@ export class BufferClientService implements OnModuleDestroy {
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
                 doc.channels > 170 &&
-                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
+                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
                 updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
