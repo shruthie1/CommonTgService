@@ -62,6 +62,7 @@ const telegram_logger_1 = require("./utils/telegram-logger");
 const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 let TelegramService = class TelegramService {
@@ -116,6 +117,15 @@ let TelegramService = class TelegramService {
         }
         catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
+            if (error.toString().includes("No user has")) {
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
+                }));
+            }
+            await this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error;
         }
     }
