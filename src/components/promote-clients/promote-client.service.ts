@@ -290,7 +290,7 @@ export class PromoteClientService implements OnModuleDestroy {
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
             const mobile = client?.mobile;
-            this.logger.debug(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
+            this.logger.info(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
             try {
                 const telegramClient = await connectionManager.getClient(mobile, {
                     autoDisconnect: false,

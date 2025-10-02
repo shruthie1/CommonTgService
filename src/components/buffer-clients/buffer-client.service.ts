@@ -398,7 +398,7 @@ export class BufferClientService implements OnModuleDestroy {
             const mobile = client.mobile;
 
             try {
-                this.logger.debug(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
+                this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
 
                 const telegramClient = await connectionManager.getClient(mobile, {
                     autoDisconnect: false,
@@ -414,10 +414,7 @@ export class BufferClientService implements OnModuleDestroy {
                 );
 
                 const channels = await channelInfo(telegramClient.client, true);
-                this.logger.debug(
-                    `${mobile}: Found ${channels.ids.length} existing channels`,
-                );
-
+                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`,);
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
                 const errorDetails = parseError(error, `Failed to UpdatedClient: ${mobile}`);
