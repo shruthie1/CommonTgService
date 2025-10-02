@@ -525,10 +525,9 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.error(`Client not found: ${clientId}`);
             return;
         }
-        let telegramClient;
         try {
             this.lastUpdateMap.set(clientId, Date.now());
-            telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, { handler: false });
+            const telegramClient = await connection_manager_1.connectionManager.getClient(client.mobile, { handler: false });
             if (!telegramClient)
                 throw new Error(`Unable to fetch Telegram client for ${client.mobile}`);
             await (0, Helpers_1.sleep)(2000);
@@ -536,8 +535,8 @@ let ClientService = ClientService_1 = class ClientService {
             if (!me)
                 throw new Error(`Unable to fetch 'me' for ${clientId}`);
             await this.updateClientUsername(client, me);
-            await this.updateClientName(client, me);
-            await this.updateClientPrivacy(client);
+            await this.updateClientName(client, telegramClient, me);
+            await this.updateClientPrivacy(client, telegramClient);
             await this.updateClientPhotos(client, telegramClient);
             await this.notify(`Updated Client: ${clientId} - ${message}`);
             if (client.deployKey)
@@ -548,8 +547,7 @@ let ClientService = ClientService_1 = class ClientService {
             (0, parseError_1.parseError)(error, `[${clientId}] updateClient failed`);
         }
         finally {
-            if (telegramClient)
-                await connection_manager_1.connectionManager.unregisterClient(client.mobile);
+            await connection_manager_1.connectionManager.unregisterClient(client.mobile);
         }
     }
     canUpdateClient(clientId) {
@@ -581,7 +579,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.log(`[${client.clientId}] Username already correct`);
         }
     }
-    async updateClientName(client, me) {
+    async updateClientName(client, tgManager, me) {
         const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
         const safeAttemptReverse = (val) => {
             try {
@@ -595,7 +593,7 @@ let ClientService = ClientService_1 = class ClientService {
         const expectedName = normalize(client.name || '');
         if (actualName !== expectedName) {
             this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-            await client.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+            await tgManager.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
                 maintainFormatting: false,
                 preserveCase: true,
             }));
@@ -605,8 +603,8 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.log(`[${client.clientId}] Name already correct`);
         }
     }
-    async updateClientPrivacy(client) {
-        await client.updatePrivacy();
+    async updateClientPrivacy(client, tgManager) {
+        await tgManager.updatePrivacy();
         this.logger.log(`[${client.clientId}] Privacy settings updated`);
         await (0, Helpers_1.sleep)(5000);
     }
