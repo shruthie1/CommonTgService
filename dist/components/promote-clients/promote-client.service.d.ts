@@ -21,8 +21,8 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private sessionService;
     private readonly logger;
     private joinChannelMap;
-    private joinChannelIntervalId;
     private leaveChannelMap;
+    private joinChannelIntervalId;
     private leaveChannelIntervalId;
     private isLeaveChannelProcessing;
     private isJoinChannelProcessing;
@@ -40,6 +40,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private startMemoryCleanup;
     private clearMemoryCleanup;
     private performMemoryCleanup;
+    private trimMapIfNeeded;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;
@@ -57,6 +58,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearPromoteMap(): void;
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
+    private clearAllMapsAndIntervals;
     joinChannelQueue(): Promise<void>;
     private processJoinChannelInterval;
     private processJoinChannelSequentially;
@@ -67,6 +69,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private processLeaveChannelInterval;
     private processLeaveChannelSequentially;
     clearLeaveChannelInterval(): void;
+    private safeUnregisterClient;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
