@@ -283,7 +283,7 @@ export class BufferClientService implements OnModuleDestroy {
             await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`);
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         } catch (error) {
-            const errorDetails = parseError(error);
+            const errorDetails = parseError(error, `failed to delete BufferClient: ${mobile}`);
             this.logger.error(
                 `Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`,
             );
@@ -412,7 +412,7 @@ export class BufferClientService implements OnModuleDestroy {
 
                 await this.update(mobile, { channels: channels.ids.length });
             } catch (error) {
-                const errorDetails = parseError(error);
+                const errorDetails = parseError(error, `Failed to UpdatedClient: ${mobile}`);
                 if (isPermanentError(errorDetails)) {
                     try {
                         await this.markAsInactive(mobile, `${errorDetails.message}`);
@@ -544,7 +544,7 @@ export class BufferClientService implements OnModuleDestroy {
                 successCount++;
             } catch (error) {
                 failCount++;
-                const errorDetails = parseError(error);
+                const errorDetails = parseError(error, `JoinChannelErr: ${mobile}`);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
                 if (isPermanentError(errorDetails)) {
                     await this.markAsInactive(mobile, `${errorDetails.message}`);
@@ -922,7 +922,7 @@ export class BufferClientService implements OnModuleDestroy {
                     .findOneAndUpdate({ mobile: user.mobile }, { $set: bufferClient }, { new: true, upsert: true })
                     .exec();
             } catch (error) {
-                const errorDetails = parseError(error);
+                const errorDetails = parseError(error, `Failed to set as Buffer Client ${mobile}`);
                 throw new HttpException(errorDetails.message, errorDetails.status);
             }
             await connectionManager.unregisterClient(mobile);
@@ -1224,8 +1224,7 @@ export class BufferClientService implements OnModuleDestroy {
 
             return updateCount; // Return true if any updates were performed
         } catch (error: any) {
-            this.logger.error(`[BufferClientService] Error with client ${doc.mobile}: ${error.message}`);
-            const errorDetails = parseError(error);
+            const errorDetails = parseError(error, `Error with client ${doc.mobile}`);
             if (isPermanentError(errorDetails)) {
                 await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
             }
@@ -1389,8 +1388,7 @@ export class BufferClientService implements OnModuleDestroy {
                     this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
                     processedCount++;
                 } catch (error: any) {
-                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
-                    parseError(error);
+                    parseError(error, `Error processing client ${document.mobile}`);
                     processedCount++;
                 } finally {
                     try {
@@ -1400,8 +1398,7 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 }
             } catch (error: any) {
-                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
-                parseError(error);
+                parseError(error, `Error creating client connection for ${document.mobile}`);
             }
         }
 
@@ -1444,8 +1441,7 @@ export class BufferClientService implements OnModuleDestroy {
                         message: 'Session updated successfully',
                     });
                 } catch (error: any) {
-                    this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
-                    const errorDetails = parseError(error);
+                    const errorDetails = parseError(error, `Failed to create new session for ${bufferClient.mobile}`);
                     if (isPermanentError(errorDetails)) {
                         await this.update(bufferClient.mobile, {
                             status: 'inactive',

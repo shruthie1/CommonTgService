@@ -653,7 +653,7 @@ export class SessionService {
 
             // All strategies failed
             const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
-            parseError(finalError);
+            this.logger.warn(mobile, finalError)
             return {
                 success: false,
                 error: finalError,
@@ -661,7 +661,7 @@ export class SessionService {
             };
 
         } catch (error) {
-            parseError(error);
+            parseError(error, `Error While generating new Session`);
             return {
                 success: false,
                 error: error.message || 'Unexpected error',

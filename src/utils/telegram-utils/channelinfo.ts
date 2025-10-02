@@ -26,7 +26,7 @@ export async function channelInfo(client: TelegramClient, sendIds = false): Prom
                     canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
                 }
             } catch (error) {
-                parseError(error);
+                parseError(error, "Failed to Fetch Channel Info");
             }
         }
     }

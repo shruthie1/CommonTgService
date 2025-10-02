@@ -383,7 +383,7 @@ export class ActiveChannelsService {
   }
 
   private handleError(error: any, message: string): Error {
-    parseError(error);
+    parseError(error, message);
     if (error instanceof BadRequestException) {
       return error;
     }

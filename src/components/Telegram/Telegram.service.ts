@@ -268,7 +268,7 @@ export class TelegramService implements OnModuleDestroy {
             await telegramClient.set2fa();
             return '2Fa set successfully'
         } catch (error) {
-            const errorDetails = parseError(error)
+            const errorDetails = parseError(error, `Faile to Set 2FA: ${mobile}`)
             throw new HttpException(errorDetails.message, errorDetails.status)
         }
     }
@@ -301,7 +301,7 @@ export class TelegramService implements OnModuleDestroy {
             await sleep(1000);
             return 'Profile pic set successfully'
         } catch (error) {
-            const errorDetails = parseError(error)
+            const errorDetails = parseError(error, `Failed to Set Profile Pics: ${mobile}`)
             throw new HttpException(errorDetails.message, errorDetails.status)
         } finally {
             await connectionManager.unregisterClient(mobile);
@@ -316,7 +316,7 @@ export class TelegramService implements OnModuleDestroy {
             await telegramClient.updatePrivacy()
             return "Privacy updated successfully";
         } catch (error) {
-            const errorDetails = parseError(error)
+            const errorDetails = parseError(error, `Failed to Update Privacy`)
             throw new HttpException(errorDetails.message, errorDetails.status)
         }
     }
