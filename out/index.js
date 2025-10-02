@@ -13216,7 +13216,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             const client = clients[i];
             const mobile = client.mobile;
             try {
-                this.logger.debug(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
+                this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
                     autoDisconnect: false,
                     handler: false,
@@ -20367,7 +20367,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
             const mobile = client?.mobile;
-            this.logger.debug(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
+            this.logger.info(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
             try {
                 const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
                     autoDisconnect: false,
