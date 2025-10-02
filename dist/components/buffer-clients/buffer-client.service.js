@@ -282,6 +282,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
+                }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
