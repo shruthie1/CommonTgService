@@ -24,6 +24,7 @@ import { fetchNumbersFromString, shouldMatch } from '../../utils';
 import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
+import isPermanentError from 'src/utils/isPermanentError';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -98,7 +99,20 @@ export class TelegramService implements OnModuleDestroy {
             }
         } catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
-            // this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
+
+            //To check if Account is Frozen
+            if (error.toString().includes("No user has")) {
+                await telegramClient.client.invoke(
+                    new Api.account.SetPrivacy({
+                        key: new Api.InputPrivacyKeyPhoneCall(),
+                        rules: [
+                            new Api.InputPrivacyValueDisallowAll()
+                        ],
+                    })
+                );
+            }
+            
+            await this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error
         }
     };
@@ -119,6 +133,7 @@ export class TelegramService implements OnModuleDestroy {
             } catch (searchError) {
                 this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
             }
+
         } else if (error.errorMessage === "CHANNEL_PRIVATE") {
             await this.channelsService.update(channelId, { private: true })
             await this.activeChannelsService.update(channelId, { private: true });
