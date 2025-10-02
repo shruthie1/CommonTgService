@@ -26,7 +26,7 @@ async function channelInfo(client, sendIds = false) {
                 }
             }
             catch (error) {
-                (0, parseError_1.parseError)(error);
+                (0, parseError_1.parseError)(error, "Failed to Fetch Channel Info");
             }
         }
     }

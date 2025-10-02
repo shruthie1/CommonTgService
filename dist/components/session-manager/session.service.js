@@ -482,7 +482,7 @@ let SessionService = class SessionService {
                 this.logger.info(mobile, `Audit sessions failed: ${auditResult.error}`);
             }
             const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
-            (0, utils_1.parseError)(finalError);
+            this.logger.warn(mobile, finalError);
             return {
                 success: false,
                 error: finalError,
@@ -490,7 +490,7 @@ let SessionService = class SessionService {
             };
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, utils_1.parseError)(error, `Error While generating new Session`);
             return {
                 success: false,
                 error: error.message || 'Unexpected error',

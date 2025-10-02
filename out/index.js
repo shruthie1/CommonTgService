@@ -2932,7 +2932,7 @@ let TelegramService = class TelegramService {
             return '2Fa set successfully';
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Faile to Set 2FA: ${mobile}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
@@ -2961,7 +2961,7 @@ let TelegramService = class TelegramService {
             return 'Profile pic set successfully';
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to Set Profile Pics: ${mobile}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
@@ -2975,7 +2975,7 @@ let TelegramService = class TelegramService {
             return "Privacy updated successfully";
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to Update Privacy`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
@@ -9977,7 +9977,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     handleError(error, message) {
-        (0, parseError_1.parseError)(error);
+        (0, parseError_1.parseError)(error, message);
         if (error instanceof common_1.BadRequestException) {
             return error;
         }
@@ -13125,7 +13125,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `failed to delete BufferClient: ${mobile}`);
             this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
@@ -13217,7 +13217,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 await this.update(mobile, { channels: channels.ids.length });
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error, `Failed to UpdatedClient: ${mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     try {
                         await this.markAsInactive(mobile, `${errorDetails.message}`);
@@ -13324,7 +13324,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             catch (error) {
                 failCount++;
-                const errorDetails = (0, parseError_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
                 const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     await this.markAsInactive(mobile, `${errorDetails.message}`);
@@ -13641,7 +13641,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     .exec();
             }
             catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${mobile}`);
                 throw new common_1.HttpException(errorDetails.message, errorDetails.status);
             }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
@@ -13899,8 +13899,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return updateCount;
         }
         catch (error) {
-            this.logger.error(`[BufferClientService] Error with client ${doc.mobile}: ${error.message}`);
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Error with client ${doc.mobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
             }
@@ -14046,8 +14045,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     processedCount++;
                 }
                 catch (error) {
-                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`);
-                    (0, parseError_1.parseError)(error);
+                    (0, parseError_1.parseError)(error, `Error processing client ${document.mobile}`);
                     processedCount++;
                 }
                 finally {
@@ -14060,8 +14058,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
             }
             catch (error) {
-                this.logger.error(`Error creating client connection for ${document.mobile}: ${error.message}`);
-                (0, parseError_1.parseError)(error);
+                (0, parseError_1.parseError)(error, `Error creating client connection for ${document.mobile}`);
             }
         }
         this.logger.log(`✅ Batch completed: Created ${processedCount} new buffer clients (max ${totalNeeded} per trigger)`);
@@ -14104,8 +14101,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     });
                 }
                 catch (error) {
-                    this.logger.error(`Failed to create new session for ${bufferClient.mobile}: ${error.message}`);
-                    const errorDetails = (0, parseError_1.parseError)(error);
+                    const errorDetails = (0, parseError_1.parseError)(error, `Failed to create new session for ${bufferClient.mobile}`);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.update(bufferClient.mobile, {
                             status: 'inactive',
@@ -23738,7 +23734,7 @@ let SessionService = class SessionService {
                 this.logger.info(mobile, `Audit sessions failed: ${auditResult.error}`);
             }
             const finalError = 'All session creation strategies failed: old session, existing manager, and audit sessions';
-            (0, utils_1.parseError)(finalError);
+            this.logger.warn(mobile, finalError);
             return {
                 success: false,
                 error: finalError,
@@ -23746,7 +23742,7 @@ let SessionService = class SessionService {
             };
         }
         catch (error) {
-            (0, utils_1.parseError)(error);
+            (0, utils_1.parseError)(error, `Error While generating new Session`);
             return {
                 success: false,
                 error: error.message || 'Unexpected error',
@@ -30780,7 +30776,7 @@ async function channelInfo(client, sendIds = false) {
                 }
             }
             catch (error) {
-                (0, parseError_1.parseError)(error);
+                (0, parseError_1.parseError)(error, "Failed to Fetch Channel Info");
             }
         }
     }

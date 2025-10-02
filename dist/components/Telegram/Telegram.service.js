@@ -274,7 +274,7 @@ let TelegramService = class TelegramService {
             return '2Fa set successfully';
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Faile to Set 2FA: ${mobile}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
@@ -303,7 +303,7 @@ let TelegramService = class TelegramService {
             return 'Profile pic set successfully';
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to Set Profile Pics: ${mobile}`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
@@ -317,7 +317,7 @@ let TelegramService = class TelegramService {
             return "Privacy updated successfully";
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to Update Privacy`);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
     }
