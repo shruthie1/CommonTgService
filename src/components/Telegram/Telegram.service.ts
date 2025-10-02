@@ -98,7 +98,7 @@ export class TelegramService implements OnModuleDestroy {
             }
         } catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
-            this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
+            // this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
             throw error
         }
     };
