@@ -41,6 +41,8 @@ import path from 'path';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
 import { TelegramService } from '../Telegram/Telegram.service';
+import TelegramManager from '../Telegram/TelegramManager';
+import { User } from '../users';
 
 // Configuration constants
 const CONFIG = {
@@ -584,7 +586,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   private async archiveOldClient(
     existingClient: Client,
-    existingClientUser: any,
+    existingClientUser: User,
     existingMobile: string,
     days: number,
   ) {
@@ -628,17 +630,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.error(`Client not found: ${clientId}`);
       return;
     }
-    let telegramClient: any;
     try {
       this.lastUpdateMap.set(clientId, Date.now());
-      telegramClient = await connectionManager.getClient(client.mobile, { handler: false });
+      const telegramClient = await connectionManager.getClient(client.mobile, { handler: false });
       if (!telegramClient) throw new Error(`Unable to fetch Telegram client for ${client.mobile}`);
       await sleep(2000);
       const me = await telegramClient.getMe();
       if (!me) throw new Error(`Unable to fetch 'me' for ${clientId}`);
       await this.updateClientUsername(client, me);
-      await this.updateClientName(client, me);
-      await this.updateClientPrivacy(client);
+      await this.updateClientName(client, telegramClient, me);
+      await this.updateClientPrivacy(client, telegramClient);
       await this.updateClientPhotos(client, telegramClient);
       await this.notify(`Updated Client: ${clientId} - ${message}`);
       if (client.deployKey) await fetchWithTimeout(client.deployKey);
@@ -646,7 +647,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.lastUpdateMap.delete(clientId);
       parseError(error, `[${clientId}] updateClient failed`);
     } finally {
-      if (telegramClient) await connectionManager.unregisterClient(client.mobile);
+      await connectionManager.unregisterClient(client.mobile);
     }
   }
 
@@ -662,7 +663,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return true;
   }
 
-  private async updateClientUsername(client: Client, me: any) {
+  private async updateClientUsername(client: Client, me: Api.User) {
     const normalize = (str: string | null | undefined): string =>
       (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
     const actualUsername = normalize(me.username || '');
@@ -689,7 +690,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async updateClientName(client: Client, me: any) {
+  private async updateClientName(client: Client, tgManager: TelegramManager, me: Api.User) {
     const normalize = (str: string | null | undefined): string =>
       (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
     const safeAttemptReverse = (val: string | null | undefined): string => {
@@ -703,7 +704,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const expectedName = normalize(client.name || '');
     if (actualName !== expectedName) {
       this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-      await (client as any).updateProfile(
+      await tgManager.updateProfile(
         obfuscateText(client.name, { maintainFormatting: false, preserveCase: true }),
         obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
           maintainFormatting: false,
@@ -716,13 +717,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async updateClientPrivacy(client: Client) {
-    await (client as any).updatePrivacy();
+  private async updateClientPrivacy(client: Client, tgManager: TelegramManager) {
+    await tgManager.updatePrivacy();
     this.logger.log(`[${client.clientId}] Privacy settings updated`);
     await sleep(5000);
   }
 
-  private async updateClientPhotos(client: Client, telegramClient: any) {
+  private async updateClientPhotos(client: Client, telegramClient: TelegramManager) {
     const photos = await telegramClient.client.invoke(
       new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }),
     );
