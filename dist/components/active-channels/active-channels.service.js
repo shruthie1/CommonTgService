@@ -338,7 +338,7 @@ let ActiveChannelsService = class ActiveChannelsService {
         }
     }
     handleError(error, message) {
-        (0, parseError_1.parseError)(error);
+        (0, parseError_1.parseError)(error, message);
         if (error instanceof common_1.BadRequestException) {
             return error;
         }
