@@ -36,6 +36,7 @@ import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { getProfilePics } from '../Telegram/utils/getProfilePics';
 import { deleteProfilePhotos } from '../Telegram/utils/deleteProfilePics';
 import isPermanentError from '../../utils/isPermanentError';
+import { Api } from 'telegram';
 
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
@@ -295,6 +296,14 @@ export class PromoteClientService implements OnModuleDestroy {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(
+                    new Api.account.SetPrivacy({
+                        key: new Api.InputPrivacyKeyPhoneCall(),
+                        rules: [
+                            new Api.InputPrivacyValueDisallowAll()
+                        ],
+                    })
+                );
                 const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });

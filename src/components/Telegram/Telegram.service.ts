@@ -103,8 +103,11 @@ export class TelegramService implements OnModuleDestroy {
             //To check if Account is Frozen
             if (error.toString().includes("No user has")) {
                 await telegramClient.client.invoke(
-                    new Api.account.UpdateProfile({
-                        lastName: ""
+                    new Api.account.SetPrivacy({
+                        key: new Api.InputPrivacyKeyPhoneCall(),
+                        rules: [
+                            new Api.InputPrivacyValueDisallowAll()
+                        ],
                     })
                 );
             }

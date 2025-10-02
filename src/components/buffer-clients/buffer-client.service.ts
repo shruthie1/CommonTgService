@@ -404,6 +404,14 @@ export class BufferClientService implements OnModuleDestroy {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(
+                    new Api.account.SetPrivacy({
+                        key: new Api.InputPrivacyKeyPhoneCall(),
+                        rules: [
+                            new Api.InputPrivacyValueDisallowAll()
+                        ],
+                    })
+                );
 
                 const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(
