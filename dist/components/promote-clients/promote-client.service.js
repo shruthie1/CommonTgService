@@ -38,6 +38,7 @@ const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const getProfilePics_1 = require("../Telegram/utils/getProfilePics");
 const deleteProfilePics_1 = require("../Telegram/utils/deleteProfilePics");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
+const telegram_1 = require("telegram");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -245,6 +246,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
+                }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });

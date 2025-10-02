@@ -118,8 +118,11 @@ let TelegramService = class TelegramService {
         catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
             if (error.toString().includes("No user has")) {
-                await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({
-                    lastName: ""
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
                 }));
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);

@@ -2776,8 +2776,11 @@ let TelegramService = class TelegramService {
         catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
             if (error.toString().includes("No user has")) {
-                await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({
-                    lastName: ""
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
                 }));
             }
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);
@@ -13218,6 +13221,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
+                }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
@@ -20158,6 +20167,7 @@ const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel
 const getProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/getProfilePics */ "./src/components/Telegram/utils/getProfilePics.ts");
 const deleteProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/deleteProfilePics */ "./src/components/Telegram/utils/deleteProfilePics.ts");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
         this.promoteClientModel = promoteClientModel;
@@ -20365,6 +20375,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     autoDisconnect: false,
                     handler: false,
                 });
+                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                    rules: [
+                        new telegram_1.Api.InputPrivacyValueDisallowAll()
+                    ],
+                }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                 await this.update(mobile, { channels: channels.ids.length });
