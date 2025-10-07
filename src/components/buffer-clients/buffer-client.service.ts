@@ -256,13 +256,13 @@ export class BufferClientService implements OnModuleDestroy {
             await this.bufferClientModel.findOne({ mobile }).exec()
         )?.toJSON();
         if (existingBufferClient) {
-            this.logger.log('Updating');
+            this.logger.log('Updating existing Client');
             return this.update(
                 existingBufferClient.mobile,
                 createorUpdateBufferClientDto as UpdateBufferClientDto,
             );
         } else {
-            this.logger.log('creating');
+            this.logger.log('creating new Client');
             // Ensure status is set to 'active' by default if not provided
             return this.create({
                 ...createorUpdateBufferClientDto,

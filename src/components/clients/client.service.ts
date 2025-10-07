@@ -556,23 +556,27 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     archiveOld: boolean,
     days: number,
   ) {
-    const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-    if (!existingClientUser) return;
-    if (toBoolean(formalities)) {
-      await this.handleFormalities(existingMobile);
-    } else {
-      this.logger.log('Formalities skipped');
-    }
-    if (archiveOld) {
-      await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
-    } else {
-      await this.bufferClientService.update(existingMobile, {
-        inUse: false,
-        lastUsed: new Date(),
-        status: 'inactive',
-      });
-      this.logger.log('Client Archive Skipped');
-      await this.notify('Skipped Old Client Archival');
+    try {
+      const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
+      if (!existingClientUser) return;
+      if (toBoolean(formalities)) {
+        await this.handleFormalities(existingMobile);
+      } else {
+        this.logger.log('Formalities skipped');
+      }
+      if (archiveOld) {
+        await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
+      } else {
+        await this.bufferClientService.update(existingMobile, {
+          inUse: false,
+          lastUsed: new Date(),
+          status: 'inactive',
+        });
+        this.logger.log('Client Archive Skipped');
+        await this.notify('Skipped Old Client Archival');
+      }
+    } catch (e) {
+      await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
     }
   }
 
