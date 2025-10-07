@@ -13112,11 +13112,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     async createOrUpdate(mobile, createorUpdateBufferClientDto) {
         const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingBufferClient) {
-            this.logger.log('Updating');
+            this.logger.log('Updating existing Client');
             return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto);
         }
         else {
-            this.logger.log('creating');
+            this.logger.log('creating new Client');
             return this.create({
                 ...createorUpdateBufferClientDto,
                 status: createorUpdateBufferClientDto.status || 'active',
@@ -16584,26 +16584,31 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days) {
-        const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-        if (!existingClientUser)
-            return;
-        if ((0, utils_1.toBoolean)(formalities)) {
-            await this.handleFormalities(existingMobile);
+        try {
+            const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
+            if (!existingClientUser)
+                return;
+            if ((0, utils_1.toBoolean)(formalities)) {
+                await this.handleFormalities(existingMobile);
+            }
+            else {
+                this.logger.log('Formalities skipped');
+            }
+            if (archiveOld) {
+                await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
+            }
+            else {
+                await this.bufferClientService.update(existingMobile, {
+                    inUse: false,
+                    lastUsed: new Date(),
+                    status: 'inactive',
+                });
+                this.logger.log('Client Archive Skipped');
+                await this.notify('Skipped Old Client Archival');
+            }
         }
-        else {
-            this.logger.log('Formalities skipped');
-        }
-        if (archiveOld) {
-            await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
-        }
-        else {
-            await this.bufferClientService.update(existingMobile, {
-                inUse: false,
-                lastUsed: new Date(),
-                status: 'inactive',
-            });
-            this.logger.log('Client Archive Skipped');
-            await this.notify('Skipped Old Client Archival');
+        catch (e) {
+            await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
         }
     }
     async handleFormalities(mobile) {
