@@ -10,11 +10,11 @@ function isPermanentError(errorDetails) {
         'USER_DEACTIVATED_BAN',
         'FROZEN_METHOD_INVALID',
     ];
-    if ((0, common_1.contains)(errorDetails.message, permanentErrors)) {
+    if ((0, common_1.contains)(errorDetails.message, permanentErrors) && !(0, common_1.contains)(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
         return true;
     }
     const rawMessage = errorDetails.error?.message || errorDetails.error?.errorMessage;
-    if ((0, common_1.contains)(rawMessage, permanentErrors)) {
+    if ((0, common_1.contains)(rawMessage, permanentErrors) && !(0, common_1.contains)(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
         return true;
     }
     return false;
