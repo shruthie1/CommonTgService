@@ -39,10 +39,27 @@ export class PromoteClient {
 
   @Prop({ required: false, type: Date, default: null })
   lastUsed: Date;
+  
+ @Prop({ required: false, type: Date, default: null })
+  privacyUpdatedAt: Date;
 
-  createdAt?: Date;
+  @Prop({ required: false, type: Date, default: null })
+  profilePicsUpdatedAt: Date;
 
-  updatedAt?: Date;
+  @Prop({ required: false, type: Date, default: null })
+  nameBioUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  profilePicsDeletedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  usernameUpdatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  createdAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  updatedAt: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);

@@ -30,13 +30,17 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { Logger } from '../../utils';
+import { attemptReverseFuzzy, Logger, obfuscateText } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { getProfilePics } from '../Telegram/utils/getProfilePics';
 import { deleteProfilePhotos } from '../Telegram/utils/deleteProfilePics';
 import isPermanentError from '../../utils/isPermanentError';
 import { Api } from 'telegram';
+import { Client } from '../clients/schemas/client.schema';
+import TelegramManager from '../Telegram/TelegramManager';
+import { CloudinaryService } from '../../cloudinary';
+import path from 'path';
 
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
@@ -778,6 +782,220 @@ export class PromoteClientService implements OnModuleDestroy {
         }
     }
 
+    async processBufferClient(doc: PromoteClient, client: Client): Promise<number> {
+        let cli: TelegramManager;
+        let updateCount = 0; // Track number of updates performed
+        const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
+
+        try {
+            // Random initial delay to avoid patterned client connections
+            await sleep(10000 + Math.random() * 5000); // 10-15s
+
+            cli = await connectionManager.getClient(doc.mobile, {
+                autoDisconnect: true,
+                handler: false,
+            });
+
+            // Check if account is at risk of rate-limiting
+            const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
+            const now = Date.now();
+            if (lastUsed && now - lastUsed < 30 * 60 * 1000) { // 30-minute cooldown
+                this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
+                return 0;
+            }
+
+            const me = await cli.getMe();
+            await sleep(5000 + Math.random() * 10000); // 5-15s delay after getting user info
+
+            // Privacy update for accounts older than 1 day
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
+                (!doc.privacyUpdatedAt || doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
+                try {
+                    await cli.updatePrivacyforDeletedAccount();
+                    await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
+                    updateCount++;
+                    this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
+                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                } catch (error: any) {
+                    const errorDetails = parseError(error, `Error in Updating Privacy: ${doc.mobile}`, true);
+                    if (isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
+                    }
+                }
+            }
+
+            // Delete profile photos for accounts 2+ days old
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
+                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
+                try {
+                    const photos = await cli.client.invoke(
+                        new Api.photos.GetUserPhotos({
+                            userId: 'me',
+                            offset: 0,
+                        })
+                    );
+                    if (photos.photos.length > 0) {
+                        await cli.deleteProfilePhotos();
+                        await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
+                        updateCount++;
+                        this.logger.debug(`[BufferClientService] Deleted profile photos for ${doc.mobile}`);
+                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                    }
+                } catch (error: any) {
+                    const errorDetails = parseError(error, `Error in Deleting Photos: ${doc.mobile}`, true);
+                    if (isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
+                    }
+                }
+            }
+
+            // Update name and bio for accounts older than 3 days with 100+ channels
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
+                doc.channels > 100 &&
+                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
+
+                const normalizeString = (str: string | null | undefined): string => {
+                    return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+                };
+
+                const safeAttemptReverse = (val: string | null | undefined): string => {
+                    try {
+                        return attemptReverseFuzzy(val ?? '') || '';
+                    } catch {
+                        return '';
+                    }
+                };
+
+                const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
+                const expectedName = normalizeString(client.name || '');
+
+                if (actualName !== expectedName) {
+                    try {
+                        this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                        await cli.updateProfile(
+                            obfuscateText(client.name, {
+                                maintainFormatting: false,
+                                preserveCase: true,
+                                useInvisibleChars: false
+                            }),
+                            ''
+                            // obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
+                            //     maintainFormatting: false,
+                            //     preserveCase: true,
+                            // })
+                        );
+                        await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
+                        updateCount++;
+                        this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
+                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                    } catch (error: any) {
+                        const errorDetails = parseError(error, `Error in Updating Profile: ${doc.mobile}`, true);
+                        if (isPermanentError(errorDetails)) {
+                            await this.markAsInactive(doc.mobile, errorDetails.message);
+                            return updateCount;
+                        }
+                    }
+                }
+            }
+
+            // Update username for accounts older than 7 days with 150+ channels
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
+                doc.channels > 150 &&
+                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
+                try {
+                    await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+                    await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
+                    updateCount++;
+                    this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
+                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                } catch (error: any) {
+                    const errorDetails = parseError(error, `Error in Updating Username: ${doc.mobile}`, true);
+                    if (isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
+                    }
+                }
+            }
+
+            // Add profile photos for accounts older than 10 days with no photos
+            if (
+                doc.createdAt &&
+                doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
+                doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
+                doc.channels > 170 &&
+                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
+                updateCount < MAX_UPDATES_PER_RUN
+            ) {
+                try {
+                    const rootPath = process.cwd();
+                    const photos = await cli.client.invoke(
+                        new Api.photos.GetUserPhotos({
+                            userId: 'me',
+                            offset: 0,
+                        })
+                    );
+                    if (photos.photos.length < 1) {
+                        await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                        await sleep(6000 + Math.random() * 3000); // 6-9s delay
+                        // Add new profile photos with staggered delays
+                        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+                        for (const photo of photoPaths) {
+                            if (updateCount >= MAX_UPDATES_PER_RUN) break;
+                            await cli.updateProfilePic(path.join(rootPath, photo));
+                            updateCount++;
+                            this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${doc.mobile}`);
+                            await sleep(20000 + Math.random() * 15000); // 20-35s delay per photo
+                        }
+                        await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
+                    }
+                } catch (error: any) {
+                    const errorDetails = parseError(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
+                    if (isPermanentError(errorDetails)) {
+                        await this.markAsInactive(doc.mobile, errorDetails.message);
+                        return updateCount;
+                    }
+                }
+            }
+
+            return updateCount; // Return true if any updates were performed
+        } catch (error: any) {
+            const errorDetails = parseError(error, `Error with client ${doc.mobile}`);
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
+            }
+            return 0; // Return false on error
+        } finally {
+            try {
+                if (cli) await connectionManager.unregisterClient(doc.mobile);
+            } catch (unregisterError: any) {
+                this.logger.error(`[BufferClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+            }
+            await sleep(10000 + Math.random() * 5000); // 10-15s final delay
+        }
+    }
+
     async checkPromoteClients() {
         if (this.telegramService.getActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
@@ -816,6 +1034,20 @@ export class PromoteClientService implements OnModuleDestroy {
 
         const clientNeedingPromoteClients: string[] = [];
         let totalSlotsNeeded = 0;
+
+        let totalUpdates = 0;
+        for (const result of promoteClientCounts) {
+            promoteClientsPerClient.set(result._id, result.count);
+            if (totalUpdates < 5) {
+                for (const promoteClientMobile of result.mobiles) {
+                    const promoteClient = await this.findOne(promoteClientMobile);
+                    const client = clients.find((c) => c.clientId === result._id);
+                    totalUpdates += await this.processBufferClient(promoteClient, client);
+                }
+            } else {
+                this.logger.warn(`Skipping buffer client ${result.mobiles.join(', ')} as total updates reached 5`);
+            }
+        }
 
         for (const client of clients) {
             const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
