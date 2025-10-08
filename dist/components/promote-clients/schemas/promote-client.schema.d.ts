@@ -10,8 +10,13 @@ export declare class PromoteClient {
     status: string;
     message: string;
     lastUsed: Date;
-    createdAt?: Date;
-    updatedAt?: Date;
+    privacyUpdatedAt: Date;
+    profilePicsUpdatedAt: Date;
+    nameBioUpdatedAt: Date;
+    profilePicsDeletedAt: Date;
+    usernameUpdatedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
 }
 export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClient, import("mongoose").Model<PromoteClient, any, any, any, Document<unknown, any, PromoteClient, any, {}> & PromoteClient & {
     _id: import("mongoose").Types.ObjectId;

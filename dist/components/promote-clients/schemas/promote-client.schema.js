@@ -50,6 +50,34 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUsed", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "privacyUpdatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "profilePicsUpdatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "nameBioUpdatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "profilePicsDeletedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "usernameUpdatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "createdAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "updatedAt", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'promoteClients', versionKey: false, autoIndex: true,

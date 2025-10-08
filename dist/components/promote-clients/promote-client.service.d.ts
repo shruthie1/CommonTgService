@@ -10,6 +10,7 @@ import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { SessionService } from '../session-manager';
+import { Client } from '../clients/schemas/client.schema';
 export declare class PromoteClientService implements OnModuleDestroy {
     private promoteClientModel;
     private telegramService;
@@ -71,6 +72,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     private safeUnregisterClient;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
+    processBufferClient(doc: PromoteClient, client: Client): Promise<number>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
     private clearAllTimeouts;
