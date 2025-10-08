@@ -24,7 +24,7 @@ import { fetchNumbersFromString, shouldMatch } from '../../utils';
 import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
-import isPermanentError from 'src/utils/isPermanentError';
+import isPermanentError from '../../utils/isPermanentError';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
