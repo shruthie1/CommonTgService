@@ -533,7 +533,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingClient.name,
         me.username,
       );
-      await this.notify(`Updated username for NewNumber: ${newMobile}\nNewUsername: ${updatedUsername}`);
+      await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: ${me.username}\nNewUsername: ${updatedUsername}`);
       await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
       setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
