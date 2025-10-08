@@ -447,7 +447,7 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify('Update finished');
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, 'Error in updating client session', true);
+            (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
             throw error;
         }
         finally {
@@ -549,7 +549,7 @@ let ClientService = ClientService_1 = class ClientService {
         }
         catch (error) {
             this.lastUpdateMap.delete(clientId);
-            (0, parseError_1.parseError)(error, `[${clientId}] updateClient failed`);
+            (0, parseError_1.parseError)(error, `[${clientId}] [${client.mobile}] updateClient failed`);
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(client.mobile);
