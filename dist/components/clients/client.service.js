@@ -438,7 +438,7 @@ let ClientService = ClientService_1 = class ClientService {
         try {
             const me = await newTelegramClient.getMe();
             const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
-            await this.notify(`Updated username for NewNumber: ${newMobile}\nNewUsername: ${updatedUsername}`);
+            await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: ${me.username}\nNewUsername: ${updatedUsername}`);
             await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
