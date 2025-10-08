@@ -10,13 +10,13 @@ export default function isPermanentError(errorDetails: { error?: any, message: s
   ];
 
   // Check the parsed message
-  if (contains(errorDetails.message, permanentErrors)) {
+  if (contains(errorDetails.message, permanentErrors) && !contains(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
     return true;
   }
 
   // Check raw error message (with proper optional chaining)
   const rawMessage = errorDetails.error?.message || errorDetails.error?.errorMessage;
-  if (contains(rawMessage, permanentErrors)) {
+  if (contains(rawMessage, permanentErrors) && !contains(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
     return true;
   }
 
