@@ -14710,10 +14710,6 @@ exports.BufferClient = BufferClient = __decorate([
     })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
-exports.BufferClientSchema.index({ clientId: 1 }, {
-    unique: true,
-    partialFilterExpression: { inUse: true }
-});
 
 
 /***/ }),
