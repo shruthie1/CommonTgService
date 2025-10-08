@@ -16523,6 +16523,7 @@ let ClientService = ClientService_1 = class ClientService {
             createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
             availableDate: { $lte: today },
             channels: { $gt: 200 },
+            status: "active"
         };
         const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
         if (!newBufferClient) {
