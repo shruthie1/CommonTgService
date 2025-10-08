@@ -72,10 +72,10 @@ export class BufferClient {
 }
 
 export const BufferClientSchema = SchemaFactory.createForClass(BufferClient);
-BufferClientSchema.index(
-  { clientId: 1 }, // apply uniqueness based on clientId
-  { 
-    unique: true, 
-    partialFilterExpression: { inUse: true } // only enforce when inUse = true
-  }
-);
+// BufferClientSchema.index(
+//   { clientId: 1 }, // apply uniqueness based on clientId
+//   { 
+//     unique: true, 
+//     partialFilterExpression: { inUse: true } // only enforce when inUse = true
+//   }
+// );
