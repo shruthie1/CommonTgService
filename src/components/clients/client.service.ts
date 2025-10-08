@@ -541,7 +541,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
       await this.notify('Update finished');
     } catch (error) {
-      parseError(error, 'Error in updating client session', true);
+      parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
       throw error;
     } finally {
       await connectionManager.unregisterClient(newMobile);
@@ -649,7 +649,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (client.deployKey) await fetchWithTimeout(client.deployKey);
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
-      parseError(error, `[${clientId}] updateClient failed`);
+      parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
     } finally {
       await connectionManager.unregisterClient(client.mobile);
     }
