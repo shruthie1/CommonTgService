@@ -87,6 +87,33 @@ let TimestampService = class TimestampService {
         }
         return updatedTimestamp;
     }
+    async clear() {
+        const timestamp = await this.timestampModel.findOne({}).lean().exec();
+        if (!timestamp) {
+            const created = await this.timestampModel.create({});
+            const createdObj = created.toObject ? created.toObject() : { ...created };
+            if (createdObj._id) {
+                delete createdObj._id;
+            }
+            return createdObj;
+        }
+        const keys = Object.keys(timestamp).filter(k => k !== '_id');
+        if (keys.length === 0) {
+            const copy = { ...timestamp };
+            if (copy._id)
+                delete copy._id;
+            return copy;
+        }
+        const unsetObj = {};
+        for (const k of keys) {
+            unsetObj[k] = "";
+        }
+        await this.timestampModel.updateOne({}, { $unset: unsetObj }).exec();
+        const updated = await this.timestampModel.findOne({}).lean().exec();
+        if (updated && updated._id)
+            delete updated._id;
+        return updated || {};
+    }
 };
 exports.TimestampService = TimestampService;
 exports.TimestampService = TimestampService = __decorate([

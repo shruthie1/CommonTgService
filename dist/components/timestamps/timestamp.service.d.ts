@@ -9,4 +9,5 @@ export declare class TimestampService {
     getTimeDifferences(threshold?: number): Promise<any>;
     getClientsWithTimeDifference(threshold?: number): Promise<any[]>;
     update(updateTimestampDto: any): Promise<any>;
+    clear(): Promise<any>;
 }
