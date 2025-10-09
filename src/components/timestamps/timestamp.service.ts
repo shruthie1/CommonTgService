@@ -102,4 +102,44 @@ export class TimestampService {
 
         return updatedTimestamp;
     }
+
+    /**
+     * Clears the timestamp document by removing all fields except `_id`.
+     * If no document exists, creates an empty one and returns it.
+     */
+    async clear(): Promise<any> {
+        const timestamp = await this.timestampModel.findOne({}).lean().exec();
+
+        // If there's no document, create an empty one
+        if (!timestamp) {
+            const created = await this.timestampModel.create({});
+            const createdObj = created.toObject ? created.toObject() : { ...created };
+            if (createdObj._id) {
+                delete createdObj._id;
+            }
+            return createdObj;
+        }
+
+        // Determine keys to unset (exclude _id)
+        const keys = Object.keys(timestamp).filter(k => k !== '_id');
+
+        if (keys.length === 0) {
+            const copy = { ...timestamp };
+            if (copy._id) delete copy._id;
+            return copy;
+        }
+
+        const unsetObj: any = {};
+        for (const k of keys) {
+            unsetObj[k] = ""; // value ignored by $unset
+        }
+
+        await this.timestampModel.updateOne({}, { $unset: unsetObj }).exec();
+
+        const updated = await this.timestampModel.findOne({}).lean().exec();
+        if (updated && updated._id) delete updated._id;
+        return updated || {};
+    }
+
+
 }
