@@ -16606,6 +16606,10 @@ let ClientService = ClientService_1 = class ClientService {
             }
         }
         catch (e) {
+            const errorDetails = (0, parseError_1.parseError)(e, `Error in Archiving Old Client: ${existingMobile}`, false);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.bufferClientService.markAsInactive(existingMobile, e.errorMessage || e.message);
+            }
             await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
         }
     }
@@ -16640,7 +16644,7 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify(errorDetails.message);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 this.logger.log('Deleting User: ', existingClientUser.mobile);
-                await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
+                await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
             }
             else {
                 this.logger.log('Not Deleting user');
@@ -16676,6 +16680,7 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             this.lastUpdateMap.delete(clientId);
             (0, parseError_1.parseError)(error, `[${clientId}] [${client.mobile}] updateClient failed`);
+            this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(client.mobile);
