@@ -577,6 +577,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.notify('Skipped Old Client Archival');
       }
     } catch (e) {
+      const errorDetails = parseError(e, `Error in Archiving Old Client: ${existingMobile}`, false);
+      if (isPermanentError(errorDetails)) {
+        await this.bufferClientService.markAsInactive(existingMobile, e.errorMessage || e.message);
+      }
       await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
     }
   }
@@ -620,7 +624,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.notify(errorDetails.message);
       if (isPermanentError(errorDetails)) {
         this.logger.log('Deleting User: ', existingClientUser.mobile);
-        await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
+        await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
+        // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
         this.logger.log('Not Deleting user');
       }
@@ -651,6 +656,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
       parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
+      this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
     } finally {
       await connectionManager.unregisterClient(client.mobile);
     }
