@@ -93,9 +93,9 @@ export class TelegramService implements OnModuleDestroy {
                 //     this.logger.debug(mobile, "Failed to update ActiveChannels");
                 // }
             } else {
-                await this.channelsService.remove(chatEntity.channelId);
-                await this.activeChannelsService.remove(chatEntity.channelId);
-                this.logger.debug(mobile, `Removed Channel: `, `@${chatEntity.username}`);
+                // await this.channelsService.remove(chatEntity.channelId);
+                // await this.activeChannelsService.remove(chatEntity.channelId);
+                // this.logger.debug(mobile, `Removed Channel: `, `@${chatEntity.username}`);
             }
         } catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
@@ -119,20 +119,20 @@ export class TelegramService implements OnModuleDestroy {
 
     async removeChannels(error: any, channelId: string, username: string, mobile: string) {
         if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
-            try {
-                if (channelId) {
-                    await this.channelsService.remove(channelId)
-                    await this.activeChannelsService.remove(channelId);
-                    this.logger.debug(mobile, `Removed Channel:  [${channelId}]`);
-                } else {
-                    const channelDetails = (await this.channelsService.search({ username: username }))[0];
-                    await this.channelsService.remove(channelDetails.channelId)
-                    await this.activeChannelsService.remove(channelDetails.channelId);
-                    this.logger.debug(mobile, `Removed Channel: [${channelDetails.channelId}]`);
-                }
-            } catch (searchError) {
-                this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
-            }
+            // try {
+            //     if (channelId) {
+            //         await this.channelsService.remove(channelId)
+            //         await this.activeChannelsService.remove(channelId);
+            //         this.logger.debug(mobile, `Removed Channel:  [${channelId}]`);
+            //     } else {
+            //         const channelDetails = (await this.channelsService.search({ username: username }))[0];
+            //         await this.channelsService.remove(channelDetails.channelId)
+            //         await this.activeChannelsService.remove(channelDetails.channelId);
+            //         this.logger.debug(mobile, `Removed Channel: [${channelDetails.channelId}]`);
+            //     }
+            // } catch (searchError) {
+            //     this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
+            // }
 
         } else if (error.errorMessage === "CHANNEL_PRIVATE") {
             await this.channelsService.update(channelId, { private: true })
