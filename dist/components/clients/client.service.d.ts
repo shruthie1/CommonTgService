@@ -53,7 +53,6 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     search(filter: any): Promise<Client[]>;
     searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]>;
     enhancedSearch(filter: any): Promise<SearchResult>;
-    private handleErrors;
     private ensureInitialized;
     private cleanUpdateObject;
     private notifyClientUpdate;

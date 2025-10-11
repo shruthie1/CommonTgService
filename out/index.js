@@ -16170,15 +16170,18 @@ let ClientService = ClientService_1 = class ClientService {
         this.refreshPromise = null;
     }
     async onModuleInit() {
-        await this.handleErrors('initialize service', async () => {
+        try {
             await this.refreshCacheFromDatabase();
             this.startPeriodicTasks();
             this.isInitialized = true;
-        });
+        }
+        catch (e) {
+            (0, parseError_1.parseError)(e, 'Failed to initialize Client Service');
+        }
     }
     async onModuleDestroy() {
         this.isShuttingDown = true;
-        await this.handleErrors('shutdown service', async () => {
+        try {
             if (this.checkInterval)
                 clearInterval(this.checkInterval);
             if (this.refreshInterval)
@@ -16187,7 +16190,10 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.refreshPromise;
             await connection_manager_1.connectionManager.shutdown();
             this.clientsMap.clear();
-        });
+        }
+        catch (e) {
+            (0, parseError_1.parseError)(e, 'Error during Client Service shutdown');
+        }
     }
     startPeriodicTasks() {
         this.checkInterval = setInterval(async () => {
@@ -16218,16 +16224,19 @@ let ClientService = ClientService_1 = class ClientService {
         this.cacheMetadata.isStale = Date.now() - this.cacheMetadata.lastUpdated > CONFIG.CACHE_TTL;
     }
     async refreshCacheFromDatabase() {
-        await this.handleErrors('refresh cache', async () => {
+        try {
             const documents = await this.executeWithRetry(() => this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec());
             const newClientsMap = new Map();
             documents.forEach((client) => newClientsMap.set(client.clientId, client));
             this.clientsMap = newClientsMap;
             this.cacheMetadata = { lastUpdated: Date.now(), isStale: false };
-        });
+        }
+        catch (e) {
+            (0, parseError_1.parseError)(e, 'Failed to refresh clients cache from database', true);
+        }
     }
     async create(createClientDto) {
-        return this.handleErrors('create client', async () => {
+        try {
             const createdClient = await this.executeWithRetry(() => {
                 const client = new this.clientModel(createClientDto);
                 return client.save();
@@ -16235,7 +16244,11 @@ let ClientService = ClientService_1 = class ClientService {
             this.clientsMap.set(createdClient.clientId, createdClient.toObject());
             this.logger.log(`Client created: ${createdClient.clientId}`);
             return createdClient;
-        });
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to create client | mobile: ${createClientDto.mobile}`);
+            throw new common_1.BadRequestException(errorDetails.message);
+        }
     }
     async findAll() {
         this.ensureInitialized();
@@ -16290,7 +16303,7 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async update(clientId, updateClientDto) {
         this.ensureInitialized();
-        return this.handleErrors(`update client ${clientId}`, async () => {
+        try {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
             await this.notifyClientUpdate(clientId);
             const updatedClient = await this.executeWithRetry(() => this.clientModel
@@ -16304,11 +16317,15 @@ let ClientService = ClientService_1 = class ClientService {
             this.performPostUpdateTasks(updatedClient);
             this.logger.log(`Client updated: ${clientId}`);
             return updatedClient;
-        });
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to update client ${clientId} | mobile: ${updateClientDto.mobile || 'N/A'}`);
+            throw new common_1.BadRequestException(errorDetails.message);
+        }
     }
     async remove(clientId) {
         this.ensureInitialized();
-        return this.handleErrors(`remove client ${clientId}`, async () => {
+        try {
             const deletedClient = await this.executeWithRetry(() => this.clientModel.findOneAndDelete({ clientId }).lean().exec());
             if (!deletedClient) {
                 throw new common_1.NotFoundException(`Client with ID "${clientId}" not found`);
@@ -16316,16 +16333,26 @@ let ClientService = ClientService_1 = class ClientService {
             this.clientsMap.delete(clientId);
             this.logger.log(`Client removed: ${clientId}`);
             return deletedClient;
-        });
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to remove client ${clientId}`);
+            throw new common_1.InternalServerErrorException(errorDetails.message);
+        }
+        // removed by dead control flow
+
     }
     async search(filter) {
-        return this.handleErrors('search clients', async () => {
+        try {
             if (filter.hasPromoteMobiles !== undefined) {
                 filter = await this.processPromoteMobileFilter(filter);
             }
             filter = this.processTextSearchFields(filter);
             return this.executeWithRetry(() => this.clientModel.find(filter).lean().exec());
-        });
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
+            throw new common_1.InternalServerErrorException(errorDetails.message);
+        }
     }
     async searchClientsByPromoteMobile(mobileNumbers) {
         if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0)
@@ -16338,7 +16365,7 @@ let ClientService = ClientService_1 = class ClientService {
         return this.executeWithRetry(() => this.clientModel.find({ clientId: { $in: clientIds } }).lean().exec());
     }
     async enhancedSearch(filter) {
-        return this.handleErrors('enhanced search', async () => {
+        try {
             let searchType = 'direct';
             let promoteMobileMatches = [];
             if (filter.promoteMobileNumber) {
@@ -16364,16 +16391,10 @@ let ClientService = ClientService_1 = class ClientService {
                 searchType,
                 promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
             };
-        });
-    }
-    async handleErrors(operation, fn) {
-        try {
-            return await fn();
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Error in ${operation}`, true);
-            this.logger.error(`Error in ${operation}`, error.stack);
-            throw error;
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to perform enhanced search with filter ${JSON.stringify(filter)}`);
+            throw new common_1.InternalServerErrorException(errorDetails.message);
         }
     }
     ensureInitialized() {
@@ -16405,7 +16426,12 @@ let ClientService = ClientService_1 = class ClientService {
     }
     performPostUpdateTasks(updatedClient) {
         setImmediate(async () => {
-            await this.handleErrors('post-update tasks', () => this.refreshExternalMaps());
+            try {
+                this.refreshExternalMaps();
+            }
+            catch (error) {
+                (0, parseError_1.parseError)(error, 'Failed to refresh external maps after client update');
+            }
         });
     }
     async refreshExternalMaps() {
@@ -16512,7 +16538,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.log('Buffer Clients not available');
             return;
         }
-        await this.handleErrors('setup client', async () => {
+        try {
             await this.notify(`Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: ${existingClient.username}`);
             this.telegramService.setActiveClientSetup({
                 ...setupClientQueryDto,
@@ -16522,13 +16548,16 @@ let ClientService = ClientService_1 = class ClientService {
             });
             await connection_manager_1.connectionManager.getClient(newBufferClient.mobile);
             await this.updateClientSession(newBufferClient.session);
-        }).catch(async (error) => {
+        }
+        catch (error) {
+            await this.notify(`Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`);
             const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
             this.telegramService.setActiveClientSetup(undefined);
-        }).finally(async () => {
+        }
+        finally {
             await connection_manager_1.connectionManager.unregisterClient(newBufferClient.mobile);
-        });
+        }
     }
     async updateClientSession(newSession) {
         const setup = this.telegramService.getActiveClientSetup();
