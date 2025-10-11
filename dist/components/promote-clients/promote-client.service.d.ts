@@ -37,6 +37,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly CHANNEL_PROCESSING_DELAY;
     private readonly CLEANUP_INTERVAL;
     private cleanupIntervalId;
+    private updateCount;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService);
     private startMemoryCleanup;
     private clearMemoryCleanup;

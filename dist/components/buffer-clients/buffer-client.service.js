@@ -38,6 +38,7 @@ const path_1 = __importDefault(require("path"));
 const cloudinary_1 = require("../../cloudinary");
 const telegram_1 = require("telegram");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
+const checkMe_utils_1 = require("../../utils/checkMe.utils");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
         this.bufferClientModel = bufferClientModel;
@@ -55,6 +56,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.leaveChannelIntervalId = null;
         this.isJoinChannelProcessing = false;
         this.isLeaveChannelProcessing = false;
+        this.updateCount = 0;
         this.activeTimeouts = new Set();
         this.JOIN_CHANNEL_INTERVAL = 6 * 60 * 1000;
         this.LEAVE_CHANNEL_INTERVAL = 120 * 1000;
@@ -761,6 +763,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             },
         ]);
         let totalUpdates = 0;
+        this.updateCount = 0;
         for (const result of bufferClientCounts) {
             bufferClientsPerClient.set(result._id, result.count);
             if (totalUpdates < 5) {
@@ -810,7 +813,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return 0;
         }
         let cli;
-        let updateCount = 0;
         const MAX_UPDATES_PER_RUN = 2;
         try {
             await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
@@ -826,15 +828,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             }
             const me = await cli.getMe();
             await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
-            if (doc.createdAt &&
+            if ((!doc.privacyUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
-                (!doc.privacyUpdatedAt || doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
+                doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000))) &&
+                this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
-                    updateCount++;
+                    this.updateCount++;
                     this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
@@ -842,15 +844,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Privacy: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
+                        return this.updateCount;
                     }
                 }
             }
-            if (doc.createdAt &&
+            if ((!doc.profilePicsDeletedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
-                (!doc.profilePicsDeletedAt || doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
+                doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
+                this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                         userId: 'me',
@@ -859,7 +861,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     if (photos.photos.length > 0) {
                         await cli.deleteProfilePhotos();
                         await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
-                        updateCount++;
+                        this.updateCount++;
                         this.logger.debug(`[BufferClientService] Deleted profile photos for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                     }
@@ -868,42 +870,26 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     const errorDetails = (0, parseError_1.parseError)(error, `Error in Deleting Photos: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
+                        return this.updateCount;
                     }
                 }
             }
-            if (doc.createdAt &&
+            if ((!doc.nameBioUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 100 &&
-                (!doc.nameBioUpdatedAt || doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
-                const normalizeString = (str) => {
-                    return (str || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-                };
-                const safeAttemptReverse = (val) => {
-                    try {
-                        return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
-                    }
-                    catch {
-                        return '';
-                    }
-                };
-                const actualName = normalizeString(safeAttemptReverse(me?.firstName || ''));
-                const expectedName = normalizeString(client.name || '');
-                if (actualName !== expectedName) {
+                doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
+                this.updateCount < MAX_UPDATES_PER_RUN) {
+                if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                         await cli.updateProfile((0, utils_1.obfuscateText)(client.name, {
                             maintainFormatting: false,
                             preserveCase: true,
                             useInvisibleChars: false
-                        }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                        }));
+                        }), '');
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
-                        updateCount++;
+                        this.updateCount++;
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                     }
@@ -911,21 +897,21 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile: ${doc.mobile}`, true);
                         if ((0, isPermanentError_1.default)(errorDetails)) {
                             await this.markAsInactive(doc.mobile, errorDetails.message);
-                            return updateCount;
+                            return this.updateCount;
                         }
                     }
                 }
             }
-            if (doc.createdAt &&
+            if ((!doc.usernameUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 150 &&
-                (!doc.usernameUpdatedAt || doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
+                doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
+                this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
-                    updateCount++;
+                    this.updateCount++;
                     this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
@@ -933,16 +919,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Username: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
+                        return this.updateCount;
                     }
                 }
             }
-            if (doc.createdAt &&
+            if ((!doc.profilePicsUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.channels > 170 &&
-                (!doc.profilePicsUpdatedAt || doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) &&
-                updateCount < MAX_UPDATES_PER_RUN) {
+                doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
+                this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
@@ -954,10 +940,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
                         const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
                         for (const photo of photoPaths) {
-                            if (updateCount >= MAX_UPDATES_PER_RUN)
+                            if (this.updateCount >= MAX_UPDATES_PER_RUN)
                                 break;
                             await cli.updateProfilePic(path_1.default.join(rootPath, photo));
-                            updateCount++;
+                            this.updateCount++;
                             this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${doc.mobile}`);
                             await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                         }
@@ -968,11 +954,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
+                        return this.updateCount;
                     }
                 }
             }
-            return updateCount;
+            return this.updateCount;
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Error with client ${doc.mobile}`);

@@ -28,6 +28,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private leaveChannelIntervalId;
     private isJoinChannelProcessing;
     private isLeaveChannelProcessing;
+    private updateCount;
     private activeTimeouts;
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
