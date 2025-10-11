@@ -93,22 +93,26 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   ) { }
 
   async onModuleInit(): Promise<void> {
-    await this.handleErrors('initialize service', async () => {
+    try {
       await this.refreshCacheFromDatabase();
       this.startPeriodicTasks();
       this.isInitialized = true;
-    });
+    } catch (e) {
+      parseError(e, 'Failed to initialize Client Service')
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
     this.isShuttingDown = true;
-    await this.handleErrors('shutdown service', async () => {
+    try {
       if (this.checkInterval) clearInterval(this.checkInterval);
       if (this.refreshInterval) clearInterval(this.refreshInterval);
       if (this.refreshPromise) await this.refreshPromise;
       await connectionManager.shutdown();
       this.clientsMap.clear();
-    });
+    } catch (e) {
+      parseError(e, 'Error during Client Service shutdown');
+    }
   }
 
   private startPeriodicTasks(): void {
@@ -141,7 +145,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async refreshCacheFromDatabase(): Promise<void> {
-    await this.handleErrors('refresh cache', async () => {
+    try {
       const documents = await this.executeWithRetry(() =>
         this.clientModel.find({}, { _id: 0, updatedAt: 0 }).lean().exec(),
       );
@@ -149,11 +153,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       documents.forEach((client) => newClientsMap.set(client.clientId, client));
       this.clientsMap = newClientsMap;
       this.cacheMetadata = { lastUpdated: Date.now(), isStale: false };
-    });
+    } catch (e) {
+      parseError(e, 'Failed to refresh clients cache from database', true);
+    }
   }
 
   async create(createClientDto: CreateClientDto): Promise<Client> {
-    return this.handleErrors('create client', async () => {
+    try {
       const createdClient = await this.executeWithRetry(() => {
         const client = new this.clientModel(createClientDto);
         return client.save();
@@ -161,7 +167,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.clientsMap.set(createdClient.clientId, createdClient.toObject());
       this.logger.log(`Client created: ${createdClient.clientId}`);
       return createdClient;
-    });
+    } catch (error) {
+      const errorDetails = parseError(error, `Failed to create client | mobile: ${createClientDto.mobile}`);
+      throw new BadRequestException(errorDetails.message);
+    }
   }
 
   async findAll(): Promise<Client[]> {
@@ -226,7 +235,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
     this.ensureInitialized();
-    return this.handleErrors(`update client ${clientId}`, async () => {
+    try {
       const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
       await this.notifyClientUpdate(clientId);
       const updatedClient = await this.executeWithRetry(() =>
@@ -246,12 +255,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.performPostUpdateTasks(updatedClient);
       this.logger.log(`Client updated: ${clientId}`);
       return updatedClient;
-    });
+    } catch (error) {
+      const errorDetails = parseError(error, `Failed to update client ${clientId} | mobile: ${updateClientDto.mobile || 'N/A'}`);
+      throw new BadRequestException(errorDetails.message);
+    }
   }
 
   async remove(clientId: string): Promise<Client> {
     this.ensureInitialized();
-    return this.handleErrors(`remove client ${clientId}`, async () => {
+    try {
       const deletedClient = await this.executeWithRetry(() =>
         this.clientModel.findOneAndDelete({ clientId }).lean().exec(),
       );
@@ -261,17 +273,23 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.clientsMap.delete(clientId);
       this.logger.log(`Client removed: ${clientId}`);
       return deletedClient;
-    });
+    } catch (error) {
+      const errorDetails = parseError(error, `Failed to remove client ${clientId}`);
+      throw new InternalServerErrorException(errorDetails.message);
+    };
   }
 
   async search(filter: any): Promise<Client[]> {
-    return this.handleErrors('search clients', async () => {
+    try {
       if (filter.hasPromoteMobiles !== undefined) {
         filter = await this.processPromoteMobileFilter(filter);
       }
       filter = this.processTextSearchFields(filter);
       return this.executeWithRetry(() => this.clientModel.find(filter).lean().exec());
-    });
+    } catch (error) {
+      const errorDetails = parseError(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
+      throw new InternalServerErrorException(errorDetails.message);
+    }
   }
 
   async searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]> {
@@ -289,7 +307,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   async enhancedSearch(filter: any): Promise<SearchResult> {
-    return this.handleErrors('enhanced search', async () => {
+    try {
       let searchType: 'direct' | 'promoteMobile' | 'mixed' = 'direct';
       let promoteMobileMatches: Array<{ clientId: string; mobile: string }> = [];
       if (filter.promoteMobileNumber) {
@@ -317,16 +335,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         searchType,
         promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
       };
-    });
-  }
-
-  private async handleErrors<T>(operation: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
     } catch (error) {
-      const errorDetails = parseError(error, `Error in ${operation}`, true);
-      this.logger.error(`Error in ${operation}`, error.stack);
-      throw error;
+      const errorDetails = parseError(error, `Failed to perform enhanced search with filter ${JSON.stringify(filter)}`);
+      throw new InternalServerErrorException(errorDetails.message);
     }
   }
 
@@ -362,7 +373,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   private performPostUpdateTasks(updatedClient: Client): void {
     setImmediate(async () => {
-      await this.handleErrors('post-update tasks', () => this.refreshExternalMaps());
+      try {
+        this.refreshExternalMaps()
+      } catch (error) {
+        parseError(error, 'Failed to refresh external maps after client update');
+      }
     });
   }
 
@@ -494,7 +509,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.log('Buffer Clients not available');
       return;
     }
-    await this.handleErrors('setup client', async () => {
+    try {
       await this.notify(
         `Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: ${existingClient.username}`,
       );
@@ -506,13 +521,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
       await connectionManager.getClient(newBufferClient.mobile);
       await this.updateClientSession(newBufferClient.session);
-    }).catch(async (error) => {
+    } catch (error) {
+      await this.notify(
+        `Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`,
+      );
       const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
       this.telegramService.setActiveClientSetup(undefined);
-    }).finally(async () => {
+    } finally {
       await connectionManager.unregisterClient(newBufferClient.mobile);
-    });
+    }
   }
 
   async updateClientSession(newSession: string) {
