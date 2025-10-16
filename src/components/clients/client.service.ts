@@ -540,10 +540,20 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     await sleep(2000);
     const existingClient = await this.findOne(clientId);
     if (!existingClient) throw new NotFoundException(`Client ${clientId} not found`);
-    const newTelegramClient = await connectionManager.getClient(newMobile, {
-      handler: true,
-      autoDisconnect: false,
-    });
+    let newTelegramClient: TelegramManager;
+    try {
+      newTelegramClient = await connectionManager.getClient(newMobile, {
+        handler: true,
+        autoDisconnect: false,
+      });
+    } catch (error) {
+      const errorDetails = parseError(error, `Failed to get Telegram client for NewMobile: ${newMobile}`, true);
+      if (isPermanentError(errorDetails)) {
+        await this.bufferClientService.markAsInactive(newMobile, errorDetails.message);
+      }
+      throw error;
+    }
+    if (!newTelegramClient) throw new Error(`Failed to get Telegram client for NewMobile: ${newMobile}`);
     try {
       const me = await newTelegramClient.getMe();
       const updatedUsername = await this.telegramService.updateUsernameForAClient(
