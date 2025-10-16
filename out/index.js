@@ -16553,10 +16553,22 @@ let ClientService = ClientService_1 = class ClientService {
         const existingClient = await this.findOne(clientId);
         if (!existingClient)
             throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        const newTelegramClient = await connection_manager_1.connectionManager.getClient(newMobile, {
-            handler: true,
-            autoDisconnect: false,
-        });
+        let newTelegramClient;
+        try {
+            newTelegramClient = await connection_manager_1.connectionManager.getClient(newMobile, {
+                handler: true,
+                autoDisconnect: false,
+            });
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to get Telegram client for NewMobile: ${newMobile}`, true);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.bufferClientService.markAsInactive(newMobile, errorDetails.message);
+            }
+            throw error;
+        }
+        if (!newTelegramClient)
+            throw new Error(`Failed to get Telegram client for NewMobile: ${newMobile}`);
         try {
             const me = await newTelegramClient.getMe();
             const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
