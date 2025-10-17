@@ -1192,7 +1192,7 @@ export class BufferClientService implements OnModuleDestroy {
                             offset: 0,
                         })
                     );
-                    if (photos.photos.length < 1) {
+                    if (photos.photos.length < 2) {
                         await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await sleep(6000 + Math.random() * 3000); // 6-9s delay
                         // Add new profile photos with staggered delays

@@ -784,7 +784,7 @@ export class PromoteClientService implements OnModuleDestroy {
         }
     }
 
-    async processBufferClient(doc: PromoteClient, client: Client): Promise<number> {
+    async processPromoteClient(doc: PromoteClient, client: Client): Promise<number> {
         let cli: TelegramManager;
         const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
 
@@ -951,7 +951,7 @@ export class PromoteClientService implements OnModuleDestroy {
                             offset: 0,
                         })
                     );
-                    if (photos.photos.length < 1) {
+                    if (photos.photos.length < 2) {
                         await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await sleep(6000 + Math.random() * 3000); // 6-9s delay
                         // Add new profile photos with staggered delays
@@ -1039,7 +1039,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 for (const promoteClientMobile of result.mobiles) {
                     const promoteClient = await this.findOne(promoteClientMobile);
                     const client = clients.find((c) => c.clientId === result._id);
-                    totalUpdates += await this.processBufferClient(promoteClient, client);
+                    totalUpdates += await this.processPromoteClient(promoteClient, client);
                 }
             } else {
                 this.logger.warn(`Skipping buffer client ${result.mobiles.join(', ')} as total updates reached 5`);
