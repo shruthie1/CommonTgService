@@ -773,7 +773,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 for (const bufferClientMobile of result.mobiles) {
                     const bufferClient = await this.findOne(bufferClientMobile);
                     const client = clients.find((c) => c.clientId === result._id);
-                    totalUpdates += await this.processBufferClient(bufferClient, client);
+                    const currentUpdates = await this.processBufferClient(bufferClient, client);
+                    this.logger.debug(`Processed buffer client ${bufferClientMobile} for client ${result._id}, current updates: ${currentUpdates} | total updates: ${totalUpdates + currentUpdates}`);
+                    if (currentUpdates > 0) {
+                        totalUpdates += currentUpdates;
+                    }
+                    if (totalUpdates >= 5) {
+                        this.logger.warn('Reached total update limit of 5 for this check cycle');
+                        break;
+                    }
                 }
             }
             else {
@@ -819,24 +827,22 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const MAX_UPDATES_PER_RUN = 2;
         try {
             await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                autoDisconnect: true,
-                handler: false,
-            });
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
             if (lastUsed && now - lastUsed < 30 * 60 * 1000) {
                 this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
-            const me = await cli.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
             if ((!doc.privacyUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
                 doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) &&
                 doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
@@ -857,6 +863,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                         userId: 'me',
                         offset: 0,
@@ -883,6 +893,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 doc.channels > 100 &&
                 doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
+                cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                    autoDisconnect: true,
+                    handler: false,
+                });
+                const me = await cli.getMe();
+                await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
                 if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
@@ -912,6 +928,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
+                    const me = await cli.getMe();
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
@@ -933,6 +954,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                         userId: 'me',
