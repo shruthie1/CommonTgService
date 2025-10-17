@@ -662,8 +662,10 @@ let ClientService = ClientService_1 = class ClientService {
     async updateClientPhotos(client, telegramClient) {
         const photos = await telegramClient.client.invoke(new tl_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
         const photoCount = photos?.photos?.length || 0;
-        if (photoCount < 1) {
+        if (photoCount < 2) {
             this.logger.warn(`[${client.clientId}] No profile photos found. Uploading new ones...`);
+            if (photoCount > 0)
+                await telegramClient.deleteProfilePhotos();
             await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
             await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
             for (const photo of CONFIG.PHOTO_PATHS) {
