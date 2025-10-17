@@ -42,6 +42,7 @@ import TelegramManager from '../Telegram/TelegramManager';
 import { CloudinaryService } from '../../cloudinary';
 import path from 'path';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
+import { BotsService, ChannelCategory } from '../bots';
 
 @Injectable()
 export class PromoteClientService implements OnModuleDestroy {
@@ -81,6 +82,7 @@ export class PromoteClientService implements OnModuleDestroy {
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService,
+        private botsService: BotsService
     ) { }
 
     private startMemoryCleanup(): void {
@@ -179,6 +181,7 @@ export class PromoteClientService implements OnModuleDestroy {
         if (message) {
             updateData.message = message;
         }
+        await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
     }
 

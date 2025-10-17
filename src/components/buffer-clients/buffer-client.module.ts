@@ -11,6 +11,7 @@ import { InitModule } from '../ConfigurationInit/init.module';
 import { ChannelsModule } from '../channels/channels.module';
 import { PromoteClientModule } from '../promote-clients/promote-client.module';
 import { SessionModule } from '../session-manager';
+import { BotsModule } from '../bots';
 
 @Module({
   imports: [
@@ -22,7 +23,8 @@ import { SessionModule } from '../session-manager';
     forwardRef(() => ClientModule),
     forwardRef(() => ChannelsModule),
     forwardRef(() => PromoteClientModule),
-    forwardRef(() => SessionModule)
+    forwardRef(() => SessionModule),
+    BotsModule
  ],
   controllers: [BufferClientController],
   providers: [BufferClientService],

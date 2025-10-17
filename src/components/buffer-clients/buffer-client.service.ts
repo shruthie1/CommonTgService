@@ -41,6 +41,7 @@ import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
 import isPermanentError from '../../utils/isPermanentError';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
+import { BotsService, ChannelCategory } from '../bots';
 
 @Injectable()
 export class BufferClientService implements OnModuleDestroy {
@@ -91,6 +92,7 @@ export class BufferClientService implements OnModuleDestroy {
         private promoteClientService: PromoteClientService,
         @Inject(forwardRef(() => SessionService))
         private sessionService: SessionService,
+        private botsService: BotsService,
     ) { }
 
     async onModuleDestroy() {
@@ -378,12 +380,12 @@ export class BufferClientService implements OnModuleDestroy {
         if (message) {
             updateData.message = message;
         }
-
-        return this.update(mobile, updateData);
+        await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        return await this.update(mobile, updateData);
     }
 
     async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument> {
-        return this.updateStatus(mobile, 'inactive', reason);
+        return await this.updateStatus(mobile, 'inactive', reason);
     }
 
     async updateInfo() {
