@@ -767,8 +767,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }),
     );
     const photoCount = photos?.photos?.length || 0;
-    if (photoCount < 1) {
+    if (photoCount < 2) {
       this.logger.warn(`[${client.clientId}] No profile photos found. Uploading new ones...`);
+      if (photoCount > 0) await telegramClient.deleteProfilePhotos();
       await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
       await sleep(6000 + Math.random() * 3000);
       for (const photo of CONFIG.PHOTO_PATHS) {
