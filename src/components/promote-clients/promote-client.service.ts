@@ -794,12 +794,6 @@ export class PromoteClientService implements OnModuleDestroy {
         try {
             // Random initial delay to avoid patterned client connections
             await sleep(10000 + Math.random() * 5000); // 10-15s
-
-            cli = await connectionManager.getClient(doc.mobile, {
-                autoDisconnect: true,
-                handler: false,
-            });
-
             // Check if account is at risk of rate-limiting
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
@@ -808,7 +802,6 @@ export class PromoteClientService implements OnModuleDestroy {
                 return 0;
             }
 
-            const me = await cli.getMe();
             await sleep(5000 + Math.random() * 10000); // 5-15s delay after getting user info
 
             // Privacy update for accounts older than 1 day
@@ -822,6 +815,10 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
@@ -847,6 +844,10 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
                             userId: 'me',
@@ -880,6 +881,11 @@ export class PromoteClientService implements OnModuleDestroy {
                 ) &&
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
+                cli = await connectionManager.getClient(doc.mobile, {
+                    autoDisconnect: true,
+                    handler: false,
+                });
+                const me = await cli.getMe();
 
                 if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), client.name)) {
                     try {
@@ -922,6 +928,10 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     await this.telegramService.updateUsername(doc.mobile, '');
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
@@ -947,6 +957,10 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
@@ -958,8 +972,17 @@ export class PromoteClientService implements OnModuleDestroy {
                         await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await sleep(6000 + Math.random() * 3000); // 6-9s delay
                         // Add new profile photos with staggered delays
-                        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                        for (const photo of photoPaths) {
+                        const shuffle = <T>(arr: T[]): T[] => {
+                            const a = arr.slice();
+                            for (let i = a.length - 1; i > 0; i--) {
+                                const j = Math.floor(Math.random() * (i + 1));
+                                [a[i], a[j]] = [a[j], a[i]];
+                            }
+                            return a;
+                        };
+
+                        const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
+                        for (const photo of photoPaths.slice(0, 2)) { // Limit to 2 new photos
                             if (this.updateCount >= MAX_UPDATES_PER_RUN) break;
                             await cli.updateProfilePic(path.join(rootPath, photo));
                             this.updateCount++;
@@ -1044,7 +1067,11 @@ export class PromoteClientService implements OnModuleDestroy {
                     const promoteClient = await this.findOne(promoteClientMobile);
                     if (!promoteClient.lastUsed) {
                         const client = clients.find((c) => c.clientId === result._id);
-                        totalUpdates += await this.processPromoteClient(promoteClient, client);
+                        const currentUpdates = await this.processPromoteClient(promoteClient, client);
+                        console.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
+                        if (currentUpdates > 0) {
+                            totalUpdates += currentUpdates;
+                        }
                     }
                 }
             } else {
@@ -1240,14 +1267,20 @@ export class PromoteClientService implements OnModuleDestroy {
                     processedCount++;
                 } catch (error: any) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`, error);
-                    parseError(error);
+                    const errorDetails = parseError(error);
+                    if (isPermanentError(errorDetails)) {
+                        await this.markAsInactive(document.mobile, errorDetails.message);
+                    }
                     processedCount++; // Prevent infinite loop
                 } finally {
                     await this.safeUnregisterClient(document.mobile);
                 }
             } catch (error: any) {
                 this.logger.error(`Error creating connection for ${document.mobile}: ${error.message}`, error);
-                parseError(error);
+                const errorDetails = parseError(error);
+                if (isPermanentError(errorDetails)) {
+                    await this.markAsInactive(document.mobile, errorDetails.message);
+                }
             }
         }
 
