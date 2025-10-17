@@ -1024,6 +1024,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 $group: {
                     _id: '$clientId',
                     count: { $sum: 1 },
+                    mobiles: { $push: '$mobile' },
                 },
             },
         ]);
