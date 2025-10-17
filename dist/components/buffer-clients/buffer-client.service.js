@@ -935,7 +935,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                         userId: 'me',
                         offset: 0,
                     }));
-                    if (photos.photos.length < 1) {
+                    if (photos.photos.length < 2) {
                         await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
                         const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];

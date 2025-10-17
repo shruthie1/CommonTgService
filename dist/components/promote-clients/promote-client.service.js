@@ -676,7 +676,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             throw new common_1.BadRequestException('Number is an Active Client');
         }
     }
-    async processBufferClient(doc, client) {
+    async processPromoteClient(doc, client) {
         let cli;
         const MAX_UPDATES_PER_RUN = 2;
         try {
@@ -800,7 +800,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         userId: 'me',
                         offset: 0,
                     }));
-                    if (photos.photos.length < 1) {
+                    if (photos.photos.length < 2) {
                         await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
                         const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
@@ -882,7 +882,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 for (const promoteClientMobile of result.mobiles) {
                     const promoteClient = await this.findOne(promoteClientMobile);
                     const client = clients.find((c) => c.clientId === result._id);
-                    totalUpdates += await this.processBufferClient(promoteClient, client);
+                    totalUpdates += await this.processPromoteClient(promoteClient, client);
                 }
             }
             else {

@@ -73,7 +73,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     private safeUnregisterClient;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
-    processBufferClient(doc: PromoteClient, client: Client): Promise<number>;
+    processPromoteClient(doc: PromoteClient, client: Client): Promise<number>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
     private clearAllTimeouts;
