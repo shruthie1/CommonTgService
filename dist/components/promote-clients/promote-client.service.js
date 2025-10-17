@@ -885,8 +885,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             if (totalUpdates < 5) {
                 for (const promoteClientMobile of result.mobiles) {
                     const promoteClient = await this.findOne(promoteClientMobile);
-                    const client = clients.find((c) => c.clientId === result._id);
-                    totalUpdates += await this.processPromoteClient(promoteClient, client);
+                    if (!promoteClient.lastUsed) {
+                        const client = clients.find((c) => c.clientId === result._id);
+                        totalUpdates += await this.processPromoteClient(promoteClient, client);
+                    }
                 }
             }
             else {
