@@ -1072,6 +1072,10 @@ export class PromoteClientService implements OnModuleDestroy {
                         if (currentUpdates > 0) {
                             totalUpdates += currentUpdates;
                         }
+                        if (totalUpdates >= 5) {
+                            this.logger.warn('Reached total update limit of 5 for this check cycle');
+                            break;
+                        }
                     }
                 }
             } else {

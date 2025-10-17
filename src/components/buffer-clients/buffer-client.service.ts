@@ -986,7 +986,15 @@ export class BufferClientService implements OnModuleDestroy {
                 for (const bufferClientMobile of result.mobiles) {
                     const bufferClient = await this.findOne(bufferClientMobile);
                     const client = clients.find((c) => c.clientId === result._id);
-                    totalUpdates += await this.processBufferClient(bufferClient, client);
+                    const currentUpdates = await this.processBufferClient(bufferClient, client);
+                    this.logger.debug(`Processed buffer client ${bufferClientMobile} for client ${result._id}, current updates: ${currentUpdates} | total updates: ${totalUpdates + currentUpdates}`);
+                    if (currentUpdates > 0) {
+                        totalUpdates += currentUpdates;
+                    }
+                    if (totalUpdates >= 5) {
+                        this.logger.warn('Reached total update limit of 5 for this check cycle');
+                        break;
+                    }
                 }
             } else {
                 this.logger.warn(`Skipping buffer client ${result.mobiles.join(', ')} as total updates reached 5`);
@@ -1043,12 +1051,6 @@ export class BufferClientService implements OnModuleDestroy {
         try {
             // Random initial delay to avoid patterned client connections
             await sleep(10000 + Math.random() * 5000); // 10-15s
-
-            cli = await connectionManager.getClient(doc.mobile, {
-                autoDisconnect: true,
-                handler: false,
-            });
-
             // Check if account is at risk of rate-limiting
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
@@ -1056,10 +1058,6 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
-
-            const me = await cli.getMe();
-            await sleep(5000 + Math.random() * 10000); // 5-15s delay after getting user info
-
             // Privacy update for accounts older than 1 day
             if (
                 (!doc.privacyUpdatedAt || (doc.createdAt &&
@@ -1069,6 +1067,11 @@ export class BufferClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
+
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
@@ -1092,6 +1095,11 @@ export class BufferClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
+
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
                             userId: 'me',
@@ -1123,7 +1131,12 @@ export class BufferClientService implements OnModuleDestroy {
                     doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
-
+                cli = await connectionManager.getClient(doc.mobile, {
+                    autoDisconnect: true,
+                    handler: false,
+                });
+                const me = await cli.getMe();
+                await sleep(5000 + Math.random() * 5000); // 5-15s delay after getting user info
                 if (!isIncludedWithTolerance(safeAttemptReverse(me.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
@@ -1163,6 +1176,11 @@ export class BufferClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
+                    const me = await cli.getMe();
                     await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
@@ -1187,6 +1205,10 @@ export class BufferClientService implements OnModuleDestroy {
                 this.updateCount < MAX_UPDATES_PER_RUN
             ) {
                 try {
+                    cli = await connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
