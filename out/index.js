@@ -12888,6 +12888,7 @@ const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module *
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -12902,7 +12903,8 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
+            bots_1.BotsModule
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
@@ -12960,8 +12962,9 @@ const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudina
 const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService, botsService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -12970,6 +12973,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
         this.sessionService = sessionService;
+        this.botsService = botsService;
         this.logger = new utils_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
@@ -13184,10 +13188,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         if (message) {
             updateData.message = message;
         }
-        return this.update(mobile, updateData);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        return await this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return this.updateStatus(mobile, 'inactive', reason);
+        return await this.updateStatus(mobile, 'inactive', reason);
     }
     async updateInfo() {
         const clients = await this.bufferClientModel
@@ -14306,7 +14311,8 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
         promote_client_service_1.PromoteClientService,
-        session_manager_1.SessionService])
+        session_manager_1.SessionService,
+        bots_1.BotsService])
 ], BufferClientService);
 
 
@@ -20112,6 +20118,7 @@ const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module *
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let PromoteClientModule = class PromoteClientModule {
 };
 exports.PromoteClientModule = PromoteClientModule;
@@ -20126,7 +20133,8 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
-            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
+            bots_1.BotsModule
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
         providers: [promote_client_service_1.PromoteClientService],
@@ -20187,8 +20195,9 @@ const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
 const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService, botsService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -20197,6 +20206,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
         this.sessionService = sessionService;
+        this.botsService = botsService;
         this.logger = new utils_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -20294,6 +20304,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         if (message) {
             updateData.message = message;
         }
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
     }
     async updateLastUsed(mobile) {
@@ -21421,7 +21432,8 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
         buffer_client_service_1.BufferClientService,
-        session_manager_1.SessionService])
+        session_manager_1.SessionService,
+        bots_1.BotsService])
 ], PromoteClientService);
 
 

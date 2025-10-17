@@ -20,6 +20,7 @@ const init_module_1 = require("../ConfigurationInit/init.module");
 const channels_module_1 = require("../channels/channels.module");
 const promote_client_module_1 = require("../promote-clients/promote-client.module");
 const session_manager_1 = require("../session-manager");
+const bots_1 = require("../bots");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -34,7 +35,8 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            (0, common_1.forwardRef)(() => session_manager_1.SessionModule)
+            (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
+            bots_1.BotsModule
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],

@@ -39,8 +39,9 @@ const cloudinary_1 = require("../../cloudinary");
 const telegram_1 = require("telegram");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 const checkMe_utils_1 = require("../../utils/checkMe.utils");
+const bots_1 = require("../bots");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService) {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService, botsService) {
         this.bufferClientModel = bufferClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -49,6 +50,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.channelsService = channelsService;
         this.promoteClientService = promoteClientService;
         this.sessionService = sessionService;
+        this.botsService = botsService;
         this.logger = new utils_1.Logger(BufferClientService_1.name);
         this.joinChannelMap = new Map();
         this.joinChannelIntervalId = null;
@@ -263,10 +265,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         if (message) {
             updateData.message = message;
         }
-        return this.update(mobile, updateData);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        return await this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return this.updateStatus(mobile, 'inactive', reason);
+        return await this.updateStatus(mobile, 'inactive', reason);
     }
     async updateInfo() {
         const clients = await this.bufferClientModel
@@ -1385,6 +1388,7 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
         promote_client_service_1.PromoteClientService,
-        session_manager_1.SessionService])
+        session_manager_1.SessionService,
+        bots_1.BotsService])
 ], BufferClientService);
 //# sourceMappingURL=buffer-client.service.js.map

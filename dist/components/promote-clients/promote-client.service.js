@@ -42,8 +42,9 @@ const telegram_1 = require("telegram");
 const cloudinary_1 = require("../../cloudinary");
 const path_1 = __importDefault(require("path"));
 const checkMe_utils_1 = require("../../utils/checkMe.utils");
+const bots_1 = require("../bots");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService) {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService, botsService) {
         this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -52,6 +53,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.channelsService = channelsService;
         this.bufferClientService = bufferClientService;
         this.sessionService = sessionService;
+        this.botsService = botsService;
         this.logger = new utils_1.Logger(PromoteClientService_1.name);
         this.joinChannelMap = new Map();
         this.leaveChannelMap = new Map();
@@ -149,6 +151,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         if (message) {
             updateData.message = message;
         }
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
     }
     async updateLastUsed(mobile) {
@@ -1276,6 +1279,7 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
         client_service_1.ClientService,
         channels_service_1.ChannelsService,
         buffer_client_service_1.BufferClientService,
-        session_manager_1.SessionService])
+        session_manager_1.SessionService,
+        bots_1.BotsService])
 ], PromoteClientService);
 //# sourceMappingURL=promote-client.service.js.map

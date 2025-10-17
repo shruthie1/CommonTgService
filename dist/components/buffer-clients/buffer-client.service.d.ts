@@ -12,6 +12,7 @@ import { PromoteClientService } from '../promote-clients/promote-client.service'
 import { SessionService } from '../session-manager';
 import { SearchBufferClientDto } from './dto/search-buffer- client.dto';
 import { Client } from '../clients';
+import { BotsService } from '../bots';
 export declare class BufferClientService implements OnModuleDestroy {
     private bufferClientModel;
     private telegramService;
@@ -21,6 +22,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private channelsService;
     private promoteClientService;
     private sessionService;
+    private botsService;
     private readonly logger;
     private joinChannelMap;
     private joinChannelIntervalId;
@@ -41,7 +43,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     private readonly MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER;
     private readonly MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT;
     private cleanupIntervalId;
-    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService);
+    constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     onModuleDestroy(): Promise<void>;
     private cleanup;
     private startMemoryCleanup;
