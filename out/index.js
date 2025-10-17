@@ -21025,6 +21025,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 $group: {
                     _id: '$clientId',
                     count: { $sum: 1 },
+                    mobiles: { $push: '$mobile' },
                 },
             },
         ]);
