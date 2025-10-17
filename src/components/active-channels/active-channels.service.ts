@@ -266,6 +266,7 @@ export class ActiveChannelsService {
             channelId: { $nin: notIds },
             participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
             username: { $ne: null },
+            deletedCount: { $lte: 30 },
             canSendMsgs: true,
             restricted: false,
             banned: false,
