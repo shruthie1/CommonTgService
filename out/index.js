@@ -20837,17 +20837,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         const MAX_UPDATES_PER_RUN = 2;
         try {
             await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                autoDisconnect: true,
-                handler: false,
-            });
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
             if (lastUsed && now - lastUsed < 30 * 60 * 1000) {
                 this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
-            const me = await cli.getMe();
             await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
             if ((!doc.privacyUpdatedAt || (doc.createdAt &&
                 doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
@@ -20855,6 +20850,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 (doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
@@ -20875,6 +20874,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                         userId: 'me',
                         offset: 0,
@@ -20901,6 +20904,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 doc.channels > 100 &&
                 doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
+                cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                    autoDisconnect: true,
+                    handler: false,
+                });
+                const me = await cli.getMe();
                 if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
@@ -20930,6 +20938,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     await this.telegramService.updateUsername(doc.mobile, '');
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
@@ -20951,6 +20963,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))) &&
                 this.updateCount < MAX_UPDATES_PER_RUN) {
                 try {
+                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
+                        autoDisconnect: true,
+                        handler: false,
+                    });
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
                         userId: 'me',
@@ -20959,8 +20975,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     if (photos.photos.length < 2) {
                         await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
                         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
-                        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                        for (const photo of photoPaths) {
+                        const shuffle = (arr) => {
+                            const a = arr.slice();
+                            for (let i = a.length - 1; i > 0; i--) {
+                                const j = Math.floor(Math.random() * (i + 1));
+                                [a[i], a[j]] = [a[j], a[i]];
+                            }
+                            return a;
+                        };
+                        const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
+                        for (const photo of photoPaths.slice(0, 2)) {
                             if (this.updateCount >= MAX_UPDATES_PER_RUN)
                                 break;
                             await cli.updateProfilePic(path_1.default.join(rootPath, photo));
@@ -21040,7 +21064,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     const promoteClient = await this.findOne(promoteClientMobile);
                     if (!promoteClient.lastUsed) {
                         const client = clients.find((c) => c.clientId === result._id);
-                        totalUpdates += await this.processPromoteClient(promoteClient, client);
+                        const currentUpdates = await this.processPromoteClient(promoteClient, client);
+                        console.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
+                        if (currentUpdates > 0) {
+                            totalUpdates += currentUpdates;
+                        }
                     }
                 }
             }
@@ -21192,7 +21220,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 }
                 catch (error) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`, error);
-                    (0, parseError_1.parseError)(error);
+                    const errorDetails = (0, parseError_1.parseError)(error);
+                    if ((0, isPermanentError_1.default)(errorDetails)) {
+                        await this.markAsInactive(document.mobile, errorDetails.message);
+                    }
                     processedCount++;
                 }
                 finally {
@@ -21201,7 +21232,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             }
             catch (error) {
                 this.logger.error(`Error creating connection for ${document.mobile}: ${error.message}`, error);
-                (0, parseError_1.parseError)(error);
+                const errorDetails = (0, parseError_1.parseError)(error);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    await this.markAsInactive(document.mobile, errorDetails.message);
+                }
             }
         }
         this.logger.log(`Batch completed: Created ${processedCount} new promote clients`);
