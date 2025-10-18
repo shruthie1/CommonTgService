@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import axios from 'axios';
+import axios, { all } from 'axios';
 import FormData from 'form-data';
 import NodeCache from 'node-cache';
 import { parseError } from '../../utils';
@@ -49,7 +49,7 @@ export interface MediaOptions extends Omit<SendMessageOptions, 'disableWebPagePr
     hasSpoiler?: boolean;
 }
 
-export interface PhotoOptions extends MediaOptions {}
+export interface PhotoOptions extends MediaOptions { }
 export interface VideoOptions extends MediaOptions {
     duration?: number;
     width?: number;
@@ -107,7 +107,7 @@ export interface MediaGroupItem {
     thumbnail?: Buffer;
 }
 
-export interface MediaGroupOptions extends Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'> {}
+export interface MediaGroupOptions extends Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'> { }
 
 @Injectable()
 export class BotsService implements OnModuleInit {
@@ -378,8 +378,8 @@ export class BotsService implements OnModuleInit {
         return false;
     }
 
-    async sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions): Promise<boolean> {
-        return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options);
+    async sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
+        return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
     }
 
     async sendPhotoByCategory(category: ChannelCategory, photo: string | Buffer, options?: PhotoOptions): Promise<boolean> {
@@ -414,9 +414,9 @@ export class BotsService implements OnModuleInit {
         return this.sendByCategoryWithFailover(category, this.sendMediaGroupByBotId, media, options);
     }
 
-    async sendMessageByBotId(botId: string, message: string, options?: SendMessageOptions): Promise<boolean> {
+    async sendMessageByBotId(botId: string, message: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
         const bot = await this.getBotById(botId);
-        const success = await this.executeSendMessage(bot, message, options);
+        const success = await this.executeSendMessage(bot, message, options, allowServiceName);
         if (success) {
             await this.updateBotStats(botId, 'messagesSent', bot);
         }
@@ -495,13 +495,13 @@ export class BotsService implements OnModuleInit {
         return success;
     }
 
-    private async executeSendMessage(bot: BotDocument, text: string, options?: SendMessageOptions): Promise<boolean> {
+    private async executeSendMessage(bot: BotDocument, text: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
         try {
             const response = await axios.post(
                 `https://api.telegram.org/bot${bot.token}/sendMessage`,
                 {
                     chat_id: bot.channelId,
-                    text: `${process.env.clientId?.toUpperCase()}:\n\n${text}`,
+                    text: `${allowServiceName ? `${process.env.clientId?.toUpperCase()}\n\n${text}` : text}`,
                     parse_mode: options?.parseMode,
                     disable_web_page_preview: options?.disableWebPagePreview,
                     disable_notification: options?.disableNotification,
