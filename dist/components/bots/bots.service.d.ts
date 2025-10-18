@@ -114,7 +114,7 @@ export declare class BotsService implements OnModuleInit {
     updateBot(id: string, updateBotDto: Partial<Bot>): Promise<BotDocument>;
     deleteBot(id: string): Promise<void>;
     private sendByCategoryWithFailover;
-    sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions): Promise<boolean>;
+    sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions, allowServiceName?: boolean): Promise<boolean>;
     sendPhotoByCategory(category: ChannelCategory, photo: string | Buffer, options?: PhotoOptions): Promise<boolean>;
     sendVideoByCategory(category: ChannelCategory, video: string | Buffer, options?: VideoOptions): Promise<boolean>;
     sendAudioByCategory(category: ChannelCategory, audio: string | Buffer, options?: AudioOptions): Promise<boolean>;
@@ -123,7 +123,7 @@ export declare class BotsService implements OnModuleInit {
     sendAnimationByCategory(category: ChannelCategory, animation: string | Buffer, options?: AnimationOptions): Promise<boolean>;
     sendStickerByCategory(category: ChannelCategory, sticker: string | Buffer, options?: StickerOptions): Promise<boolean>;
     sendMediaGroupByCategory(category: ChannelCategory, media: MediaGroupItem[], options?: MediaGroupOptions): Promise<boolean>;
-    sendMessageByBotId(botId: string, message: string, options?: SendMessageOptions): Promise<boolean>;
+    sendMessageByBotId(botId: string, message: string, options?: SendMessageOptions, allowServiceName?: boolean): Promise<boolean>;
     sendPhotoByBotId(botId: string, photo: string | Buffer, options?: PhotoOptions): Promise<boolean>;
     sendVideoByBotId(botId: string, video: string | Buffer, options?: VideoOptions): Promise<boolean>;
     sendAudioByBotId(botId: string, audio: string | Buffer, options?: AudioOptions): Promise<boolean>;

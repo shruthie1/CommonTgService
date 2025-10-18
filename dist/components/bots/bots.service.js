@@ -268,8 +268,8 @@ let BotsService = class BotsService {
         console.error(`Failed to send for category ${category} after trying all ${availableBots.length} available bot(s).`);
         return false;
     }
-    async sendMessageByCategory(category, message, options) {
-        return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options);
+    async sendMessageByCategory(category, message, options, allowServiceName = true) {
+        return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
     }
     async sendPhotoByCategory(category, photo, options) {
         return this.sendByCategoryWithFailover(category, this.sendPhotoByBotId, photo, options);
@@ -295,9 +295,9 @@ let BotsService = class BotsService {
     async sendMediaGroupByCategory(category, media, options) {
         return this.sendByCategoryWithFailover(category, this.sendMediaGroupByBotId, media, options);
     }
-    async sendMessageByBotId(botId, message, options) {
+    async sendMessageByBotId(botId, message, options, allowServiceName = true) {
         const bot = await this.getBotById(botId);
-        const success = await this.executeSendMessage(bot, message, options);
+        const success = await this.executeSendMessage(bot, message, options, allowServiceName);
         if (success) {
             await this.updateBotStats(botId, 'messagesSent', bot);
         }
@@ -367,11 +367,11 @@ let BotsService = class BotsService {
         }
         return success;
     }
-    async executeSendMessage(bot, text, options) {
+    async executeSendMessage(bot, text, options, allowServiceName = true) {
         try {
             const response = await axios_1.default.post(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
                 chat_id: bot.channelId,
-                text: `${process.env.clientId?.toUpperCase()}:\n\n${text}`,
+                text: `${allowServiceName ? `${process.env.clientId?.toUpperCase()}\n\n${text}` : text}`,
                 parse_mode: options?.parseMode,
                 disable_web_page_preview: options?.disableWebPagePreview,
                 disable_notification: options?.disableNotification,
