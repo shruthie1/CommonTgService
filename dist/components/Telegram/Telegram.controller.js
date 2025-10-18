@@ -504,12 +504,12 @@ __decorate([
     (0, common_1.Post)('message/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Send a Telegram message as a user' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true }),
-    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendMessageDto }),
+    (0, swagger_1.ApiBody)({ type: send_message_dto_1.SendTgMessageDto }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, send_message_dto_1.SendMessageDto]),
+    __metadata("design:paramtypes", [String, send_message_dto_1.SendTgMessageDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMessage", null);
 __decorate([
@@ -1307,12 +1307,12 @@ __decorate([
     (0, common_1.Post)('bot/create/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new bot using BotFather' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.CreateBotDto }),
+    (0, swagger_1.ApiBody)({ type: dto_1.CreateTgBotDto }),
     (0, swagger_1.ApiResponse)({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.CreateBotDto]),
+    __metadata("design:paramtypes", [String, dto_1.CreateTgBotDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "createBot", null);
 exports.TelegramController = TelegramController = __decorate([

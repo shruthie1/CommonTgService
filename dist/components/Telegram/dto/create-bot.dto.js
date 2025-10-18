@@ -9,12 +9,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateBotDto = void 0;
+exports.CreateTgBotDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
-class CreateBotDto {
+class CreateTgBotDto {
 }
-exports.CreateBotDto = CreateBotDto;
+exports.CreateTgBotDto = CreateTgBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Name of the bot (required)',
@@ -24,7 +24,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(64),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "name", void 0);
+], CreateTgBotDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Username for the bot (required)',
@@ -34,7 +34,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(32),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "username", void 0);
+], CreateTgBotDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Description of what your bot can do',
@@ -45,7 +45,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(512),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "description", void 0);
+], CreateTgBotDto.prototype, "description", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'What the bot can be used for',
@@ -56,7 +56,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(512),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "aboutText", void 0);
+], CreateTgBotDto.prototype, "aboutText", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL to the bot\'s profile photo',
@@ -66,5 +66,5 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], CreateBotDto.prototype, "profilePhotoUrl", void 0);
+], CreateTgBotDto.prototype, "profilePhotoUrl", void 0);
 //# sourceMappingURL=create-bot.dto.js.map

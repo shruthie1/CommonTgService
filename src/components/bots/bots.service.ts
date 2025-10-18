@@ -16,6 +16,7 @@ export enum ChannelCategory {
     CHANNEL_NOTIFICATIONS = 'CHANNEL_NOTIFICATIONS',
     ACCOUNT_NOTIFICATIONS = 'ACCOUNT_NOTIFICATIONS',
     ACCOUNT_LOGIN_FAILURES = 'ACCOUNT_LOGIN_FAILURES',
+    ACCOUNT_LOGINS = 'ACCOUNT_LOGINS',
     PROMOTION_ACCOUNT = 'PROMOTION_ACCOUNT',
     CLIENT_ACCOUNT = 'CLIENT_ACCOUNT',
     PAYMENT_FAIL_QUERIES = 'PAYMENT_FAIL_QUERIES',
@@ -629,6 +630,7 @@ export class BotsService implements OnModuleInit {
             });
             return res.data?.ok ? res.data.result.username : '';
         } catch (error) {
+            console.error('Error fetching bot username with provided token:', error);
             parseError(error, 'Failed fetching bot username:');
             return '';
         }

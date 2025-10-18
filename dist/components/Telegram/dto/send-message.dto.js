@@ -9,12 +9,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SendMessageDto = void 0;
+exports.SendTgMessageDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
-class SendMessageDto {
+class SendTgMessageDto {
 }
-exports.SendMessageDto = SendMessageDto;
+exports.SendTgMessageDto = SendTgMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Target username or peer ID',
@@ -22,7 +22,7 @@ __decorate([
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "peer", void 0);
+], SendTgMessageDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Message text to send',
@@ -30,7 +30,7 @@ __decorate([
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "message", void 0);
+], SendTgMessageDto.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional message parse mode (Markdown, HTML)',
@@ -40,5 +40,5 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
-], SendMessageDto.prototype, "parseMode", void 0);
+], SendTgMessageDto.prototype, "parseMode", void 0);
 //# sourceMappingURL=send-message.dto.js.map

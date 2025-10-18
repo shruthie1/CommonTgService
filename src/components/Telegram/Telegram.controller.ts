@@ -23,7 +23,7 @@ import {
     createGroupDto,
     ViewOnceMediaDto,
     MediaSourceType,
-    CreateBotDto
+    CreateTgBotDto
 } from './dto';
 import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
@@ -36,7 +36,7 @@ import { connectionManager } from './utils/connection-manager';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
-import { SendMessageDto } from './dto/send-message.dto';
+import { SendTgMessageDto } from './dto/send-message.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -153,9 +153,9 @@ export class TelegramController {
     @Post('message/:mobile')
     @ApiOperation({ summary: 'Send a Telegram message as a user' })
     @ApiParam({ name: 'mobile', description: 'Mobile number of the user account to send the message from', required: true })
-    @ApiBody({ type: SendMessageDto })
+    @ApiBody({ type: SendTgMessageDto })
     @ApiResponse({ type: Object })
-    async sendMessage(@Param('mobile') mobile: string, @Body() dto: SendMessageDto) {
+    async sendMessage(@Param('mobile') mobile: string, @Body() dto: SendTgMessageDto) {
         return this.telegramService.sendMessage(mobile, dto);
     }
 
@@ -850,9 +850,9 @@ export class TelegramController {
     @Post('bot/create/:mobile')
     @ApiOperation({ summary: 'Create a new bot using BotFather' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiBody({ type: CreateBotDto })
+    @ApiBody({ type: CreateTgBotDto })
     @ApiResponse({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } })
-    async createBot(@Param('mobile') mobile: string, @Body() createBotDto: CreateBotDto) {
+    async createBot(@Param('mobile') mobile: string, @Body() createBotDto: CreateTgBotDto) {
         return this.telegramService.createBot(mobile, createBotDto);
     }
 }

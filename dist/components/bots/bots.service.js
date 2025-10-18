@@ -34,6 +34,7 @@ var ChannelCategory;
     ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
     ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
     ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
+    ChannelCategory["ACCOUNT_LOGINS"] = "ACCOUNT_LOGINS";
     ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
@@ -503,6 +504,7 @@ let BotsService = class BotsService {
             return res.data?.ok ? res.data.result.username : '';
         }
         catch (error) {
+            console.error('Error fetching bot username with provided token:', error);
             (0, utils_1.parseError)(error, 'Failed fetching bot username:');
             return '';
         }

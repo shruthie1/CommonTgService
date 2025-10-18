@@ -13,9 +13,7 @@ import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule, {
-      logger: Logger
-    });
+    const app = await NestFactory.create(AppModule);
     const config = new DocumentBuilder()
       .setTitle('NestJS and Express API')
       .setDescription('API documentation')

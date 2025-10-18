@@ -7,6 +7,7 @@ import { EntityLike } from 'telegram/define';
 import { GroupOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
+import { SendTgMessageDto } from './dto/send-message.dto';
 interface MessageScheduleOptions {
     chatId: string;
     message: string;
@@ -158,11 +159,7 @@ declare class TelegramManager {
     scheduleMessageSend(opts: MessageScheduleOptions): Promise<Api.Message>;
     getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]>;
     sendMediaAlbum(album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
-    sendMessage(params: {
-        peer: string;
-        parseMode?: string;
-        message: string;
-    }): Promise<Api.Message>;
+    sendMessage(params: SendTgMessageDto): Promise<Api.Message>;
     sendVoiceMessage(voice: {
         chatId: string;
         url: string;
@@ -308,7 +305,7 @@ declare class TelegramManager {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;

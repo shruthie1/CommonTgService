@@ -558,7 +558,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendMessageDto"
+                "$ref": "#/components/schemas/SendTgMessageDto"
               }
             }
           }
@@ -3741,7 +3741,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateBotDto"
+                "$ref": "#/components/schemas/CreateTgBotDto"
               }
             }
           }
@@ -3827,6 +3827,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -3958,6 +3959,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4029,6 +4031,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4100,6 +4103,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4171,6 +4175,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4242,6 +4247,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4313,6 +4319,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4384,6 +4391,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4455,6 +4463,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4526,6 +4535,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -4597,6 +4607,7 @@
                 "CHANNEL_NOTIFICATIONS",
                 "ACCOUNT_NOTIFICATIONS",
                 "ACCOUNT_LOGIN_FAILURES",
+                "ACCOUNT_LOGINS",
                 "PROMOTION_ACCOUNT",
                 "CLIENT_ACCOUNT",
                 "PAYMENT_FAIL_QUERIES",
@@ -10441,24 +10452,27 @@
           "name"
         ]
       },
-      "SendMessageDto": {
+      "SendTgMessageDto": {
         "type": "object",
         "properties": {
+          "peer": {
+            "type": "string",
+            "description": "Target username or peer ID",
+            "example": "someusername"
+          },
           "message": {
             "type": "string",
             "description": "Message text to send",
-            "example": "Hello, this is a test message!"
+            "example": "Hello from NestJS and GramJS!"
           },
-          "options": {
-            "description": "Message sending options",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SendMessageOptionsDto"
-              }
-            ]
+          "parseMode": {
+            "type": "string",
+            "description": "Optional message parse mode (Markdown, HTML)",
+            "example": "Markdown"
           }
         },
         "required": [
+          "peer",
           "message"
         ]
       },
@@ -11217,6 +11231,40 @@
           "includedChats"
         ]
       },
+      "CreateTgBotDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the bot (required)",
+            "example": "MyAwesomeBot"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username for the bot (required)",
+            "example": "my_awesome_bot"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of what your bot can do",
+            "example": "This bot helps you manage your tasks"
+          },
+          "aboutText": {
+            "type": "string",
+            "description": "What the bot can be used for",
+            "example": "Task Management, Reminders, Notes"
+          },
+          "profilePhotoUrl": {
+            "type": "string",
+            "description": "URL to the bot's profile photo",
+            "example": "https://example.com/bot-photo.jpg"
+          }
+        },
+        "required": [
+          "name",
+          "username"
+        ]
+      },
       "CreateBotDto": {
         "type": "object",
         "properties": {
@@ -11237,6 +11285,7 @@
               "CHANNEL_NOTIFICATIONS",
               "ACCOUNT_NOTIFICATIONS",
               "ACCOUNT_LOGIN_FAILURES",
+              "ACCOUNT_LOGINS",
               "PROMOTION_ACCOUNT",
               "CLIENT_ACCOUNT",
               "PAYMENT_FAIL_QUERIES",
@@ -11332,6 +11381,27 @@
             ]
           }
         }
+      },
+      "SendMessageDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message text to send",
+            "example": "Hello, this is a test message!"
+          },
+          "options": {
+            "description": "Message sending options",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SendMessageOptionsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "message"
+        ]
       },
       "MediaOptionsDto": {
         "type": "object",

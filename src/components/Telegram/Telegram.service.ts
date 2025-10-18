@@ -18,13 +18,14 @@ import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { SearchMessagesDto } from './dto/message-search.dto';
-import { CreateBotDto } from './dto/create-bot.dto';
+import { CreateTgBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { fetchNumbersFromString, shouldMatch } from '../../utils';
 import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import isPermanentError from '../../utils/isPermanentError';
+import { SendTgMessageDto } from './dto/send-message.dto';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -575,7 +576,7 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.sendMediaAlbum(album)
     }
 
-    async sendMessage(mobile: string, params: { peer: string, parseMode?: string, message: string }) {
+    async sendMessage(mobile: string, params: SendTgMessageDto) {
         const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.sendMessage(params)
     }
@@ -1118,7 +1119,7 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async createBot(mobile: string, createBotDto: CreateBotDto) {
+    async createBot(mobile: string, createBotDto: CreateTgBotDto) {
         const client = await connectionManager.getClient(mobile);
         return client.createBot(createBotDto);
     }

@@ -1,4 +1,4 @@
-export declare class CreateBotDto {
+export declare class CreateTgBotDto {
     name: string;
     username: string;
     description?: string;

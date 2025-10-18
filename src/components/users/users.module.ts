@@ -6,13 +6,15 @@ import { UserSchema } from './schemas/user.schema';
 import { TelegramModule } from '../Telegram/Telegram.module';
 import { ClientModule } from '../clients/client.module';
 import { InitModule } from '../ConfigurationInit/init.module';
+import { BotsModule } from '../bots';
 
 @Module({
   imports: [
     InitModule,
     MongooseModule.forFeature([{ name: 'userModule', schema: UserSchema, collection: 'users' }]),
     forwardRef(() => TelegramModule),
-    forwardRef(() => ClientModule)
+    forwardRef(() => ClientModule),
+    BotsModule
   ],
   controllers: [UsersController],
   providers: [UsersService],

@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { TelegramService } from './Telegram.service';
-import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto, CreateBotDto } from './dto';
+import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, UpdateProfileDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto, CreateTgBotDto } from './dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { ChatStatistics } from '../../interfaces/telegram';
@@ -8,7 +8,7 @@ import { ConnectionStatusDto } from './dto/connection-management.dto';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
-import { SendMessageDto } from './dto/send-message.dto';
+import { SendTgMessageDto } from './dto/send-message.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -36,7 +36,7 @@ export declare class TelegramController {
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
     getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
-    sendMessage(mobile: string, dto: SendMessageDto): Promise<import("telegram").Api.Message>;
+    sendMessage(mobile: string, dto: SendTgMessageDto): Promise<import("telegram").Api.Message>;
     forwardMessage(mobile: string, forwardDto: ForwardBatchDto): Promise<number>;
     processBatchMessages(mobile: string, batchOp: BatchProcessDto): Promise<{
         processed: number;
@@ -108,7 +108,7 @@ export declare class TelegramController {
     getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -331,7 +331,7 @@ export declare class TelegramController {
     addBotsToChannel(mobile: string, body: {
         channelIds?: string[];
     }): Promise<void>;
-    createBot(mobile: string, createBotDto: CreateBotDto): Promise<{
+    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<{
         botToken: string;
         username: string;
     }>;

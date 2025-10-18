@@ -9,10 +9,11 @@ import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ChatStatistics, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
-import { CreateBotDto } from './dto/create-bot.dto';
+import { CreateTgBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
 import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { ActiveChannel } from '../active-channels';
+import { SendTgMessageDto } from './dto/send-message.dto';
 export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
@@ -138,11 +139,7 @@ export declare class TelegramService implements OnModuleDestroy {
     scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message>;
     getScheduledMessages(mobile: string, chatId: string): Promise<Api.TypeMessage[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
-    sendMessage(mobile: string, params: {
-        peer: string;
-        parseMode?: string;
-        message: string;
-    }): Promise<Api.Message>;
+    sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
         url: string;
@@ -225,7 +222,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         messages: {
             messageId: number;
-            type: "document" | "video" | "photo";
+            type: "document" | "photo" | "video";
             thumb: any;
             caption: string;
             date: number;
@@ -455,7 +452,7 @@ export declare class TelegramService implements OnModuleDestroy {
         anonymous?: boolean;
         manageCall?: boolean;
     }): Promise<void>;
-    createBot(mobile: string, createBotDto: CreateBotDto): Promise<{
+    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<{
         botToken: string;
         username: string;
     }>;

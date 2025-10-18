@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 
-export class SendMessageDto {
+export class SendTgMessageDto {
   @ApiProperty({
     description: 'Target username or peer ID',
     example: 'someusername',

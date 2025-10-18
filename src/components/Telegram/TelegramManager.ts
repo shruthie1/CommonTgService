@@ -25,6 +25,7 @@ import { generateTGConfig } from './utils/generateTGConfig';
 import { TelegramLogger } from './utils/telegram-logger';
 import { withTimeout } from '../../utils/withTimeout';
 import isPermanentError from '../../utils/isPermanentError';
+import { SendTgMessageDto } from './dto/send-message.dto';
 
 interface MessageScheduleOptions {
     chatId: string;
@@ -1813,7 +1814,7 @@ class TelegramManager {
         }));
     }
 
-    async sendMessage(params: { peer: string, parseMode?: string, message: string }) {
+    async sendMessage(params: SendTgMessageDto) {
         if (!this.client) throw new Error('Client not initialized');
         const { peer, parseMode, message } = params;
         return await this.client.sendMessage(peer, { message, parseMode });

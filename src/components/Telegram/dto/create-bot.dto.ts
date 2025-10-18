@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, IsOptional, MaxLength } from 'class-validator';
 
-export class CreateBotDto {
+export class CreateTgBotDto {
     @ApiProperty({
         description: 'Name of the bot (required)',
         example: 'MyAwesomeBot'

@@ -45,14 +45,11 @@ const app_module_1 = require("./app.module");
 const swagger_1 = require("@nestjs/swagger");
 const common_1 = require("@nestjs/common");
 const fs = __importStar(require("fs"));
-const utils_1 = require("./utils");
 const Exception_filter_1 = require("./interceptors/Exception-filter");
 const timeout_interceptor_1 = require("./interceptors/timeout.interceptor");
 async function bootstrap() {
     try {
-        const app = await core_1.NestFactory.create(app_module_1.AppModule, {
-            logger: utils_1.Logger
-        });
+        const app = await core_1.NestFactory.create(app_module_1.AppModule);
         const config = new swagger_1.DocumentBuilder()
             .setTitle('NestJS and Express API')
             .setDescription('API documentation')
