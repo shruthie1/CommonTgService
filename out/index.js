@@ -13828,11 +13828,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile((0, utils_1.obfuscateText)(client.name, {
+                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
                             maintainFormatting: false,
                             preserveCase: true,
                             useInvisibleChars: false
-                        }), '');
+                        })} ${(0, utils_1.getCuteEmoji)()}`, '');
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         this.updateCount++;
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
@@ -16161,6 +16161,7 @@ const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
+const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
 const CONFIG = {
     REFRESH_INTERVAL: 5 * 60 * 1000,
     CACHE_TTL: 10 * 60 * 1000,
@@ -16738,43 +16739,24 @@ let ClientService = ClientService_1 = class ClientService {
         return true;
     }
     async updateClientUsername(client, me) {
-        const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-        const actualUsername = normalize(me.username || '');
-        const expectedUsername = normalize(client.username || '');
-        if (!actualUsername || actualUsername !== expectedUsername) {
-            this.logger.log(`[${client.clientId}] Username mismatch. Actual: ${me.username}, Expected: ${client.username}`);
-            const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
-            if (updatedUsername) {
-                await this.update(client.clientId, { username: updatedUsername });
-                this.logger.log(`[${client.clientId}] Username updated to: ${updatedUsername}`);
-                await (0, Helpers_1.sleep)(10000);
-            }
-            else {
-                this.logger.warn(`[${client.clientId}] Failed to update username`);
-            }
+        const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+        if (updatedUsername) {
+            await this.update(client.clientId, { username: updatedUsername });
+            this.logger.log(`[${client.clientId}] Username updated to: ${updatedUsername}`);
+            await (0, Helpers_1.sleep)(10000);
         }
         else {
-            this.logger.log(`[${client.clientId}] Username already correct`);
+            this.logger.warn(`[${client.clientId}] Failed to update username`);
         }
     }
     async updateClientName(client, tgManager, me) {
-        const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-        const safeAttemptReverse = (val) => {
-            try {
-                return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
-            }
-            catch {
-                return '';
-            }
-        };
-        const actualName = normalize(safeAttemptReverse(me.firstName || ''));
-        const expectedName = normalize(client.name || '');
-        if (actualName !== expectedName) {
+        if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
             this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-            await tgManager.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+            await tgManager.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
                 maintainFormatting: false,
                 preserveCase: true,
-            }));
+                useInvisibleChars: false
+            })} ${(0, utils_1.getCuteEmoji)()}`, '');
             await (0, Helpers_1.sleep)(5000);
         }
         else {
@@ -20940,11 +20922,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile((0, utils_1.obfuscateText)(client.name, {
+                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
                             maintainFormatting: false,
                             preserveCase: true,
                             useInvisibleChars: false
-                        }), '');
+                        })} ${(0, utils_1.getCuteEmoji)()}`, '');
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         this.updateCount++;
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
@@ -29380,10 +29362,9 @@ const normalize = (str) => (str || "")
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/[^\p{L}\p{N}@]/gu, "")
+    .replace(/[^\p{L}\p{N}@\s]/gu, "")
     .normalize("NFC")
-    .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "")
-    .replace(/\s*👉\s*/g, "👉");
+    .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "");
 const safeAttemptReverse = (val) => {
     try {
         return (0, obfuscateText_1.attemptReverseFuzzy)(val ?? "") || "";
@@ -29912,10 +29893,19 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getRandomEmoji = getRandomEmoji;
+exports.getCuteEmoji = getCuteEmoji;
 function getRandomEmoji() {
     const eroticEmojis = ["🔥", "💋", "👅", "🍆", "🔥", "💋", " 🙈", "👅", "🍑", "🍆", "💦", "🍑", "😚", "😏", "💦", "🥕", "🥖"];
     const randomIndex = Math.floor(Math.random() * eroticEmojis.length);
     return eroticEmojis[randomIndex];
+}
+function getCuteEmoji() {
+    const girlishEmojis = [
+        "🌸", "💖", "💅", "✨", "💐", "🎀", "🌷", "🦋", "💞",
+        "💫", "🌈", "🍓", "🧁", "🌺", "🥰", "😊", "💕", "🌻"
+    ];
+    const randomIndex = Math.floor(Math.random() * girlishEmojis.length);
+    return girlishEmojis[randomIndex];
 }
 
 
