@@ -30,7 +30,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { getCuteEmoji, Logger, obfuscateText } from '../../utils';
+import { getCuteEmoji, getRandomPetName, Logger, obfuscateText } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { getProfilePics } from '../Telegram/utils/getProfilePics';
@@ -798,7 +798,7 @@ export class PromoteClientService implements OnModuleDestroy {
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
             if (lastUsed && now - lastUsed < 30 * 60 * 1000) { // 30-minute cooldown
-                this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
+                this.logger.warn(`[PromoteClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
 
@@ -822,7 +822,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
-                    this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
+                    this.logger.debug(`[PromoteClientService] Updated privacy settings for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Updating Privacy: ${doc.mobile}`, true);
@@ -858,7 +858,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         await cli.deleteProfilePhotos();
                         await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
                         this.updateCount++;
-                        this.logger.debug(`[BufferClientService] Deleted profile photos for ${doc.mobile}`);
+                        this.logger.debug(`[PromoteClientService] Deleted profile photos for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     }
                 } catch (error: any) {
@@ -886,12 +886,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     handler: false,
                 });
                 const me = await cli.getMe();
-
-                if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), client.name)) {
+                const expectedName = client?.name.split(' ')[0];
+                if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), expectedName, 2)) {
                     try {
-                        this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                        this.logger.log(`[PromoteClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                         await cli.updateProfile(
-                            `${obfuscateText(client.name, {
+                            `${obfuscateText(`${expectedName} ${getRandomPetName()}`, {
                                 maintainFormatting: false,
                                 preserveCase: true,
                                 useInvisibleChars: false
@@ -904,7 +904,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         );
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         this.updateCount++;
-                        this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
+                        this.logger.debug(`[PromoteClientService] Updated name and bio for ${doc.mobile}`);
                         await sleep(20000 + Math.random() * 15000); // 20-35s delay
                     } catch (error: any) {
                         const errorDetails = parseError(error, `Error in Updating Profile: ${doc.mobile}`, true);
@@ -935,7 +935,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     await this.telegramService.updateUsername(doc.mobile, '');
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
-                    this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
+                    this.logger.debug(`[PromoteClientService] Updated username for ${doc.mobile}`);
                     await sleep(20000 + Math.random() * 15000); // 20-35s delay
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Updating Username: ${doc.mobile}`, true);
@@ -986,7 +986,7 @@ export class PromoteClientService implements OnModuleDestroy {
                             if (this.updateCount >= MAX_UPDATES_PER_RUN) break;
                             await cli.updateProfilePic(path.join(rootPath, photo));
                             this.updateCount++;
-                            this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${doc.mobile}`);
+                            this.logger.debug(`[PromoteClientService] Updated profile photo ${photo} for ${doc.mobile}`);
                             await sleep(20000 + Math.random() * 15000); // 20-35s delay per photo
                         }
                         await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
@@ -1011,7 +1011,7 @@ export class PromoteClientService implements OnModuleDestroy {
             try {
                 if (cli) await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError: any) {
-                this.logger.error(`[BufferClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+                this.logger.error(`[PromoteClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
             await sleep(10000 + Math.random() * 5000); // 10-15s final delay
         }
