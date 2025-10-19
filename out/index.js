@@ -20850,7 +20850,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
             const now = Date.now();
             if (lastUsed && now - lastUsed < 30 * 60 * 1000) {
-                this.logger.warn(`[BufferClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
+                this.logger.warn(`[PromoteClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
             await (0, Helpers_1.sleep)(5000 + Math.random() * 10000);
@@ -20867,7 +20867,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await cli.updatePrivacyforDeletedAccount();
                     await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
                     this.updateCount++;
-                    this.logger.debug(`[BufferClientService] Updated privacy settings for ${doc.mobile}`);
+                    this.logger.debug(`[PromoteClientService] Updated privacy settings for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
                 catch (error) {
@@ -20896,7 +20896,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         await cli.deleteProfilePhotos();
                         await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
                         this.updateCount++;
-                        this.logger.debug(`[BufferClientService] Deleted profile photos for ${doc.mobile}`);
+                        this.logger.debug(`[PromoteClientService] Deleted profile photos for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                     }
                 }
@@ -20919,17 +20919,18 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     handler: false,
                 });
                 const me = await cli.getMe();
-                if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
+                const expectedName = client?.name.split(' ')[0];
+                if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
                     try {
-                        this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
+                        this.logger.log(`[PromoteClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
                             maintainFormatting: false,
                             preserveCase: true,
                             useInvisibleChars: false
                         })} ${(0, utils_1.getCuteEmoji)()}`, '');
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         this.updateCount++;
-                        this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);
+                        this.logger.debug(`[PromoteClientService] Updated name and bio for ${doc.mobile}`);
                         await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                     }
                     catch (error) {
@@ -20955,7 +20956,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await this.telegramService.updateUsername(doc.mobile, '');
                     await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
                     this.updateCount++;
-                    this.logger.debug(`[BufferClientService] Updated username for ${doc.mobile}`);
+                    this.logger.debug(`[PromoteClientService] Updated username for ${doc.mobile}`);
                     await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                 }
                 catch (error) {
@@ -20999,7 +21000,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                                 break;
                             await cli.updateProfilePic(path_1.default.join(rootPath, photo));
                             this.updateCount++;
-                            this.logger.debug(`[BufferClientService] Updated profile photo ${photo} for ${doc.mobile}`);
+                            this.logger.debug(`[PromoteClientService] Updated profile photo ${photo} for ${doc.mobile}`);
                             await (0, Helpers_1.sleep)(20000 + Math.random() * 15000);
                         }
                         await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
@@ -21028,7 +21029,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
             }
             catch (unregisterError) {
-                this.logger.error(`[BufferClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
+                this.logger.error(`[PromoteClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
             await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
         }
@@ -29894,6 +29895,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getRandomEmoji = getRandomEmoji;
 exports.getCuteEmoji = getCuteEmoji;
+exports.getRandomPetName = getRandomPetName;
 function getRandomEmoji() {
     const eroticEmojis = ["🔥", "💋", "👅", "🍆", "🔥", "💋", " 🙈", "👅", "🍑", "🍆", "💦", "🍑", "😚", "😏", "💦", "🥕", "🥖"];
     const randomIndex = Math.floor(Math.random() * eroticEmojis.length);
@@ -29906,6 +29908,17 @@ function getCuteEmoji() {
     ];
     const randomIndex = Math.floor(Math.random() * girlishEmojis.length);
     return girlishEmojis[randomIndex];
+}
+function getRandomPetName() {
+    const cuteDesiEnglishPetNames = [
+        "Cuti", 'Cutie', "Sweety", "Shinny", 'Shiney', "Bubli",
+        "Cuddly", "Sparkle", "Hunny", "Twinkle", "Bunni", "Cuppy",
+        "Jelly", "Rosy", "Starry", "Dolly",
+        "Pinku", "Glitzy", "Chirpy", "Mishu", "Dreamy",
+        "Lovely", "Puppy", "Kuttie", "Rinkly", "Bouncy"
+    ];
+    const randomIndex = Math.floor(Math.random() * cuteDesiEnglishPetNames.length);
+    return cuteDesiEnglishPetNames[randomIndex];
 }
 
 
