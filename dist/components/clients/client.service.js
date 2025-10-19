@@ -35,6 +35,7 @@ const path_1 = __importDefault(require("path"));
 const tl_1 = require("telegram/tl");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 const Telegram_service_1 = require("../Telegram/Telegram.service");
+const checkMe_utils_1 = require("../../utils/checkMe.utils");
 const CONFIG = {
     REFRESH_INTERVAL: 5 * 60 * 1000,
     CACHE_TTL: 10 * 60 * 1000,
@@ -611,43 +612,24 @@ let ClientService = ClientService_1 = class ClientService {
         return true;
     }
     async updateClientUsername(client, me) {
-        const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-        const actualUsername = normalize(me.username || '');
-        const expectedUsername = normalize(client.username || '');
-        if (!actualUsername || actualUsername !== expectedUsername) {
-            this.logger.log(`[${client.clientId}] Username mismatch. Actual: ${me.username}, Expected: ${client.username}`);
-            const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
-            if (updatedUsername) {
-                await this.update(client.clientId, { username: updatedUsername });
-                this.logger.log(`[${client.clientId}] Username updated to: ${updatedUsername}`);
-                await (0, Helpers_1.sleep)(10000);
-            }
-            else {
-                this.logger.warn(`[${client.clientId}] Failed to update username`);
-            }
+        const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, client.name, me.username);
+        if (updatedUsername) {
+            await this.update(client.clientId, { username: updatedUsername });
+            this.logger.log(`[${client.clientId}] Username updated to: ${updatedUsername}`);
+            await (0, Helpers_1.sleep)(10000);
         }
         else {
-            this.logger.log(`[${client.clientId}] Username already correct`);
+            this.logger.warn(`[${client.clientId}] Failed to update username`);
         }
     }
     async updateClientName(client, tgManager, me) {
-        const normalize = (str) => (str || '').toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
-        const safeAttemptReverse = (val) => {
-            try {
-                return (0, utils_1.attemptReverseFuzzy)(val ?? '') || '';
-            }
-            catch {
-                return '';
-            }
-        };
-        const actualName = normalize(safeAttemptReverse(me.firstName || ''));
-        const expectedName = normalize(client.name || '');
-        if (actualName !== expectedName) {
+        if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
             this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-            await tgManager.updateProfile((0, utils_1.obfuscateText)(client.name, { maintainFormatting: false, preserveCase: true }), (0, utils_1.obfuscateText)(`Genuine Paid Girl${(0, utils_1.getRandomEmoji)()}, Best Services${(0, utils_1.getRandomEmoji)()}`, {
+            await tgManager.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
                 maintainFormatting: false,
                 preserveCase: true,
-            }));
+                useInvisibleChars: false
+            })} ${(0, utils_1.getCuteEmoji)()}`, '');
             await (0, Helpers_1.sleep)(5000);
         }
         else {

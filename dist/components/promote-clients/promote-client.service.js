@@ -759,11 +759,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), client.name)) {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile((0, utils_1.obfuscateText)(client.name, {
+                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
                             maintainFormatting: false,
                             preserveCase: true,
                             useInvisibleChars: false
-                        }), '');
+                        })} ${(0, utils_1.getCuteEmoji)()}`, '');
                         await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
                         this.updateCount++;
                         this.logger.debug(`[BufferClientService] Updated name and bio for ${doc.mobile}`);

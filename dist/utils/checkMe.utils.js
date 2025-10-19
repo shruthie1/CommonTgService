@@ -6,10 +6,9 @@ const normalize = (str) => (str || "")
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/[^\p{L}\p{N}@]/gu, "")
+    .replace(/[^\p{L}\p{N}@\s]/gu, "")
     .normalize("NFC")
-    .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "")
-    .replace(/\s*👉\s*/g, "👉");
+    .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "");
 const safeAttemptReverse = (val) => {
     try {
         return (0, obfuscateText_1.attemptReverseFuzzy)(val ?? "") || "";
