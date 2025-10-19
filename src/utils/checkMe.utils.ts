@@ -5,11 +5,9 @@ const normalize = (str: string | null | undefined): string =>
         .toLowerCase()
         .trim()
         .replace(/\s+/g, " ")
-        .replace(/[^\p{L}\p{N}@]/gu, "") // remove non-letter/number/@
+        .replace(/[^\p{L}\p{N}@\s]/gu, "")
         .normalize("NFC")
-        .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "")
-        .replace(/\s*👉\s*/g, "👉");
-
+        .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, "");
 // Safely attempt reverse fuzzy operation
 export const safeAttemptReverse = (val: string | null | undefined): string => {
     try {

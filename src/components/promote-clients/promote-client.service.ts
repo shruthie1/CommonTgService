@@ -30,7 +30,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { Logger, obfuscateText } from '../../utils';
+import { getCuteEmoji, Logger, obfuscateText } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { getProfilePics } from '../Telegram/utils/getProfilePics';
@@ -891,11 +891,11 @@ export class PromoteClientService implements OnModuleDestroy {
                     try {
                         this.logger.log(`[BufferClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                         await cli.updateProfile(
-                            obfuscateText(client.name, {
+                            `${obfuscateText(client.name, {
                                 maintainFormatting: false,
                                 preserveCase: true,
                                 useInvisibleChars: false
-                            }),
+                            })} ${getCuteEmoji()}`,
                             ''
                             // obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
                             //     maintainFormatting: false,
