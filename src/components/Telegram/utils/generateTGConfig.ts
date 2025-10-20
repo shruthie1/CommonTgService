@@ -38,7 +38,7 @@ export async function generateTGConfig(mobile: string, ttl: number = 60 * 60 * 2
     maxConcurrentDownloads: 3,
     downloadRetries: 5,
     // Optional flags:
-    useWSS: true,
+    useWSS: false,
     useIPV6: false,
   };
 

@@ -99,6 +99,7 @@ export class TgSignupService implements OnModuleDestroy {
                 connectionRetries: 5,
                 retryDelay: 2000,
                 useWSS: false,
+                useIPV6: false,
                 timeout: 30000
             });
 
