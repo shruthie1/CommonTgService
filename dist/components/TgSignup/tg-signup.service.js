@@ -81,6 +81,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 connectionRetries: 5,
                 retryDelay: 2000,
                 useWSS: false,
+                useIPV6: false,
                 timeout: 30000
             });
             await client.setLogLevel(Logger_1.LogLevel.ERROR);

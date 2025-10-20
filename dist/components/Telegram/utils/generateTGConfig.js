@@ -26,7 +26,7 @@ async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
-        useWSS: true,
+        useWSS: false,
         useIPV6: false,
     };
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
