@@ -23346,7 +23346,7 @@ let SessionController = class SessionController {
             }
             const mobile = body.mobile.trim();
             const allowFallback = body.allowFallback !== false;
-            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 30;
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 90;
             const result = await this.sessionService.getOldestSessionOrCreate({
                 mobile,
                 allowFallback,
