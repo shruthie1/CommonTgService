@@ -8620,7 +8620,7 @@ async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
         autoReconnect: true,
         maxConcurrentDownloads: 3,
         downloadRetries: 5,
-        useWSS: true,
+        useWSS: false,
         useIPV6: false,
     };
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
@@ -9191,6 +9191,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 connectionRetries: 5,
                 retryDelay: 2000,
                 useWSS: false,
+                useIPV6: false,
                 timeout: 30000
             });
             await client.setLogLevel(Logger_1.LogLevel.ERROR);
