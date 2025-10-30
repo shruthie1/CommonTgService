@@ -362,7 +362,7 @@ export class SessionController {
             // Sanitize and set defaults
             const mobile = body.mobile.trim();
             const allowFallback = body.allowFallback !== false; // Default to true
-            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 30; // Default to 30 days
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 90; // Default to 30 days
 
             // Call service method
             const result = await this.sessionService.getOldestSessionOrCreate({
