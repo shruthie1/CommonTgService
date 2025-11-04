@@ -1333,6 +1333,7 @@ const message_search_dto_1 = __webpack_require__(/*! ./dto/message-search.dto */
 const delete_chat_dto_1 = __webpack_require__(/*! ./dto/delete-chat.dto */ "./src/components/Telegram/dto/delete-chat.dto.ts");
 const update_username_dto_1 = __webpack_require__(/*! ./dto/update-username.dto */ "./src/components/Telegram/dto/update-username.dto.ts");
 const send_message_dto_1 = __webpack_require__(/*! ./dto/send-message.dto */ "./src/components/Telegram/dto/send-message.dto.ts");
+const update_profile_dto_1 = __webpack_require__(/*! ./dto/update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -1729,12 +1730,12 @@ __decorate([
     (0, common_1.Post)('profile/update/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.UpdateProfileDto }),
+    (0, swagger_1.ApiBody)({ type: update_profile_dto_1.UpdateProfileDto }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.UpdateProfileDto]),
+    __metadata("design:paramtypes", [String, update_profile_dto_1.UpdateProfileDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "updateProfile", null);
 __decorate([
@@ -7781,24 +7782,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = exports.UpdateProfileDto = void 0;
+exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = void 0;
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const telegram_1 = __webpack_require__(/*! ../../../interfaces/telegram */ "./src/interfaces/telegram.ts");
-class UpdateProfileDto {
-}
-exports.UpdateProfileDto = UpdateProfileDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "firstName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About/bio information', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "about", void 0);
 class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;
@@ -8047,12 +8034,13 @@ class UpdateProfileDto {
 }
 exports.UpdateProfileDto = UpdateProfileDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First name' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About information', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'About information', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

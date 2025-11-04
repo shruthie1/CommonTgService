@@ -113,7 +113,7 @@ export declare class TelegramService implements OnModuleDestroy {
         minDate?: number;
         maxDate?: number;
     }): Promise<void>;
-    updateNameandBio(mobile: string, firstName: string, about?: string): Promise<void>;
+    updateNameandBio(mobile: string, firstName?: string, about?: string): Promise<void>;
     getDialogs(mobile: string, query: DialogsQueryDto): Promise<any[]>;
     getConnectionStatus(): Promise<{
         activeConnections: number;
