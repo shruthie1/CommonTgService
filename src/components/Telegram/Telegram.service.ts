@@ -438,7 +438,7 @@ export class TelegramService implements OnModuleDestroy {
     }
     async updateNameandBio(
         mobile: string,
-        firstName: string,
+        firstName?: string,
         about?: string,
     ): Promise<void> {
         const telegramClient = await connectionManager.getClient(mobile)
