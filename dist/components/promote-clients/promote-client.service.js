@@ -165,7 +165,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return this.updateStatus(mobile, 'inactive', reason);
+        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
+        try {
+            return await this.updateStatus(mobile, 'inactive', reason);
+        }
+        catch (error) {
+            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${error.message}`);
+        }
     }
     async markAsActive(mobile, message = 'Account is functioning properly') {
         return this.updateStatus(mobile, 'active', message);
@@ -913,10 +919,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     if (!promoteClient.lastUsed) {
                         const client = clients.find((c) => c.clientId === result._id);
                         const currentUpdates = await this.processPromoteClient(promoteClient, client);
-                        console.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (currentUpdates > 0) {
                             totalUpdates += currentUpdates;
                         }
+                        this.logger.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (totalUpdates >= 5) {
                             this.logger.warn('Reached total update limit of 5 for this check cycle');
                             break;
