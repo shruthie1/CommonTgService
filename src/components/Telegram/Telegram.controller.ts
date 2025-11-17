@@ -9,7 +9,6 @@ import {
     GroupMemberOperationDto,
     AdminOperationDto,
     ChatCleanupDto,
-    UpdateProfileDto,
     PrivacySettingsDto,
     ProfilePhotoDto,
     ScheduleMessageDto,
@@ -37,6 +36,7 @@ import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-sear
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { SendTgMessageDto } from './dto/send-message.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('telegram')
 @ApiTags('Telegram')

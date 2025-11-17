@@ -60,6 +60,7 @@ const message_search_dto_1 = require("./dto/message-search.dto");
 const delete_chat_dto_1 = require("./dto/delete-chat.dto");
 const update_username_dto_1 = require("./dto/update-username.dto");
 const send_message_dto_1 = require("./dto/send-message.dto");
+const update_profile_dto_1 = require("./dto/update-profile.dto");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -456,12 +457,12 @@ __decorate([
     (0, common_1.Post)('profile/update/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.UpdateProfileDto }),
+    (0, swagger_1.ApiBody)({ type: update_profile_dto_1.UpdateProfileDto }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.UpdateProfileDto]),
+    __metadata("design:paramtypes", [String, update_profile_dto_1.UpdateProfileDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "updateProfile", null);
 __decorate([
