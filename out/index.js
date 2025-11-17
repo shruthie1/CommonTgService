@@ -13064,10 +13064,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.debug('Cleared all active timeouts');
     }
     async create(bufferClient) {
-        return await this.bufferClientModel.create({
+        const result = await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        return result;
     }
     async findAll(status) {
         const filter = status ? { status } : {};
@@ -20282,7 +20285,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
-        return newUser.save();
+        const result = await newUser.save();
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client Created:\n\nMobile: ${promoteClient.mobile}`);
+        return result;
     }
     async findAll(statusFilter) {
         const filter = statusFilter ? { status: statusFilter } : {};

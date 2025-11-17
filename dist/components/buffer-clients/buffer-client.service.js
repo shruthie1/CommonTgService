@@ -149,10 +149,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.debug('Cleared all active timeouts');
     }
     async create(bufferClient) {
-        return await this.bufferClientModel.create({
+        const result = await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        return result;
     }
     async findAll(status) {
         const filter = status ? { status } : {};
