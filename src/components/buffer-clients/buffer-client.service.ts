@@ -206,10 +206,13 @@ export class BufferClientService implements OnModuleDestroy {
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument> {
         // Ensure status is set to 'active' by default if not provided
-        return await this.bufferClientModel.create({
+        const result = await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        return result;
     }
 
     async findAll(status?: 'active' | 'inactive'): Promise<BufferClientDocument[]> {

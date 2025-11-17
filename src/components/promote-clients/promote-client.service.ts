@@ -144,7 +144,9 @@ export class PromoteClientService implements OnModuleDestroy {
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
-        return newUser.save();
+        const result = await newUser.save();
+        this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client Created:\n\nMobile: ${promoteClient.mobile}`);
+        return result;
     }
 
     async findAll(statusFilter?: string): Promise<PromoteClient[]> {
