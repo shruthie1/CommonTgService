@@ -269,7 +269,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         return await this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return await this.updateStatus(mobile, 'inactive', reason);
+        try {
+            this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
+            return await this.updateStatus(mobile, 'inactive', reason);
+        }
+        catch (error) {
+            this.logger.error(`Failed to mark buffer client ${mobile} as inactive: ${error.message}`);
+        }
     }
     async updateInfo() {
         const clients = await this.bufferClientModel
