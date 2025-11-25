@@ -30,7 +30,6 @@ export declare class BufferClientService implements OnModuleDestroy {
     private leaveChannelIntervalId;
     private isJoinChannelProcessing;
     private isLeaveChannelProcessing;
-    private updateCount;
     private activeTimeouts;
     private readonly JOIN_CHANNEL_INTERVAL;
     private readonly LEAVE_CHANNEL_INTERVAL;
@@ -79,6 +78,7 @@ export declare class BufferClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
+    private getPendingUpdates;
     processBufferClient(doc: BufferClient, client: Client): Promise<number>;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[], clientsNeedingBufferClients?: string[], bufferClientsPerClient?: Map<string, number>): Promise<void>;
     updateAllClientSessions(): Promise<void>;

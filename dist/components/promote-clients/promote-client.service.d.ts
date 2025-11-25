@@ -39,7 +39,6 @@ export declare class PromoteClientService implements OnModuleDestroy {
     private readonly CHANNEL_PROCESSING_DELAY;
     private readonly CLEANUP_INTERVAL;
     private cleanupIntervalId;
-    private updateCount;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientService: BufferClientService, sessionService: SessionService, botsService: BotsService);
     private startMemoryCleanup;
     private clearMemoryCleanup;
@@ -75,6 +74,7 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     private safeUnregisterClient;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
+    private getPendingUpdates;
     processPromoteClient(doc: PromoteClient, client: Client): Promise<number>;
     checkPromoteClients(): Promise<void>;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
