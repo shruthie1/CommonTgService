@@ -1333,6 +1333,7 @@ const message_search_dto_1 = __webpack_require__(/*! ./dto/message-search.dto */
 const delete_chat_dto_1 = __webpack_require__(/*! ./dto/delete-chat.dto */ "./src/components/Telegram/dto/delete-chat.dto.ts");
 const update_username_dto_1 = __webpack_require__(/*! ./dto/update-username.dto */ "./src/components/Telegram/dto/update-username.dto.ts");
 const send_message_dto_1 = __webpack_require__(/*! ./dto/send-message.dto */ "./src/components/Telegram/dto/send-message.dto.ts");
+const update_profile_dto_1 = __webpack_require__(/*! ./dto/update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts");
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -1729,12 +1730,12 @@ __decorate([
     (0, common_1.Post)('profile/update/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update profile information' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ type: dto_1.UpdateProfileDto }),
+    (0, swagger_1.ApiBody)({ type: update_profile_dto_1.UpdateProfileDto }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, dto_1.UpdateProfileDto]),
+    __metadata("design:paramtypes", [String, update_profile_dto_1.UpdateProfileDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "updateProfile", null);
 __decorate([
@@ -7781,24 +7782,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = exports.UpdateProfileDto = void 0;
+exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = void 0;
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const telegram_1 = __webpack_require__(/*! ../../../interfaces/telegram */ "./src/interfaces/telegram.ts");
-class UpdateProfileDto {
-}
-exports.UpdateProfileDto = UpdateProfileDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "firstName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About/bio information', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "about", void 0);
 class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;
@@ -8047,12 +8034,13 @@ class UpdateProfileDto {
 }
 exports.UpdateProfileDto = UpdateProfileDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First name' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About information', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'About information', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -13076,10 +13064,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.logger.debug('Cleared all active timeouts');
     }
     async create(bufferClient) {
-        return await this.bufferClientModel.create({
+        const result = await this.bufferClientModel.create({
             ...bufferClient,
             status: bufferClient.status || 'active',
         });
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        return result;
     }
     async findAll(status) {
         const filter = status ? { status } : {};
@@ -13196,7 +13187,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         return await this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return await this.updateStatus(mobile, 'inactive', reason);
+        try {
+            this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
+            return await this.updateStatus(mobile, 'inactive', reason);
+        }
+        catch (error) {
+            this.logger.error(`Failed to mark buffer client ${mobile} as inactive: ${error.message}`);
+        }
     }
     async updateInfo() {
         const clients = await this.bufferClientModel
@@ -20288,7 +20285,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
-        return newUser.save();
+        const result = await newUser.save();
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client Created:\n\nMobile: ${promoteClient.mobile}`);
+        return result;
     }
     async findAll(statusFilter) {
         const filter = statusFilter ? { status: statusFilter } : {};
@@ -20329,7 +20328,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
-        return this.updateStatus(mobile, 'inactive', reason);
+        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
+        try {
+            return await this.updateStatus(mobile, 'inactive', reason);
+        }
+        catch (error) {
+            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${error.message}`);
+        }
     }
     async markAsActive(mobile, message = 'Account is functioning properly') {
         return this.updateStatus(mobile, 'active', message);
@@ -21077,10 +21082,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                     if (!promoteClient.lastUsed) {
                         const client = clients.find((c) => c.clientId === result._id);
                         const currentUpdates = await this.processPromoteClient(promoteClient, client);
-                        console.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (currentUpdates > 0) {
                             totalUpdates += currentUpdates;
                         }
+                        this.logger.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (totalUpdates >= 5) {
                             this.logger.warn('Reached total update limit of 5 for this check cycle');
                             break;

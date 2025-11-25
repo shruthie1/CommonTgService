@@ -143,7 +143,9 @@ export class PromoteClientService implements OnModuleDestroy {
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
-        return newUser.save();
+        const result = await newUser.save();
+        this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client Created:\n\nMobile: ${promoteClient.mobile}`);
+        return result;
     }
 
     async findAll(statusFilter?: string): Promise<PromoteClient[]> {
@@ -197,7 +199,12 @@ export class PromoteClientService implements OnModuleDestroy {
     }
 
     async markAsInactive(mobile: string, reason: string): Promise<PromoteClient> {
-        return this.updateStatus(mobile, 'inactive', reason);
+        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
+        try {
+            return await this.updateStatus(mobile, 'inactive', reason);
+        } catch (error) {
+            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${error.message}`);
+        }
     }
 
     async markAsActive(mobile: string, message: string = 'Account is functioning properly'): Promise<PromoteClient> {
@@ -1260,6 +1267,7 @@ export class PromoteClientService implements OnModuleDestroy {
                         if (currentUpdates > 0) {
                             totalUpdates += currentUpdates;
                         }
+                        this.logger.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (totalUpdates >= 5) {
                             this.logger.warn('Reached total update limit of 5 for this check cycle');
                             break;
