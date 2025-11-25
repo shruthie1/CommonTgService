@@ -69,6 +69,9 @@ export class BufferClient {
 
   @Prop({ required: false, type: Date, default: null })
   updatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  lastUpdateAttempt: Date;
 }
 
 export const BufferClientSchema = SchemaFactory.createForClass(BufferClient);

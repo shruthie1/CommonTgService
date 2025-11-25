@@ -89,8 +89,8 @@ async function bootstrap() {
             },
         }));
         await app.init();
-        await app.listen(process.env.PORT || 9002);
-        console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
+        await app.listen(process.env.PORT || 9003);
+        console.log(`Application is running on: http://localhost:${process.env.PORT || 9003}`);
     }
     catch (error) {
         console.error('Error during application bootstrap:', error);

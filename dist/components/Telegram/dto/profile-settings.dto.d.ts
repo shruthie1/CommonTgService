@@ -1,8 +1,4 @@
 import { PrivacyLevel } from '../../../interfaces/telegram';
-export declare class UpdateProfileDto {
-    firstName: string;
-    about?: string;
-}
 export declare class PrivacySettingsDto {
     phoneNumber?: PrivacyLevel;
     lastSeen?: PrivacyLevel;

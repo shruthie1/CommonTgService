@@ -9,24 +9,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = exports.UpdateProfileDto = void 0;
+exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
 const telegram_1 = require("../../../interfaces/telegram");
-class UpdateProfileDto {
-}
-exports.UpdateProfileDto = UpdateProfileDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name' }),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "firstName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'About/bio information', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateProfileDto.prototype, "about", void 0);
 class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;

@@ -9,4 +9,5 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     nameBioUpdatedAt?: Date;
     profilePicsDeletedAt?: Date;
     usernameUpdatedAt?: Date;
+    lastUpdateAttempt?: Date;
 }

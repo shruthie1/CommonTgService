@@ -28,8 +28,8 @@ export class PromoteClient {
   @Prop({ required: true, type: Number })
   channels: number;
 
-  @Prop({ required: true })
-  clientId: string;
+  @Prop({ required: false })
+  clientId?: string;
 
   @Prop({ required: false, default: 'active' })
   status: string;
@@ -60,6 +60,9 @@ export class PromoteClient {
 
   @Prop({ required: false, type: Date, default: null })
   updatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  lastUpdateAttempt: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);

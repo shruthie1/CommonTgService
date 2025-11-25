@@ -10433,12 +10433,9 @@
           },
           "about": {
             "type": "string",
-            "description": "About/bio information"
+            "description": "About information"
           }
-        },
-        "required": [
-          "firstName"
-        ]
+        }
       },
       "ProfilePhotoDto": {
         "type": "object",
