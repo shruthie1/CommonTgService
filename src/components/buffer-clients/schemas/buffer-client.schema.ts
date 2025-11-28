@@ -37,6 +37,9 @@ export class BufferClient {
   @Prop({ required: false, type: Date, default: null })
   lastUsed: Date;
 
+  @Prop({ required: false, type: Date, default: null })
+  lastChecked: Date;
+
   @Prop({
     required: true,
     enum: ['active', 'inactive'],

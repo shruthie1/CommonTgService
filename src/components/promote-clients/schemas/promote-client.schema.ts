@@ -60,6 +60,9 @@ export class PromoteClient {
 
   @Prop({ required: false, type: Date, default: null })
   updatedAt: Date;
+
+  @Prop({ required: false, type: Date, default: null })
+  lastChecked: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);

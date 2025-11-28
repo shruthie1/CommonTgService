@@ -300,8 +300,9 @@ export class PromoteClientService implements OnModuleDestroy {
 
     async updateInfo() {
         const clients = await this.promoteClientModel
-            .find({ status: 'active' })
-            .sort({ channels: 1 });
+            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })
+            .sort({ channels: 1 })
+            .limit(25);
 
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
@@ -322,7 +323,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 );
                 const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length });
+                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date()});
             } catch (error) {
                 const errorDetails = parseError(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
                 if (isPermanentError(errorDetails)) {

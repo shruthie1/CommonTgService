@@ -400,8 +400,10 @@ export class BufferClientService implements OnModuleDestroy {
         const clients = await this.bufferClientModel
             .find({
                 status: 'active',
+                lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
             })
-            .sort({ channels: 1 });
+            .sort({ channels: 1 })
+            .limit(25);
 
         this.logger.debug(`Updating info for ${clients.length} buffer clients`);
 
@@ -427,7 +429,7 @@ export class BufferClientService implements OnModuleDestroy {
 
                 const channels = await channelInfo(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`,);
-                await this.update(mobile, { channels: channels.ids.length });
+                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
             } catch (error) {
                 const errorDetails = parseError(error, `Failed to UpdatedClient: ${mobile}`);
                 if (isPermanentError(errorDetails)) {
@@ -456,6 +458,7 @@ export class BufferClientService implements OnModuleDestroy {
                     await sleep(8000 + Math.random() * 4000); // Increased to 8-12 seconds between each client
                 }
             }
+
         }
 
         this.logger.debug('Completed updating info for all buffer clients');
