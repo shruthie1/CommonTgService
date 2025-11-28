@@ -1,1 +1,1 @@
-{"version":3,"file":"update-buffer-client.dto.js","sourceRoot":"","sources":["../../../../src/components/buffer-clients/dto/update-buffer-client.dto.ts"],"names":[],"mappings":";;;AAAA,6CAA8C;AAC9C,yEAAmE;AAEnE,MAAa,qBAAsB,SAAQ,IAAA,qBAAW,EAAC,gDAAqB,CAAC;CAQ5E;AARD,sDAQC"}
+{"version":3,"file":"update-buffer-client.dto.js","sourceRoot":"","sources":["../../../../src/components/buffer-clients/dto/update-buffer-client.dto.ts"],"names":[],"mappings":";;;AAAA,6CAA8C;AAC9C,yEAAmE;AAEnE,MAAa,qBAAsB,SAAQ,IAAA,qBAAW,EAAC,gDAAqB,CAAC;CAS5E;AATD,sDASC"}

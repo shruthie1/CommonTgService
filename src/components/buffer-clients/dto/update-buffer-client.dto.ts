@@ -10,4 +10,5 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     profilePicsDeletedAt?: Date;
     usernameUpdatedAt?: Date;
     lastChecked?: Date;
+    lastUpdateAttempt?: Date;
 }

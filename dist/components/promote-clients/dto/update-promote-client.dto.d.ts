@@ -6,5 +6,6 @@ export declare class UpdatePromoteClientDto extends UpdatePromoteClientDto_base 
     nameBioUpdatedAt?: Date;
     profilePicsDeletedAt?: Date;
     usernameUpdatedAt?: Date;
+    lastUpdateAttempt?: Date;
 }
 export {};

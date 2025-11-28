@@ -10,4 +10,5 @@ export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) 
     profilePicsDeletedAt?: Date;
     usernameUpdatedAt?: Date;
     lastChecked?: Date;
+    lastUpdateAttempt?: Date;
 }

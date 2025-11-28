@@ -8,5 +8,6 @@ export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     nameBioUpdatedAt?: Date;
     profilePicsDeletedAt?: Date;
     usernameUpdatedAt?: Date;
+    lastUpdateAttempt?: Date;
 }
 export {};

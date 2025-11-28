@@ -63,7 +63,6 @@ export class PromoteClientService implements OnModuleDestroy {
     private readonly CHANNEL_PROCESSING_DELAY = 10000; // 10 seconds
     private readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10 minutes
     private cleanupIntervalId: NodeJS.Timeout | null = null;
-    private updateCount = 0;
 
     constructor(
         @InjectModel(PromoteClient.name)
@@ -265,10 +264,11 @@ export class PromoteClientService implements OnModuleDestroy {
         limit?: number,
         skip?: number,
     ): Promise<PromoteClient[]> {
+        if (!query) {
+            throw new BadRequestException('Query is invalid.');
+        }
+        
         try {
-            if (!query) {
-                throw new BadRequestException('Query is invalid.');
-            }
             const queryExec = this.promoteClientModel.find(query);
             if (sort) {
                 queryExec.sort(sort);
@@ -281,7 +281,12 @@ export class PromoteClientService implements OnModuleDestroy {
             }
             return await queryExec.exec();
         } catch (error) {
-            throw new InternalServerErrorException(error.message);
+            // Re-throw known exceptions, wrap unknown errors
+            if (error instanceof BadRequestException || error instanceof NotFoundException) {
+                throw error;
+            }
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            throw new InternalServerErrorException(`Query execution failed: ${errorMessage}`);
         }
     }
 
@@ -332,7 +337,10 @@ export class PromoteClientService implements OnModuleDestroy {
                 this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
             } finally {
                 await connectionManager.unregisterClient(mobile);
-                await sleep(2000);
+                // Increased delay to avoid rate limits
+                if (i < clients.length - 1) {
+                    await sleep(12000 + Math.random() * 8000); // 12-20 seconds between each client
+                }
             }
         }
     }
@@ -346,7 +354,7 @@ export class PromoteClientService implements OnModuleDestroy {
         this.logger.log('Starting join channel process');
         this.clearAllMapsAndIntervals();
 
-        await sleep(3000); // Initial delay to reduce CPU spike
+        await sleep(6000 + Math.random() * 3000); // Increased initial delay to reduce CPU spike
 
         try {
             const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
@@ -376,23 +384,25 @@ export class PromoteClientService implements OnModuleDestroy {
                         handler: false,
                     });
 
-                    await sleep(2000);
+                    await sleep(5000 + Math.random() * 3000); // 5-8s delay before channel info
                     const channels = await channelInfo(client.client, true);
                     this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
-                    await sleep(2000);
+                    await sleep(5000 + Math.random() * 3000); // 5-8s delay before update
                     await this.update(mobile, { channels: channels.ids.length });
 
                     if (channels.ids.length > 100) {
+                        await sleep(5000 + Math.random() * 3000); // Delay before profile pic operations
                         const profilePics = await getProfilePics(client.client);
                         if (profilePics.length > 0) {
                             await deleteProfilePhotos(client.client, profilePics);
+                            await sleep(10000 + Math.random() * 5000); // Delay after deletion
                         }
                     }
 
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
                         const channelLimit = 150;
-                        await sleep(1500);
+                        await sleep(5000 + Math.random() * 3000); // Increased delay before getting channels
                         const isBelowThreshold = channels.ids.length < 220;
 
                         const result: (Channel | ActiveChannel)[] = isBelowThreshold
@@ -431,11 +441,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                 } finally {
                     await this.safeUnregisterClient(mobile);
-                    await sleep(5000);
+                    // Progressive delay between clients to prevent rate limits
+                    await sleep(8000 + Math.random() * 5000); // 8-13s delay between clients
                 }
             }
 
-            await sleep(3000); // Delay before starting queues
+            await sleep(6000 + Math.random() * 3000); // Increased delay before starting queues
 
             if (joinSet.size > 0) {
                 this.startMemoryCleanup();
@@ -528,7 +539,12 @@ export class PromoteClientService implements OnModuleDestroy {
                     continue;
                 }
 
-                currentChannel = channels.shift()!;
+                currentChannel = channels.shift();
+                if (!currentChannel) {
+                    this.logger.debug(`No channel to process for ${mobile}, removing from queue`);
+                    this.removeFromPromoteMap(mobile);
+                    continue;
+                }
                 this.logger.debug(`[${mobile}] Processing channel: @${currentChannel.username} (${channels.length} remaining)`);
                 this.joinChannelMap.set(mobile, channels);
 
@@ -542,6 +558,8 @@ export class PromoteClientService implements OnModuleDestroy {
                 // Check for banned, deleted, or null
                 if (!activeChannel || activeChannel.banned || (activeChannel as any).deleted) { // Assume 'deleted' field; adjust schema if needed
                     this.logger.debug(`Skipping invalid/banned/deleted channel ${currentChannel.channelId}`);
+                    // Still add delay even when skipping to maintain rate limiting
+                    await sleep(5000 + Math.random() * 3000);
                     continue;
                 }
 
@@ -560,7 +578,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     this.logger.warn(`[${mobile}] FloodWaitError or too many channels, removing from queue`);
                     this.removeFromPromoteMap(mobile);
 
-                    await sleep(2000);
+                    await sleep(10000 + Math.random() * 5000); // Increased delay on FloodWaitError
                     if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
                         await this.update(mobile, { channels: 400 });
                     } else {
@@ -688,7 +706,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     handler: false,
                 });
 
-                await sleep(1500);
+                await sleep(5000 + Math.random() * 3000); // Increased delay before leaving channels
                 await client.leaveChannels(channelsToProcess);
                 this.logger.debug(`[${mobile}] Successfully left ${channelsToProcess.length} channels`);
             } catch (error: any) {
@@ -706,7 +724,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     i < keys.length - 1 ||
                     this.leaveChannelMap.get(mobile)?.length > 0
                 ) {
-                    await sleep(this.LEAVE_CHANNEL_INTERVAL / 2);
+                    await sleep((this.LEAVE_CHANNEL_INTERVAL / 2) + Math.random() * 30000); // Add randomness to delay
                 }
             }
         }
@@ -746,116 +764,232 @@ export class PromoteClientService implements OnModuleDestroy {
 
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        const existingAssignment = await this.promoteClientModel.findOne({
-            mobile,
-            clientId: { $exists: true },
-        });
 
-        if (!clientMobiles.includes(mobile) && !existingAssignment) {
-            const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false });
-            try {
-                await telegramClient.set2fa();
-                await sleep(15000);
-                await telegramClient.updateUsername('');
-                await sleep(3000);
-                await telegramClient.updatePrivacyforDeletedAccount();
-                await sleep(3000);
-                await telegramClient.updateProfile('Deleted Account', 'Deleted Account');
-                await sleep(3000);
-                await telegramClient.deleteProfilePhotos();
-                const channels = await this.telegramService.getChannelInfo(mobile, true);
-
-                const promoteClient = {
-                    tgId: user.tgId,
-                    lastActive: 'default',
-                    mobile: user.mobile,
-                    availableDate,
-                    channels: channels.ids.length,
-                    status: 'active',
-                    message: 'Manually configured as promote client',
-                    lastUsed: null,
-                };
-
-                await this.promoteClientModel
-                    .findOneAndUpdate(
-                        { mobile: user.mobile },
-                        { $set: promoteClient },
-                        { new: true, upsert: true },
-                    )
-                    .exec();
-            } catch (error) {
-                const errorDetails = parseError(error);
-                throw new HttpException(errorDetails.message, errorDetails.status);
-            } finally {
-                await this.safeUnregisterClient(mobile);
-            }
-            return 'Client set as promote successfully';
-        } else {
+        // Check if mobile is already an active client
+        if (clientMobiles.includes(mobile)) {
             throw new BadRequestException('Number is an Active Client');
         }
+
+        // If we reach here, promote client doesn't exist (checked above) and mobile is not an active client
+        const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false });
+        try {
+            await telegramClient.set2fa();
+            await sleep(30000 + Math.random() * 30000); // 30-60s delay for 2FA setup
+            await sleep(5000 + Math.random() * 5000); // Delay before username update
+            await telegramClient.updateUsername('');
+            await sleep(10000 + Math.random() * 5000); // 10-15s delay after username
+            await telegramClient.updatePrivacyforDeletedAccount();
+            await sleep(10000 + Math.random() * 5000); // 10-15s delay after privacy
+            await telegramClient.updateProfile('Deleted Account', 'Deleted Account');
+            await sleep(10000 + Math.random() * 5000); // 10-15s delay after profile
+            await telegramClient.deleteProfilePhotos();
+            await sleep(10000 + Math.random() * 5000); // 10-15s delay after photo deletion
+            const channels = await this.telegramService.getChannelInfo(mobile, true);
+
+            const promoteClient = {
+                tgId: user.tgId,
+                lastActive: 'default',
+                mobile: user.mobile,
+                availableDate,
+                channels: channels.ids.length,
+                status: 'active',
+                message: 'Manually configured as promote client',
+                lastUsed: null,
+            };
+
+            await this.promoteClientModel
+                .findOneAndUpdate(
+                    { mobile: user.mobile },
+                    { $set: promoteClient },
+                    { new: true, upsert: true },
+                )
+                .exec();
+        } catch (error) {
+            const errorDetails = parseError(error);
+            throw new HttpException(errorDetails.message, errorDetails.status);
+        } finally {
+            await this.safeUnregisterClient(mobile);
+        }
+        return 'Client set as promote successfully';
+    }
+
+    /**
+     * Check which updates are pending for a promote client
+     * Returns information about what needs to be updated
+     */
+    private getPendingUpdates(doc: PromoteClient, now: number): {
+        needsPrivacy: boolean;
+        needsDeletePhotos: boolean;
+        needsNameBio: boolean;
+        needsUsername: boolean;
+        needsProfilePhotos: boolean;
+        totalPending: number;
+        reasons: string[];
+    } {
+        const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
+        const oneDay = 24 * 60 * 60 * 1000;
+        const twoDays = 2 * oneDay;
+        const threeDays = 3 * oneDay;
+        const sevenDays = 7 * oneDay;
+        const tenDays = 10 * oneDay;
+        const thirtyDays = 30 * oneDay;
+        const fifteenDays = 15 * oneDay;
+        const MIN_DAYS_BETWEEN_UPDATE_TYPES = 2 * oneDay;
+        const reasons: string[] = [];
+
+        // Privacy update - always needed if account is 1-30 days old and not updated in last 15 days
+        const needsPrivacy = accountAge >= oneDay && accountAge <= thirtyDays &&
+            (!doc.privacyUpdatedAt || (new Date(doc.privacyUpdatedAt).getTime() < now - fifteenDays));
+        if (needsPrivacy) reasons.push('Privacy update needed');
+
+        // Delete photos - needs privacy updated at least 2 days ago OR privacy not done yet (will be done first)
+        const privacyUpdatedRecently = doc.privacyUpdatedAt && 
+            (now - new Date(doc.privacyUpdatedAt).getTime() >= MIN_DAYS_BETWEEN_UPDATE_TYPES);
+        const needsDeletePhotos = accountAge >= twoDays && accountAge <= thirtyDays &&
+            (!doc.profilePicsDeletedAt || (new Date(doc.profilePicsDeletedAt).getTime() < now - thirtyDays)) &&
+            (privacyUpdatedRecently || !doc.privacyUpdatedAt); // Allow if privacy was never updated (will be done first)
+        if (needsDeletePhotos) reasons.push('Delete photos needed');
+        else if (accountAge >= twoDays && accountAge <= thirtyDays && !privacyUpdatedRecently && doc.privacyUpdatedAt) {
+            reasons.push('Delete photos waiting for privacy update to age (2 days)');
+        }
+
+        // Name/Bio - needs photos deleted at least 2 days ago OR photos not deleted yet
+        const photosDeletedRecently = doc.profilePicsDeletedAt && 
+            (now - new Date(doc.profilePicsDeletedAt).getTime() >= MIN_DAYS_BETWEEN_UPDATE_TYPES);
+        const needsNameBio = accountAge >= threeDays && accountAge <= thirtyDays &&
+            doc.channels > 100 &&
+            (!doc.nameBioUpdatedAt || (new Date(doc.nameBioUpdatedAt).getTime() < now - thirtyDays)) &&
+            (photosDeletedRecently || !doc.profilePicsDeletedAt); // Allow if photos not deleted yet
+        if (needsNameBio) reasons.push('Name/Bio update needed');
+        else if (accountAge >= threeDays && accountAge <= thirtyDays && doc.channels > 100 && !photosDeletedRecently && doc.profilePicsDeletedAt) {
+            reasons.push('Name/Bio waiting for photo deletion to age (2 days)');
+        }
+
+        // Username - needs name/bio updated at least 2 days ago OR name/bio not updated yet
+        const nameBioUpdatedRecently = doc.nameBioUpdatedAt && 
+            (now - new Date(doc.nameBioUpdatedAt).getTime() >= MIN_DAYS_BETWEEN_UPDATE_TYPES);
+        const needsUsername = accountAge >= sevenDays && accountAge <= thirtyDays &&
+            doc.channels > 150 &&
+            (!doc.usernameUpdatedAt || (new Date(doc.usernameUpdatedAt).getTime() < now - thirtyDays)) &&
+            (nameBioUpdatedRecently || !doc.nameBioUpdatedAt); // Allow if name/bio not updated yet
+        if (needsUsername) reasons.push('Username update needed');
+        else if (accountAge >= sevenDays && accountAge <= thirtyDays && doc.channels > 150 && !nameBioUpdatedRecently && doc.nameBioUpdatedAt) {
+            reasons.push('Username waiting for name/bio update to age (2 days)');
+        }
+
+        // Profile photos - needs username updated at least 2 days ago OR username not updated yet
+        const usernameUpdatedRecently = doc.usernameUpdatedAt && 
+            (now - new Date(doc.usernameUpdatedAt).getTime() >= MIN_DAYS_BETWEEN_UPDATE_TYPES);
+        const needsProfilePhotos = accountAge >= tenDays && accountAge <= thirtyDays &&
+            doc.channels > 170 &&
+            (!doc.profilePicsUpdatedAt || (new Date(doc.profilePicsUpdatedAt).getTime() < now - thirtyDays)) &&
+            (usernameUpdatedRecently || !doc.usernameUpdatedAt); // Allow if username not updated yet
+        if (needsProfilePhotos) reasons.push('Profile photos update needed');
+        else if (accountAge >= tenDays && accountAge <= thirtyDays && doc.channels > 170 && !usernameUpdatedRecently && doc.usernameUpdatedAt) {
+            reasons.push('Profile photos waiting for username update to age (2 days)');
+        }
+
+        const totalPending = [needsPrivacy, needsDeletePhotos, needsNameBio, needsUsername, needsProfilePhotos]
+            .filter(Boolean).length;
+
+        return {
+            needsPrivacy,
+            needsDeletePhotos,
+            needsNameBio,
+            needsUsername,
+            needsProfilePhotos,
+            totalPending,
+            reasons
+        };
     }
 
     async processPromoteClient(doc: PromoteClient, client: Client): Promise<number> {
+        // Validate client parameter
+        if (!client) {
+            this.logger.warn(`[PromoteClientService] Client not found for promote client ${doc.mobile}`);
+            return 0;
+        }
+
         let cli: TelegramManager;
-        const MAX_UPDATES_PER_RUN = 2; // Limit to 2 profile updates per run to avoid spam flags
+        const MAX_UPDATES_PER_RUN = 1; // CRITICAL: Only ONE update per client per run to avoid Telegram anti-bot triggers
+        const MIN_COOLDOWN_HOURS = 4; // Minimum 4 hours between any updates
+        const MIN_DAYS_BETWEEN_UPDATE_TYPES = 2; // Minimum 2 days between different update types
+        let updateCount = 0; // Local variable to track updates for this specific client
 
         try {
             // Random initial delay to avoid patterned client connections
-            await sleep(10000 + Math.random() * 5000); // 10-15s
+            await sleep(15000 + Math.random() * 10000); // 15-25s - increased delay
             // Check if account is at risk of rate-limiting
             const lastUsed = doc.lastUsed ? new Date(doc.lastUsed).getTime() : 0;
+            const lastUpdateAttempt = (doc as any).lastUpdateAttempt ? new Date((doc as any).lastUpdateAttempt).getTime() : 0;
             const now = Date.now();
-            if (lastUsed && now - lastUsed < 30 * 60 * 1000) { // 30-minute cooldown
-                this.logger.warn(`[PromoteClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
+            
+            // Check cooldown from last update attempt (more strict)
+            if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
+                const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
+                this.logger.debug(`[PromoteClientService] Client ${doc.mobile} on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
+                return 0;
+            }
+            
+            // Also check lastUsed for additional safety
+            if (lastUsed && now - lastUsed < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
+                this.logger.debug(`[PromoteClientService] Client ${doc.mobile} recently used, skipping to avoid rate limits`);
                 return 0;
             }
 
-            await sleep(5000 + Math.random() * 10000); // 5-15s delay after getting user info
+            // Check pending updates and log them
+            const pendingUpdates = this.getPendingUpdates(doc, now);
+            if (pendingUpdates.totalPending > 0) {
+                this.logger.debug(`[PromoteClientService] Client ${doc.mobile} has ${pendingUpdates.totalPending} pending updates: ${pendingUpdates.reasons.join(', ')}`);
+            } else {
+                this.logger.debug(`[PromoteClientService] Client ${doc.mobile} has no pending updates - all updates complete!`);
+            }
 
-            // Privacy update for accounts older than 1 day
+            // Privacy update for accounts older than 1 day - PRIORITY 1 (safest, do first)
+            // Use pending updates check to ensure we don't skip this
             if (
-                (!doc.privacyUpdatedAt || (
-                    doc.createdAt &&
-                    doc.createdAt < new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) &&
-                    doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                    (doc.privacyUpdatedAt < new Date(Date.now() - 15 * 24 * 60 * 60 * 1000))
-                )) &&
-                this.updateCount < MAX_UPDATES_PER_RUN
+                updateCount < MAX_UPDATES_PER_RUN &&
+                pendingUpdates.needsPrivacy
             ) {
                 try {
                     cli = await connectionManager.getClient(doc.mobile, {
                         autoDisconnect: true,
                         handler: false,
                     });
+                    await sleep(5000 + Math.random() * 5000); // 5-10s delay before operation
                     await cli.updatePrivacyforDeletedAccount();
-                    await this.update(doc.mobile, { privacyUpdatedAt: new Date() });
-                    this.updateCount++;
+                    await this.update(doc.mobile, { 
+                        privacyUpdatedAt: new Date(),
+                        lastUpdateAttempt: new Date() // Track update attempt
+                    } as UpdatePromoteClientDto);
+                    updateCount++;
                     this.logger.debug(`[PromoteClientService] Updated privacy settings for ${doc.mobile}`);
-                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                    await sleep(30000 + Math.random() * 20000); // 30-50s delay after operation
+                    return updateCount; // Exit after one update
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Updating Privacy: ${doc.mobile}`, true);
+                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() } as UpdatePromoteClientDto); // Track attempt even on failure
                     if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return this.updateCount;
+                        return updateCount;
                     }
+                    // On transient error, return to prevent further updates this cycle
+                    return updateCount;
                 }
             }
 
-            // Delete profile photos for accounts 2+ days old
+            // Delete profile photos for accounts 2+ days old - PRIORITY 2
+            // Only proceed if privacy was updated at least MIN_DAYS_BETWEEN_UPDATE_TYPES days ago (or not updated yet - will be done first)
             if (
-                (!doc.profilePicsDeletedAt || (
-                    doc.createdAt &&
-                    doc.createdAt < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) &&
-                    doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                    doc.profilePicsDeletedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-                )) &&
-                this.updateCount < MAX_UPDATES_PER_RUN
+                updateCount < MAX_UPDATES_PER_RUN &&
+                pendingUpdates.needsDeletePhotos
             ) {
                 try {
                     cli = await connectionManager.getClient(doc.mobile, {
                         autoDisconnect: true,
                         handler: false,
                     });
+                    await sleep(5000 + Math.random() * 5000); // 5-10s delay before operation
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
                             userId: 'me',
@@ -864,36 +998,39 @@ export class PromoteClientService implements OnModuleDestroy {
                     );
                     if (photos.photos.length > 0) {
                         await cli.deleteProfilePhotos();
-                        await this.update(doc.mobile, { profilePicsDeletedAt: new Date() });
-                        this.updateCount++;
+                        await this.update(doc.mobile, { 
+                            profilePicsDeletedAt: new Date(),
+                            lastUpdateAttempt: new Date()
+                        } as UpdatePromoteClientDto);
+                        updateCount++;
                         this.logger.debug(`[PromoteClientService] Deleted profile photos for ${doc.mobile}`);
-                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                        await sleep(30000 + Math.random() * 20000); // 30-50s delay after operation
+                        return updateCount; // Exit after one update
                     }
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Deleting Photos: ${doc.mobile}`, true);
+                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                     if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return this.updateCount;
+                        return updateCount;
                     }
+                    return updateCount;
                 }
             }
 
-            // Update name and bio for accounts older than 3 days with 100+ channels
+            // Update name and bio for accounts older than 3 days with 100+ channels - PRIORITY 3
+            // Only proceed if previous updates were done at least MIN_DAYS_BETWEEN_UPDATE_TYPES days ago (or not done yet)
             if (
-                (!doc.nameBioUpdatedAt || (
-                    doc.createdAt &&
-                    doc.createdAt < new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) &&
-                    doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                    doc.channels > 100 &&
-                    doc.nameBioUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-                ) &&
-                this.updateCount < MAX_UPDATES_PER_RUN
+                updateCount < MAX_UPDATES_PER_RUN &&
+                pendingUpdates.needsNameBio
             ) {
                 cli = await connectionManager.getClient(doc.mobile, {
                     autoDisconnect: true,
                     handler: false,
                 });
+                await sleep(5000 + Math.random() * 5000); // 5-10s delay before operation
                 const me = await cli.getMe();
+                await sleep(5000 + Math.random() * 5000); // Additional 5-10s delay after getting user info
                 const expectedName = client?.name.split(' ')[0];
                 if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), expectedName, 2)) {
                     try {
@@ -905,70 +1042,72 @@ export class PromoteClientService implements OnModuleDestroy {
                                 useInvisibleChars: false
                             })} ${getCuteEmoji()}`,
                             ''
-                            // obfuscateText(`Genuine Paid Girl${getRandomEmoji()}, Best Services${getRandomEmoji()}`, {
-                            //     maintainFormatting: false,
-                            //     preserveCase: true,
-                            // })
                         );
-                        await this.update(doc.mobile, { nameBioUpdatedAt: new Date() });
-                        this.updateCount++;
+                        await this.update(doc.mobile, { 
+                            nameBioUpdatedAt: new Date(),
+                            lastUpdateAttempt: new Date()
+                        } as UpdatePromoteClientDto);
+                        updateCount++;
                         this.logger.debug(`[PromoteClientService] Updated name and bio for ${doc.mobile}`);
-                        await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                        await sleep(30000 + Math.random() * 20000); // 30-50s delay after operation
+                        return updateCount; // Exit after one update
                     } catch (error: any) {
                         const errorDetails = parseError(error, `Error in Updating Profile: ${doc.mobile}`, true);
+                        await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                         if (isPermanentError(errorDetails)) {
                             await this.markAsInactive(doc.mobile, errorDetails.message);
-                            return this.updateCount;
+                            return updateCount;
                         }
+                        return updateCount;
                     }
                 }
             }
 
-            // Update username for accounts older than 7 days with 150+ channels
+            // Update username for accounts older than 7 days with 150+ channels - PRIORITY 4
+            // Only proceed if name/bio was updated at least MIN_DAYS_BETWEEN_UPDATE_TYPES days ago (or not done yet)
             if (
-                (!doc.usernameUpdatedAt || (
-                    doc.createdAt &&
-                    doc.createdAt < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) &&
-                    doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                    doc.channels > 150 &&
-                    doc.usernameUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-                ) &&
-                this.updateCount < MAX_UPDATES_PER_RUN
+                updateCount < MAX_UPDATES_PER_RUN &&
+                pendingUpdates.needsUsername
             ) {
                 try {
                     cli = await connectionManager.getClient(doc.mobile, {
                         autoDisconnect: true,
                         handler: false,
                     });
+                    await sleep(5000 + Math.random() * 5000); // 5-10s delay before operation
                     await this.telegramService.updateUsername(doc.mobile, '');
-                    await this.update(doc.mobile, { usernameUpdatedAt: new Date() });
-                    this.updateCount++;
+                    await this.update(doc.mobile, { 
+                        usernameUpdatedAt: new Date(),
+                        lastUpdateAttempt: new Date()
+                    } as UpdatePromoteClientDto);
+                    updateCount++;
                     this.logger.debug(`[PromoteClientService] Updated username for ${doc.mobile}`);
-                    await sleep(20000 + Math.random() * 15000); // 20-35s delay
+                    await sleep(30000 + Math.random() * 20000); // 30-50s delay after operation
+                    return updateCount; // Exit after one update
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Updating Username: ${doc.mobile}`, true);
+                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                     if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return this.updateCount;
+                        return updateCount;
                     }
+                    return updateCount;
                 }
             }
 
-            // Add profile photos for accounts older than 10 days with no photos
+            // Add profile photos for accounts older than 10 days with no photos - PRIORITY 5 (last, most risky)
+            // Only proceed if username was updated at least MIN_DAYS_BETWEEN_UPDATE_TYPES days ago (or not done yet)
+            // AND only add ONE photo per cycle (not multiple)
             if (
-                (!doc.profilePicsUpdatedAt || (doc.createdAt &&
-                    doc.createdAt < new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) &&
-                    doc.createdAt > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) && // Not older than 30 days
-                    doc.channels > 170 &&
-                    doc.profilePicsUpdatedAt < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-                ) &&
-                this.updateCount < MAX_UPDATES_PER_RUN
+                updateCount < MAX_UPDATES_PER_RUN &&
+                pendingUpdates.needsProfilePhotos
             ) {
                 try {
                     cli = await connectionManager.getClient(doc.mobile, {
                         autoDisconnect: true,
                         handler: false,
                     });
+                    await sleep(5000 + Math.random() * 5000); // 5-10s delay before operation
                     const rootPath = process.cwd();
                     const photos = await cli.client.invoke(
                         new Api.photos.GetUserPhotos({
@@ -978,8 +1117,8 @@ export class PromoteClientService implements OnModuleDestroy {
                     );
                     if (photos.photos.length < 2) {
                         await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                        await sleep(6000 + Math.random() * 3000); // 6-9s delay
-                        // Add new profile photos with staggered delays
+                        await sleep(10000 + Math.random() * 5000); // 10-15s delay before photo upload
+                        // CRITICAL: Only add ONE photo per cycle to avoid triggering anti-bot
                         const shuffle = <T>(arr: T[]): T[] => {
                             const a = arr.slice();
                             for (let i = a.length - 1; i > 0; i--) {
@@ -990,38 +1129,65 @@ export class PromoteClientService implements OnModuleDestroy {
                         };
 
                         const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
-                        for (const photo of photoPaths.slice(0, 2)) { // Limit to 2 new photos
-                            if (this.updateCount >= MAX_UPDATES_PER_RUN) break;
-                            await cli.updateProfilePic(path.join(rootPath, photo));
-                            this.updateCount++;
-                            this.logger.debug(`[PromoteClientService] Updated profile photo ${photo} for ${doc.mobile}`);
-                            await sleep(20000 + Math.random() * 15000); // 20-35s delay per photo
-                        }
-                        await this.update(doc.mobile, { profilePicsUpdatedAt: new Date() });
+                        const randomPhoto = photoPaths[0]; // Only use first photo
+                        await cli.updateProfilePic(path.join(rootPath, randomPhoto));
+                        await this.update(doc.mobile, { 
+                            profilePicsUpdatedAt: new Date(),
+                            lastUpdateAttempt: new Date()
+                        } as UpdatePromoteClientDto);
+                        updateCount++;
+                        this.logger.debug(`[PromoteClientService] Updated profile photo ${randomPhoto} for ${doc.mobile} (1 of ${photoPaths.length} photos)`);
+                        await sleep(40000 + Math.random() * 20000); // 40-60s delay after photo upload (longer for photos)
+                        return updateCount; // Exit after one update
                     }
                 } catch (error: any) {
                     const errorDetails = parseError(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
+                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                     if (isPermanentError(errorDetails)) {
                         await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return this.updateCount;
+                        return updateCount;
                     }
+                    return updateCount;
                 }
             }
 
-            return this.updateCount; // Return true if any updates were performed
+            // If no updates were performed, still track the attempt to prevent rapid retries
+            if (updateCount === 0) {
+                await this.update(doc.mobile, { lastUpdateAttempt: new Date() } as UpdatePromoteClientDto);
+                // Log why no updates were performed
+                if (pendingUpdates.totalPending > 0) {
+                    this.logger.debug(`[PromoteClientService] No updates performed for ${doc.mobile} despite ${pendingUpdates.totalPending} pending updates. Reasons: ${pendingUpdates.reasons.join(', ')}`);
+                }
+            } else {
+                // Log remaining pending updates after this update
+                const remainingPending = pendingUpdates.totalPending - updateCount;
+                if (remainingPending > 0) {
+                    this.logger.debug(`[PromoteClientService] Client ${doc.mobile} still has ${remainingPending} pending updates remaining`);
+                } else {
+                    this.logger.log(`[PromoteClientService] ✅ Client ${doc.mobile} - ALL UPDATES COMPLETE! Ready for use.`);
+                }
+            }
+            
+            return updateCount; // Return number of updates performed
         } catch (error: any) {
             const errorDetails = parseError(error, `Error with client ${doc.mobile}`);
+            // Track attempt even on error
+            try {
+                await this.update(doc.mobile, { lastUpdateAttempt: new Date() } as UpdatePromoteClientDto);
+            } catch (updateError) {
+                this.logger.warn(`Failed to track update attempt for ${doc.mobile}:`, updateError);
+            }
             if (isPermanentError(errorDetails)) {
                 await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
             }
-            return 0; // Return false on error
+            return 0; // Return 0 on error
         } finally {
             try {
                 if (cli) await connectionManager.unregisterClient(doc.mobile);
             } catch (unregisterError: any) {
                 this.logger.error(`[PromoteClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
             }
-            await sleep(10000 + Math.random() * 5000); // 10-15s final delay
+            await sleep(15000 + Math.random() * 10000); // 15-25s final delay (increased)
         }
     }
 
@@ -1030,7 +1196,6 @@ export class PromoteClientService implements OnModuleDestroy {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }
-        this.updateCount = 0;
         this.logger.log('Starting promote client check process');
 
         const clients = await this.clientService.findAll();
@@ -1068,14 +1233,38 @@ export class PromoteClientService implements OnModuleDestroy {
         let totalSlotsNeeded = 0;
 
         let totalUpdates = 0;
+        const MIN_COOLDOWN_HOURS = 4; // Same cooldown as in processPromoteClient
+        const now = Date.now();
+        
         for (const result of promoteClientCounts) {
-            promoteClientsPerClient.set(result._id, result.count);
+            // promoteClientsPerClient is already populated from the aggregation above, no need to set again
             if (totalUpdates < 5) {
                 for (const promoteClientMobile of result.mobiles) {
-                    const promoteClient = await this.findOne(promoteClientMobile);
+                    const promoteClient = await this.findOne(promoteClientMobile, false);
+                    if (!promoteClient) {
+                        this.logger.warn(`Promote client ${promoteClientMobile} not found, skipping`);
+                        continue;
+                    }
+                    
+                    // Check cooldown before processing
+                    const lastUpdateAttempt = (promoteClient as any).lastUpdateAttempt 
+                        ? new Date((promoteClient as any).lastUpdateAttempt).getTime() 
+                        : 0;
+                    if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
+                        const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
+                        this.logger.debug(`Skipping ${promoteClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
+                        continue;
+                    }
+                    
+                    // Only process if not recently used
                     if (!promoteClient.lastUsed) {
                         const client = clients.find((c) => c.clientId === result._id);
+                        if (!client) {
+                            this.logger.warn(`Client with ID ${result._id} not found, skipping promote client ${promoteClientMobile}`);
+                            continue;
+                        }
                         const currentUpdates = await this.processPromoteClient(promoteClient, client);
+                        this.logger.debug(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
                         if (currentUpdates > 0) {
                             totalUpdates += currentUpdates;
                         }
@@ -1087,13 +1276,13 @@ export class PromoteClientService implements OnModuleDestroy {
                     }
                 }
             } else {
-                this.logger.warn(`Skipping buffer client ${result.mobiles.join(', ')} as total updates reached 5`);
+                this.logger.warn(`Skipping promote client ${result.mobiles.join(', ')} as total updates reached 5`);
             }
         }
 
         for (const client of clients) {
             const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
-            promoteClientsPerClient.set(client.clientId, assignedCount);
+            // No need to set it again, it's already in the map from the aggregation
 
             const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
             if (needed > 0) {
@@ -1229,11 +1418,12 @@ export class PromoteClientService implements OnModuleDestroy {
 
                     if (!hasPassword) {
                         await client.removeOtherAuths();
-                        await sleep(10000);
+                        await sleep(10000 + Math.random() * 10000); // 10-20s delay
                         await client.set2fa();
-                        await sleep(30000);
+                        await sleep(30000 + Math.random() * 30000); // 30-60s delay for 2FA setup
 
                         const channels = await channelInfo(client.client, true);
+                        await sleep(5000 + Math.random() * 5000); // Delay before creating promote client record
                         const promoteClient = {
                             tgId: document.tgId,
                             lastActive: 'today',
@@ -1254,6 +1444,21 @@ export class PromoteClientService implements OnModuleDestroy {
                         }
 
                         this.logger.log(`Created PromoteClient for ${targetClientId}: ${document.mobile}`);
+                        
+                        // Only update tracker if we actually created a promote client
+                        const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
+                        const newNeeded = Math.max(0, currentNeeded - 1);
+                        clientAssignmentTracker.set(targetClientId, newNeeded);
+
+                        if (newNeeded === 0) {
+                            const index = clientsNeedingPromoteClients.indexOf(targetClientId);
+                            if (index > -1) {
+                                clientsNeedingPromoteClients.splice(index, 1);
+                            }
+                        }
+
+                        this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed`);
+                        processedCount++;
                     } else {
                         this.logger.debug(`${document.mobile} already has password`);
                         try {
@@ -1261,38 +1466,36 @@ export class PromoteClientService implements OnModuleDestroy {
                         } catch (userUpdateError) {
                             this.logger.warn(`Failed to update user 2FA for ${document.mobile}:`, userUpdateError);
                         }
+                        // Don't update tracker or increment processedCount if we didn't create a promote client
                     }
-
-                    // Update tracker
-                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
-                    const newNeeded = Math.max(0, currentNeeded - 1);
-                    clientAssignmentTracker.set(targetClientId, newNeeded);
-
-                    if (newNeeded === 0) {
-                        const index = clientsNeedingPromoteClients.indexOf(targetClientId);
-                        if (index > -1) {
-                            clientsNeedingPromoteClients.splice(index, 1);
-                        }
-                    }
-
-                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed`);
-                    processedCount++;
                 } catch (error: any) {
                     this.logger.error(`Error processing client ${document.mobile}: ${error.message}`, error);
                     const errorDetails = parseError(error);
                     if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(document.mobile, errorDetails.message);
+                        try {
+                            await this.markAsInactive(document.mobile, errorDetails.message);
+                        } catch (markError) {
+                            this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
+                        }
                     }
                     processedCount++; // Prevent infinite loop
                 } finally {
                     await this.safeUnregisterClient(document.mobile);
+                    // Add delay between client processing even on errors
+                    await sleep(10000 + Math.random() * 5000);
                 }
             } catch (error: any) {
                 this.logger.error(`Error creating connection for ${document.mobile}: ${error.message}`, error);
                 const errorDetails = parseError(error);
                 if (isPermanentError(errorDetails)) {
-                    await this.markAsInactive(document.mobile, errorDetails.message);
+                    try {
+                        await this.markAsInactive(document.mobile, errorDetails.message);
+                    } catch (markError) {
+                        this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
+                    }
                 }
+                // Add delay even on error to prevent rapid retries
+                await sleep(10000 + Math.random() * 5000);
             }
         }
 
@@ -1486,6 +1689,7 @@ export class PromoteClientService implements OnModuleDestroy {
     }
 
     async getLeastRecentlyUsedPromoteClients(clientId: string, limit: number = 1): Promise<PromoteClient[]> {
+        // Note: PromoteClient schema doesn't have 'inUse' field, so we only filter by status
         return this.promoteClientModel
             .find({ clientId, status: 'active' })
             .sort({ lastUsed: 1, _id: 1 })
