@@ -13205,8 +13205,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const clients = await this.bufferClientModel
             .find({
             status: 'active',
+            lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
         })
-            .sort({ channels: 1 });
+            .sort({ channels: 1 })
+            .limit(25);
         this.logger.debug(`Updating info for ${clients.length} buffer clients`);
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
@@ -13225,7 +13227,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length });
+                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `Failed to UpdatedClient: ${mobile}`);
@@ -14836,6 +14838,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUsed", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "lastChecked", void 0);
 __decorate([
     (0, mongoose_1.Prop)({
         required: true,
@@ -20599,8 +20605,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async updateInfo() {
         const clients = await this.promoteClientModel
-            .find({ status: 'active' })
-            .sort({ channels: 1 });
+            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })
+            .sort({ channels: 1 })
+            .limit(25);
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
             const mobile = client?.mobile;
@@ -20618,7 +20625,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length });
+                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
@@ -21958,6 +21965,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "updatedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastChecked", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)

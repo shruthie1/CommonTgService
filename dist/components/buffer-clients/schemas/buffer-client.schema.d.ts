@@ -9,6 +9,7 @@ export declare class BufferClient {
     clientId: string;
     message: string;
     lastUsed: Date;
+    lastChecked: Date;
     status: 'active' | 'inactive';
     inUse: boolean;
     privacyUpdatedAt: Date;

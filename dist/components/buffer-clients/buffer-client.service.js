@@ -290,8 +290,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const clients = await this.bufferClientModel
             .find({
             status: 'active',
+            lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
         })
-            .sort({ channels: 1 });
+            .sort({ channels: 1 })
+            .limit(25);
         this.logger.debug(`Updating info for ${clients.length} buffer clients`);
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
@@ -310,7 +312,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }));
                 const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
                 this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length });
+                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
             }
             catch (error) {
                 const errorDetails = (0, parseError_1.parseError)(error, `Failed to UpdatedClient: ${mobile}`);

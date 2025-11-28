@@ -17,6 +17,7 @@ export declare class PromoteClient {
     usernameUpdatedAt: Date;
     createdAt: Date;
     updatedAt: Date;
+    lastChecked: Date;
     lastUpdateAttempt: Date;
 }
 export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClient, import("mongoose").Model<PromoteClient, any, any, any, Document<unknown, any, PromoteClient, any, {}> & PromoteClient & {

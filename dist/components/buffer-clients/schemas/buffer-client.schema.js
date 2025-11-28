@@ -47,6 +47,10 @@ __decorate([
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUsed", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "lastChecked", void 0);
+__decorate([
     (0, mongoose_1.Prop)({
         required: true,
         enum: ['active', 'inactive'],
