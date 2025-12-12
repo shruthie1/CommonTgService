@@ -522,16 +522,23 @@ export class SessionService {
         const now = Date.now();
         const rateLimit = this.rateLimitMap.get(mobile);
 
-        if (!rateLimit || now > rateLimit.resetTime) {
+        // Clean up expired rate limit entries
+        if (rateLimit && now > rateLimit.resetTime) {
+            this.rateLimitMap.delete(mobile);
+        }
+
+        const currentLimit = this.rateLimitMap.get(mobile);
+
+        if (!currentLimit) {
             this.rateLimitMap.set(mobile, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
             return { allowed: true };
         }
 
-        if (rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
-            return { allowed: false, resetTime: rateLimit.resetTime };
+        if (currentLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: currentLimit.resetTime };
         }
 
-        rateLimit.count++;
+        currentLimit.count++;
         return { allowed: true };
     }
 
@@ -816,15 +823,24 @@ export class SessionService {
         code?: string;
         retryable?: boolean;
     }> {
-        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 180 } = options;
 
         try {
             // Validate input parameters
-            if (!mobile || typeof mobile !== 'string') {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
                 return {
                     success: false,
-                    message: 'Mobile number is required and must be a valid string',
+                    message: 'Mobile number is required and must be a valid non-empty string',
                     code: 'INVALID_MOBILE'
+                };
+            }
+
+            // Validate maxAgeDays
+            if (maxAgeDays <= 0 || maxAgeDays > 365) {
+                return {
+                    success: false,
+                    message: 'maxAgeDays must be between 1 and 365 days',
+                    code: 'INVALID_MAX_AGE'
                 };
             }
 
@@ -953,8 +969,11 @@ export class SessionService {
             // Filter and sort to get the oldest session that meets our criteria
             const validSessions = sessions.sessions
                 .filter(session =>
+                    session &&
                     session.sessionString &&
+                    typeof session.sessionString === 'string' &&
                     session.sessionString.trim().length > 0 &&
+                    session.isActive === true &&
                     (session.status === SessionStatus.ACTIVE || session.status === SessionStatus.CREATED)
                 )
                 .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Sort oldest first

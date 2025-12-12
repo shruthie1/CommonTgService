@@ -87,12 +87,13 @@ export class GetOldestSessionDto {
 
     @ApiPropertyOptional({
         description: 'Maximum age of session to consider (in days)',
-        default: 3000,
-        minimum: 1
+        default: 180,
+        minimum: 1,
+        maximum: 365
     })
     @IsOptional()
     @IsNumber()
-    @Min(0)
+    @Min(1)
     maxAgeDays?: number;
 }
 
@@ -362,7 +363,9 @@ export class SessionController {
             // Sanitize and set defaults
             const mobile = body.mobile.trim();
             const allowFallback = body.allowFallback !== false; // Default to true
-            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 90; // Default to 30 days
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 && body.maxAgeDays <= 365 
+                ? body.maxAgeDays 
+                : 180; // Default to 180 days, max 365 days
 
             // Call service method
             const result = await this.sessionService.getOldestSessionOrCreate({
