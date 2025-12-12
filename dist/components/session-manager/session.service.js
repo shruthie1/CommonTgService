@@ -373,14 +373,18 @@ let SessionService = class SessionService {
     checkRateLimit(mobile) {
         const now = Date.now();
         const rateLimit = this.rateLimitMap.get(mobile);
-        if (!rateLimit || now > rateLimit.resetTime) {
+        if (rateLimit && now > rateLimit.resetTime) {
+            this.rateLimitMap.delete(mobile);
+        }
+        const currentLimit = this.rateLimitMap.get(mobile);
+        if (!currentLimit) {
             this.rateLimitMap.set(mobile, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
             return { allowed: true };
         }
-        if (rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
-            return { allowed: false, resetTime: rateLimit.resetTime };
+        if (currentLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: currentLimit.resetTime };
         }
-        rateLimit.count++;
+        currentLimit.count++;
         return { allowed: true };
     }
     async extractMobileFromSession(sessionString) {
@@ -602,13 +606,20 @@ let SessionService = class SessionService {
         }
     }
     async getOldestSessionOrCreate(options) {
-        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 180 } = options;
         try {
-            if (!mobile || typeof mobile !== 'string') {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
                 return {
                     success: false,
-                    message: 'Mobile number is required and must be a valid string',
+                    message: 'Mobile number is required and must be a valid non-empty string',
                     code: 'INVALID_MOBILE'
+                };
+            }
+            if (maxAgeDays <= 0 || maxAgeDays > 365) {
+                return {
+                    success: false,
+                    message: 'maxAgeDays must be between 1 and 365 days',
+                    code: 'INVALID_MAX_AGE'
                 };
             }
             this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
@@ -706,8 +717,11 @@ let SessionService = class SessionService {
                 return { success: false, error: 'No sessions found within age limit' };
             }
             const validSessions = sessions.sessions
-                .filter(session => session.sessionString &&
+                .filter(session => session &&
+                session.sessionString &&
+                typeof session.sessionString === 'string' &&
                 session.sessionString.trim().length > 0 &&
+                session.isActive === true &&
                 (session.status === sessions_schema_1.SessionStatus.ACTIVE || session.status === sessions_schema_1.SessionStatus.CREATED))
                 .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             if (validSessions.length === 0) {

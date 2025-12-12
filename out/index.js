@@ -23200,8 +23200,12 @@ let SessionAuditService = class SessionAuditService {
     }
     async markSessionUsed(mobile, sessionString) {
         try {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to markSessionUsed');
+                return null;
+            }
             const query = { mobile, isActive: true };
-            if (sessionString) {
+            if (sessionString && typeof sessionString === 'string' && sessionString.trim().length > 0) {
                 query.sessionString = sessionString;
             }
             const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, {
@@ -23210,6 +23214,9 @@ let SessionAuditService = class SessionAuditService {
             }, { new: true, sort: { createdAt: -1 } });
             if (updatedRecord) {
                 this.logger.info(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
+            }
+            else {
+                this.logger.warn(mobile, 'No active session found to mark as used');
             }
             return updatedRecord;
         }
@@ -23248,15 +23255,21 @@ let SessionAuditService = class SessionAuditService {
     }
     async getSessionsFormobile(mobile, activeOnly = false) {
         try {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to getSessionsFormobile');
+                return [];
+            }
             const query = { mobile };
             if (activeOnly) {
                 query.isActive = true;
+                query.status = { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] };
             }
             const sessions = await this.sessionAuditModel
                 .find(query)
                 .sort({ createdAt: -1 })
+                .limit(100)
                 .exec();
-            this.logger.info(mobile, `Retrieved ${sessions.length} session records`);
+            this.logger.info(mobile, `Retrieved ${sessions.length} session records (activeOnly: ${activeOnly})`);
             return sessions;
         }
         catch (error) {
@@ -23402,30 +23415,40 @@ let SessionAuditService = class SessionAuditService {
             throw error;
         }
     }
-    async findRecentSessions(mobile) {
+    async findRecentSessions(mobile, days = 30) {
         try {
-            const tenDaysAgo = new Date();
-            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-            tenDaysAgo.setHours(0, 0, 0, 0);
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to findRecentSessions');
+                return [];
+            }
+            if (days <= 0 || days > 365) {
+                this.logger.warn(mobile, `Invalid days parameter: ${days}, using default 10 days`);
+                days = 30;
+            }
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+            cutoffDate.setHours(0, 0, 0, 0);
             const recentSessions = await this.sessionAuditModel
                 .find({
                 mobile,
                 isActive: true,
                 status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
                 $or: [
-                    { lastUsedAt: { $gte: tenDaysAgo } },
+                    { lastUsedAt: { $gte: cutoffDate } },
                     {
                         lastUsedAt: { $exists: false },
-                        createdAt: { $gte: tenDaysAgo }
+                        createdAt: { $gte: cutoffDate }
                     }
                 ]
             })
                 .sort({ lastUsedAt: -1, createdAt: -1 })
+                .limit(50)
                 .exec();
+            this.logger.info(mobile, `Found ${recentSessions.length} recent sessions from last ${days} days`);
             return recentSessions;
         }
         catch (error) {
-            this.logger.error(mobile, 'Failed to find valid session from last 10 days', error);
+            this.logger.error(mobile, `Failed to find valid session from last ${days} days`, error);
             throw error;
         }
     }
@@ -23586,12 +23609,13 @@ __decorate([
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
         description: 'Maximum age of session to consider (in days)',
-        default: 3000,
-        minimum: 1
+        default: 180,
+        minimum: 1,
+        maximum: 365
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
 ], GetOldestSessionDto.prototype, "maxAgeDays", void 0);
 let SessionController = class SessionController {
@@ -23714,7 +23738,9 @@ let SessionController = class SessionController {
             }
             const mobile = body.mobile.trim();
             const allowFallback = body.allowFallback !== false;
-            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 90;
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 && body.maxAgeDays <= 365
+                ? body.maxAgeDays
+                : 180;
             const result = await this.sessionService.getOldestSessionOrCreate({
                 mobile,
                 allowFallback,
@@ -24311,14 +24337,18 @@ let SessionService = class SessionService {
     checkRateLimit(mobile) {
         const now = Date.now();
         const rateLimit = this.rateLimitMap.get(mobile);
-        if (!rateLimit || now > rateLimit.resetTime) {
+        if (rateLimit && now > rateLimit.resetTime) {
+            this.rateLimitMap.delete(mobile);
+        }
+        const currentLimit = this.rateLimitMap.get(mobile);
+        if (!currentLimit) {
             this.rateLimitMap.set(mobile, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
             return { allowed: true };
         }
-        if (rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
-            return { allowed: false, resetTime: rateLimit.resetTime };
+        if (currentLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: currentLimit.resetTime };
         }
-        rateLimit.count++;
+        currentLimit.count++;
         return { allowed: true };
     }
     async extractMobileFromSession(sessionString) {
@@ -24540,13 +24570,20 @@ let SessionService = class SessionService {
         }
     }
     async getOldestSessionOrCreate(options) {
-        const { mobile, allowFallback = true, maxAgeDays = 300 } = options;
+        const { mobile, allowFallback = true, maxAgeDays = 180 } = options;
         try {
-            if (!mobile || typeof mobile !== 'string') {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
                 return {
                     success: false,
-                    message: 'Mobile number is required and must be a valid string',
+                    message: 'Mobile number is required and must be a valid non-empty string',
                     code: 'INVALID_MOBILE'
+                };
+            }
+            if (maxAgeDays <= 0 || maxAgeDays > 365) {
+                return {
+                    success: false,
+                    message: 'maxAgeDays must be between 1 and 365 days',
+                    code: 'INVALID_MAX_AGE'
                 };
             }
             this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
@@ -24644,8 +24681,11 @@ let SessionService = class SessionService {
                 return { success: false, error: 'No sessions found within age limit' };
             }
             const validSessions = sessions.sessions
-                .filter(session => session.sessionString &&
+                .filter(session => session &&
+                session.sessionString &&
+                typeof session.sessionString === 'string' &&
                 session.sessionString.trim().length > 0 &&
+                session.isActive === true &&
                 (session.status === sessions_schema_1.SessionStatus.ACTIVE || session.status === sessions_schema_1.SessionStatus.CREATED))
                 .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             if (validSessions.length === 0) {

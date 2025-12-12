@@ -70,8 +70,12 @@ let SessionAuditService = class SessionAuditService {
     }
     async markSessionUsed(mobile, sessionString) {
         try {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to markSessionUsed');
+                return null;
+            }
             const query = { mobile, isActive: true };
-            if (sessionString) {
+            if (sessionString && typeof sessionString === 'string' && sessionString.trim().length > 0) {
                 query.sessionString = sessionString;
             }
             const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(query, {
@@ -80,6 +84,9 @@ let SessionAuditService = class SessionAuditService {
             }, { new: true, sort: { createdAt: -1 } });
             if (updatedRecord) {
                 this.logger.info(mobile, `Session usage recorded: count ${updatedRecord.usageCount}`);
+            }
+            else {
+                this.logger.warn(mobile, 'No active session found to mark as used');
             }
             return updatedRecord;
         }
@@ -118,15 +125,21 @@ let SessionAuditService = class SessionAuditService {
     }
     async getSessionsFormobile(mobile, activeOnly = false) {
         try {
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to getSessionsFormobile');
+                return [];
+            }
             const query = { mobile };
             if (activeOnly) {
                 query.isActive = true;
+                query.status = { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] };
             }
             const sessions = await this.sessionAuditModel
                 .find(query)
                 .sort({ createdAt: -1 })
+                .limit(100)
                 .exec();
-            this.logger.info(mobile, `Retrieved ${sessions.length} session records`);
+            this.logger.info(mobile, `Retrieved ${sessions.length} session records (activeOnly: ${activeOnly})`);
             return sessions;
         }
         catch (error) {
@@ -272,30 +285,40 @@ let SessionAuditService = class SessionAuditService {
             throw error;
         }
     }
-    async findRecentSessions(mobile) {
+    async findRecentSessions(mobile, days = 30) {
         try {
-            const tenDaysAgo = new Date();
-            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-            tenDaysAgo.setHours(0, 0, 0, 0);
+            if (!mobile || typeof mobile !== 'string' || mobile.trim().length === 0) {
+                this.logger.warn('system', 'Invalid mobile number provided to findRecentSessions');
+                return [];
+            }
+            if (days <= 0 || days > 365) {
+                this.logger.warn(mobile, `Invalid days parameter: ${days}, using default 10 days`);
+                days = 30;
+            }
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+            cutoffDate.setHours(0, 0, 0, 0);
             const recentSessions = await this.sessionAuditModel
                 .find({
                 mobile,
                 isActive: true,
                 status: { $in: [sessions_schema_1.SessionStatus.ACTIVE, sessions_schema_1.SessionStatus.CREATED] },
                 $or: [
-                    { lastUsedAt: { $gte: tenDaysAgo } },
+                    { lastUsedAt: { $gte: cutoffDate } },
                     {
                         lastUsedAt: { $exists: false },
-                        createdAt: { $gte: tenDaysAgo }
+                        createdAt: { $gte: cutoffDate }
                     }
                 ]
             })
                 .sort({ lastUsedAt: -1, createdAt: -1 })
+                .limit(50)
                 .exec();
+            this.logger.info(mobile, `Found ${recentSessions.length} recent sessions from last ${days} days`);
             return recentSessions;
         }
         catch (error) {
-            this.logger.error(mobile, 'Failed to find valid session from last 10 days', error);
+            this.logger.error(mobile, `Failed to find valid session from last ${days} days`, error);
             throw error;
         }
     }

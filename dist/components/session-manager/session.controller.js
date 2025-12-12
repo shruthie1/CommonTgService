@@ -114,12 +114,13 @@ __decorate([
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
         description: 'Maximum age of session to consider (in days)',
-        default: 3000,
-        minimum: 1
+        default: 180,
+        minimum: 1,
+        maximum: 365
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(0),
+    (0, class_validator_1.Min)(1),
     __metadata("design:type", Number)
 ], GetOldestSessionDto.prototype, "maxAgeDays", void 0);
 let SessionController = class SessionController {
@@ -242,7 +243,9 @@ let SessionController = class SessionController {
             }
             const mobile = body.mobile.trim();
             const allowFallback = body.allowFallback !== false;
-            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 ? body.maxAgeDays : 90;
+            const maxAgeDays = body.maxAgeDays && body.maxAgeDays > 0 && body.maxAgeDays <= 365
+                ? body.maxAgeDays
+                : 180;
             const result = await this.sessionService.getOldestSessionOrCreate({
                 mobile,
                 allowFallback,
