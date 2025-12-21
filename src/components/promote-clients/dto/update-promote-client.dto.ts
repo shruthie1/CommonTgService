@@ -11,4 +11,6 @@ export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) 
     usernameUpdatedAt?: Date;
     lastChecked?: Date;
     lastUpdateAttempt?: Date;
+    failedUpdateAttempts?: number;
+    lastUpdateFailure?: Date;
 }

@@ -66,6 +66,12 @@ export class PromoteClient {
   
   @Prop({ required: false, type: Date, default: null })
   lastUpdateAttempt: Date;
+
+  @Prop({ required: false, type: Number, default: 0 })
+  failedUpdateAttempts: number;
+
+  @Prop({ required: false, type: Date, default: null })
+  lastUpdateFailure: Date;
 }
 
 export const PromoteClientSchema = SchemaFactory.createForClass(PromoteClient);

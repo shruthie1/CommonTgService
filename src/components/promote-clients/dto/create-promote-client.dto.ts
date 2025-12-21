@@ -65,7 +65,7 @@ export class CreatePromoteClientDto {
   })
   @IsOptional()
   @IsString()
-  readonly message?: string;
+  message?: string;
 
   @ApiProperty({
     description: 'Last used timestamp for the promote client',

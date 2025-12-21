@@ -11,4 +11,6 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     usernameUpdatedAt?: Date;
     lastChecked?: Date;
     lastUpdateAttempt?: Date;
+    failedUpdateAttempts?: number;
+    lastUpdateFailure?: Date;
 }
