@@ -840,7 +840,7 @@ export class PromoteClientService implements OnModuleDestroy {
     private async backfillTimestamps(mobile: string, doc: PromoteClient, now: number): Promise<void> {
         const needsBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
             !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt ||
-            !(doc as any).profilePicsUpdatedAt;
+            !doc.profilePicsUpdatedAt;
 
         if (!needsBackfill) return;
 
@@ -909,7 +909,7 @@ export class PromoteClientService implements OnModuleDestroy {
 
         // Profile photos - needs username done at least 1 day ago, 170+ channels
         const usernameDone = usernameTimestamp > 0 && (now - usernameTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const profilePicsTimestamp = this.getTimestamp((doc as any).profilePicsUpdatedAt);
+        const profilePicsTimestamp = this.getTimestamp(doc.profilePicsUpdatedAt);
         const needsProfilePhotos = accountAge >= 10 * DAY && accountAge <= 30 * DAY &&
             (doc.channels || 0) > 170 &&
             (profilePicsTimestamp === 0 || profilePicsTimestamp < now - 30 * DAY) &&
@@ -1292,8 +1292,8 @@ export class PromoteClientService implements OnModuleDestroy {
                     // Check cooldown before processing - handle missing field safely
                     let lastUpdateAttempt = 0;
                     try {
-                        lastUpdateAttempt = (promoteClient as any).lastUpdateAttempt
-                            ? new Date((promoteClient as any).lastUpdateAttempt).getTime()
+                        lastUpdateAttempt = promoteClient.lastUpdateAttempt
+                            ? new Date(promoteClient.lastUpdateAttempt).getTime()
                             : 0;
                     } catch (error) {
                         lastUpdateAttempt = 0;
@@ -1313,7 +1313,7 @@ export class PromoteClientService implements OnModuleDestroy {
                     if (hasBeenUsed) {
                         const needsBackfill = !promoteClient.privacyUpdatedAt || !promoteClient.profilePicsDeletedAt ||
                             !promoteClient.nameBioUpdatedAt || !promoteClient.usernameUpdatedAt ||
-                            !(promoteClient as any).profilePicsUpdatedAt;
+                            !promoteClient.profilePicsUpdatedAt;
 
                         if (needsBackfill) {
                             this.logger.log(`Backfilling timestamp fields for used client ${promoteClientMobile}`);

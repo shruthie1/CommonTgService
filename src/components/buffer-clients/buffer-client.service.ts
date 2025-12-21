@@ -495,9 +495,9 @@ export class BufferClientService implements OnModuleDestroy {
             : Array.from(this.joinChannelMap.keys());
 
         // Build query with optional clientId filter
-        const query: Partial<BufferClient> = {
-            channels: { $lt: 350 } as any,
-            mobile: { $nin: existingKeys } as any,
+        const query: Record<string, any> = {
+            channels: { $lt: 350 },
+            mobile: { $nin: existingKeys },
             status: 'active',
         };
 
