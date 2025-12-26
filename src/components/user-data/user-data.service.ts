@@ -57,7 +57,9 @@ export class UserDataService {
 
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
         delete (updateUserDataDto as any)._id;
-
+        delete (updateUserDataDto as any).profile;
+        delete (updateUserDataDto as any).chatId;
+        
         const updatedUser = await this.userDataModel
             .findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
             .lean()
