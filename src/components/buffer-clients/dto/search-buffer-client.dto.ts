@@ -38,4 +38,9 @@ export class SearchBufferClientDto {
   @IsBoolean()
   @Transform(({ value }) => value === 'true' || value === true)
   isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by tgId' })
+  @IsOptional()
+  @IsString()
+  tgId?: string;
 }
