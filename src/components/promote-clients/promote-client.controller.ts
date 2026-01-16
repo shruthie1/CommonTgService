@@ -182,7 +182,10 @@ export class PromoteClientController {
   })
   @ApiResponse({ type: PromoteClient })
   async updateStatus(@Param('mobile') mobile: string, @Body() body: { status: string; message?: string }): Promise<PromoteClient> {
-    return this.clientService.updateStatus(mobile, body.status, body.message);
+    if (body.status !== 'active' && body.status !== 'inactive') {
+      throw new BadRequestException('Status must be either "active" or "inactive"');
+    }
+    return this.clientService.updateStatus(mobile, body.status as 'active' | 'inactive', body.message);
   }
 
   @Patch('activate/:mobile')
