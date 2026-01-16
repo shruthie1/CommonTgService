@@ -6,6 +6,6 @@ export declare class CreateBufferClientDto {
     readonly channels: number;
     readonly clientId: string;
     readonly status?: 'active' | 'inactive';
-    readonly message?: string;
+    message?: string;
     readonly lastUsed?: Date;
 }

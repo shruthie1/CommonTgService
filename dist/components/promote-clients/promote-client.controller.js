@@ -82,6 +82,9 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.getPromoteClientsWithMessages();
     }
     async updateStatus(mobile, body) {
+        if (body.status !== 'active' && body.status !== 'inactive') {
+            throw new common_1.BadRequestException('Status must be either "active" or "inactive"');
+        }
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {

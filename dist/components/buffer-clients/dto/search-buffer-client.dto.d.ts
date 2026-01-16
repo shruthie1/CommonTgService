@@ -6,4 +6,5 @@ export declare class SearchBufferClientDto {
     channelLink?: string;
     repl?: string;
     isActive?: boolean;
+    tgId?: string;
 }

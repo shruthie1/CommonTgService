@@ -70,6 +70,9 @@ let BufferClientController = class BufferClientController {
         return this.clientService.findAll(status);
     }
     async updateStatus(mobile, body) {
+        if (body.status !== 'active' && body.status !== 'inactive') {
+            throw new common_1.BadRequestException('Status must be either "active" or "inactive"');
+        }
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {

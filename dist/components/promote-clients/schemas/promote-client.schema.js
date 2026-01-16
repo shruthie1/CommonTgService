@@ -86,6 +86,14 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUpdateAttempt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], PromoteClient.prototype, "failedUpdateAttempts", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "lastUpdateFailure", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'promoteClients', versionKey: false, autoIndex: true,

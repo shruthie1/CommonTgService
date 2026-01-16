@@ -48,15 +48,15 @@ export declare class PromoteClientService implements OnModuleDestroy {
     findAll(statusFilter?: string): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClient>;
     update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
-    updateStatus(mobile: string, status: string, message?: string): Promise<PromoteClient>;
+    updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<PromoteClient>;
     updateLastUsed(mobile: string): Promise<PromoteClient>;
     markAsUsed(mobile: string, message?: string): Promise<PromoteClient>;
     markAsInactive(mobile: string, reason: string): Promise<PromoteClient>;
     markAsActive(mobile: string, message?: string): Promise<PromoteClient>;
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient>;
     remove(mobile: string, message?: string): Promise<void>;
-    search(filter: any): Promise<PromoteClient[]>;
-    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<PromoteClient[]>;
+    search(filter: Partial<PromoteClient>): Promise<PromoteClient[]>;
+    executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<PromoteClient[]>;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
     updateInfo(): Promise<void>;
@@ -74,6 +74,9 @@ export declare class PromoteClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     private safeUnregisterClient;
     setAsPromoteClient(mobile: string, availableDate?: string): Promise<string>;
+    private getTimestamp;
+    private createBackfillTimestamps;
+    private backfillTimestamps;
     private getPendingUpdates;
     processPromoteClient(doc: PromoteClient, client: Client): Promise<number>;
     checkPromoteClients(): Promise<void>;

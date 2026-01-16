@@ -96,6 +96,14 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUpdateAttempt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], BufferClient.prototype, "failedUpdateAttempts", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "lastUpdateFailure", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'bufferClients', versionKey: false, autoIndex: true,

@@ -10,5 +10,7 @@ export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     usernameUpdatedAt?: Date;
     lastChecked?: Date;
     lastUpdateAttempt?: Date;
+    failedUpdateAttempts?: number;
+    lastUpdateFailure?: Date;
 }
 export {};

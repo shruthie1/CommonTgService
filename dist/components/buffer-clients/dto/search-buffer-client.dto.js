@@ -59,4 +59,10 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     __metadata("design:type", Boolean)
 ], SearchBufferClientDto.prototype, "isActive", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by tgId' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "tgId", void 0);
 //# sourceMappingURL=search-buffer-client.dto.js.map

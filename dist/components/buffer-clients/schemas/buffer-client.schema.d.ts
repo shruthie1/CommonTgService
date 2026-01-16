@@ -20,6 +20,8 @@ export declare class BufferClient {
     createdAt: Date;
     updatedAt: Date;
     lastUpdateAttempt: Date;
+    failedUpdateAttempts: number;
+    lastUpdateFailure: Date;
 }
 export declare const BufferClientSchema: import("mongoose").Schema<BufferClient, import("mongoose").Model<BufferClient, any, any, any, Document<unknown, any, BufferClient, any, {}> & BufferClient & {
     _id: import("mongoose").Types.ObjectId;

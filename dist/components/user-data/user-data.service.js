@@ -57,6 +57,8 @@ let UserDataService = UserDataService_1 = class UserDataService {
     }
     async update(profile, chatId, updateUserDataDto) {
         delete updateUserDataDto._id;
+        delete updateUserDataDto.profile;
+        delete updateUserDataDto.chatId;
         const updatedUser = await this.userDataModel
             .findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
             .lean()
