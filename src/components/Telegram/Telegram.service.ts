@@ -1052,7 +1052,7 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getTopPrivateChats(mobile: string): Promise<{
+    async getTopPrivateChats(mobile: string, limit?: number): Promise<{
         chatId: string;
         username?: string;
         firstName?: string;
@@ -1086,9 +1086,9 @@ export class TelegramService implements OnModuleDestroy {
         };
     }[]> {
         const telegramClient = await connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Get top private chats');
+        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}`);
         try {
-            return await telegramClient.getTopPrivateChats();
+            return await telegramClient.getTopPrivateChats(limit);
         } catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);
             throw error;

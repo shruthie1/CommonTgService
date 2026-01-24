@@ -1421,11 +1421,19 @@ export class TelegramController {
     @Get('chats/top-private/:mobile')
     @ApiOperation({ 
         summary: 'Get top private chats with smart activity-based filtering',
-        description: 'Retrieves top 10 private chats ranked by engagement score using advanced filtering. ' +
+        description: 'Retrieves top private chats ranked by engagement score using advanced filtering. ' +
                      'Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. ' +
-                     'Considers recency, mutual engagement, reply chains, and call history.'
+                     'Considers recency, mutual engagement, reply chains, and call history. ' +
+                     'Supports configurable limit (default: 10, max: 50).'
     })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
+    @ApiQuery({ 
+        name: 'limit', 
+        required: false, 
+        type: Number,
+        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
+        example: 10
+    })
     @ApiResponse({ 
         status: 200,
         description: 'Top private chats retrieved successfully',
@@ -1496,8 +1504,11 @@ export class TelegramController {
         }
     })
     @ApiResponse({ status: 500, description: 'Internal Server Error' })
-    async getTopPrivateChats(@Param('mobile') mobile: string) {
-        return this.telegramService.getTopPrivateChats(mobile);
+    async getTopPrivateChats(
+        @Param('mobile') mobile: string,
+        @Query('limit') limit?: number
+    ) {
+        return this.telegramService.getTopPrivateChats(mobile, limit);
     }
 
     @Get('messages/self-msg-info/:mobile')

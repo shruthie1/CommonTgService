@@ -4405,7 +4405,7 @@ class TelegramManager {
      * for more accurate results based on actual user engagement with peers
      * @returns Array of top private chats sorted by engagement score
      */
-    async getTopPrivateChats(): Promise<Array<{
+    async getTopPrivateChats(limit: number = 10): Promise<Array<{
         chatId: string;
         username?: string;
         firstName?: string;
@@ -4440,21 +4440,24 @@ class TelegramManager {
     }>> {
         if (!this.client) throw new Error('Client not initialized');
 
-        this.logger.info(this.phoneNumber, 'Starting getTopPrivateChats analysis with smart filtering...');
+        // Clamp limit to valid range [1, 50], default to 10 if invalid
+        const clampedLimit = Math.max(1, Math.min(50, limit || 10));
+        
+        this.logger.info(this.phoneNumber, `Starting getTopPrivateChats analysis with limit=${clampedLimit}...`);
         const startTime = Date.now();
         const now = Date.now();
         const nowSeconds = Math.floor(now / 1000);
 
         // Enhanced weighting factors with time-decay consideration
         const weights = {
-            videoCall: 20,           // Video calls indicate highest engagement
-            incomingCall: 8,         // Incoming calls show peer interest
+            videoCall: 5,           // Video calls indicate highest engagement
+            incomingCall: 4,         // Incoming calls show peer interest
             outgoingCall: 3,         // Outgoing calls show user interest
-            sharedVideo: 8,          // Videos require more effort/intent
-            sharedPhoto: 5,          // Photos show moderate engagement
+            sharedVideo: 12,          // Videos require more effort/intent
+            sharedPhoto: 10,          // Photos show moderate engagement
             textMessage: 1,          // Base weight for messages
-            unreadMessages: 2,       // Unread messages indicate active conversation
-            recentActivity: 1.5,     // Recent activity multiplier (time-decay)
+            unreadMessages: 1,       // Unread messages indicate active conversation
+            recentActivity: 1,     // Recent activity multiplier (time-decay)
         };
 
         // Time windows for activity classification (in days)
@@ -4527,7 +4530,7 @@ class TelegramManager {
             const mediaStats = { photos: 0, videos: 0 };
             
             for await (const message of this.client.iterMessages('me', {
-                limit: 100,
+                limit: 500,
                 reverse: false
             })) {
                 messageCount++;
@@ -4633,9 +4636,20 @@ class TelegramManager {
         // Process chats in batches to avoid overwhelming the API
         const batchSize = 10;
         const chatStats = [];
+        const CHAT_TIMEOUT_MS = 30000; // 30 seconds per chat
+        const BATCH_DELAY_MS = 100; // Small delay between batches
+        
+        // Early termination: stop when we have enough high-quality candidates
+        const targetCandidates = clampedLimit * 2;
         
         for (let i = 0; i < privateChats.length; i += batchSize) {
-            this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)}`);
+            // Early termination check
+            if (chatStats.length >= targetCandidates) {
+                this.logger.info(this.phoneNumber, `Early termination: Found ${chatStats.length} candidates (target: ${targetCandidates})`);
+                break;
+            }
+            
+            this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)} (${chatStats.length} candidates so far)`);
             const batch = privateChats.slice(i, i + batchSize);
 
             const batchResults = await Promise.all(batch.map(async (dialog) => {
@@ -4652,67 +4666,87 @@ class TelegramManager {
                 this.logger.info(this.phoneNumber, `Processing chat ${chatId} (${user.firstName || 'Unknown'}) - Last activity: ${daysSinceLastActivity.toFixed(1)} days ago, Unread: ${unreadCount}`);
 
                 try {
-                    // Use iterMessages for memory-efficient message analysis
-                    // Analyze recent messages (last 100) for conversation patterns
-                    let messageCount = 0;
-                    let ownMessageCount = 0;
-                    let replyChainCount = 0;
-                    let recentMediaCount = 0;
-                    const messageDates: number[] = [];
-                    const mediaStats = { photos: 0, videos: 0 };
-                    
-                    // Analyze messages with time-decay consideration
-                    for await (const message of this.client.iterMessages(chatId, {
-                        limit: 100, // Analyze last 100 messages for patterns
-                        reverse: false
-                    })) {
-                        messageCount++;
+                    // Wrap processing in timeout protection
+                    const chatProcessingPromise = (async () => {
+                        // Use iterMessages for memory-efficient message analysis
+                        // Analyze recent messages (last 100) for conversation patterns
+                        let messageCount = 0;
+                        let ownMessageCount = 0;
+                        let replyChainCount = 0;
+                        let recentMediaCount = 0;
+                        const messageDates: number[] = [];
+                        const mediaStats = { photos: 0, videos: 0 };
                         
-                        // Track message dates for recency analysis
-                        if (message.date) {
-                            messageDates.push(message.date * 1000);
-                        }
-                        
-                        // Count own vs peer messages for engagement pattern
-                        if (message.out) {
-                            ownMessageCount++;
-                        }
-                        
-                        // Detect reply chains (conversation depth indicator)
-                        if (message.replyTo) {
-                            replyChainCount++;
-                        }
-                        
-                        // Count media with time-decay
-                        if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
-                            recentMediaCount++;
+                        // Analyze messages with time-decay consideration
+                        for await (const message of this.client.iterMessages(chatId, {
+                            limit: 400, // Analyze last 100 messages for patterns
+                            reverse: false
+                        })) {
+                            messageCount++;
                             
-                            if (message.media instanceof Api.MessageMediaPhoto) {
-                                mediaStats.photos++;
-                            } else if (message.media instanceof Api.MessageMediaDocument) {
-                                const document = message.media.document;
-                                if (document instanceof Api.Document) {
-                                    const isVideo = document.attributes.some(
-                                        attr => attr instanceof Api.DocumentAttributeVideo
-                                    );
-                                    if (isVideo) {
-                                        mediaStats.videos++;
+                            // Track message dates for recency analysis
+                            if (message.date) {
+                                messageDates.push(message.date * 1000);
+                            }
+                            
+                            // Count own vs peer messages for engagement pattern
+                            if (message.out) {
+                                ownMessageCount++;
+                            }
+                            
+                            // Detect reply chains (conversation depth indicator)
+                            if (message.replyTo) {
+                                replyChainCount++;
+                            }
+                            
+                            // Count media with time-decay
+                            if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
+                                recentMediaCount++;
+                                
+                                if (message.media instanceof Api.MessageMediaPhoto) {
+                                    mediaStats.photos++;
+                                } else if (message.media instanceof Api.MessageMediaDocument) {
+                                    const document = message.media.document;
+                                    if (document instanceof Api.Document) {
+                                        const isVideo = document.attributes.some(
+                                            attr => attr instanceof Api.DocumentAttributeVideo
+                                        );
+                                        if (isVideo) {
+                                            mediaStats.videos++;
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        // Get total message count (lightweight call)
+                        let totalMessages = messageCount;
+                        try {
+                            const firstBatch = await this.client.getMessages(chatId, { limit: 1 });
+                            if (firstBatch.total) {
+                                totalMessages = firstBatch.total;
+                            }
+                        } catch (totalError) {
+                            // Use analyzed count as fallback
+                        }
+
+                        return { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages };
+                    })();
+
+                    // Race between processing and timeout
+                    const timeoutPromise = new Promise((resolve) => 
+                        setTimeout(() => resolve(null), CHAT_TIMEOUT_MS)
+                    );
+
+                    const result = await Promise.race([chatProcessingPromise, timeoutPromise]) as any;
+                    
+                    // Skip this chat if it timed out
+                    if (result === null) {
+                        this.logger.warn(this.phoneNumber, `Chat ${chatId} processing timed out after ${CHAT_TIMEOUT_MS}ms - skipping`);
+                        return null;
                     }
 
-                    // Get total message count (lightweight call)
-                    let totalMessages = messageCount;
-                    try {
-                        const firstBatch = await this.client.getMessages(chatId, { limit: 1 });
-                        if (firstBatch.total) {
-                            totalMessages = firstBatch.total;
-                        }
-                    } catch (totalError) {
-                        // Use analyzed count as fallback
-                    }
+                    const { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages } = result;
 
                     // Adaptive filtering: Skip chats with very low engagement
                     // // Threshold adapts based on overall activity level
@@ -4739,18 +4773,6 @@ class TelegramManager {
                         callStats.outgoing.audio = callStats.outgoing.total; // Assuming outgoing calls are audio unless specified
                     }
 
-                    // Calculate time-decay multiplier
-                    const timeDecay = getTimeDecayMultiplier(daysSinceLastActivity);
-                    
-                    // Calculate conversation pattern score (mutual engagement indicator)
-                    const mutualEngagementScore = messageCount > 0 
-                        ? Math.min(1.5, (ownMessageCount / messageCount) * 2) // Prefer balanced conversations
-                        : 1.0;
-                    
-                    // Reply chain depth indicates conversation quality
-                    const conversationDepthScore = messageCount > 0
-                        ? Math.min(1.3, 1 + (replyChainCount / messageCount) * 0.3)
-                        : 1.0;
 
                     // Calculate comprehensive interaction score with time-decay and patterns
                     const baseScore = (
@@ -4763,8 +4785,7 @@ class TelegramManager {
                         unreadCount * weights.unreadMessages
                     );
 
-                    // Apply time-decay, mutual engagement, and conversation depth
-                    const interactionScore = baseScore * timeDecay * mutualEngagementScore * conversationDepthScore;
+                    const interactionScore = baseScore 
                     
                     // Add pinned chat bonus (indicates user importance)
                     const finalScore = isPinned ? interactionScore * 1.2 : interactionScore;
@@ -4819,12 +4840,22 @@ class TelegramManager {
                         activityBreakdown
                     };
                 } catch (error) {
-                    this.logger.error(this.phoneNumber, `Error processing chat ${chatId}:`, error);
+                    const processingTime = Date.now() - processingStart;
+                    if (error.message === 'Chat processing timeout') {
+                        this.logger.warn(this.phoneNumber, `Chat ${chatId} timed out after ${processingTime}ms, skipping...`);
+                    } else {
+                        this.logger.error(this.phoneNumber, `Error processing chat ${chatId} after ${processingTime}ms:`, error);
+                    }
                     return null;
                 }
             }));
 
             chatStats.push(...batchResults.filter(Boolean));
+            
+            // Add small delay between batches to prevent rate limiting
+            if (i + batchSize < privateChats.length && chatStats.length < targetCandidates) {
+                await sleep(BATCH_DELAY_MS);
+            }
         }
 
         // Sort by interaction score (prioritize recent/active chats with same score)
@@ -4842,7 +4873,7 @@ class TelegramManager {
                 // Tertiary sort: last activity (most recent first)
                 return a.lastActivityDays - b.lastActivityDays;
             })
-            .slice(0, 10);
+            .slice(0, clampedLimit);
         
         // Always include self chat (chatId: "me") in results
         if (selfChatData) {
@@ -4850,14 +4881,14 @@ class TelegramManager {
             topChats = topChats.filter(chat => chat.chatId !== 'me');
             // Add self chat at the beginning (highest priority)
             topChats.unshift(selfChatData);
-            // If we have more than 10, remove the last one
-            if (topChats.length > 10) {
-                topChats = topChats.slice(0, 10);
+            // If we have more than limit, remove the last one
+            if (topChats.length > clampedLimit) {
+                topChats = topChats.slice(0, clampedLimit);
             }
         }
 
         const totalTime = Date.now() - startTime;
-        this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
+        this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats (requested: ${clampedLimit})`);
         topChats.forEach((chat, index) => {
             this.logger.info(this.phoneNumber, `Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}, Level: ${chat.engagementLevel}, Days: ${chat.lastActivityDays}`);
         });
