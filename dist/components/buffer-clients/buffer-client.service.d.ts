@@ -39,7 +39,11 @@ export declare class BufferClientService implements OnModuleDestroy {
     private readonly MAX_MAP_SIZE;
     private readonly CLEANUP_INTERVAL;
     private readonly MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER;
-    private readonly MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT;
+    private readonly MIN_TOTAL_BUFFER_CLIENTS;
+    private readonly AVAILABILITY_WINDOWS;
+    private readonly ONE_DAY_MS;
+    private readonly THREE_MONTHS_MS;
+    private readonly INACTIVE_USER_CUTOFF_DAYS;
     private cleanupIntervalId;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientService: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     onModuleDestroy(): Promise<void>;
@@ -79,9 +83,10 @@ export declare class BufferClientService implements OnModuleDestroy {
     clearLeaveChannelInterval(): void;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
-    private getTimestamp;
-    private createBackfillTimestamps;
+    private updateUser2FAStatus;
+    private calculateAvailabilityBasedNeeds;
     private backfillTimestamps;
+    private performHealthCheck;
     private getPendingUpdates;
     private updatePrivacySettings;
     private deleteProfilePhotos;
@@ -89,9 +94,23 @@ export declare class BufferClientService implements OnModuleDestroy {
     private updateUsername;
     private updateProfilePhotos;
     processBufferClient(doc: BufferClient, client: Client): Promise<number>;
-    private calculateClientAssignments;
     private createBufferClientFromUser;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[], clientsNeedingBufferClients?: string[], bufferClientsPerClient?: Map<string, number>): Promise<void>;
+    addNewUserstoBufferClientsDynamic(badIds: string[], goodIds: string[], clientsNeedingBufferClients: Array<{
+        clientId: string;
+        totalNeeded: number;
+        windowNeeds: Array<{
+            window: string;
+            available: number;
+            needed: number;
+            targetDate: string;
+            minRequired: number;
+        }>;
+        totalActive: number;
+        totalNeededForCount: number;
+        calculationReason: string;
+        priority: number;
+    }>, bufferClientsPerClient?: Map<string, number>): Promise<void>;
     updateAllClientSessions(): Promise<void>;
     getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]>;
     getBufferClientDistribution(): Promise<{
