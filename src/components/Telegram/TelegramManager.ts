@@ -4715,12 +4715,12 @@ class TelegramManager {
                     }
 
                     // Adaptive filtering: Skip chats with very low engagement
-                    // Threshold adapts based on overall activity level
-                    const minMessagesThreshold = Math.max(10, Math.floor(totalMessages * 0.1)); // At least 10% of total or 10 messages
-                    if (messageCount < minMessagesThreshold && daysSinceLastActivity > 30) {
-                        this.logger.info(this.phoneNumber, `Skipping chat ${chatId} - low recent engagement (${messageCount} recent, ${totalMessages} total, ${daysSinceLastActivity.toFixed(1)} days inactive)`);
-                        return null;
-                    }
+                    // // Threshold adapts based on overall activity level
+                    // const minMessagesThreshold = Math.max(10, Math.floor(totalMessages * 0.1)); // At least 10% of total or 10 messages
+                    // if (messageCount < minMessagesThreshold && daysSinceLastActivity > 30) {
+                    //     this.logger.info(this.phoneNumber, `Skipping chat ${chatId} - low recent engagement (${messageCount} recent, ${totalMessages} total, ${daysSinceLastActivity.toFixed(1)} days inactive)`);
+                    //     return null;
+                    // }
 
                     // Get call statistics
                     const callStats = {
