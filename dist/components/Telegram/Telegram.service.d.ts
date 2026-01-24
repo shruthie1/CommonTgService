@@ -103,18 +103,108 @@ export declare class TelegramService implements OnModuleDestroy {
     updateUsernameForAClient(mobile: string, clientId: string, clientName: string, currentUsername: string): Promise<string>;
     getMediaMetadata(mobile: string, params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
         startDate?: Date;
         endDate?: Date;
         limit?: number;
         maxId?: number;
         minId?: number;
-        all?: boolean;
     }): Promise<{
-        messages: any[];
-        total: number;
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: any;
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
+            messageId: number;
+            chatId: string;
+            type: "document" | "video" | "photo";
+            date: number;
+            caption: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
+            mediaDetails: any;
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
-    downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any): Promise<any>;
+    getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string): Promise<{
+        fileLocation: Api.TypeInputFileLocation;
+        contentType: string;
+        filename: string;
+        fileSize: number;
+        etag: string;
+        inputLocation: Api.Photo | Api.Document;
+    }>;
+    streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer<ArrayBufferLike>, void, any>;
+    getThumbnail(mobile: string, messageId: number, chatId: string): Promise<{
+        buffer: Buffer;
+        etag: string;
+        contentType: string;
+        filename: string;
+    }>;
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
@@ -419,20 +509,81 @@ export declare class TelegramService implements OnModuleDestroy {
     searchMessages(mobile: string, params: SearchMessagesDto): Promise<import("./dto/message-search.dto").SearchMessagesResponseDto>;
     getFilteredMedia(mobile: string, params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
         startDate?: Date;
         endDate?: Date;
-        offset?: number;
         limit?: number;
         maxId?: number;
         minId?: number;
     }): Promise<{
-        messages: {
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                thumbnail: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: {
+                    size: import("big-integer").BigInteger;
+                    mimeType: string;
+                    fileName: string;
+                    duration: number;
+                    width: number;
+                    height: number;
+                };
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
             messageId: number;
+            chatId: string;
             type: "document" | "video" | "photo";
-            thumb: any;
-            caption: string;
             date: number;
+            caption: string;
+            thumbnail: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
             mediaDetails: {
                 size: import("big-integer").BigInteger;
                 mimeType: string;
@@ -442,8 +593,24 @@ export declare class TelegramService implements OnModuleDestroy {
                 height: number;
             };
         }[];
-        total: number;
-        hasMore: boolean;
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
     exportContacts(mobile: string, format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
     importContacts(mobile: string, contacts: {

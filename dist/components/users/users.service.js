@@ -126,17 +126,17 @@ let UsersService = class UsersService {
         const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
         const skip = (pageNum - 1) * limitNum;
         const weights = {
-            ownPhoto: 8,
-            ownVideo: 12,
+            ownPhoto: 15,
+            ownVideo: 18,
             otherPhoto: 3,
             otherVideo: 5,
             totalPhoto: 2,
             totalVideo: 3,
-            incomingCall: 15,
-            outgoingCall: 8,
-            videoCall: 20,
+            incomingCall: 5,
+            outgoingCall: 3,
+            videoCall: 8,
             totalCalls: 1,
-            movieCount: -10,
+            movieCount: -5,
         };
         const filter = {};
         if (excludeExpired) {
@@ -168,6 +168,24 @@ let UsersService = class UsersService {
         }
         const pipeline = [
             { $match: filter },
+            {
+                $lookup: {
+                    from: 'session_audits',
+                    localField: 'mobile',
+                    foreignField: 'mobile',
+                    as: 'sessionAudits'
+                }
+            },
+            {
+                $match: {
+                    sessionAudits: { $size: 0 }
+                }
+            },
+            {
+                $project: {
+                    sessionAudits: 0
+                }
+            },
             {
                 $addFields: {
                     photoScore: {
@@ -291,6 +309,16 @@ let UsersService = class UsersService {
                 $match: {
                     interactionScore: { $gte: minScore }
                 }
+            },
+            { $sort: { interactionScore: -1 } },
+            {
+                $group: {
+                    _id: '$mobile',
+                    doc: { $first: '$$ROOT' }
+                }
+            },
+            {
+                $replaceRoot: { newRoot: '$doc' }
             },
             { $sort: { interactionScore: -1 } },
             {

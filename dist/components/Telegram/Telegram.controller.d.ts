@@ -10,6 +10,7 @@ import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { SendTgMessageDto } from './dto/send-message.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import bigInt from 'big-integer';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -112,7 +113,8 @@ export declare class TelegramController {
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
-    downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<any>;
+    downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
+    getThumbnail(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<{
         success: number;
         failed: number;
@@ -308,19 +310,158 @@ export declare class TelegramController {
             ttlPeriod?: import("telegram").Api.int;
         };
     }>;
-    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number, all?: boolean): Promise<{
-        messages: any[];
-        total: number;
-    }>;
-    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
-        messages: {
+    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<{
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: any;
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
             messageId: number;
+            chatId: string;
             type: "document" | "video" | "photo";
-            thumb: any;
-            caption: string;
             date: number;
+            caption: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
+            mediaDetails: any;
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
+    }>;
+    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<{
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                thumbnail: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: {
+                    size: bigInt.BigInteger;
+                    mimeType: string;
+                    fileName: string;
+                    duration: number;
+                    width: number;
+                    height: number;
+                };
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
+            messageId: number;
+            chatId: string;
+            type: "document" | "video" | "photo";
+            date: number;
+            caption: string;
+            thumbnail: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
             mediaDetails: {
-                size: import("big-integer").BigInteger;
+                size: bigInt.BigInteger;
                 mimeType: string;
                 fileName: string;
                 duration: number;
@@ -328,8 +469,24 @@ export declare class TelegramController {
                 height: number;
             };
         }[];
-        total: number;
-        hasMore: boolean;
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
     getGroupMembers(mobile: string, groupId: string): Promise<any[]>;
     blockChat(mobile: string, chatId: string): Promise<void>;

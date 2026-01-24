@@ -183,7 +183,7 @@ let ChannelsService = class ChannelsService {
                 { $limit: limit },
                 { $project: { randomField: 0 } }
             ];
-            const result = await this.ChannelModel.aggregate(pipeline).exec();
+            const result = await this.ChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
             return result;
         }
         catch (error) {

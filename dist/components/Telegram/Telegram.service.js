@@ -367,28 +367,36 @@ let TelegramService = class TelegramService {
     async getMediaMetadata(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
-            if (params.all) {
-                return await telegramClient.getAllMediaMetaData(params);
-            }
-            else {
-                return await telegramClient.getMediaMetadata(params);
-            }
+            return await telegramClient.getMediaMetadata(params);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting media metadata:', error);
             throw error;
         }
     }
-    async downloadMediaFile(mobile, messageId, chatId, res) {
+    async getMediaFileDownloadInfo(mobile, messageId, chatId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
-            return await telegramClient.downloadMediaFile(messageId, chatId, res);
+            this.logger.info(mobile, 'Get media file download info', { messageId, chatId });
+            return await telegramClient.getMediaFileDownloadInfo(messageId, chatId);
         }
         catch (error) {
-            this.logger.error(mobile, 'Error downloading media file:', error);
-            if (!res.headersSent) {
-                res.status(500).send('Error downloading media file');
-            }
+            this.logger.error(mobile, 'Error getting media file download info:', error);
+            throw error;
+        }
+    }
+    async *streamMediaFile(mobile, fileLocation, offset, limit, requestSize) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize);
+    }
+    async getThumbnail(mobile, messageId, chatId) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        try {
+            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId });
+            return await telegramClient.getThumbnail(messageId, chatId);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error getting thumbnail:', error);
             throw error;
         }
     }

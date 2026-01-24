@@ -99,6 +99,9 @@ declare class TelegramManager {
     getAllChats(): Promise<any[]>;
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<any>;
     getMediaUrl(message: Api.Message): Promise<string | Buffer>;
+    private getThumbnailBuffer;
+    private getMessageWithMedia;
+    private getMediaFileInfo;
     sendInlineMessage(chatId: string, message: string, url: string): Promise<Api.Message>;
     getMediaMessages(): Promise<Api.messages.Messages>;
     getCallLog(limit?: number): Promise<{
@@ -138,19 +141,108 @@ declare class TelegramManager {
     blockUser(chatId: string): Promise<void>;
     getMediaMetadata(params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
         startDate?: Date;
         endDate?: Date;
         limit?: number;
         maxId?: number;
         minId?: number;
     }): Promise<{
-        messages: number[];
-        total: number;
-        hasMore: boolean;
-        lastOffsetId: number;
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: any;
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
+            messageId: number;
+            chatId: string;
+            type: "document" | "video" | "photo";
+            date: number;
+            caption: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
+            mediaDetails: any;
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
-    downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
+    getThumbnail(messageId: number, chatId?: string): Promise<{
+        buffer: Buffer;
+        etag: string;
+        contentType: string;
+        filename: string;
+    }>;
+    getMediaFileDownloadInfo(messageId: number, chatId?: string): Promise<{
+        fileLocation: Api.TypeInputFileLocation;
+        contentType: string;
+        filename: string;
+        fileSize: number;
+        etag: string;
+        inputLocation: Api.Photo | Api.Document;
+    }>;
+    streamMediaFile(fileLocation: Api.TypeInputFileLocation, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer>;
     private downloadWithTimeout;
     private processWithConcurrencyLimit;
     private getMediaDetails;
@@ -502,30 +594,132 @@ declare class TelegramManager {
     searchMessages(params: SearchMessagesDto): Promise<SearchMessagesResponseDto>;
     getAllMediaMetaData(params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
         startDate?: Date;
         endDate?: Date;
         maxId?: number;
         minId?: number;
     }): Promise<{
-        messages: any[];
-        total: number;
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: any;
+            items: any;
+            pagination: {
+                page: number;
+                limit: any;
+                total: any;
+                totalPages: number;
+                hasMore: boolean;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: any[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
     getFilteredMedia(params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice')[];
+        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
         startDate?: Date;
         endDate?: Date;
         limit?: number;
         maxId?: number;
         minId?: number;
     }): Promise<{
-        messages: {
+        groups: {
+            type: "document" | "video" | "photo" | "voice";
+            count: number;
+            items: {
+                messageId: number;
+                chatId: string;
+                type: "document" | "video" | "photo";
+                date: number;
+                caption: string;
+                thumbnail: string;
+                fileSize: number;
+                mimeType: string;
+                filename: string;
+                width: number;
+                height: number;
+                duration: number;
+                mediaDetails: {
+                    size: bigInt.BigInteger;
+                    mimeType: string;
+                    fileName: string;
+                    duration: number;
+                    width: number;
+                    height: number;
+                };
+            }[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                totalPages: number;
+                hasMore: boolean;
+                nextMaxId: number;
+                firstMessageId: number;
+                lastMessageId: number;
+            };
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: string[];
+            startDate: string;
+            endDate: string;
+        };
+        data?: undefined;
+    } | {
+        data: {
             messageId: number;
+            chatId: string;
             type: "document" | "video" | "photo";
-            thumb: any;
-            caption: string;
             date: number;
+            caption: string;
+            thumbnail: string;
+            fileSize: number;
+            mimeType: string;
+            filename: string;
+            width: number;
+            height: number;
+            duration: number;
             mediaDetails: {
                 size: bigInt.BigInteger;
                 mimeType: string;
@@ -535,8 +729,24 @@ declare class TelegramManager {
                 height: number;
             };
         }[];
-        total: number;
-        hasMore: boolean;
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasMore: boolean;
+            nextMaxId: number;
+            prevMaxId: number;
+            firstMessageId: number;
+            lastMessageId: number;
+        };
+        filters: {
+            chatId: string;
+            types: ("document" | "video" | "photo" | "voice")[];
+            startDate: string;
+            endDate: string;
+        };
+        groups?: undefined;
     }>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
     private generateCSV;
