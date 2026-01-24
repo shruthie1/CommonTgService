@@ -3689,11 +3689,6 @@ class TelegramManager {
                     }
                     catch (totalError) {
                     }
-                    const minMessagesThreshold = Math.max(10, Math.floor(totalMessages * 0.1));
-                    if (messageCount < minMessagesThreshold && daysSinceLastActivity > 30) {
-                        this.logger.info(this.phoneNumber, `Skipping chat ${chatId} - low recent engagement (${messageCount} recent, ${totalMessages} total, ${daysSinceLastActivity.toFixed(1)} days inactive)`);
-                        return null;
-                    }
                     const callStats = {
                         total: 0,
                         incoming: { total: 0, audio: 0, video: 0 },
