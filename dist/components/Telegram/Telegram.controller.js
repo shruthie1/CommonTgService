@@ -53,7 +53,6 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const Telegram_service_1 = require("./Telegram.service");
 const dto_1 = require("./dto");
-const metadata_operations_dto_1 = require("./dto/metadata-operations.dto");
 const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const connection_management_dto_1 = require("./dto/connection-management.dto");
 const platform_express_1 = require("@nestjs/platform-express");
@@ -65,6 +64,7 @@ const delete_chat_dto_1 = require("./dto/delete-chat.dto");
 const update_username_dto_1 = require("./dto/update-username.dto");
 const send_message_dto_1 = require("./dto/send-message.dto");
 const update_profile_dto_1 = require("./dto/update-profile.dto");
+const big_integer_1 = __importDefault(require("big-integer"));
 let TelegramController = class TelegramController {
     constructor(telegramService) {
         this.telegramService = telegramService;
@@ -229,7 +229,85 @@ let TelegramController = class TelegramController {
         if (!chatId || chatId.trim().length === 0) {
             throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
         }
-        return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
+        try {
+            const fileInfo = await this.telegramService.getMediaFileDownloadInfo(mobile, messageId, chatId);
+            if (res.req.headers['if-none-match'] === fileInfo.etag) {
+                return res.status(304).end();
+            }
+            const range = res.req.headers.range;
+            const chunkSize = 512 * 1024;
+            if (range && fileInfo.fileSize > 0) {
+                const parts = range.replace(/bytes=/, "").split("-");
+                const start = parseInt(parts[0], 10);
+                const end = parts[1] ? parseInt(parts[1], 10) : fileInfo.fileSize - 1;
+                const chunksize = (end - start) + 1;
+                if (start >= fileInfo.fileSize || end >= fileInfo.fileSize || start > end) {
+                    res.status(416).setHeader('Content-Range', `bytes */${fileInfo.fileSize}`);
+                    return res.end();
+                }
+                res.status(206);
+                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileInfo.fileSize}`);
+                res.setHeader('Accept-Ranges', 'bytes');
+                res.setHeader('Content-Length', chunksize);
+                res.setHeader('Content-Type', fileInfo.contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('ETag', fileInfo.etag);
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(start), chunksize, chunkSize)) {
+                    res.write(chunk);
+                }
+            }
+            else {
+                res.setHeader('Content-Type', fileInfo.contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('ETag', fileInfo.etag);
+                res.setHeader('Accept-Ranges', 'bytes');
+                if (fileInfo.fileSize > 0) {
+                    res.setHeader('Content-Length', fileInfo.fileSize);
+                }
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), 5 * 1024 * 1024, chunkSize)) {
+                    res.write(chunk);
+                }
+            }
+            res.end();
+        }
+        catch (error) {
+            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found')) {
+                return res.status(404).send(error.message || 'File reference expired');
+            }
+            if (!res.headersSent) {
+                res.status(500).send('Error downloading media');
+            }
+        }
+    }
+    async getThumbnail(mobile, chatId, messageId, res) {
+        if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
+            throw new common_1.BadRequestException('Message ID must be a positive integer');
+        }
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
+        }
+        try {
+            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId);
+            if (res.req.headers['if-none-match'] === thumbnail.etag) {
+                return res.status(304).end();
+            }
+            res.setHeader('Content-Type', thumbnail.contentType);
+            res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('ETag', thumbnail.etag);
+            res.setHeader('Content-Length', thumbnail.buffer.length);
+            return res.send(thumbnail.buffer);
+        }
+        catch (error) {
+            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found') || error.message?.includes('not available')) {
+                return res.status(404).send(error.message || 'Thumbnail not available');
+            }
+            if (!res.headersSent) {
+                res.status(500).send('Error getting thumbnail');
+            }
+        }
     }
     async sendMediaAlbum(mobile, albumDto) {
         if (!albumDto.media || albumDto.media.length === 0) {
@@ -240,7 +318,7 @@ let TelegramController = class TelegramController {
         }
         return this.telegramService.sendMediaAlbum(mobile, albumDto);
     }
-    async getMediaMetadata(mobile, chatId, types, startDate, endDate, limit, minId, maxId, all) {
+    async getMediaMetadata(mobile, chatId, types, startDate, endDate, limit, maxId, minId) {
         if (!chatId || chatId.trim().length === 0) {
             throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
         }
@@ -250,7 +328,7 @@ let TelegramController = class TelegramController {
         let parsedTypes;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
             parsedTypes = typesArray
                 .filter(t => validTypes.includes(t.toLowerCase()))
                 .map(t => t.toLowerCase());
@@ -281,12 +359,11 @@ let TelegramController = class TelegramController {
             startDate: parsedStartDate,
             endDate: parsedEndDate,
             limit,
-            minId,
             maxId,
-            all
+            minId
         });
     }
-    async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, minId, maxId) {
+    async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, maxId, minId) {
         if (!chatId || chatId.trim().length === 0) {
             throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
         }
@@ -296,7 +373,7 @@ let TelegramController = class TelegramController {
         let parsedTypes;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
             parsedTypes = typesArray
                 .filter(t => validTypes.includes(t.toLowerCase()))
                 .map(t => t.toLowerCase());
@@ -327,8 +404,8 @@ let TelegramController = class TelegramController {
             startDate: parsedStartDate,
             endDate: parsedEndDate,
             limit,
-            minId,
-            maxId
+            maxId,
+            minId
         });
     }
     async getGroupMembers(mobile, groupId) {
@@ -986,6 +1063,53 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "downloadMedia", null);
 __decorate([
+    (0, common_1.Get)('media/thumbnail/:mobile'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get thumbnail for a media message',
+        description: 'Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'chatId',
+        required: true,
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
+        example: 'me'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'messageId',
+        required: true,
+        description: 'Message ID containing the media (must be a positive number)',
+        type: Number,
+        example: 12345
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Thumbnail image (JPEG format)',
+        content: {
+            'image/jpeg': { schema: { type: 'string', format: 'binary' } }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 304,
+        description: 'Not modified (when using If-None-Match header for caching)'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'Thumbnail not found - message ID does not exist, message has no media, or thumbnail is not available'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Error getting thumbnail'
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('messageId')),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number, Object]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getThumbnail", null);
+__decorate([
     (0, common_1.Post)('media/album/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send media album (multiple photos/videos)',
@@ -1033,7 +1157,7 @@ __decorate([
     (0, common_1.Get)('media/metadata/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get media metadata from a chat',
-        description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range.'
+        description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
     (0, swagger_1.ApiQuery)({
@@ -1044,10 +1168,10 @@ __decorate([
     }),
     (0, swagger_1.ApiQuery)({
         name: 'types',
-        enum: ['photo', 'video', 'document', 'voice'],
+        enum: ['photo', 'video', 'document', 'voice', 'all'],
         required: false,
         isArray: true,
-        description: 'Filter by media types. If not specified, returns all media types.',
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
         example: ['photo', 'video']
     }),
     (0, swagger_1.ApiQuery)({
@@ -1070,25 +1194,18 @@ __decorate([
         example: 50
     }),
     (0, swagger_1.ApiQuery)({
+        name: 'maxId',
+        required: false,
+        type: Number,
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
+        example: 12345
+    }),
+    (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
         description: 'Minimum message ID to include',
         example: 1000
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'maxId',
-        required: false,
-        type: Number,
-        description: 'Maximum message ID to include',
-        example: 5000
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'all',
-        required: false,
-        type: Boolean,
-        description: 'If true, returns all media types grouped by type',
-        example: false
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1105,18 +1222,17 @@ __decorate([
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
     __param(5, (0, common_1.Query)('limit')),
-    __param(6, (0, common_1.Query)('minId')),
-    __param(7, (0, common_1.Query)('maxId')),
-    __param(8, (0, common_1.Query)('all')),
+    __param(6, (0, common_1.Query)('maxId')),
+    __param(7, (0, common_1.Query)('minId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Object, String, String, Number, Number, Number, Boolean]),
+    __metadata("design:paramtypes", [String, String, Object, String, String, Number, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMediaMetadata", null);
 __decorate([
     (0, common_1.Get)('media/filter/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get filtered media messages from a chat',
-        description: 'Get filtered list of media messages with detailed metadata. Returns array of media items with file information.'
+        description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
     (0, swagger_1.ApiQuery)({
@@ -1128,9 +1244,9 @@ __decorate([
     (0, swagger_1.ApiQuery)({
         name: 'types',
         required: false,
-        enum: ['photo', 'video', 'document', 'voice'],
+        enum: ['photo', 'video', 'document', 'voice', 'all'],
         isArray: true,
-        description: 'Filter by media types. If not specified, returns all media types.',
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
         example: ['photo', 'video']
     }),
     (0, swagger_1.ApiQuery)({
@@ -1153,23 +1269,23 @@ __decorate([
         example: 50
     }),
     (0, swagger_1.ApiQuery)({
+        name: 'maxId',
+        required: false,
+        type: Number,
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
+        example: 12345
+    }),
+    (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
         description: 'Minimum message ID to include',
         example: 1000
     }),
-    (0, swagger_1.ApiQuery)({
-        name: 'maxId',
-        required: false,
-        type: Number,
-        description: 'Maximum message ID to include',
-        example: 5000
-    }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Array of filtered media metadata',
-        type: [metadata_operations_dto_1.MediaMetadataDto]
+        description: 'Paginated media response with standardized format',
+        type: Object
     }),
     (0, swagger_1.ApiResponse)({
         status: 400,
@@ -1181,8 +1297,8 @@ __decorate([
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
     __param(5, (0, common_1.Query)('limit')),
-    __param(6, (0, common_1.Query)('minId')),
-    __param(7, (0, common_1.Query)('maxId')),
+    __param(6, (0, common_1.Query)('maxId')),
+    __param(7, (0, common_1.Query)('minId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, Object, String, String, Number, Number, Number]),
     __metadata("design:returntype", Promise)

@@ -791,6 +791,100 @@ class TelegramManager {
         }
         return null;
     }
+    async getThumbnailBuffer(message) {
+        try {
+            if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+                const sizes = message.photo?.sizes || [];
+                if (sizes.length > 0) {
+                    const preferredSize = sizes.find((s) => s.type === 'm') ||
+                        sizes.find((s) => s.type === 'x') ||
+                        sizes[sizes.length - 1] ||
+                        sizes[0];
+                    return await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: preferredSize }), 30000);
+                }
+            }
+            else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                const thumbs = message.document?.thumbs || [];
+                if (thumbs.length > 0) {
+                    const preferredThumb = thumbs.find((t) => t.type === 'm') ||
+                        thumbs[thumbs.length - 1] ||
+                        thumbs[0];
+                    return await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
+                }
+            }
+        }
+        catch (error) {
+            this.logger.warn(this.phoneNumber, `Failed to get thumbnail for message ${message.id}:`, error);
+        }
+        return null;
+    }
+    async getMessageWithMedia(messageId, chatId) {
+        const entity = await this.safeGetEntity(chatId);
+        const messages = await this.client.getMessages(entity, { ids: [messageId] });
+        const message = messages[0];
+        if (!message || message.media instanceof telegram_1.Api.MessageMediaEmpty) {
+            throw new Error('Media not found');
+        }
+        return message;
+    }
+    getMediaFileInfo(message) {
+        const media = message.media;
+        let contentType;
+        let filename;
+        let fileLocation;
+        let fileSize = 0;
+        let inputLocation;
+        if (media instanceof telegram_1.Api.MessageMediaPhoto) {
+            const photo = message.photo;
+            if (!photo || photo instanceof telegram_1.Api.PhotoEmpty) {
+                throw new Error('Photo not found in message');
+            }
+            inputLocation = photo;
+            contentType = 'image/jpeg';
+            filename = 'photo.jpg';
+            const data = {
+                id: photo.id,
+                accessHash: photo.accessHash,
+                fileReference: photo.fileReference,
+            };
+            fileLocation = new telegram_1.Api.InputPhotoFileLocation({ ...data, thumbSize: 'm' });
+            const sizes = photo?.sizes || [];
+            const largestSize = sizes[sizes.length - 1];
+            if (largestSize && 'size' in largestSize) {
+                fileSize = largestSize.size || 0;
+            }
+        }
+        else if (media instanceof telegram_1.Api.MessageMediaDocument) {
+            const document = media.document;
+            if (!document || document instanceof telegram_1.Api.DocumentEmpty) {
+                throw new Error('Document not found in message');
+            }
+            if (!(document instanceof telegram_1.Api.Document)) {
+                throw new Error('Document format not supported');
+            }
+            inputLocation = document;
+            const fileNameAttr = document.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
+            filename = fileNameAttr?.fileName || 'document.bin';
+            contentType = document.mimeType || this.detectContentType(filename);
+            fileSize = typeof document.size === 'number' ? document.size : (document.size ? Number(document.size.toString()) : 0);
+            const data = {
+                id: document.id,
+                accessHash: document.accessHash,
+                fileReference: document.fileReference,
+            };
+            fileLocation = new telegram_1.Api.InputDocumentFileLocation({ ...data, thumbSize: '' });
+        }
+        else {
+            throw new Error('Unsupported media type');
+        }
+        return {
+            contentType,
+            filename,
+            fileLocation,
+            fileSize,
+            inputLocation
+        };
+    }
     async sendInlineMessage(chatId, message, url) {
         const button = {
             text: "Open URL",
@@ -1233,13 +1327,22 @@ class TelegramManager {
     async getMediaMetadata(params) {
         if (!this.client)
             throw new Error('Client not initialized');
-        const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+        let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+        const hasAll = types.includes('all');
+        const typesToFetch = hasAll
+            ? ['photo', 'video', 'document', 'voice']
+            : types.filter(t => t !== 'all');
+        const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
         const query = {
-            limit: limit || 500,
+            limit: queryLimit,
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
-            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && { minDate: Math.floor(startDate.getTime() / 1000) }),
-            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && { maxDate: Math.floor(endDate.getTime() / 1000) })
+            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
+                minDate: Math.floor(startDate.getTime() / 1000)
+            }),
+            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && {
+                maxDate: Math.floor(endDate.getTime() / 1000)
+            })
         };
         const ent = await this.safeGetEntity(chatId);
         this.logger.info(this.phoneNumber, "getMediaMetadata", params);
@@ -1250,119 +1353,205 @@ class TelegramManager {
             if (!message.media)
                 return false;
             const mediaType = this.getMediaType(message.media);
-            return types.includes(mediaType);
+            return typesToFetch.includes(mediaType);
         })
-            .map(message => message.id);
-        return {
-            messages: filteredMessages,
-            total: filteredMessages.length,
-            hasMore: messages.length === limit && messages.length > 0,
-            lastOffsetId: filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1] : undefined
-        };
-    }
-    async downloadMediaFile(messageId, chatId = 'me', res) {
-        try {
-            const entity = await this.safeGetEntity(chatId);
-            const messages = await this.client.getMessages(entity, { ids: [messageId] });
-            const message = messages[0];
-            if (!message || message.media instanceof telegram_1.Api.MessageMediaEmpty) {
-                return res.status(404).send('Media not found');
-            }
-            const media = message.media;
-            let contentType, filename, fileLocation, fileSize = 0;
-            const inputLocation = message.video || message.photo;
-            const data = {
-                id: inputLocation.id,
-                accessHash: inputLocation.accessHash,
-                fileReference: inputLocation.fileReference,
-            };
-            if (media instanceof telegram_1.Api.MessageMediaPhoto) {
-                contentType = 'image/jpeg';
-                filename = 'photo.jpg';
-                fileLocation = new telegram_1.Api.InputPhotoFileLocation({ ...data, thumbSize: 'm' });
+            .map(message => {
+            const mediaType = this.getMediaType(message.media);
+            let fileSize;
+            let mimeType;
+            let filename;
+            let width;
+            let height;
+            let duration;
+            if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
                 const photo = message.photo;
-                const sizes = photo?.sizes || [];
-                const largestSize = sizes[sizes.length - 1];
-                if (largestSize && 'size' in largestSize) {
-                    fileSize = largestSize.size || 0;
+                mimeType = 'image/jpeg';
+                filename = 'photo.jpg';
+                if (photo?.sizes && photo.sizes.length > 0) {
+                    const largestSize = photo.sizes[photo.sizes.length - 1];
+                    if (largestSize && 'size' in largestSize) {
+                        fileSize = largestSize.size;
+                    }
+                    if (largestSize && 'w' in largestSize) {
+                        width = largestSize.w;
+                    }
+                    if (largestSize && 'h' in largestSize) {
+                        height = largestSize.h;
+                    }
                 }
             }
-            else if (media instanceof telegram_1.Api.MessageMediaDocument) {
-                const document = media.document;
-                if (document instanceof telegram_1.Api.Document) {
-                    const fileNameAttr = document.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
-                    filename = fileNameAttr?.fileName || 'video.mp4';
-                    contentType = document.mimeType || this.detectContentType(filename);
-                    fileSize = typeof document.size === 'number' ? document.size : (document.size ? Number(document.size.toString()) : 0);
+            else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                const doc = message.media.document;
+                if (doc instanceof telegram_1.Api.Document) {
+                    fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
+                    mimeType = doc.mimeType;
+                    const fileNameAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
+                    filename = fileNameAttr?.fileName;
+                    const videoAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
+                    if (videoAttr) {
+                        width = videoAttr.w;
+                        height = videoAttr.h;
+                        duration = videoAttr.duration;
+                    }
+                    const audioAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeAudio);
+                    if (audioAttr && !duration) {
+                        duration = audioAttr.duration;
+                    }
+                }
+            }
+            let dateValue;
+            const msgDate = message.date;
+            if (msgDate) {
+                if (typeof msgDate === 'number') {
+                    dateValue = msgDate;
+                }
+                else if (typeof msgDate === 'object' && msgDate !== null && 'getTime' in msgDate) {
+                    const dateObj = msgDate;
+                    dateValue = Math.floor(dateObj.getTime() / 1000);
                 }
                 else {
-                    contentType = media.mimeType || 'video/mp4';
-                    filename = 'video.mp4';
-                }
-                fileLocation = new telegram_1.Api.InputDocumentFileLocation({ ...data, thumbSize: '' });
-            }
-            else {
-                return res.status(415).send('Unsupported media type');
-            }
-            const fileId = typeof inputLocation.id === 'object' ? inputLocation.id.toString() : inputLocation.id;
-            const etag = this.generateETag(messageId, chatId, fileId);
-            if (res.req.headers['if-none-match'] === etag) {
-                return res.status(304).end();
-            }
-            const range = res.req.headers.range;
-            const chunkSize = 512 * 1024;
-            if (range && fileSize > 0) {
-                const parts = range.replace(/bytes=/, "").split("-");
-                const start = parseInt(parts[0], 10);
-                const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-                const chunksize = (end - start) + 1;
-                if (start >= fileSize || end >= fileSize || start > end) {
-                    res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
-                    return res.end();
-                }
-                res.status(206);
-                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
-                res.setHeader('Accept-Ranges', 'bytes');
-                res.setHeader('Content-Length', chunksize);
-                res.setHeader('Content-Type', contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
-                res.setHeader('ETag', etag);
-                for await (const chunk of this.client.iterDownload({
-                    file: fileLocation,
-                    offset: (0, big_integer_1.default)(start),
-                    limit: chunksize,
-                    requestSize: chunkSize,
-                })) {
-                    res.write(chunk);
+                    dateValue = Math.floor(Date.now() / 1000);
                 }
             }
             else {
-                res.setHeader('Content-Type', contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
-                res.setHeader('ETag', etag);
-                res.setHeader('Accept-Ranges', 'bytes');
-                if (fileSize > 0) {
-                    res.setHeader('Content-Length', fileSize);
-                }
-                for await (const chunk of this.client.iterDownload({
-                    file: fileLocation,
-                    offset: big_integer_1.default[0],
-                    limit: 5 * 1024 * 1024,
-                    requestSize: chunkSize,
-                })) {
-                    res.write(chunk);
-                }
+                dateValue = Math.floor(Date.now() / 1000);
             }
-            res.end();
+            return {
+                messageId: message.id,
+                chatId: chatId,
+                type: mediaType,
+                date: dateValue,
+                caption: message.message || '',
+                fileSize,
+                mimeType,
+                filename,
+                width,
+                height,
+                duration,
+                mediaDetails: undefined
+            };
+        });
+        if (hasAll) {
+            const grouped = filteredMessages.reduce((acc, item) => {
+                if (!acc[item.type]) {
+                    acc[item.type] = [];
+                }
+                acc[item.type].push(item);
+                return acc;
+            }, {});
+            const groups = typesToFetch.map(mediaType => {
+                const items = (grouped[mediaType] || []).slice(0, limit);
+                const typeTotal = items.length;
+                const typeHasMore = grouped[mediaType]?.length > limit;
+                const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
+                const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
+                const typeNextMaxId = typeHasMore ? typeLastMessageId : undefined;
+                return {
+                    type: mediaType,
+                    count: typeTotal,
+                    items: items,
+                    pagination: {
+                        page: 1,
+                        limit,
+                        total: typeTotal,
+                        totalPages: typeHasMore ? -1 : 1,
+                        hasMore: typeHasMore,
+                        nextMaxId: typeNextMaxId,
+                        firstMessageId: typeFirstMessageId,
+                        lastMessageId: typeLastMessageId
+                    }
+                };
+            });
+            const totalItems = filteredMessages.length;
+            const overallHasMore = messages.length === queryLimit && messages.length > 0;
+            const overallFirstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
+            const overallLastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
+            const overallNextMaxId = overallHasMore ? overallLastMessageId : undefined;
+            const overallPrevMaxId = maxId && filteredMessages.length > 0 ? overallFirstMessageId : undefined;
+            return {
+                groups,
+                pagination: {
+                    page: 1,
+                    limit,
+                    total: totalItems,
+                    totalPages: overallHasMore ? -1 : 1,
+                    hasMore: overallHasMore,
+                    nextMaxId: overallNextMaxId,
+                    prevMaxId: overallPrevMaxId,
+                    firstMessageId: overallFirstMessageId,
+                    lastMessageId: overallLastMessageId
+                },
+                filters: {
+                    chatId,
+                    types: ['all'],
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
         }
-        catch (error) {
-            if (error.message?.includes('FILE_REFERENCE_EXPIRED')) {
-                return res.status(404).send('File reference expired');
-            }
-            this.logger.error(this.phoneNumber, 'Error downloading media:', error);
-            res.status(500).send('Error downloading media');
+        else {
+            const total = filteredMessages.length;
+            const hasMore = messages.length === queryLimit && messages.length > 0;
+            const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
+            const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
+            const nextMaxId = hasMore ? lastMessageId : undefined;
+            const prevMaxId = maxId && filteredMessages.length > 0 ? firstMessageId : undefined;
+            return {
+                data: filteredMessages,
+                pagination: {
+                    page: 1,
+                    limit,
+                    total,
+                    totalPages: hasMore ? -1 : 1,
+                    hasMore,
+                    nextMaxId,
+                    prevMaxId,
+                    firstMessageId,
+                    lastMessageId
+                },
+                filters: {
+                    chatId,
+                    types: typesToFetch,
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
+        }
+    }
+    async getThumbnail(messageId, chatId = 'me') {
+        const message = await this.getMessageWithMedia(messageId, chatId);
+        const thumbBuffer = await this.getThumbnailBuffer(message);
+        if (!thumbBuffer) {
+            throw new Error('Thumbnail not available for this media');
+        }
+        const etag = this.generateETag(messageId, chatId, `thumb-${messageId}`);
+        return {
+            buffer: thumbBuffer,
+            etag,
+            contentType: 'image/jpeg',
+            filename: `thumbnail_${messageId}.jpg`
+        };
+    }
+    async getMediaFileDownloadInfo(messageId, chatId = 'me') {
+        const message = await this.getMessageWithMedia(messageId, chatId);
+        const fileInfo = this.getMediaFileInfo(message);
+        const fileId = typeof fileInfo.inputLocation.id === 'object'
+            ? fileInfo.inputLocation.id.toString()
+            : fileInfo.inputLocation.id;
+        const etag = this.generateETag(messageId, chatId, fileId);
+        return {
+            ...fileInfo,
+            etag
+        };
+    }
+    async *streamMediaFile(fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 512 * 1024) {
+        for await (const chunk of this.client.iterDownload({
+            file: fileLocation,
+            offset,
+            limit,
+            requestSize,
+        })) {
+            yield chunk;
         }
     }
     async downloadWithTimeout(promise, timeout) {
@@ -2565,7 +2754,11 @@ class TelegramManager {
     async getAllMediaMetaData(params) {
         if (!this.client)
             throw new Error('Client not initialized');
-        const { chatId, types = ['photo', 'video'], startDate, endDate, maxId, minId } = params;
+        let { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
+        const hasAll = types.includes('all');
+        const typesToFetch = hasAll
+            ? ['photo', 'video', 'document', 'voice']
+            : types.filter(t => t !== 'all');
         let allMedia = [];
         let hasMore = true;
         let lastOffsetId = 0;
@@ -2573,88 +2766,282 @@ class TelegramManager {
         while (hasMore) {
             const response = await this.getMediaMetadata({
                 chatId,
-                types,
+                types: hasAll ? ['all'] : typesToFetch,
                 startDate,
                 endDate,
                 limit,
                 maxId: lastOffsetId > 0 ? lastOffsetId : undefined,
                 minId
             });
-            this.logger.info(this.phoneNumber, `hasMore: ${response.hasMore}, Total: ${response.total}, lastOffsetId: ${response.lastOffsetId}`);
-            allMedia = allMedia.concat(response.messages);
-            if (!response.hasMore || !response.lastOffsetId) {
+            this.logger.info(this.phoneNumber, `hasMore: ${response.pagination.hasMore}, Total: ${response.pagination.total}, nextMaxId: ${response.pagination.nextMaxId}`);
+            if (response.groups) {
+                const items = response.groups.flatMap(group => group.items || []);
+                allMedia = allMedia.concat(items);
+            }
+            else if (response.data) {
+                allMedia = allMedia.concat(response.data);
+            }
+            if (!response.pagination.hasMore || !response.pagination.nextMaxId) {
                 hasMore = false;
                 this.logger.info(this.phoneNumber, 'No more messages to fetch');
             }
             else {
-                lastOffsetId = response.lastOffsetId;
+                lastOffsetId = response.pagination.nextMaxId;
                 this.logger.info(this.phoneNumber, `Fetched ${allMedia.length} messages so far`);
             }
             await (0, Helpers_1.sleep)(3000);
         }
-        return {
-            messages: allMedia,
-            total: allMedia.length,
-        };
+        if (hasAll) {
+            const grouped = allMedia.reduce((acc, item) => {
+                if (!acc[item.type]) {
+                    acc[item.type] = [];
+                }
+                acc[item.type].push(item);
+                return acc;
+            }, {});
+            const groups = typesToFetch.map(mediaType => ({
+                type: mediaType,
+                count: grouped[mediaType]?.length || 0,
+                items: grouped[mediaType] || [],
+                pagination: {
+                    page: 1,
+                    limit: grouped[mediaType]?.length || 0,
+                    total: grouped[mediaType]?.length || 0,
+                    totalPages: 1,
+                    hasMore: false
+                }
+            }));
+            return {
+                groups,
+                pagination: {
+                    page: 1,
+                    limit: allMedia.length,
+                    total: allMedia.length,
+                    totalPages: 1,
+                    hasMore: false
+                },
+                filters: {
+                    chatId,
+                    types: ['all'],
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
+        }
+        else {
+            return {
+                data: allMedia,
+                pagination: {
+                    page: 1,
+                    limit: allMedia.length,
+                    total: allMedia.length,
+                    totalPages: 1,
+                    hasMore: false
+                },
+                filters: {
+                    chatId,
+                    types: typesToFetch,
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
+        }
     }
     async getFilteredMedia(params) {
         if (!this.client)
             throw new Error('Client not initialized');
-        const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+        let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+        const hasAll = types.includes('all');
+        const typesToFetch = hasAll
+            ? ['photo', 'video', 'document', 'voice']
+            : types.filter(t => t !== 'all');
+        const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
         const query = {
-            limit: limit || 100,
+            limit: queryLimit,
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
-            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && { minDate: Math.floor(startDate.getTime() / 1000) }),
-            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && { maxDate: Math.floor(endDate.getTime() / 1000) })
+            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
+                minDate: Math.floor(startDate.getTime() / 1000)
+            }),
+            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && {
+                maxDate: Math.floor(endDate.getTime() / 1000)
+            })
         };
         const ent = await this.safeGetEntity(chatId);
-        this.logger.info(this.phoneNumber, "getMediaMetadata", params);
+        this.logger.info(this.phoneNumber, "getFilteredMedia", params);
         const messages = await this.client.getMessages(ent, query);
         this.logger.info(this.phoneNumber, `Fetched ${messages.length} messages`);
         const filteredMessages = messages.filter(message => {
             if (!message.media)
                 return false;
             const mediaType = this.getMediaType(message.media);
-            return types.includes(mediaType);
+            return typesToFetch.includes(mediaType);
         });
         this.logger.info(this.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
         const mediaData = await this.processWithConcurrencyLimit(filteredMessages, async (message) => {
-            let thumbBuffer = null;
-            try {
-                if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
-                    const sizes = message.photo?.sizes || [];
-                    if (sizes.length > 0) {
-                        const preferredSize = sizes.find((s) => s.type === 'm') || sizes[sizes.length - 1] || sizes[0];
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: preferredSize }), 30000);
+            const thumbBuffer = await this.getThumbnailBuffer(message);
+            const mediaDetails = this.getMediaDetails(message.media);
+            let fileSize;
+            let mimeType;
+            let filename;
+            let width;
+            let height;
+            let duration;
+            if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+                const photo = message.photo;
+                mimeType = 'image/jpeg';
+                filename = 'photo.jpg';
+                if (photo?.sizes && photo.sizes.length > 0) {
+                    const largestSize = photo.sizes[photo.sizes.length - 1];
+                    if (largestSize && 'size' in largestSize) {
+                        fileSize = largestSize.size;
                     }
-                }
-                else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-                    const thumbs = message.document?.thumbs || [];
-                    if (thumbs.length > 0) {
-                        const preferredThumb = thumbs.find((t) => t.type === 'm') || thumbs[thumbs.length - 1] || thumbs[0];
-                        thumbBuffer = await this.downloadWithTimeout(this.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
+                    if (largestSize && 'w' in largestSize) {
+                        width = largestSize.w;
+                    }
+                    if (largestSize && 'h' in largestSize) {
+                        height = largestSize.h;
                     }
                 }
             }
-            catch (error) {
-                this.logger.warn(this.phoneNumber, `Failed to get thumbnail for message ${message.id}:`, error);
+            else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                const doc = message.media.document;
+                if (doc instanceof telegram_1.Api.Document) {
+                    fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
+                    mimeType = doc.mimeType;
+                    const fileNameAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
+                    filename = fileNameAttr?.fileName;
+                    const videoAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
+                    if (videoAttr) {
+                        width = videoAttr.w;
+                        height = videoAttr.h;
+                        duration = videoAttr.duration;
+                    }
+                    const audioAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeAudio);
+                    if (audioAttr && !duration) {
+                        duration = audioAttr.duration;
+                    }
+                }
             }
-            const mediaDetails = await this.getMediaDetails(message.media);
+            let dateValue;
+            const msgDate = message.date;
+            if (msgDate) {
+                if (typeof msgDate === 'number') {
+                    dateValue = msgDate;
+                }
+                else if (typeof msgDate === 'object' && msgDate !== null && 'getTime' in msgDate) {
+                    const dateObj = msgDate;
+                    dateValue = Math.floor(dateObj.getTime() / 1000);
+                }
+                else {
+                    dateValue = Math.floor(Date.now() / 1000);
+                }
+            }
+            else {
+                dateValue = Math.floor(Date.now() / 1000);
+            }
             return {
                 messageId: message.id,
+                chatId: chatId,
                 type: this.getMediaType(message.media),
-                thumb: thumbBuffer?.toString('base64') || null,
+                date: dateValue,
                 caption: message.message || '',
-                date: message.date,
-                mediaDetails,
+                thumbnail: thumbBuffer ? `data:image/jpeg;base64,${thumbBuffer.toString('base64')}` : undefined,
+                fileSize,
+                mimeType,
+                filename,
+                width,
+                height,
+                duration,
+                mediaDetails: mediaDetails || undefined
             };
         }, this.THUMBNAIL_CONCURRENCY_LIMIT, this.THUMBNAIL_BATCH_DELAY_MS);
-        return {
-            messages: mediaData,
-            total: mediaData.length,
-            hasMore: messages.length === limit && messages.length > 0
-        };
+        if (hasAll) {
+            const grouped = mediaData.reduce((acc, item) => {
+                if (!acc[item.type]) {
+                    acc[item.type] = [];
+                }
+                acc[item.type].push(item);
+                return acc;
+            }, {});
+            const groups = typesToFetch.map(mediaType => {
+                const items = (grouped[mediaType] || []).slice(0, limit);
+                const typeTotal = items.length;
+                const typeHasMore = grouped[mediaType]?.length > limit;
+                const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
+                const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
+                const typeNextMaxId = typeHasMore ? typeLastMessageId : undefined;
+                return {
+                    type: mediaType,
+                    count: typeTotal,
+                    items: items,
+                    pagination: {
+                        page: 1,
+                        limit,
+                        total: typeTotal,
+                        totalPages: typeHasMore ? -1 : 1,
+                        hasMore: typeHasMore,
+                        nextMaxId: typeNextMaxId,
+                        firstMessageId: typeFirstMessageId,
+                        lastMessageId: typeLastMessageId
+                    }
+                };
+            });
+            const totalItems = mediaData.length;
+            const overallHasMore = messages.length === queryLimit && messages.length > 0;
+            const overallFirstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
+            const overallLastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
+            const overallNextMaxId = overallHasMore ? overallLastMessageId : undefined;
+            const overallPrevMaxId = maxId && mediaData.length > 0 ? overallFirstMessageId : undefined;
+            return {
+                groups,
+                pagination: {
+                    page: 1,
+                    limit,
+                    total: totalItems,
+                    totalPages: overallHasMore ? -1 : 1,
+                    hasMore: overallHasMore,
+                    nextMaxId: overallNextMaxId,
+                    prevMaxId: overallPrevMaxId,
+                    firstMessageId: overallFirstMessageId,
+                    lastMessageId: overallLastMessageId
+                },
+                filters: {
+                    chatId,
+                    types: ['all'],
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
+        }
+        else {
+            const total = mediaData.length;
+            const hasMore = messages.length === queryLimit && messages.length > 0;
+            const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
+            const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
+            const nextMaxId = hasMore ? lastMessageId : undefined;
+            const prevMaxId = maxId && mediaData.length > 0 ? firstMessageId : undefined;
+            return {
+                data: mediaData,
+                pagination: {
+                    page: 1,
+                    limit,
+                    total,
+                    totalPages: hasMore ? -1 : 1,
+                    hasMore,
+                    nextMaxId,
+                    prevMaxId,
+                    firstMessageId,
+                    lastMessageId
+                },
+                filters: {
+                    chatId,
+                    types: typesToFetch,
+                    startDate: startDate?.toISOString(),
+                    endDate: endDate?.toISOString()
+                }
+            };
+        }
     }
     async safeGetEntity(entityId) {
         if (!this.client)
@@ -3130,13 +3517,6 @@ class TelegramManager {
             const userId = user.id.toString();
             if (userId === "777000" || userId === "42777")
                 return false;
-            if (dialog.message && dialog.message.date) {
-                const lastMessageDate = dialog.message.date * 1000;
-                const daysSinceLastMessage = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-                if (daysSinceLastMessage > 180) {
-                    return false;
-                }
-            }
             return true;
         })
             .sort((a, b) => {
@@ -3146,6 +3526,109 @@ class TelegramManager {
         });
         this.logger.info(this.phoneNumber, `Found ${privateChats.length} valid private chats after smart filtering`);
         const callLogs = await this.getCallLogsInternal();
+        let selfChatData = null;
+        try {
+            const me = await this.getMe();
+            const selfChatId = me.id.toString();
+            this.logger.info(this.phoneNumber, `Processing self chat (me) with chatId: ${selfChatId}`);
+            let messageCount = 0;
+            let ownMessageCount = 0;
+            let replyChainCount = 0;
+            const messageDates = [];
+            const mediaStats = { photos: 0, videos: 0 };
+            for await (const message of this.client.iterMessages('me', {
+                limit: 100,
+                reverse: false
+            })) {
+                messageCount++;
+                if (message.date) {
+                    messageDates.push(message.date * 1000);
+                }
+                if (message.out) {
+                    ownMessageCount++;
+                }
+                if (message.replyTo) {
+                    replyChainCount++;
+                }
+                if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
+                    if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+                        mediaStats.photos++;
+                    }
+                    else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                        const document = message.media.document;
+                        if (document instanceof telegram_1.Api.Document) {
+                            const isVideo = document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
+                            if (isVideo) {
+                                mediaStats.videos++;
+                            }
+                        }
+                    }
+                }
+            }
+            let totalMessages = messageCount;
+            try {
+                const firstBatch = await this.client.getMessages('me', { limit: 1 });
+                if (firstBatch.total) {
+                    totalMessages = firstBatch.total;
+                }
+            }
+            catch (totalError) {
+            }
+            const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : now;
+            const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
+            const timeDecay = getTimeDecayMultiplier(daysSinceLastActivity);
+            const mutualEngagementScore = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
+            const conversationDepthScore = messageCount > 0 ? Math.min(1.3, 1 + (replyChainCount / messageCount) * 0.3) : 1.0;
+            const callStats = {
+                total: 0,
+                incoming: { total: 0, audio: 0, video: 0 },
+                outgoing: { total: 0, audio: 0, video: 0 }
+            };
+            const baseScore = (mediaStats.videos * weights.sharedVideo +
+                mediaStats.photos * weights.sharedPhoto +
+                totalMessages * weights.textMessage);
+            const interactionScore = baseScore * timeDecay * mutualEngagementScore * conversationDepthScore;
+            let engagementLevel;
+            if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
+                engagementLevel = 'recent';
+            }
+            else if (daysSinceLastActivity <= ACTIVITY_WINDOWS.active) {
+                engagementLevel = 'active';
+            }
+            else {
+                engagementLevel = 'dormant';
+            }
+            const totalActivity = (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
+                totalMessages * weights.textMessage;
+            const activityBreakdown = totalActivity > 0 ? {
+                videoCalls: 0,
+                audioCalls: 0,
+                mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
+                textMessages: Math.round((totalMessages * weights.textMessage / totalActivity) * 100)
+            } : {
+                videoCalls: 0,
+                audioCalls: 0,
+                mediaSharing: 0,
+                textMessages: 100
+            };
+            selfChatData = {
+                chatId: 'me',
+                username: me.username,
+                firstName: me.firstName || 'Saved Messages',
+                lastName: me.lastName,
+                totalMessages,
+                interactionScore: Math.round(interactionScore * 100) / 100,
+                engagementLevel,
+                lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
+                calls: callStats,
+                media: mediaStats,
+                activityBreakdown
+            };
+            this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}, Total Messages: ${totalMessages}`);
+        }
+        catch (selfChatError) {
+            this.logger.warn(this.phoneNumber, `Error processing self chat, will continue without it:`, selfChatError);
+        }
         const batchSize = 10;
         const chatStats = [];
         for (let i = 0; i < privateChats.length; i += batchSize) {
@@ -3294,7 +3777,7 @@ class TelegramManager {
             }));
             chatStats.push(...batchResults.filter(Boolean));
         }
-        const topChats = chatStats
+        let topChats = chatStats
             .sort((a, b) => {
             if (Math.abs(b.interactionScore - a.interactionScore) > 0.1) {
                 return b.interactionScore - a.interactionScore;
@@ -3306,6 +3789,13 @@ class TelegramManager {
             return a.lastActivityDays - b.lastActivityDays;
         })
             .slice(0, 10);
+        if (selfChatData) {
+            topChats = topChats.filter(chat => chat.chatId !== 'me');
+            topChats.unshift(selfChatData);
+            if (topChats.length > 10) {
+                topChats = topChats.slice(0, 10);
+            }
+        }
         const totalTime = Date.now() - startTime;
         this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats`);
         topChats.forEach((chat, index) => {
