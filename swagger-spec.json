@@ -7164,6 +7164,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "tgId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by tgId",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -12491,8 +12500,9 @@
           "maxAgeDays": {
             "type": "number",
             "description": "Maximum age of session to consider (in days)",
-            "default": 3000,
-            "minimum": 1
+            "default": 180,
+            "minimum": 1,
+            "maximum": 365
           }
         }
       },
