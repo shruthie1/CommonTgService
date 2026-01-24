@@ -751,11 +751,11 @@ let TelegramService = class TelegramService {
             throw error;
         }
     }
-    async getTopPrivateChats(mobile) {
+    async getTopPrivateChats(mobile, limit) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Get top private chats');
+        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}`);
         try {
-            return await telegramClient.getTopPrivateChats();
+            return await telegramClient.getTopPrivateChats(limit);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);

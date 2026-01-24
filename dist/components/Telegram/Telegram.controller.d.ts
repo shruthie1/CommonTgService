@@ -661,7 +661,7 @@ export declare class TelegramController {
             other: number;
         };
     }>;
-    getTopPrivateChats(mobile: string): Promise<{
+    getTopPrivateChats(mobile: string, limit?: number): Promise<{
         chatId: string;
         username?: string;
         firstName?: string;

@@ -567,8 +567,8 @@ let TelegramController = class TelegramController {
     async getMessageStats(mobile, options) {
         return this.telegramService.getMessageStats(mobile, options);
     }
-    async getTopPrivateChats(mobile) {
-        return this.telegramService.getTopPrivateChats(mobile);
+    async getTopPrivateChats(mobile, limit) {
+        return this.telegramService.getTopPrivateChats(mobile, limit);
     }
     async getSelfMsgsInfo(mobile, limit) {
         if (limit !== undefined && (limit < 1 || limit > 10000)) {
@@ -1799,11 +1799,19 @@ __decorate([
     (0, common_1.Get)('chats/top-private/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get top private chats with smart activity-based filtering',
-        description: 'Retrieves top 10 private chats ranked by engagement score using advanced filtering. ' +
+        description: 'Retrieves top private chats ranked by engagement score using advanced filtering. ' +
             'Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. ' +
-            'Considers recency, mutual engagement, reply chains, and call history.'
+            'Considers recency, mutual engagement, reply chains, and call history. ' +
+            'Supports configurable limit (default: 10, max: 50).'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
+        example: 10
+    }),
     (0, swagger_1.ApiResponse)({
         status: 200,
         description: 'Top private chats retrieved successfully',
@@ -1875,8 +1883,9 @@ __decorate([
     }),
     (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
     __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getTopPrivateChats", null);
 __decorate([

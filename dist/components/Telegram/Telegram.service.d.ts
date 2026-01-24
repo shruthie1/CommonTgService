@@ -781,7 +781,7 @@ export declare class TelegramService implements OnModuleDestroy {
         caption?: string;
         filename?: string;
     }): Promise<Api.TypeUpdates>;
-    getTopPrivateChats(mobile: string): Promise<{
+    getTopPrivateChats(mobile: string, limit?: number): Promise<{
         chatId: string;
         username?: string;
         firstName?: string;
