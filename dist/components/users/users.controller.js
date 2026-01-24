@@ -30,6 +30,45 @@ let UsersController = class UsersController {
     async search(queryParams) {
         return this.usersService.search(queryParams);
     }
+    async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeExpired, excludeTwoFA, gender) {
+        const pageNum = page ? parseInt(page, 10) : undefined;
+        const limitNum = limit ? parseInt(limit, 10) : undefined;
+        const minScoreNum = minScore ? parseFloat(minScore) : undefined;
+        const minCallsNum = minCalls ? parseInt(minCalls, 10) : undefined;
+        const minPhotosNum = minPhotos ? parseInt(minPhotos, 10) : undefined;
+        const minVideosNum = minVideos ? parseInt(minVideos, 10) : undefined;
+        if (pageNum !== undefined && (isNaN(pageNum) || pageNum < 1)) {
+            throw new common_1.BadRequestException('Page must be a positive integer');
+        }
+        if (limitNum !== undefined && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 100');
+        }
+        if (minScoreNum !== undefined && (isNaN(minScoreNum) || minScoreNum < 0)) {
+            throw new common_1.BadRequestException('minScore must be a non-negative number');
+        }
+        if (minCallsNum !== undefined && (isNaN(minCallsNum) || minCallsNum < 0)) {
+            throw new common_1.BadRequestException('minCalls must be a non-negative integer');
+        }
+        if (minPhotosNum !== undefined && (isNaN(minPhotosNum) || minPhotosNum < 0)) {
+            throw new common_1.BadRequestException('minPhotos must be a non-negative integer');
+        }
+        if (minVideosNum !== undefined && (isNaN(minVideosNum) || minVideosNum < 0)) {
+            throw new common_1.BadRequestException('minVideos must be a non-negative integer');
+        }
+        const excludeExpiredBool = excludeExpired === 'false' ? false : (excludeExpired === 'true' ? true : undefined);
+        const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
+        return this.usersService.getTopInteractionUsers({
+            page: pageNum,
+            limit: limitNum,
+            minScore: minScoreNum,
+            minCalls: minCallsNum,
+            minPhotos: minPhotosNum,
+            minVideos: minVideosNum,
+            excludeExpired: excludeExpiredBool,
+            excludeTwoFA: excludeTwoFABool,
+            gender
+        });
+    }
     async findAll() {
         return this.usersService.findAll();
     }
@@ -69,6 +108,148 @@ __decorate([
     __metadata("design:paramtypes", [search_user_dto_1.SearchUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "search", null);
+__decorate([
+    (0, common_1.Get)('top-interacted'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get users with top interaction scores',
+        description: 'Retrieves users ranked by interaction score calculated from saved DB stats. ' +
+            'Score is based on photos, videos, calls, and other interactions. ' +
+            'Movie count has negative weightage as it indicates less genuine interaction. ' +
+            'Supports filtering and pagination for efficient data retrieval.'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Page number (default: 1, minimum: 1)',
+        example: 1,
+        minimum: 1
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Number of results per page (default: 20, max: 100)',
+        example: 20,
+        minimum: 1,
+        maximum: 100
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minScore',
+        required: false,
+        type: Number,
+        description: 'Minimum interaction score to include (default: 0)',
+        example: 100,
+        minimum: 0
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minCalls',
+        required: false,
+        type: Number,
+        description: 'Minimum total calls required (default: 0)',
+        example: 5,
+        minimum: 0
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minPhotos',
+        required: false,
+        type: Number,
+        description: 'Minimum photos required (default: 0)',
+        example: 10,
+        minimum: 0
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minVideos',
+        required: false,
+        type: Number,
+        description: 'Minimum videos required (default: 0)',
+        example: 5,
+        minimum: 0
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'excludeExpired',
+        required: false,
+        type: Boolean,
+        description: 'Exclude expired users (default: true)',
+        example: true
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'excludeTwoFA',
+        required: false,
+        type: Boolean,
+        description: 'Exclude users with 2FA enabled (default: false)',
+        example: false
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'gender',
+        required: false,
+        type: String,
+        description: 'Filter by gender',
+        example: 'male'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Users retrieved successfully with interaction scores',
+        schema: {
+            type: 'object',
+            properties: {
+                users: {
+                    type: 'array',
+                    description: 'List of users with interaction scores',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'string', description: 'User ID' },
+                            mobile: { type: 'string' },
+                            tgId: { type: 'string' },
+                            firstName: { type: 'string' },
+                            lastName: { type: 'string' },
+                            username: { type: 'string' },
+                            photoCount: { type: 'number' },
+                            videoCount: { type: 'number' },
+                            ownPhotoCount: { type: 'number' },
+                            ownVideoCount: { type: 'number' },
+                            otherPhotoCount: { type: 'number' },
+                            otherVideoCount: { type: 'number' },
+                            movieCount: { type: 'number', description: 'Has negative impact on score' },
+                            calls: {
+                                type: 'object',
+                                properties: {
+                                    outgoing: { type: 'number' },
+                                    incoming: { type: 'number' },
+                                    video: { type: 'number' },
+                                    totalCalls: { type: 'number' }
+                                }
+                            },
+                            interactionScore: {
+                                type: 'number',
+                                description: 'Calculated interaction score (higher = more active/engaged)'
+                            }
+                        }
+                    }
+                },
+                total: { type: 'number', description: 'Total number of users matching filters' },
+                page: { type: 'number', description: 'Current page number' },
+                limit: { type: 'number', description: 'Results per page' },
+                totalPages: { type: 'number', description: 'Total number of pages' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - invalid query parameters' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('minScore')),
+    __param(3, (0, common_1.Query)('minCalls')),
+    __param(4, (0, common_1.Query)('minPhotos')),
+    __param(5, (0, common_1.Query)('minVideos')),
+    __param(6, (0, common_1.Query)('excludeExpired')),
+    __param(7, (0, common_1.Query)('excludeTwoFA')),
+    __param(8, (0, common_1.Query)('gender')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getTopInteractionUsers", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all users' }),

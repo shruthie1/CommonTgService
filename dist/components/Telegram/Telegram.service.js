@@ -162,9 +162,15 @@ let TelegramService = class TelegramService {
             this.logger.error(mobile, "Error fetching adding Contacts:", err);
         }
     }
-    async getSelfMsgsInfo(mobile) {
+    async getSelfMsgsInfo(mobile, limit) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.getSelfMSgsInfo();
+        try {
+            return await telegramClient.getSelfMSgsInfo(limit);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error getting self messages info:', error);
+            throw error;
+        }
     }
     async createGroup(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -187,7 +193,10 @@ let TelegramService = class TelegramService {
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
             await telegramClient.forwardMediaToBot(fromChatId);
-            const dialogs = await telegramClient.getDialogs({ limit: 500 });
+            const dialogs = [];
+            for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
+                dialogs.push(dialog);
+            }
             const channels = dialogs
                 .filter(chat => chat.isChannel || chat.isGroup)
                 .map(chat => {
@@ -232,9 +241,15 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.joinChannel(channelId);
     }
-    async getCallLog(mobile) {
+    async getCallLog(mobile, limit) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.getCallLog();
+        try {
+            return await telegramClient.getCallLog(limit);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error getting call log:', error);
+            throw error;
+        }
     }
     async getmedia(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -351,16 +366,31 @@ let TelegramService = class TelegramService {
     }
     async getMediaMetadata(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        if (params) {
-            return await telegramClient.getAllMediaMetaData(params);
+        try {
+            if (params.all) {
+                return await telegramClient.getAllMediaMetaData(params);
+            }
+            else {
+                return await telegramClient.getMediaMetadata(params);
+            }
         }
-        else {
-            return await telegramClient.getMediaMetadata(params);
+        catch (error) {
+            this.logger.error(mobile, 'Error getting media metadata:', error);
+            throw error;
         }
     }
     async downloadMediaFile(mobile, messageId, chatId, res) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.downloadMediaFile(messageId, chatId, res);
+        try {
+            return await telegramClient.downloadMediaFile(messageId, chatId, res);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error downloading media file:', error);
+            if (!res.headersSent) {
+                res.status(500).send('Error downloading media file');
+            }
+            throw error;
+        }
     }
     async forwardMessage(mobile, toChatId, fromChatId, messageId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -389,9 +419,8 @@ let TelegramService = class TelegramService {
     async getDialogs(mobile, query) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const { limit = 10, offsetId, archived = false } = query;
-        const dialogs = await telegramClient.getDialogs({ limit, offsetId, archived });
         const chatData = [];
-        for (const chat of dialogs) {
+        for await (const chat of telegramClient.client.iterDialogs({ limit, offsetId, archived })) {
             const chatEntity = await chat.entity.toJSON();
             chatData.push(chatEntity);
         }
@@ -474,7 +503,13 @@ let TelegramService = class TelegramService {
     }
     async sendMediaAlbum(mobile, album) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.sendMediaAlbum(album);
+        try {
+            return await telegramClient.sendMediaAlbum(album);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error sending media album:', error);
+            throw error;
+        }
     }
     async sendMessage(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -482,7 +517,13 @@ let TelegramService = class TelegramService {
     }
     async sendVoiceMessage(mobile, voice) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return await telegramClient.sendVoiceMessage(voice);
+        try {
+            return await telegramClient.sendVoiceMessage(voice);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error sending voice message:', error);
+            throw error;
+        }
     }
     async cleanupChat(mobile, cleanup) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -535,8 +576,14 @@ let TelegramService = class TelegramService {
     }
     async getFilteredMedia(mobile, params) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Get filtered media', params);
-        return await telegramClient.getFilteredMedia(params);
+        try {
+            this.logger.info(mobile, 'Get filtered media', params);
+            return await telegramClient.getFilteredMedia(params);
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error getting filtered media:', error);
+            throw error;
+        }
     }
     async exportContacts(mobile, format, includeBlocked = false) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -699,7 +746,13 @@ let TelegramService = class TelegramService {
     async getTopPrivateChats(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get top private chats');
-        return await telegramClient.getTopPrivateChats();
+        try {
+            return await telegramClient.getTopPrivateChats();
+        }
+        catch (error) {
+            this.logger.error(mobile, 'Error getting top private chats:', error);
+            throw error;
+        }
     }
     async addBotsToChannel(mobile, channelIds = [process.env.accountsChannel, process.env.updatesChannel, process.env.notifChannel, "miscmessages", process.env.httpFailuresChannel]) {
         this.logger.info(mobile, 'Add bots to channel', { channelIds });

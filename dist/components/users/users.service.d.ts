@@ -25,4 +25,23 @@ export declare class UsersService {
     }> & {
         __v: number;
     })[]>;
+    getTopInteractionUsers(options: {
+        page?: number;
+        limit?: number;
+        minScore?: number;
+        minCalls?: number;
+        minPhotos?: number;
+        minVideos?: number;
+        excludeExpired?: boolean;
+        excludeTwoFA?: boolean;
+        gender?: string;
+    }): Promise<{
+        users: Array<User & {
+            interactionScore: number;
+        }>;
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
 }

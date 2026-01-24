@@ -10,5 +10,6 @@ export interface MediaAlbumOptions {
         type: 'photo' | 'video';
         url: string;
         caption?: string;
+        filename?: string;
     }>;
 }

@@ -44,6 +44,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramController = void 0;
 const common_1 = require("@nestjs/common");
@@ -55,6 +58,7 @@ const create_chat_folder_dto_1 = require("./dto/create-chat-folder.dto");
 const connection_management_dto_1 = require("./dto/connection-management.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
+const axios_1 = __importDefault(require("axios"));
 const connection_manager_1 = require("./utils/connection-manager");
 const message_search_dto_1 = require("./dto/message-search.dto");
 const delete_chat_dto_1 = require("./dto/delete-chat.dto");
@@ -174,8 +178,11 @@ let TelegramController = class TelegramController {
     async getConnectionStatus() {
         return { status: await this.telegramService.getConnectionStatus() };
     }
-    async getCallLogStats(mobile) {
-        return this.telegramService.getCallLog(mobile);
+    async getCallLogStats(mobile, limit) {
+        if (limit !== undefined && (limit < 1 || limit > 10000)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 10000.');
+        }
+        return this.telegramService.getCallLog(mobile, limit);
     }
     async addContactsBulk(mobile, contactsDto) {
         return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
@@ -184,24 +191,95 @@ let TelegramController = class TelegramController {
         return this.telegramService.getContacts(mobile);
     }
     async sendMedia(mobile, sendMediaDto) {
-        const client = await connection_manager_1.connectionManager.getClient(mobile);
-        if (sendMediaDto.type === dto_1.MediaType.PHOTO) {
-            return client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
+        if (sendMediaDto.url) {
+            try {
+                const headResponse = await axios_1.default.head(sendMediaDto.url, { timeout: 10000 });
+                const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+                const maxSize = 100 * 1024 * 1024;
+                if (contentLength > maxSize) {
+                    const fileSizeMB = (contentLength / (1024 * 1024)).toFixed(2);
+                    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0);
+                    throw new common_1.BadRequestException(`File size (${fileSizeMB} MB) exceeds maximum allowed size of ${maxSizeMB} MB. Please use a smaller file.`);
+                }
+            }
+            catch (error) {
+                if (error instanceof common_1.BadRequestException) {
+                    throw error;
+                }
+            }
         }
-        return client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
+        try {
+            const client = await connection_manager_1.connectionManager.getClient(mobile);
+            if (sendMediaDto.type === dto_1.MediaType.PHOTO) {
+                return await client.sendPhotoChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
+            }
+            return await client.sendFileChat(sendMediaDto.chatId, sendMediaDto.url, sendMediaDto.caption, sendMediaDto.filename);
+        }
+        catch (error) {
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.BadRequestException(`Failed to send media: ${error.message || 'Unknown error'}`);
+        }
     }
     async downloadMedia(mobile, chatId, messageId, res) {
+        if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
+            throw new common_1.BadRequestException('Message ID must be a positive integer');
+        }
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
+        }
         return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
     }
     async sendMediaAlbum(mobile, albumDto) {
+        if (!albumDto.media || albumDto.media.length === 0) {
+            throw new common_1.BadRequestException('Album must contain at least one media item');
+        }
+        if (albumDto.media.length > 10) {
+            throw new common_1.BadRequestException(`Album cannot contain more than 10 items. You provided ${albumDto.media.length} items.`);
+        }
         return this.telegramService.sendMediaAlbum(mobile, albumDto);
     }
     async getMediaMetadata(mobile, chatId, types, startDate, endDate, limit, minId, maxId, all) {
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
+        }
+        if (limit !== undefined && (limit <= 0 || limit > 1000)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 1000');
+        }
+        let parsedTypes;
+        if (types) {
+            const typesArray = Array.isArray(types) ? types : [types];
+            const validTypes = ['photo', 'video', 'document', 'voice'];
+            parsedTypes = typesArray
+                .filter(t => validTypes.includes(t.toLowerCase()))
+                .map(t => t.toLowerCase());
+            if (parsedTypes.length === 0) {
+                throw new common_1.BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
+            }
+        }
+        let parsedStartDate;
+        let parsedEndDate;
+        if (startDate && startDate.trim()) {
+            parsedStartDate = new Date(startDate);
+            if (isNaN(parsedStartDate.getTime())) {
+                throw new common_1.BadRequestException(`Invalid startDate format. Use ISO 8601 format (e.g., "2024-01-01" or "2024-01-01T10:00:00")`);
+            }
+        }
+        if (endDate && endDate.trim()) {
+            parsedEndDate = new Date(endDate);
+            if (isNaN(parsedEndDate.getTime())) {
+                throw new common_1.BadRequestException(`Invalid endDate format. Use ISO 8601 format (e.g., "2024-12-31" or "2024-12-31T23:59:59")`);
+            }
+        }
+        if (parsedStartDate && parsedEndDate && parsedStartDate > parsedEndDate) {
+            throw new common_1.BadRequestException('startDate must be before or equal to endDate');
+        }
         return this.telegramService.getMediaMetadata(mobile, {
             chatId,
-            types,
-            startDate: startDate ? new Date(startDate) : undefined,
-            endDate: endDate ? new Date(endDate) : undefined,
+            types: parsedTypes,
+            startDate: parsedStartDate,
+            endDate: parsedEndDate,
             limit,
             minId,
             maxId,
@@ -209,11 +287,45 @@ let TelegramController = class TelegramController {
         });
     }
     async getFilteredMedia(mobile, chatId, types, startDate, endDate, limit, minId, maxId) {
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
+        }
+        if (limit !== undefined && (limit <= 0 || limit > 1000)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 1000');
+        }
+        let parsedTypes;
+        if (types) {
+            const typesArray = Array.isArray(types) ? types : [types];
+            const validTypes = ['photo', 'video', 'document', 'voice'];
+            parsedTypes = typesArray
+                .filter(t => validTypes.includes(t.toLowerCase()))
+                .map(t => t.toLowerCase());
+            if (parsedTypes.length === 0) {
+                throw new common_1.BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
+            }
+        }
+        let parsedStartDate;
+        let parsedEndDate;
+        if (startDate && startDate.trim()) {
+            parsedStartDate = new Date(startDate);
+            if (isNaN(parsedStartDate.getTime())) {
+                throw new common_1.BadRequestException(`Invalid startDate format. Use ISO 8601 format (e.g., "2024-01-01" or "2024-01-01T10:00:00")`);
+            }
+        }
+        if (endDate && endDate.trim()) {
+            parsedEndDate = new Date(endDate);
+            if (isNaN(parsedEndDate.getTime())) {
+                throw new common_1.BadRequestException(`Invalid endDate format. Use ISO 8601 format (e.g., "2024-12-31" or "2024-12-31T23:59:59")`);
+            }
+        }
+        if (parsedStartDate && parsedEndDate && parsedStartDate > parsedEndDate) {
+            throw new common_1.BadRequestException('startDate must be before or equal to endDate');
+        }
         return this.telegramService.getFilteredMedia(mobile, {
             chatId,
-            types,
-            startDate: startDate ? new Date(startDate) : undefined,
-            endDate: endDate ? new Date(endDate) : undefined,
+            types: parsedTypes,
+            startDate: parsedStartDate,
+            endDate: parsedEndDate,
             limit,
             minId,
             maxId
@@ -281,6 +393,21 @@ let TelegramController = class TelegramController {
         return this.telegramService.getScheduledMessages(mobile, chatId);
     }
     async sendVoiceMessage(mobile, voice) {
+        if (!voice.chatId || voice.chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
+        }
+        if (!voice.url || voice.url.trim().length === 0) {
+            throw new common_1.BadRequestException('URL is required and cannot be empty');
+        }
+        try {
+            new URL(voice.url);
+        }
+        catch {
+            throw new common_1.BadRequestException('Invalid URL format. Please provide a valid HTTP/HTTPS URL.');
+        }
+        if (voice.duration !== undefined && (voice.duration < 0 || !Number.isInteger(voice.duration))) {
+            throw new common_1.BadRequestException('Duration must be a non-negative integer (in seconds)');
+        }
         return this.telegramService.sendVoiceMessage(mobile, voice);
     }
     async sendViewOnceMedia(mobile, file, viewOnceDto) {
@@ -365,6 +492,12 @@ let TelegramController = class TelegramController {
     }
     async getTopPrivateChats(mobile) {
         return this.telegramService.getTopPrivateChats(mobile);
+    }
+    async getSelfMsgsInfo(mobile, limit) {
+        if (limit !== undefined && (limit < 1 || limit > 10000)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 10000.');
+        }
+        return this.telegramService.getSelfMsgsInfo(mobile, limit);
     }
     async addBotsToChannel(mobile, body) {
         return this.telegramService.addBotsToChannel(mobile, body.channelIds);
@@ -693,12 +826,61 @@ __decorate([
 ], TelegramController.prototype, "getConnectionStatus", null);
 __decorate([
     (0, common_1.Get)('monitoring/calllog/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get call log statistics' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get call log statistics with enhanced filtering',
+        description: 'Retrieves comprehensive call statistics including incoming/outgoing calls, video/audio breakdown, ' +
+            'and per-chat call counts. Uses server-side filtering for optimal performance. ' +
+            'Supports pagination via limit parameter (default: 1000, max: 10000).'
+    }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Maximum number of calls to analyze (default: 1000, max: 10000)',
+        example: 1000,
+        minimum: 1,
+        maximum: 10000
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Call log statistics retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                outgoing: { type: 'number', description: 'Total outgoing calls' },
+                incoming: { type: 'number', description: 'Total incoming calls' },
+                video: { type: 'number', description: 'Total video calls' },
+                audio: { type: 'number', description: 'Total audio calls' },
+                chatCallCounts: {
+                    type: 'array',
+                    description: 'Per-chat call statistics (only chats with >4 calls)',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            chatId: { type: 'string' },
+                            phone: { type: 'string' },
+                            username: { type: 'string' },
+                            name: { type: 'string' },
+                            count: { type: 'number' },
+                            msgs: { type: 'number', description: 'Total messages in chat' },
+                            video: { type: 'number', description: 'Video messages count' },
+                            photo: { type: 'number', description: 'Photo messages count' },
+                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] }
+                        }
+                    }
+                },
+                totalCalls: { type: 'number', description: 'Total number of calls analyzed' },
+                analyzedCalls: { type: 'number', description: 'Number of calls actually processed' }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - invalid limit parameter' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
     __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getCallLogStats", null);
 __decorate([
@@ -725,10 +907,25 @@ __decorate([
 ], TelegramController.prototype, "getContacts", null);
 __decorate([
     (0, common_1.Post)('media/send/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Send media message' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send media message',
+        description: 'Send a photo or file to a chat. Maximum file size is 100MB. Supports images, videos, and documents.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaDto }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Media sent successfully',
+        type: Object
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid request - file too large, invalid URL, or missing required fields'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Failed to send media - check Telegram connection or file accessibility'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -737,11 +934,49 @@ __decorate([
 ], TelegramController.prototype, "sendMedia", null);
 __decorate([
     (0, common_1.Get)('media/download/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Download media from a message' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'messageId', required: true }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Preview or download media from a message',
+        description: 'Download or preview media from a Telegram message. Images and videos preview in browser, other files download. Supports HTTP Range requests for video streaming.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'chatId',
+        required: true,
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
+        example: 'me'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'messageId',
+        required: true,
+        description: 'Message ID containing the media (must be a positive number)',
+        type: Number,
+        example: 12345
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Media file (preview in browser for images/videos, download for other types)',
+        content: {
+            'image/*': { schema: { type: 'string', format: 'binary' } },
+            'video/*': { schema: { type: 'string', format: 'binary' } },
+            'application/*': { schema: { type: 'string', format: 'binary' } }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 206,
+        description: 'Partial content (when using Range header for video streaming)'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 304,
+        description: 'Not modified (when using If-None-Match header for caching)'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'Media not found - message ID does not exist or message has no media'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 416,
+        description: 'Range not satisfiable - invalid Range header'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('messageId')),
@@ -752,10 +987,42 @@ __decorate([
 ], TelegramController.prototype, "downloadMedia", null);
 __decorate([
     (0, common_1.Post)('media/album/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Send media album (multiple photos/videos)' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send media album (multiple photos/videos)',
+        description: 'Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaAlbumDto }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Album sent with summary of results',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'number', description: 'Number of successfully sent items' },
+                failed: { type: 'number', description: 'Number of failed items' },
+                errors: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            index: { type: 'number', description: 'Index of failed item' },
+                            error: { type: 'string', description: 'Error message' }
+                        }
+                    },
+                    description: 'Details of failed items (only present if failed > 0)'
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid request - empty album, invalid URLs, or file size exceeds limit'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Failed to send album - all items failed or Telegram connection error'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -764,20 +1031,77 @@ __decorate([
 ], TelegramController.prototype, "sendMediaAlbum", null);
 __decorate([
     (0, common_1.Get)('media/metadata/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get media metadata from a chat' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'types', enum: ['photo', 'video', 'document'], required: false, isArray: true }),
-    (0, swagger_1.ApiQuery)({ name: 'startDate', required: false }),
-    (0, swagger_1.ApiQuery)({ name: 'endDate', required: false }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Number of messages to fetch', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'all', required: false, type: Boolean }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get media metadata from a chat',
+        description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'chatId',
+        required: true,
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
+        example: 'me'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'types',
+        enum: ['photo', 'video', 'document', 'voice'],
+        required: false,
+        isArray: true,
+        description: 'Filter by media types. If not specified, returns all media types.',
+        example: ['photo', 'video']
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'startDate',
+        required: false,
+        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+        example: '2024-01-01'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'endDate',
+        required: false,
+        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+        example: '2024-12-31'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        description: 'Maximum number of messages to fetch (default: 50, max: 1000)',
+        required: false,
+        type: Number,
+        example: 50
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minId',
+        required: false,
+        type: Number,
+        description: 'Minimum message ID to include',
+        example: 1000
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'maxId',
+        required: false,
+        type: Number,
+        description: 'Maximum message ID to include',
+        example: 5000
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'all',
+        required: false,
+        type: Boolean,
+        description: 'If true, returns all media types grouped by type',
+        example: false
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Media metadata retrieved successfully',
+        type: Object
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid request - invalid date format, chat ID, or limit value'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
-    __param(2, (0, common_1.Query)('types')),
+    __param(2, (0, common_1.Query)('types', new common_1.ParseArrayPipe({ items: String, separator: ',', optional: true }))),
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
     __param(5, (0, common_1.Query)('limit')),
@@ -785,31 +1109,82 @@ __decorate([
     __param(7, (0, common_1.Query)('maxId')),
     __param(8, (0, common_1.Query)('all')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Array, String, String, Number, Number, Number, Boolean]),
+    __metadata("design:paramtypes", [String, String, Object, String, String, Number, Number, Number, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMediaMetadata", null);
 __decorate([
     (0, common_1.Get)('media/filter/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get filtered media messages from a chat' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: true, description: 'Chat ID to get media from' }),
-    (0, swagger_1.ApiQuery)({ name: 'types', required: false, enum: ['photo', 'video', 'document', 'voice'], isArray: true }),
-    (0, swagger_1.ApiQuery)({ name: 'startDate', required: false, description: 'Filter media after this date' }),
-    (0, swagger_1.ApiQuery)({ name: 'endDate', required: false, description: 'Filter media before this date' }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of media items to fetch' }),
-    (0, swagger_1.ApiQuery)({ name: 'minId', required: false, type: Number, description: 'Minimum message ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'maxId', required: false, type: Number, description: 'Maximum message ID' }),
-    (0, swagger_1.ApiResponse)({ type: [metadata_operations_dto_1.MediaMetadataDto] }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get filtered media messages from a chat',
+        description: 'Get filtered list of media messages with detailed metadata. Returns array of media items with file information.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'chatId',
+        required: true,
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
+        example: 'me'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'types',
+        required: false,
+        enum: ['photo', 'video', 'document', 'voice'],
+        isArray: true,
+        description: 'Filter by media types. If not specified, returns all media types.',
+        example: ['photo', 'video']
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'startDate',
+        required: false,
+        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+        example: '2024-01-01'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'endDate',
+        required: false,
+        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+        example: '2024-12-31'
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Maximum number of media items to fetch (default: 50, max: 1000)',
+        example: 50
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'minId',
+        required: false,
+        type: Number,
+        description: 'Minimum message ID to include',
+        example: 1000
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'maxId',
+        required: false,
+        type: Number,
+        description: 'Maximum message ID to include',
+        example: 5000
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Array of filtered media metadata',
+        type: [metadata_operations_dto_1.MediaMetadataDto]
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid request - invalid date format, chat ID, or limit value'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
-    __param(2, (0, common_1.Query)('types')),
+    __param(2, (0, common_1.Query)('types', new common_1.ParseArrayPipe({ items: String, separator: ',', optional: true }))),
     __param(3, (0, common_1.Query)('startDate')),
     __param(4, (0, common_1.Query)('endDate')),
     __param(5, (0, common_1.Query)('limit')),
     __param(6, (0, common_1.Query)('minId')),
     __param(7, (0, common_1.Query)('maxId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Array, String, String, Number, Number, Number]),
+    __metadata("design:paramtypes", [String, String, Object, String, String, Number, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
@@ -1006,10 +1381,32 @@ __decorate([
 ], TelegramController.prototype, "getScheduledMessages", null);
 __decorate([
     (0, common_1.Post)('media/voice/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Send voice message' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiBody)({ schema: { type: 'object', properties: { chatId: { type: 'string' }, url: { type: 'string' }, duration: { type: 'number' }, caption: { type: 'string' } } } }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Send voice message',
+        description: 'Send a voice message (audio file) to a chat. Maximum file size is 100MB. Duration is optional but recommended for better playback.'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                chatId: { type: 'string', description: 'Chat ID or username', example: 'me' },
+                url: { type: 'string', description: 'URL of the voice file (must be accessible)', example: 'https://example.com/voice.ogg' },
+                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)', example: 30 },
+                caption: { type: 'string', description: 'Optional caption for the voice message' }
+            },
+            required: ['chatId', 'url']
+        }
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Voice message sent successfully',
+        type: Object
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid request - missing chatId/url, file too large, or invalid URL'
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -1284,14 +1681,138 @@ __decorate([
 ], TelegramController.prototype, "getMessageStats", null);
 __decorate([
     (0, common_1.Get)('chats/top-private/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get top 5 private chats with detailed statistics' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get top private chats with smart activity-based filtering',
+        description: 'Retrieves top 10 private chats ranked by engagement score using advanced filtering. ' +
+            'Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. ' +
+            'Considers recency, mutual engagement, reply chains, and call history.'
+    }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Top private chats retrieved successfully',
+        schema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    chatId: { type: 'string', description: 'Chat/user ID' },
+                    username: { type: 'string', description: 'Username (if available)' },
+                    firstName: { type: 'string', description: 'First name' },
+                    lastName: { type: 'string', description: 'Last name' },
+                    totalMessages: { type: 'number', description: 'Total messages in conversation' },
+                    interactionScore: {
+                        type: 'number',
+                        description: 'Calculated engagement score (higher = more active)'
+                    },
+                    engagementLevel: {
+                        type: 'string',
+                        enum: ['recent', 'active', 'dormant'],
+                        description: 'Activity classification: recent (≤7 days), active (7-30 days), dormant (30-90 days)'
+                    },
+                    lastActivityDays: {
+                        type: 'number',
+                        description: 'Days since last activity'
+                    },
+                    calls: {
+                        type: 'object',
+                        properties: {
+                            total: { type: 'number' },
+                            incoming: {
+                                type: 'object',
+                                properties: {
+                                    total: { type: 'number' },
+                                    audio: { type: 'number' },
+                                    video: { type: 'number' }
+                                }
+                            },
+                            outgoing: {
+                                type: 'object',
+                                properties: {
+                                    total: { type: 'number' },
+                                    audio: { type: 'number' },
+                                    video: { type: 'number' }
+                                }
+                            }
+                        }
+                    },
+                    media: {
+                        type: 'object',
+                        properties: {
+                            photos: { type: 'number', description: 'Total photos shared' },
+                            videos: { type: 'number', description: 'Total videos shared' }
+                        }
+                    },
+                    activityBreakdown: {
+                        type: 'object',
+                        description: 'Percentage breakdown of interaction types',
+                        properties: {
+                            videoCalls: { type: 'number', description: 'Percentage from video calls' },
+                            audioCalls: { type: 'number', description: 'Percentage from audio calls' },
+                            mediaSharing: { type: 'number', description: 'Percentage from media sharing' },
+                            textMessages: { type: 'number', description: 'Percentage from text messages' }
+                        }
+                    }
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getTopPrivateChats", null);
+__decorate([
+    (0, common_1.Get)('messages/self-msg-info/:mobile'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get statistics about media messages in saved messages',
+        description: 'Retrieves comprehensive statistics about photos, videos, and movies in saved messages (self chat). ' +
+            'Uses memory-efficient iterMessages for processing large message histories. ' +
+            'Supports configurable limit for analysis scope (default: 500, max: 10000).'
+    }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Maximum number of messages to analyze (default: 500, max: 10000)',
+        example: 500,
+        minimum: 1,
+        maximum: 10000
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Self messages statistics retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                total: { type: 'number', description: 'Total messages in saved messages' },
+                photoCount: { type: 'number', description: 'Total photos' },
+                videoCount: { type: 'number', description: 'Total videos' },
+                movieCount: {
+                    type: 'number',
+                    description: 'Messages containing movie-related keywords (links, shared content)'
+                },
+                ownPhotoCount: { type: 'number', description: 'Photos sent by user' },
+                otherPhotoCount: { type: 'number', description: 'Photos received from others' },
+                ownVideoCount: { type: 'number', description: 'Videos sent by user' },
+                otherVideoCount: { type: 'number', description: 'Videos received from others' },
+                analyzedMessages: {
+                    type: 'number',
+                    description: 'Number of messages actually analyzed'
+                }
+            }
+        }
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - invalid limit parameter' }),
+    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getSelfMsgsInfo", null);
 __decorate([
     (0, common_1.Post)('bots/add-to-channel/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Add bots to channel with admin privileges' }),

@@ -90,23 +90,229 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getCallLogStats(mobile: string): Promise<{
-        chatCallCounts: any[];
+    getCallLogStats(mobile: string, limit?: number): Promise<{
         outgoing: number;
         incoming: number;
         video: number;
+        audio: number;
+        chatCallCounts: Array<{
+            chatId: string;
+            phone?: string;
+            username?: string;
+            name: string;
+            count: number;
+            msgs?: number;
+            video?: number;
+            photo?: number;
+            peerType: "user" | "group" | "channel";
+        }>;
         totalCalls: number;
+        analyzedCalls: number;
     }>;
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
     downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<any>;
-    sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("telegram").Api.TypeUpdates>;
-    getMediaMetadata(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number, all?: boolean): Promise<{
+    sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<{
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 3809980286;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdatesTooLong";
+        originalArgs: void;
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 826001400;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortMessage";
+        out?: boolean;
+        mentioned?: boolean;
+        mediaUnread?: boolean;
+        silent?: boolean;
+        id: import("telegram").Api.int;
+        userId: import("telegram").Api.long;
+        message: string;
+        pts: import("telegram").Api.int;
+        ptsCount: import("telegram").Api.int;
+        date: import("telegram").Api.int;
+        fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
+        viaBotId?: import("telegram").Api.long;
+        replyTo?: import("telegram").Api.TypeMessageReplyHeader;
+        entities?: import("telegram").Api.TypeMessageEntity[];
+        ttlPeriod?: import("telegram").Api.int;
+        originalArgs: {
+            out?: boolean;
+            mentioned?: boolean;
+            mediaUnread?: boolean;
+            silent?: boolean;
+            id: import("telegram").Api.int;
+            userId: import("telegram").Api.long;
+            message: string;
+            pts: import("telegram").Api.int;
+            ptsCount: import("telegram").Api.int;
+            date: import("telegram").Api.int;
+            fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
+            viaBotId?: import("telegram").Api.long;
+            replyTo?: import("telegram").Api.TypeMessageReplyHeader;
+            entities?: import("telegram").Api.TypeMessageEntity[];
+            ttlPeriod?: import("telegram").Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1299050149;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortChatMessage";
+        out?: boolean;
+        mentioned?: boolean;
+        mediaUnread?: boolean;
+        silent?: boolean;
+        id: import("telegram").Api.int;
+        fromId: import("telegram").Api.long;
+        chatId: import("telegram").Api.long;
+        message: string;
+        pts: import("telegram").Api.int;
+        ptsCount: import("telegram").Api.int;
+        date: import("telegram").Api.int;
+        fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
+        viaBotId?: import("telegram").Api.long;
+        replyTo?: import("telegram").Api.TypeMessageReplyHeader;
+        entities?: import("telegram").Api.TypeMessageEntity[];
+        ttlPeriod?: import("telegram").Api.int;
+        originalArgs: {
+            out?: boolean;
+            mentioned?: boolean;
+            mediaUnread?: boolean;
+            silent?: boolean;
+            id: import("telegram").Api.int;
+            fromId: import("telegram").Api.long;
+            chatId: import("telegram").Api.long;
+            message: string;
+            pts: import("telegram").Api.int;
+            ptsCount: import("telegram").Api.int;
+            date: import("telegram").Api.int;
+            fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
+            viaBotId?: import("telegram").Api.long;
+            replyTo?: import("telegram").Api.TypeMessageReplyHeader;
+            entities?: import("telegram").Api.TypeMessageEntity[];
+            ttlPeriod?: import("telegram").Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 2027216577;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShort";
+        update: import("telegram").Api.TypeUpdate;
+        date: import("telegram").Api.int;
+        originalArgs: {
+            update: import("telegram").Api.TypeUpdate;
+            date: import("telegram").Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1918567619;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdatesCombined";
+        updates: import("telegram").Api.TypeUpdate[];
+        users: import("telegram").Api.TypeUser[];
+        chats: import("telegram").Api.TypeChat[];
+        date: import("telegram").Api.int;
+        seqStart: import("telegram").Api.int;
+        seq: import("telegram").Api.int;
+        originalArgs: {
+            updates: import("telegram").Api.TypeUpdate[];
+            users: import("telegram").Api.TypeUser[];
+            chats: import("telegram").Api.TypeChat[];
+            date: import("telegram").Api.int;
+            seqStart: import("telegram").Api.int;
+            seq: import("telegram").Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1957577280;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "Updates";
+        updates: import("telegram").Api.TypeUpdate[];
+        users: import("telegram").Api.TypeUser[];
+        chats: import("telegram").Api.TypeChat[];
+        date: import("telegram").Api.int;
+        seq: import("telegram").Api.int;
+        originalArgs: {
+            updates: import("telegram").Api.TypeUpdate[];
+            users: import("telegram").Api.TypeUser[];
+            chats: import("telegram").Api.TypeChat[];
+            date: import("telegram").Api.int;
+            seq: import("telegram").Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 2417352961;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortSentMessage";
+        out?: boolean;
+        id: import("telegram").Api.int;
+        pts: import("telegram").Api.int;
+        ptsCount: import("telegram").Api.int;
+        date: import("telegram").Api.int;
+        media?: import("telegram").Api.TypeMessageMedia;
+        entities?: import("telegram").Api.TypeMessageEntity[];
+        ttlPeriod?: import("telegram").Api.int;
+        originalArgs: {
+            out?: boolean;
+            id: import("telegram").Api.int;
+            pts: import("telegram").Api.int;
+            ptsCount: import("telegram").Api.int;
+            date: import("telegram").Api.int;
+            media?: import("telegram").Api.TypeMessageMedia;
+            entities?: import("telegram").Api.TypeMessageEntity[];
+            ttlPeriod?: import("telegram").Api.int;
+        };
+    }>;
+    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number, all?: boolean): Promise<{
         messages: any[];
         total: number;
     }>;
-    getFilteredMedia(mobile: string, chatId: string, types?: ('photo' | 'video' | 'document' | 'voice')[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
+    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, minId?: number, maxId?: number): Promise<{
         messages: {
             messageId: number;
             type: "document" | "video" | "photo";
@@ -268,14 +474,14 @@ export declare class TelegramController {
     }): Promise<import("telegram").Api.TypeUpdates>;
     hasPassword(mobile: string): Promise<boolean>;
     getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number): Promise<{
-        id: string;
-        title: string;
-        username: string;
+        id: any;
+        title: any;
+        username: any;
         type: string;
-        unreadCount: number;
+        unreadCount: any;
         lastMessage: {
-            id: number;
-            text: string;
+            id: any;
+            text: any;
             date: Date;
         };
     }[]>;
@@ -305,6 +511,8 @@ export declare class TelegramController {
         lastName?: string;
         totalMessages: number;
         interactionScore: number;
+        engagementLevel: "recent" | "active" | "dormant";
+        lastActivityDays: number;
         calls: {
             total: number;
             incoming: {
@@ -329,6 +537,17 @@ export declare class TelegramController {
             textMessages: number;
         };
     }[]>;
+    getSelfMsgsInfo(mobile: string, limit?: number): Promise<{
+        photoCount: number;
+        videoCount: number;
+        movieCount: number;
+        total: number;
+        ownPhotoCount: number;
+        otherPhotoCount: number;
+        ownVideoCount: number;
+        otherVideoCount: number;
+        analyzedMessages: number;
+    }>;
     addBotsToChannel(mobile: string, body: {
         channelIds?: string[];
     }): Promise<void>;
