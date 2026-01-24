@@ -12958,6 +12958,7 @@ const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService, botsService) {
         this.bufferClientModel = bufferClientModel;
@@ -12985,7 +12986,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.MAX_MAP_SIZE = 100;
         this.CLEANUP_INTERVAL = 15 * 60 * 1000;
         this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER = 10;
-        this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT = 10;
+        this.MIN_TOTAL_BUFFER_CLIENTS = 10;
+        this.AVAILABILITY_WINDOWS = [
+            { name: 'today', days: 0, minRequired: 3 },
+            { name: 'tomorrow', days: 1, minRequired: 5 },
+            { name: 'oneWeek', days: 7, minRequired: 7 },
+            { name: 'tenDays', days: 10, minRequired: 9 }
+        ];
+        this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
+        this.INACTIVE_USER_CUTOFF_DAYS = 90;
         this.cleanupIntervalId = null;
     }
     async onModuleDestroy() {
@@ -13222,47 +13232,22 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const clients = await this.bufferClientModel
             .find({
             status: 'active',
-            lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+            lastChecked: { $lt: new Date(Date.now() - 7 * this.ONE_DAY_MS) }
         })
             .sort({ channels: 1 })
             .limit(25);
         this.logger.debug(`Updating info for ${clients.length} buffer clients`);
+        const now = Date.now();
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
             const mobile = client.mobile;
-            try {
-                this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
-                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                    handler: false,
-                });
-                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
-                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
-                    rules: [
-                        new telegram_1.Api.InputPrivacyValueDisallowAll()
-                    ],
-                }));
-                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-                this.logger.debug(`${mobile}: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
-            }
-            catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `Failed to Update Client: ${mobile}`);
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    try {
-                        await this.markAsInactive(mobile, `${errorDetails.message}`);
-                    }
-                    catch (markError) {
-                        this.logger.error(`Error marking client ${mobile} as inactive:`, markError);
-                    }
-                }
-                this.logger.error(`Error updating info for client ${mobile}:`, errorDetails);
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
-                }
+            this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
+            const lastChecked = client.lastChecked
+                ? new Date(client.lastChecked).getTime()
+                : 0;
+            await this.performHealthCheck(mobile, lastChecked, now);
+            if (i < clients.length - 1) {
+                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
             }
         }
         this.logger.debug('Completed updating info for all buffer clients');
@@ -13623,7 +13608,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         this.isLeaveChannelProcessing = false;
         this.logger.debug('Leave channel interval cleared and processing flag reset');
     }
-    async setAsBufferClient(mobile, clientId, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]) {
+    async setAsBufferClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('user not found');
@@ -13685,7 +13670,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             ...assignedBufferMobiles,
         ].filter(Boolean);
         const bufferClientsPerClient = new Map();
-        const clientNeedingBufferClients = [];
         const bufferClientCounts = await this.bufferClientModel.aggregate([
             {
                 $match: {
@@ -13731,8 +13715,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.debug(`Skipping ${bufferClientMobile} - currently in use`);
                     continue;
                 }
+                const lastChecked = bufferClient.lastChecked
+                    ? new Date(bufferClient.lastChecked).getTime()
+                    : 0;
+                const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
+                if (!healthCheckPassed) {
+                    continue;
+                }
                 if (bufferClient.lastUsed) {
-                    const lastUsed = this.getTimestamp(bufferClient.lastUsed);
+                    const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
                     if (lastUsed > 0) {
                         await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
                         this.logger.debug(`Skipping ${bufferClientMobile} - already used, timestamps backfilled`);
@@ -13741,7 +13732,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
                 const pendingUpdates = this.getPendingUpdates(bufferClient, now);
                 const accountAge = bufferClient.createdAt ? now - new Date(bufferClient.createdAt).getTime() : 0;
-                const DAY = 24 * 60 * 60 * 1000;
+                const DAY = this.ONE_DAY_MS;
                 const failedAttempts = bufferClient.failedUpdateAttempts || 0;
                 const lastAttemptAgeHours = lastUpdateAttempt > 0
                     ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
@@ -13771,52 +13762,134 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 totalUpdates += currentUpdates;
             }
         }
+        const clientNeedingBufferClients = [];
         for (const client of clients) {
-            const assignedCount = bufferClientsPerClient.get(client.clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - assignedCount);
-            if (needed > 0) {
-                clientNeedingBufferClients.push(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            if (availabilityNeeds.totalNeeded > 0) {
+                clientNeedingBufferClients.push({
+                    clientId: client.clientId,
+                    ...availabilityNeeds
+                });
             }
         }
+        clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
-        for (const clientId of clientNeedingBufferClients) {
+        const clientNeedsMap = new Map();
+        for (const clientNeed of clientNeedingBufferClients) {
+            const allocated = Math.min(clientNeed.totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+            if (allocated > 0) {
+                clientNeedsMap.set(clientNeed.clientId, allocated);
+                totalSlotsNeeded += allocated;
+            }
             if (totalSlotsNeeded >= this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER)
                 break;
-            const assignedCount = bufferClientsPerClient.get(clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - assignedCount);
-            const allocatedForThisClient = Math.min(needed, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
-            totalSlotsNeeded += allocatedForThisClient;
         }
-        this.logger.debug(`Buffer clients per client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}`);
-        this.logger.debug(`Clients needing buffer clients: ${clientNeedingBufferClients.join(', ')}`);
-        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
+        this.logger.debug(`Availability-based needs calculated (NO HARD LIMIT):`);
+        clientNeedingBufferClients.forEach(need => {
+            this.logger.debug(`Client ${need.clientId} (priority: ${need.priority}): ` +
+                `${need.totalActive} total active, ${need.totalNeeded} new needed - ${need.calculationReason}`);
+            need.windowNeeds.forEach(window => {
+                if (window.needed > 0) {
+                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
+                        `${window.available} available, ${window.needed} needed ` +
+                        `(target: ${window.minRequired} per window)`);
+                }
+                else {
+                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
+                        `${window.available} available ✅ (sufficient, target: ${window.minRequired})`);
+                }
+            });
+        });
         const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
         this.logger.debug(`Total active buffer clients: ${totalActiveBufferClients}`);
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\nClients Needing Buffer Clients: ${clientNeedingBufferClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
+        const clientNeedsSummary = clientNeedingBufferClients
+            .map(c => `${c.clientId}: ${c.totalNeeded} (${c.calculationReason})`)
+            .join('\n');
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check (Dynamic Availability):\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\n\nClients Needing Buffer Clients:\n${clientNeedsSummary || 'None'}\n\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            await this.addNewUserstoBufferClients([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+            await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
         else {
-            this.logger.debug('No new buffer clients needed - all clients have sufficient buffer clients');
+            this.logger.debug('No new buffer clients needed - all availability windows and total count satisfied');
         }
     }
-    getTimestamp(date) {
-        if (!date)
-            return 0;
+    async updateUser2FAStatus(tgId, mobile) {
         try {
-            return new Date(date).getTime();
+            await this.usersService.update(tgId, { twoFA: true });
         }
-        catch {
-            return 0;
+        catch (userUpdateError) {
+            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
         }
     }
-    createBackfillTimestamps(now) {
+    async calculateAvailabilityBasedNeeds(clientId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0];
+        const windows = this.AVAILABILITY_WINDOWS.map(window => ({
+            ...window,
+            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS)
+                .toISOString().split('T')[0]
+        }));
+        const totalActive = await this.bufferClientModel.countDocuments({
+            clientId,
+            status: 'active'
+        });
+        const windowNeeds = [];
+        let maxNeeded = 0;
+        let mostUrgentWindow = '';
+        let mostUrgentPriority = 999;
+        for (const window of windows) {
+            const availableCount = await this.bufferClientModel.countDocuments({
+                clientId,
+                status: 'active',
+                availableDate: { $lte: window.targetDate }
+            });
+            const needed = Math.max(0, window.minRequired - availableCount);
+            windowNeeds.push({
+                window: window.name,
+                available: availableCount,
+                needed,
+                targetDate: window.targetDate,
+                minRequired: window.minRequired
+            });
+            if (needed > maxNeeded) {
+                maxNeeded = needed;
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+            else if (needed > 0 && window.days < mostUrgentPriority) {
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+        }
+        const totalNeededForCount = Math.max(0, this.MIN_TOTAL_BUFFER_CLIENTS - totalActive);
+        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
+        let priority = 100;
+        if (maxNeeded > 0) {
+            priority = mostUrgentPriority;
+        }
+        let calculationReason = '';
+        if (maxNeeded > 0 && totalNeededForCount > 0) {
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
+        }
+        else if (maxNeeded > 0) {
+            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
+        }
+        else if (totalNeededForCount > 0) {
+            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.MIN_TOTAL_BUFFER_CLIENTS}`;
+        }
+        else {
+            calculationReason = 'All windows satisfied';
+        }
         return {
-            privacyUpdatedAt: new Date(now - (25 * 24 * 60 * 60 * 1000)),
-            profilePicsDeletedAt: new Date(now - (20 * 24 * 60 * 60 * 1000)),
-            nameBioUpdatedAt: new Date(now - (14 * 24 * 60 * 60 * 1000)),
-            usernameUpdatedAt: new Date(now - (10 * 24 * 60 * 60 * 1000)),
-            profilePicsUpdatedAt: new Date(now - (7 * 24 * 60 * 60 * 1000)),
+            totalNeeded,
+            windowNeeds,
+            totalActive,
+            totalNeededForCount,
+            calculationReason,
+            priority
         };
     }
     async backfillTimestamps(mobile, doc, now) {
@@ -13826,7 +13899,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         if (!needsBackfill)
             return;
         this.logger.log(`Backfilling timestamp fields for ${mobile}`);
-        const allTimestamps = this.createBackfillTimestamps(now);
+        const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
         const backfillData = {};
         if (!doc.privacyUpdatedAt)
             backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
@@ -13841,25 +13914,59 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         await this.update(mobile, backfillData);
         this.logger.log(`Backfilled ${Object.keys(backfillData).length} timestamp fields for ${mobile}`);
     }
+    async performHealthCheck(mobile, lastChecked, now) {
+        const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
+        if (!needsHealthCheck) {
+            return true;
+        }
+        try {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                autoDisconnect: false,
+                handler: false,
+            });
+            await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()],
+            }));
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
+            await this.update(mobile, {
+                channels: channels.ids.length,
+                lastChecked: new Date()
+            });
+            this.logger.debug(`Health check passed for ${mobile}`);
+            return true;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Health check failed', mobile);
+            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
+            }
+            return false;
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+    }
     getPendingUpdates(doc, now) {
         const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-        const DAY = 24 * 60 * 60 * 1000;
+        const DAY = this.ONE_DAY_MS;
         const MIN_DAYS_BETWEEN_UPDATES = DAY;
         const reasons = [];
-        const privacyTimestamp = this.getTimestamp(doc.privacyUpdatedAt);
+        const privacyTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt);
         const needsPrivacy = accountAge >= DAY &&
             (privacyTimestamp === 0 || privacyTimestamp < now - 15 * DAY);
         if (needsPrivacy)
             reasons.push('Privacy update needed');
         const privacyDone = privacyTimestamp > 0 && (now - privacyTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const photosDeletedTimestamp = this.getTimestamp(doc.profilePicsDeletedAt);
+        const photosDeletedTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt);
         const needsDeletePhotos = accountAge >= 2 * DAY &&
             (photosDeletedTimestamp === 0 || photosDeletedTimestamp < now - 30 * DAY) &&
             (privacyDone || privacyTimestamp === 0);
         if (needsDeletePhotos)
             reasons.push('Delete photos needed');
         const photosDone = photosDeletedTimestamp > 0 && (now - photosDeletedTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const nameBioTimestamp = this.getTimestamp(doc.nameBioUpdatedAt);
+        const nameBioTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt);
         const needsNameBio = accountAge >= 3 * DAY &&
             (doc.channels || 0) > 100 &&
             (nameBioTimestamp === 0 || nameBioTimestamp < now - 30 * DAY) &&
@@ -13867,7 +13974,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         if (needsNameBio)
             reasons.push('Name/Bio update needed');
         const nameBioDone = nameBioTimestamp > 0 && (now - nameBioTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const usernameTimestamp = this.getTimestamp(doc.usernameUpdatedAt);
+        const usernameTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt);
         const needsUsername = accountAge >= 7 * DAY &&
             (doc.channels || 0) > 150 &&
             (usernameTimestamp === 0 || usernameTimestamp < now - 30 * DAY) &&
@@ -13875,7 +13982,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         if (needsUsername)
             reasons.push('Username update needed');
         const usernameDone = usernameTimestamp > 0 && (now - usernameTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const profilePicsTimestamp = this.getTimestamp(doc.profilePicsUpdatedAt);
+        const profilePicsTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt);
         const needsProfilePhotos = accountAge >= 10 * DAY &&
             (doc.channels || 0) > 170 &&
             (profilePicsTimestamp === 0 || profilePicsTimestamp < now - 30 * DAY) &&
@@ -14094,9 +14201,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         try {
             await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
             const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = this.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * 24 * 60 * 60 * 1000) {
-                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / (24 * 60 * 60 * 1000))} days ago)`);
+            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * this.ONE_DAY_MS) {
+                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / this.ONE_DAY_MS)} days ago)`);
                 await this.update(doc.mobile, {
                     failedUpdateAttempts: 0,
                     lastUpdateFailure: null
@@ -14106,13 +14213,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts}). Will retry after ${FAILURE_RESET_DAYS} days.`);
                 return 0;
             }
-            const lastUpdateAttempt = this.getTimestamp(doc.lastUpdateAttempt);
+            const lastUpdateAttempt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt);
             if (lastUpdateAttempt > 0 && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
                 const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
                 this.logger.debug(`Client ${doc.mobile} on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
                 return 0;
             }
-            const lastUsed = this.getTimestamp(doc.lastUsed);
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
             if (lastUsed > 0 && now - lastUsed < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
                 this.logger.debug(`Client ${doc.mobile} recently used, skipping`);
                 return 0;
@@ -14188,26 +14295,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
         }
     }
-    async calculateClientAssignments(clientsNeedingBufferClients, bufferClientsPerClient) {
-        const clientAssignmentTracker = new Map();
-        for (const clientId of clientsNeedingBufferClients) {
-            let needed = 0;
-            if (bufferClientsPerClient) {
-                const currentCount = bufferClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
-            }
-            else {
-                const currentCount = await this.bufferClientModel.countDocuments({
-                    clientId,
-                    status: 'active',
-                });
-                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
-            }
-            clientAssignmentTracker.set(clientId, needed);
-        }
-        return clientAssignmentTracker;
-    }
-    async createBufferClientFromUser(document, targetClientId) {
+    async createBufferClientFromUser(document, targetClientId, availableDate) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, {
             autoDisconnect: false,
         });
@@ -14216,12 +14304,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
             if (hasPassword) {
                 this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
-                try {
-                    await this.usersService.update(document.tgId, { twoFA: true });
-                }
-                catch (userUpdateError) {
-                    this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
-                }
+                await this.updateUser2FAStatus(document.tgId, document.mobile);
                 return false;
             }
             await telegramClient.removeOtherAuths();
@@ -14232,31 +14315,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             const channels = await this.telegramService.getChannelInfo(document.mobile, true);
             await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
             const newSession = await this.telegramService.createNewSession(document.mobile);
-            this.logger.debug(`Inserting Document for client ${targetClientId}`);
+            const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+            this.logger.debug(`Inserting Document for client ${targetClientId} with availableDate ${targetAvailableDate}`);
             const bufferClient = {
                 tgId: document.tgId,
                 session: newSession,
                 mobile: document.mobile,
                 lastUsed: null,
-                availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
                 status: 'active',
-                message: 'Account successfully configured as buffer client',
+                message: availableDate
+                    ? 'Account successfully configured as buffer client - available immediately'
+                    : 'Account successfully configured as buffer client',
             };
             await this.create(bufferClient);
-            try {
-                await this.usersService.update(document.tgId, { twoFA: true });
-            }
-            catch (userUpdateError) {
-                this.logger.warn(`Failed to update user 2FA status for ${document.mobile}:`, userUpdateError);
-            }
-            this.logger.log(`=============Created BufferClient for ${targetClientId}==============`);
+            await this.updateUser2FAStatus(document.tgId, document.mobile);
+            this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             return true;
         }
         catch (error) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
-            this.logger.error(`Error processing buffer client ${document.mobile}:`, errorDetails);
+            this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
                     await this.markAsInactive(document.mobile, errorDetails.message);
@@ -14273,75 +14354,71 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds, clientsNeedingBufferClients = [], bufferClientsPerClient) {
-        const sixMonthsAgo = new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0];
-        let totalNeededFromClients = 0;
+        const clientNeedingBufferClientsDynamic = [];
         for (const clientId of clientsNeedingBufferClients) {
-            let needed = 0;
-            if (bufferClientsPerClient) {
-                const currentCount = bufferClientsPerClient.get(clientId) || 0;
-                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
-            }
-            else {
-                const currentCount = await this.bufferClientModel.countDocuments({
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(clientId);
+            if (availabilityNeeds.totalNeeded > 0) {
+                clientNeedingBufferClientsDynamic.push({
                     clientId,
-                    status: 'active',
+                    ...availabilityNeeds
                 });
-                needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - currentCount);
             }
-            totalNeededFromClients += needed;
         }
-        const totalNeeded = Math.min(totalNeededFromClients, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER);
+        clientNeedingBufferClientsDynamic.sort((a, b) => a.priority - b.priority);
+        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, clientNeedingBufferClientsDynamic, bufferClientsPerClient);
+    }
+    async addNewUserstoBufferClientsDynamic(badIds, goodIds, clientsNeedingBufferClients, bufferClientsPerClient) {
+        const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
+        let totalNeeded = 0;
+        for (const clientNeed of clientsNeedingBufferClients) {
+            totalNeeded += clientNeed.totalNeeded;
+        }
+        totalNeeded = Math.min(totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER);
         if (totalNeeded === 0) {
-            this.logger.debug('No buffer clients needed - all clients have sufficient buffer clients or limit reached');
+            this.logger.debug('No buffer clients needed - all availability windows and total count satisfied');
             return;
         }
-        this.logger.debug(`Limited to creating ${totalNeeded} new buffer clients (max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
+        this.logger.debug(`Creating ${totalNeeded} new buffer clients (all with availableDate = today) ` +
+            `to satisfy availability windows and total count requirements`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
             twoFA: false,
-            lastActive: { $lt: sixMonthsAgo },
+            lastActive: { $lt: threeMonthsAgo },
             totalChats: { $gt: 150 },
         }, { tgId: 1 }, totalNeeded + 5);
-        this.logger.debug(`New buffer documents to be added: ${documents.length} for ${clientsNeedingBufferClients.length} clients needing buffer clients (limited to ${totalNeeded})`);
+        const today = new Date().toISOString().split('T')[0];
+        const assignmentQueue = [];
+        for (const clientNeed of clientsNeedingBufferClients) {
+            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+                assignmentQueue.push({
+                    clientId: clientNeed.clientId,
+                    priority: clientNeed.priority
+                });
+            }
+        }
         let processedCount = 0;
-        const clientAssignmentTracker = await this.calculateClientAssignments(clientsNeedingBufferClients, bufferClientsPerClient);
-        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER) &&
+        let assignmentIndex = 0;
+        while (processedCount < totalNeeded &&
             documents.length > 0 &&
-            clientsNeedingBufferClients.length > 0) {
+            assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) {
                 this.logger.warn('Invalid document found, skipping');
                 continue;
             }
-            let targetClientId = null;
-            for (const clientId of clientsNeedingBufferClients) {
-                const needed = clientAssignmentTracker.get(clientId) || 0;
-                if (needed > 0) {
-                    targetClientId = clientId;
-                    break;
-                }
-            }
-            if (!targetClientId) {
-                this.logger.debug('All clients have sufficient buffer clients assigned');
+            const assignment = assignmentQueue[assignmentIndex];
+            if (!assignment) {
+                this.logger.debug('No more assignments needed');
                 break;
             }
             try {
-                const created = await this.createBufferClientFromUser(document, targetClientId);
+                const created = await this.createBufferClientFromUser(document, assignment.clientId, today);
                 if (created) {
-                    const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
-                    const newNeeded = Math.max(0, currentNeeded - 1);
-                    clientAssignmentTracker.set(targetClientId, newNeeded);
-                    if (newNeeded === 0) {
-                        const index = clientsNeedingBufferClients.indexOf(targetClientId);
-                        if (index > -1) {
-                            clientsNeedingBufferClients.splice(index, 1);
-                        }
-                    }
-                    this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed, ${totalNeeded - processedCount - 1} remaining in this batch`);
+                    assignmentIndex++;
                     processedCount++;
+                    this.logger.debug(`Created buffer client ${document.mobile} for ${assignment.clientId} ` +
+                        `with availableDate = ${today} (available immediately, priority: ${assignment.priority})`);
                 }
                 else {
                     processedCount++;
@@ -14354,19 +14431,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 processedCount++;
             }
         }
-        this.logger.log(`✅ Batch completed: Created ${processedCount} new buffer clients (max ${totalNeeded} per trigger)`);
-        if (clientsNeedingBufferClients.length > 0) {
-            const stillNeeded = clientsNeedingBufferClients
-                .map((clientId) => {
-                const needed = clientAssignmentTracker.get(clientId) || 0;
-                return `${clientId}:${needed}`;
-            })
-                .join(', ');
-            this.logger.log(`⏳ Still needed in future triggers: ${stillNeeded}`);
-        }
-        else {
-            this.logger.log(`🎉 All clients now have sufficient buffer clients!`);
-        }
+        this.logger.log(`✅ Dynamic batch completed: Created ${processedCount} new buffer clients ` +
+            `(all with availableDate = ${today}, available immediately). ` +
+            `System maintains availability windows and total count requirements.`);
     }
     async updateAllClientSessions() {
         const bufferClients = await this.findAll('active');
@@ -14429,7 +14496,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     async getBufferClientDistribution() {
         const clients = await this.clientService.findAll();
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
         const [totalBufferClients, unassignedBufferClients, activeBufferClients, inactiveBufferClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts,] = await Promise.all([
             this.bufferClientModel.countDocuments(),
             this.bufferClientModel.countDocuments({ clientId: { $exists: false } }),
@@ -14483,7 +14550,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
             const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
             const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_BUFFER_CLIENTS_PER_CLIENT - activeCount);
+            const needed = Math.max(0, this.MIN_TOTAL_BUFFER_CLIENTS - activeCount);
             const status = needed === 0 ? 'sufficient' : 'needs_more';
             distributionPerClient.push({
                 clientId: client.clientId,
@@ -14565,8 +14632,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             filter.clientId = clientId;
         }
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
+        const lastWeek = new Date(now.getTime() - 7 * this.ONE_DAY_MS);
         const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
             this.bufferClientModel.countDocuments(filter),
             this.bufferClientModel.countDocuments({
@@ -20519,6 +20586,7 @@ const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudina
 const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService, botsService) {
         this.promoteClientModel = promoteClientModel;
@@ -20547,6 +20615,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         this.CHANNEL_PROCESSING_DELAY = 10000;
         this.CLEANUP_INTERVAL = 10 * 60 * 1000;
         this.cleanupIntervalId = null;
+        this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
+        this.INACTIVE_USER_CUTOFF_DAYS = 90;
+        this.MIN_TOTAL_PROMOTE_CLIENTS = 12;
+        this.AVAILABILITY_WINDOWS = [
+            { name: 'today', days: 0, minRequired: 3 },
+            { name: 'tomorrow', days: 1, minRequired: 5 },
+            { name: 'oneWeek', days: 7, minRequired: 7 },
+            { name: 'tenDays', days: 10, minRequired: 9 }
+        ];
     }
     startMemoryCleanup() {
         if (this.cleanupIntervalId)
@@ -20725,40 +20803,20 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async updateInfo() {
         const clients = await this.promoteClientModel
-            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })
+            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 7 * this.ONE_DAY_MS) } })
             .sort({ channels: 1 })
             .limit(25);
+        const now = Date.now();
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
             const mobile = client?.mobile;
             this.logger.info(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
-            try {
-                const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                    handler: false,
-                });
-                await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
-                    key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
-                    rules: [
-                        new telegram_1.Api.InputPrivacyValueDisallowAll()
-                    ],
-                }));
-                const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-                this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length, lastChecked: new Date() });
-            }
-            catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `[PromoteClientService] Error Updating Info for ${mobile}: `);
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                }
-                this.logger.error(`[${mobile}] Error updating info for client`, errorDetails);
-            }
-            finally {
-                await connection_manager_1.connectionManager.unregisterClient(mobile);
-                if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
-                }
+            const lastChecked = client.lastChecked
+                ? new Date(client.lastChecked).getTime()
+                : 0;
+            await this.performHealthCheck(mobile, lastChecked, now);
+            if (i < clients.length - 1) {
+                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
             }
         }
     }
@@ -21115,10 +21173,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
         catch (unregisterError) {
-            this.logger.warn(`Error during client cleanup for ${mobile}:`, unregisterError);
+            const errorMessage = unregisterError instanceof Error ? unregisterError.message : 'Unknown error';
+            this.logger.error(`Error unregistering client ${mobile}: ${errorMessage}`);
         }
     }
-    async setAsPromoteClient(mobile, availableDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]) {
+    async setAsPromoteClient(mobile, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
         if (!user) {
             throw new common_1.BadRequestException('User not found');
@@ -21169,24 +21228,142 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         }
         return 'Client set as promote successfully';
     }
-    getTimestamp(date) {
-        if (!date)
-            return 0;
+    async updateUser2FAStatus(tgId, mobile) {
         try {
-            return new Date(date).getTime();
+            await this.usersService.update(tgId, { twoFA: true });
         }
-        catch {
-            return 0;
+        catch (userUpdateError) {
+            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
         }
     }
-    createBackfillTimestamps(now) {
+    handleError(error, context, mobile) {
+        const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
+        return (0, parseError_1.parseError)(error, contextWithMobile, false);
+    }
+    async calculateAvailabilityBasedNeeds(clientId) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0];
+        const windows = this.AVAILABILITY_WINDOWS.map(window => ({
+            ...window,
+            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS)
+                .toISOString().split('T')[0]
+        }));
+        const totalActive = await this.promoteClientModel.countDocuments({
+            clientId,
+            status: 'active'
+        });
+        const windowNeeds = [];
+        let maxNeeded = 0;
+        let mostUrgentWindow = '';
+        let mostUrgentPriority = 999;
+        for (const window of windows) {
+            const availableCount = await this.promoteClientModel.countDocuments({
+                clientId,
+                status: 'active',
+                availableDate: { $lte: window.targetDate }
+            });
+            const needed = Math.max(0, window.minRequired - availableCount);
+            windowNeeds.push({
+                window: window.name,
+                available: availableCount,
+                needed,
+                targetDate: window.targetDate,
+                minRequired: window.minRequired
+            });
+            if (needed > maxNeeded) {
+                maxNeeded = needed;
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+            else if (needed > 0 && window.days < mostUrgentPriority) {
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+        }
+        const totalNeededForCount = Math.max(0, this.MIN_TOTAL_PROMOTE_CLIENTS - totalActive);
+        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
+        let priority = 100;
+        if (maxNeeded > 0) {
+            priority = mostUrgentPriority;
+        }
+        let calculationReason = '';
+        if (maxNeeded > 0 && totalNeededForCount > 0) {
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
+        }
+        else if (maxNeeded > 0) {
+            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
+        }
+        else if (totalNeededForCount > 0) {
+            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.MIN_TOTAL_PROMOTE_CLIENTS}`;
+        }
+        else {
+            calculationReason = 'All windows satisfied';
+        }
         return {
-            privacyUpdatedAt: new Date(now - (25 * 24 * 60 * 60 * 1000)),
-            profilePicsDeletedAt: new Date(now - (20 * 24 * 60 * 60 * 1000)),
-            nameBioUpdatedAt: new Date(now - (14 * 24 * 60 * 60 * 1000)),
-            usernameUpdatedAt: new Date(now - (10 * 24 * 60 * 60 * 1000)),
-            profilePicsUpdatedAt: new Date(now - (7 * 24 * 60 * 60 * 1000)),
+            totalNeeded,
+            windowNeeds,
+            totalActive,
+            totalNeededForCount,
+            calculationReason,
+            priority
         };
+    }
+    async createPromoteClientFromUser(document, targetClientId, availableDate) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, {
+            autoDisconnect: false,
+        });
+        try {
+            const hasPassword = await telegramClient.hasPassword();
+            this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
+            if (hasPassword) {
+                this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
+                await this.updateUser2FAStatus(document.tgId, document.mobile);
+                return false;
+            }
+            await telegramClient.removeOtherAuths();
+            await (0, Helpers_1.sleep)(10000 + Math.random() * 10000);
+            await telegramClient.set2fa();
+            this.logger.debug('Waiting for setting 2FA');
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+            this.logger.debug(`Inserting Document for client ${targetClientId} with availableDate ${targetAvailableDate}`);
+            const promoteClient = {
+                tgId: document.tgId,
+                lastActive: 'today',
+                mobile: document.mobile,
+                availableDate: targetAvailableDate,
+                channels: channels.ids.length,
+                clientId: targetClientId,
+                status: 'active',
+                message: 'Account successfully configured as promote client',
+                lastUsed: null,
+            };
+            await this.create(promoteClient);
+            await this.updateUser2FAStatus(document.tgId, document.mobile);
+            this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
+            return true;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
+            this.logger.error(`Error processing promote client ${document.mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.markAsInactive(document.mobile, errorDetails.message);
+                }
+                catch (markError) {
+                    this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
+                }
+            }
+            return false;
+        }
+        finally {
+            await this.safeUnregisterClient(document.mobile);
+            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+        }
     }
     async backfillTimestamps(mobile, doc, now) {
         const needsBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
@@ -21195,7 +21372,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         if (!needsBackfill)
             return;
         this.logger.log(`Backfilling timestamp fields for ${mobile}`);
-        const allTimestamps = this.createBackfillTimestamps(now);
+        const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
         const backfillData = {};
         if (!doc.privacyUpdatedAt)
             backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
@@ -21210,25 +21387,59 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         await this.update(mobile, backfillData);
         this.logger.log(`Backfilled ${Object.keys(backfillData).length} timestamp fields for ${mobile}`);
     }
+    async performHealthCheck(mobile, lastChecked, now) {
+        const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
+        if (!needsHealthCheck) {
+            return true;
+        }
+        try {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                autoDisconnect: false,
+                handler: false,
+            });
+            await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
+                key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
+                rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()],
+            }));
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
+            await this.update(mobile, {
+                channels: channels.ids.length,
+                lastChecked: new Date()
+            });
+            this.logger.debug(`Health check passed for ${mobile}`);
+            return true;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Health check failed', mobile);
+            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
+            }
+            return false;
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+    }
     getPendingUpdates(doc, now) {
         const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-        const DAY = 24 * 60 * 60 * 1000;
+        const DAY = this.ONE_DAY_MS;
         const MIN_DAYS_BETWEEN_UPDATES = DAY;
         const reasons = [];
-        const privacyTimestamp = this.getTimestamp(doc.privacyUpdatedAt);
+        const privacyTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt);
         const needsPrivacy = accountAge >= DAY && accountAge <= 30 * DAY &&
             (privacyTimestamp === 0 || privacyTimestamp < now - 15 * DAY);
         if (needsPrivacy)
             reasons.push('Privacy update needed');
         const privacyDone = privacyTimestamp > 0 && (now - privacyTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const photosDeletedTimestamp = this.getTimestamp(doc.profilePicsDeletedAt);
+        const photosDeletedTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt);
         const needsDeletePhotos = accountAge >= 2 * DAY && accountAge <= 30 * DAY &&
             (photosDeletedTimestamp === 0 || photosDeletedTimestamp < now - 30 * DAY) &&
             (privacyDone || privacyTimestamp === 0);
         if (needsDeletePhotos)
             reasons.push('Delete photos needed');
         const photosDone = photosDeletedTimestamp > 0 && (now - photosDeletedTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const nameBioTimestamp = this.getTimestamp(doc.nameBioUpdatedAt);
+        const nameBioTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt);
         const needsNameBio = accountAge >= 3 * DAY && accountAge <= 30 * DAY &&
             (doc.channels || 0) > 100 &&
             (nameBioTimestamp === 0 || nameBioTimestamp < now - 30 * DAY) &&
@@ -21236,7 +21447,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         if (needsNameBio)
             reasons.push('Name/Bio update needed');
         const nameBioDone = nameBioTimestamp > 0 && (now - nameBioTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const usernameTimestamp = this.getTimestamp(doc.usernameUpdatedAt);
+        const usernameTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt);
         const needsUsername = accountAge >= 7 * DAY && accountAge <= 30 * DAY &&
             (doc.channels || 0) > 150 &&
             (usernameTimestamp === 0 || usernameTimestamp < now - 30 * DAY) &&
@@ -21244,7 +21455,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         if (needsUsername)
             reasons.push('Username update needed');
         const usernameDone = usernameTimestamp > 0 && (now - usernameTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const profilePicsTimestamp = this.getTimestamp(doc.profilePicsUpdatedAt);
+        const profilePicsTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt);
         const needsProfilePhotos = accountAge >= 10 * DAY && accountAge <= 30 * DAY &&
             (doc.channels || 0) > 170 &&
             (profilePicsTimestamp === 0 || profilePicsTimestamp < now - 30 * DAY) &&
@@ -21263,12 +21474,201 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             reasons
         };
     }
+    async updatePrivacySettings(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+        try {
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await telegramClient.updatePrivacyforDeletedAccount();
+            await this.update(doc.mobile, {
+                privacyUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async deleteProfilePhotos(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+        try {
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
+            if (photos.photos.length > 0) {
+                await telegramClient.deleteProfilePhotos();
+                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
+            }
+            else {
+                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
+            }
+            await this.update(doc.mobile, {
+                profilePicsDeletedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return photos.photos.length > 0 ? 1 : 0;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async updateNameAndBio(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+        try {
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            const me = await telegramClient.getMe();
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            let updateCount = 0;
+            const expectedName = client?.name.split(' ')[0];
+            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
+                this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
+                    maintainFormatting: false,
+                    preserveCase: true,
+                    useInvisibleChars: false
+                })} ${(0, utils_1.getCuteEmoji)()}`, '');
+                updateCount = 1;
+            }
+            await this.update(doc.mobile, {
+                nameBioUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return updateCount;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async updateUsername(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+        try {
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await this.telegramService.updateUsername(doc.mobile, '');
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated username for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async updateProfilePhotos(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
+        try {
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
+            let updateCount = 0;
+            if (photos.photos.length < 2) {
+                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                const shuffle = (arr) => {
+                    const a = arr.slice();
+                    for (let i = a.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [a[i], a[j]] = [a[j], a[i]];
+                    }
+                    return a;
+                };
+                const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
+                const randomPhoto = photoPaths[0];
+                await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), randomPhoto));
+                updateCount = 1;
+                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile} (1 of ${photoPaths.length} photos)`);
+            }
+            await this.update(doc.mobile, {
+                profilePicsUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
+            return updateCount;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
     async processPromoteClient(doc, client) {
         if (!client) {
             this.logger.warn(`Client not found for promote client ${doc.mobile}`);
             return 0;
         }
-        let cli;
         const MIN_COOLDOWN_HOURS = 2;
         const MAX_FAILED_ATTEMPTS = 3;
         const FAILURE_RESET_DAYS = 7;
@@ -21277,9 +21677,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         try {
             await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
             const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = this.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * 24 * 60 * 60 * 1000) {
-                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / (24 * 60 * 60 * 1000))} days ago)`);
+            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * this.ONE_DAY_MS) {
+                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / this.ONE_DAY_MS)} days ago)`);
                 await this.update(doc.mobile, {
                     failedUpdateAttempts: 0,
                     lastUpdateFailure: null
@@ -21289,13 +21689,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts}). Will retry after ${FAILURE_RESET_DAYS} days.`);
                 return 0;
             }
-            const lastUpdateAttempt = this.getTimestamp(doc.lastUpdateAttempt);
+            const lastUpdateAttempt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt);
             if (lastUpdateAttempt > 0 && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
                 const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
                 this.logger.debug(`Client ${doc.mobile} on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
                 return 0;
             }
-            const lastUsed = this.getTimestamp(doc.lastUsed);
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
             const hasAnyUpdate = !!(doc.privacyUpdatedAt || doc.profilePicsDeletedAt || doc.nameBioUpdatedAt ||
                 doc.usernameUpdatedAt || doc.profilePicsUpdatedAt);
             if (hasAnyUpdate && lastUsed > 0 && now - lastUsed < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
@@ -21303,7 +21703,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 return 0;
             }
             const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-            if (accountAge > 30 * 24 * 60 * 60 * 1000) {
+            if (accountAge > 30 * this.ONE_DAY_MS) {
                 this.logger.debug(`Client ${doc.mobile} is older than 30 days, skipping`);
                 return 0;
             }
@@ -21320,203 +21720,44 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 this.logger.debug(`Client ${doc.mobile} has no pending updates - all complete!`);
             }
             if (pendingUpdates.needsPrivacy) {
-                try {
-                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                    await cli.updatePrivacyforDeletedAccount();
-                    await this.update(doc.mobile, {
-                        privacyUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    updateCount++;
-                    this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-                    await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-                    return updateCount;
-                }
-                catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, `Error updating privacy: ${doc.mobile}`, true);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
-                    return updateCount;
-                }
+                updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
+                return updateCount;
             }
             if (pendingUpdates.needsDeletePhotos) {
-                try {
-                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                        autoDisconnect: true,
-                        handler: false,
-                    });
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                    const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
-                        userId: 'me',
-                        offset: 0,
-                    }));
-                    if (photos.photos.length > 0) {
-                        await cli.deleteProfilePhotos();
-                        await this.update(doc.mobile, {
-                            profilePicsDeletedAt: new Date(),
-                            lastUpdateAttempt: new Date()
-                        });
-                        updateCount++;
-                        this.logger.debug(`[PromoteClientService] Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
-                        await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-                        return updateCount;
-                    }
-                    else {
-                        await this.update(doc.mobile, {
-                            profilePicsDeletedAt: new Date(),
-                            lastUpdateAttempt: new Date()
-                        });
-                        this.logger.debug(`[PromoteClientService] No profile photos to delete for ${doc.mobile}, marked as complete`);
-                    }
-                }
-                catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Deleting Photos: ${doc.mobile}`, true);
-                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
-                    }
-                    return updateCount;
-                }
+                updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
+                return updateCount;
             }
             if (pendingUpdates.needsNameBio) {
-                cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                    autoDisconnect: true,
-                    handler: false,
-                });
-                await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                const me = await cli.getMe();
-                await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                const expectedName = client?.name.split(' ')[0];
-                if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
-                    try {
-                        this.logger.log(`[PromoteClientService] Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                        await cli.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                            useInvisibleChars: false
-                        })} ${(0, utils_1.getCuteEmoji)()}`, '');
-                        await this.update(doc.mobile, {
-                            nameBioUpdatedAt: new Date(),
-                            lastUpdateAttempt: new Date()
-                        });
-                        updateCount++;
-                        this.logger.debug(`[PromoteClientService] Updated name and bio for ${doc.mobile}`);
-                        await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-                        return updateCount;
-                    }
-                    catch (error) {
-                        const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile: ${doc.mobile}`, true);
-                        await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                        if ((0, isPermanentError_1.default)(errorDetails)) {
-                            await this.markAsInactive(doc.mobile, errorDetails.message);
-                            return updateCount;
-                        }
-                        return updateCount;
-                    }
-                }
+                updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
+                return updateCount;
             }
             if (pendingUpdates.needsUsername) {
-                try {
-                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                        autoDisconnect: true,
-                        handler: false,
-                    });
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                    await this.telegramService.updateUsername(doc.mobile, '');
-                    await this.update(doc.mobile, {
-                        usernameUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date()
-                    });
-                    updateCount++;
-                    this.logger.debug(`[PromoteClientService] Updated username for ${doc.mobile}`);
-                    await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-                    return updateCount;
-                }
-                catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Username: ${doc.mobile}`, true);
-                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
-                    }
-                    return updateCount;
-                }
+                updateCount = await this.updateUsername(doc, client, failedAttempts);
+                return updateCount;
             }
             if (pendingUpdates.needsProfilePhotos) {
-                try {
-                    cli = await connection_manager_1.connectionManager.getClient(doc.mobile, {
-                        autoDisconnect: true,
-                        handler: false,
-                    });
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                    const rootPath = process.cwd();
-                    const photos = await cli.client.invoke(new telegram_1.Api.photos.GetUserPhotos({
-                        userId: 'me',
-                        offset: 0,
-                    }));
-                    if (photos.photos.length < 2) {
-                        await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                        await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                        const shuffle = (arr) => {
-                            const a = arr.slice();
-                            for (let i = a.length - 1; i > 0; i--) {
-                                const j = Math.floor(Math.random() * (i + 1));
-                                [a[i], a[j]] = [a[j], a[i]];
-                            }
-                            return a;
-                        };
-                        const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
-                        const randomPhoto = photoPaths[0];
-                        await cli.updateProfilePic(path_1.default.join(rootPath, randomPhoto));
-                        await this.update(doc.mobile, {
-                            profilePicsUpdatedAt: new Date(),
-                            lastUpdateAttempt: new Date()
-                        });
-                        updateCount++;
-                        this.logger.debug(`[PromoteClientService] Updated profile photo ${randomPhoto} for ${doc.mobile} (1 of ${photoPaths.length} photos)`);
-                        await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
-                        return updateCount;
-                    }
-                }
-                catch (error) {
-                    const errorDetails = (0, parseError_1.parseError)(error, `Error in Updating Profile Photos: ${doc.mobile}`, true);
-                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                        return updateCount;
-                    }
-                    return updateCount;
-                }
+                updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
+                return updateCount;
             }
             if (updateCount === 0) {
                 await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                 if (pendingUpdates.totalPending > 0) {
-                    this.logger.debug(`[PromoteClientService] No updates performed for ${doc.mobile} despite ${pendingUpdates.totalPending} pending updates. Reasons: ${pendingUpdates.reasons.join(', ')}`);
+                    this.logger.debug(`No updates performed for ${doc.mobile} despite ${pendingUpdates.totalPending} pending updates. Reasons: ${pendingUpdates.reasons.join(', ')}`);
                 }
             }
             else {
                 const remainingPending = pendingUpdates.totalPending - updateCount;
                 if (remainingPending > 0) {
-                    this.logger.debug(`[PromoteClientService] Client ${doc.mobile} still has ${remainingPending} pending updates remaining`);
+                    this.logger.debug(`Client ${doc.mobile} still has ${remainingPending} pending updates remaining`);
                 }
                 else {
-                    this.logger.log(`[PromoteClientService] ✅ Client ${doc.mobile} - ALL UPDATES COMPLETE! Ready for use.`);
+                    this.logger.log(`✅ Client ${doc.mobile} - ALL UPDATES COMPLETE! Ready for use.`);
                 }
             }
             return updateCount;
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Error with client ${doc.mobile}`);
+            const errorDetails = this.handleError(error, 'Error with client', doc.mobile);
             try {
                 await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
             }
@@ -21529,13 +21770,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             return 0;
         }
         finally {
-            try {
-                if (cli)
-                    await connection_manager_1.connectionManager.unregisterClient(doc.mobile);
-            }
-            catch (unregisterError) {
-                this.logger.error(`[PromoteClientService] Error unregistering client ${doc.mobile}: ${unregisterError.message}`);
-            }
             await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
         }
     }
@@ -21569,8 +21803,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             },
         ]);
         const promoteClientsPerClient = new Map(promoteClientCounts.map((result) => [result._id, result.count]));
-        const clientNeedingPromoteClients = [];
-        let totalSlotsNeeded = 0;
         let totalUpdates = 0;
         const MIN_COOLDOWN_HOURS = 4;
         const now = Date.now();
@@ -21596,43 +21828,25 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                         this.logger.debug(`Skipping ${promoteClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
                         continue;
                     }
-                    const pendingUpdates = this.getPendingUpdates(promoteClient, now);
+                    const lastChecked = promoteClient.lastChecked
+                        ? new Date(promoteClient.lastChecked).getTime()
+                        : 0;
+                    const healthCheckPassed = await this.performHealthCheck(promoteClientMobile, lastChecked, now);
+                    if (!healthCheckPassed) {
+                        continue;
+                    }
                     const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
                     if (hasBeenUsed) {
                         const needsBackfill = !promoteClient.privacyUpdatedAt || !promoteClient.profilePicsDeletedAt ||
                             !promoteClient.nameBioUpdatedAt || !promoteClient.usernameUpdatedAt ||
                             !promoteClient.profilePicsUpdatedAt;
                         if (needsBackfill) {
-                            this.logger.log(`Backfilling timestamp fields for used client ${promoteClientMobile}`);
-                            const sevenDaysAgo = new Date(now - (7 * 24 * 60 * 60 * 1000));
-                            const tenDaysAgo = new Date(now - (10 * 24 * 60 * 60 * 1000));
-                            const fourteenDaysAgo = new Date(now - (14 * 24 * 60 * 60 * 1000));
-                            const twentyDaysAgo = new Date(now - (20 * 24 * 60 * 60 * 1000));
-                            const twentyFiveDaysAgo = new Date(now - (25 * 24 * 60 * 60 * 1000));
-                            const backfillData = {};
-                            if (!promoteClient.privacyUpdatedAt) {
-                                backfillData.privacyUpdatedAt = twentyFiveDaysAgo;
-                            }
-                            if (!promoteClient.profilePicsDeletedAt) {
-                                backfillData.profilePicsDeletedAt = twentyDaysAgo;
-                            }
-                            if (!promoteClient.nameBioUpdatedAt) {
-                                backfillData.nameBioUpdatedAt = fourteenDaysAgo;
-                            }
-                            if (!promoteClient.usernameUpdatedAt) {
-                                backfillData.usernameUpdatedAt = tenDaysAgo;
-                            }
-                            if (!promoteClient.profilePicsUpdatedAt) {
-                                backfillData.profilePicsUpdatedAt = sevenDaysAgo;
-                            }
-                            await this.update(promoteClientMobile, backfillData);
-                            this.logger.log(`Backfilled ${Object.keys(backfillData).length} fields for ${promoteClientMobile}`);
+                            await this.backfillTimestamps(promoteClientMobile, promoteClient, now);
                         }
-                        if (pendingUpdates.totalPending === 0) {
-                            this.logger.debug(`Skipping ${promoteClientMobile} - already used and no pending updates`);
-                            continue;
-                        }
+                        this.logger.debug(`Skipping ${promoteClientMobile} - already used, timestamps backfilled`);
+                        continue;
                     }
+                    const pendingUpdates = this.getPendingUpdates(promoteClient, now);
                     if (pendingUpdates.totalPending > 0) {
                         const client = clients.find((c) => c.clientId === result._id);
                         if (!client) {
@@ -21656,190 +21870,139 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 this.logger.warn(`Skipping promote client ${result.mobiles.join(', ')} as total updates reached 5`);
             }
         }
+        const clientNeedingPromoteClients = [];
         for (const client of clients) {
-            const assignedCount = promoteClientsPerClient.get(client.clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
-            if (needed > 0) {
-                clientNeedingPromoteClients.push(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            if (availabilityNeeds.totalNeeded > 0) {
+                clientNeedingPromoteClients.push({
+                    clientId: client.clientId,
+                    ...availabilityNeeds
+                });
             }
         }
-        clientNeedingPromoteClients.sort();
-        for (const clientId of clientNeedingPromoteClients) {
+        clientNeedingPromoteClients.sort((a, b) => a.priority - b.priority);
+        let totalSlotsNeeded = 0;
+        const clientNeedsMap = new Map();
+        for (const clientNeed of clientNeedingPromoteClients) {
+            const allocated = Math.min(clientNeed.totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
+            if (allocated > 0) {
+                clientNeedsMap.set(clientNeed.clientId, allocated);
+                totalSlotsNeeded += allocated;
+            }
             if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
                 break;
-            const assignedCount = promoteClientsPerClient.get(clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - assignedCount);
-            const allocatedForThisClient = Math.min(needed, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
-            totalSlotsNeeded += allocatedForThisClient;
         }
-        this.logger.debug(`Promote clients per client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}`);
-        this.logger.debug(`Clients needing promote clients: ${clientNeedingPromoteClients.join(', ')}`);
-        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
+        this.logger.debug(`Availability-based needs calculated (NO HARD LIMIT):`);
+        clientNeedingPromoteClients.forEach(need => {
+            this.logger.debug(`Client ${need.clientId} (priority: ${need.priority}): ` +
+                `${need.totalActive} total active, ${need.totalNeeded} new needed - ${need.calculationReason}`);
+            need.windowNeeds.forEach(window => {
+                if (window.needed > 0) {
+                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
+                        `${window.available} available, ${window.needed} needed ` +
+                        `(target: ${window.minRequired} per window)`);
+                }
+                else {
+                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
+                        `${window.available} available ✅ (sufficient, target: ${window.minRequired})`);
+                }
+            });
+        });
         const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
         this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\nClients Needing Promote Clients: ${clientNeedingPromoteClients.join(', ')}\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
+        const clientNeedsSummary = clientNeedingPromoteClients
+            .map(c => `${c.clientId}: ${c.totalNeeded} (${c.calculationReason})`)
+            .join('\n');
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check (Dynamic Availability):\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\n\nClients Needing Promote Clients:\n${clientNeedsSummary || 'None'}\n\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            await this.addNewUserstoPromoteClients([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
         }
         else {
-            this.logger.debug('No new promote clients needed');
+            this.logger.debug('No new promote clients needed - all availability windows and total count satisfied');
         }
     }
     async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
-        const sixMonthsAgo = new Date(Date.now() - 3 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        let totalNeededFromClients = 0;
+        const clientNeedingPromoteClientsDynamic = [];
         for (const clientId of clientsNeedingPromoteClients) {
-            let currentCount = promoteClientsPerClient?.get(clientId) || 0;
-            if (!promoteClientsPerClient) {
-                currentCount = await this.promoteClientModel.countDocuments({ clientId, status: 'active' });
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(clientId);
+            if (availabilityNeeds.totalNeeded > 0) {
+                clientNeedingPromoteClientsDynamic.push({
+                    clientId,
+                    ...availabilityNeeds
+                });
             }
-            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
-            totalNeededFromClients += needed;
         }
-        const totalNeeded = Math.min(totalNeededFromClients, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER);
+        clientNeedingPromoteClientsDynamic.sort((a, b) => a.priority - b.priority);
+        await this.addNewUserstoPromoteClientsDynamic(badIds, goodIds, clientNeedingPromoteClientsDynamic, promoteClientsPerClient);
+    }
+    async addNewUserstoPromoteClientsDynamic(badIds, goodIds, clientsNeedingPromoteClients, promoteClientsPerClient) {
+        const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
+        let totalNeeded = 0;
+        for (const clientNeed of clientsNeedingPromoteClients) {
+            totalNeeded += clientNeed.totalNeeded;
+        }
+        totalNeeded = Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER);
         if (totalNeeded === 0) {
-            this.logger.debug('No promote clients needed');
+            this.logger.debug('No promote clients needed - all availability windows and total count satisfied');
             return;
         }
-        this.logger.debug(`Creating ${totalNeeded} new promote clients (max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
+        this.logger.debug(`Creating ${totalNeeded} new promote clients (all with availableDate = today) ` +
+            `to satisfy availability windows and total count requirements`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
             twoFA: false,
-            lastActive: { $lt: sixMonthsAgo },
+            lastActive: { $lt: threeMonthsAgo },
             totalChats: { $gt: 150 },
         }, { tgId: 1 }, totalNeeded + 5);
-        this.logger.debug(`Found ${documents.length} candidate documents`);
-        let processedCount = 0;
-        const clientAssignmentTracker = new Map();
-        for (const clientId of clientsNeedingPromoteClients) {
-            let currentCount = promoteClientsPerClient?.get(clientId) || 0;
-            if (!promoteClientsPerClient) {
-                currentCount = await this.promoteClientModel.countDocuments({ clientId, status: 'active' });
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        const assignmentQueue = [];
+        for (const clientNeed of clientsNeedingPromoteClients) {
+            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+                assignmentQueue.push({
+                    clientId: clientNeed.clientId,
+                    priority: clientNeed.priority
+                });
             }
-            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - currentCount);
-            clientAssignmentTracker.set(clientId, needed);
         }
-        while (processedCount < Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER) &&
+        let processedCount = 0;
+        let assignmentIndex = 0;
+        while (processedCount < totalNeeded &&
             documents.length > 0 &&
-            clientsNeedingPromoteClients.length > 0) {
+            assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
-            if (!document?.mobile || !document.tgId) {
-                this.logger.warn('Invalid document, skipping');
+            if (!document || !document.mobile || !document.tgId) {
+                this.logger.warn('Invalid document found, skipping');
                 continue;
             }
-            const existingPromote = await this.findOne(document.mobile, false);
-            if (existingPromote) {
-                this.logger.debug(`Skipping ${document.mobile}: already a promote client`);
-                continue;
-            }
-            let targetClientId = null;
-            for (const clientId of clientsNeedingPromoteClients) {
-                const needed = clientAssignmentTracker.get(clientId) || 0;
-                if (needed > 0) {
-                    targetClientId = clientId;
-                    break;
-                }
-            }
-            if (!targetClientId) {
-                this.logger.debug('All clients satisfied');
+            const assignment = assignmentQueue[assignmentIndex];
+            if (!assignment) {
+                this.logger.debug('No more assignments needed');
                 break;
             }
             try {
-                const client = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
-                try {
-                    const hasPassword = await client.hasPassword();
-                    this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
-                    if (!hasPassword) {
-                        await client.removeOtherAuths();
-                        await (0, Helpers_1.sleep)(10000 + Math.random() * 10000);
-                        await client.set2fa();
-                        await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
-                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                        await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-                        const promoteClient = {
-                            tgId: document.tgId,
-                            lastActive: 'today',
-                            mobile: document.mobile,
-                            availableDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                            channels: channels.ids.length,
-                            clientId: targetClientId,
-                            status: 'active',
-                            message: 'Account successfully configured as promote client',
-                            lastUsed: null,
-                        };
-                        await this.create(promoteClient);
-                        try {
-                            await this.usersService.update(document.tgId, { twoFA: true });
-                        }
-                        catch (userUpdateError) {
-                            this.logger.warn(`Failed to update user 2FA for ${document.mobile}:`, userUpdateError);
-                        }
-                        this.logger.log(`Created PromoteClient for ${targetClientId}: ${document.mobile}`);
-                        const currentNeeded = clientAssignmentTracker.get(targetClientId) || 0;
-                        const newNeeded = Math.max(0, currentNeeded - 1);
-                        clientAssignmentTracker.set(targetClientId, newNeeded);
-                        if (newNeeded === 0) {
-                            const index = clientsNeedingPromoteClients.indexOf(targetClientId);
-                            if (index > -1) {
-                                clientsNeedingPromoteClients.splice(index, 1);
-                            }
-                        }
-                        this.logger.debug(`Client ${targetClientId}: ${newNeeded} more needed`);
-                        processedCount++;
-                    }
-                    else {
-                        this.logger.debug(`${document.mobile} already has password`);
-                        try {
-                            await this.usersService.update(document.tgId, { twoFA: true });
-                        }
-                        catch (userUpdateError) {
-                            this.logger.warn(`Failed to update user 2FA for ${document.mobile}:`, userUpdateError);
-                        }
-                    }
-                }
-                catch (error) {
-                    this.logger.error(`Error processing client ${document.mobile}: ${error.message}`, error);
-                    const errorDetails = (0, parseError_1.parseError)(error);
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        try {
-                            await this.markAsInactive(document.mobile, errorDetails.message);
-                        }
-                        catch (markError) {
-                            this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
-                        }
-                    }
+                const created = await this.createPromoteClientFromUser(document, assignment.clientId, today);
+                if (created) {
+                    assignmentIndex++;
                     processedCount++;
+                    this.logger.debug(`Created promote client ${document.mobile} for ${assignment.clientId} ` +
+                        `with availableDate = ${today} (available immediately, priority: ${assignment.priority})`);
                 }
-                finally {
-                    await this.safeUnregisterClient(document.mobile);
-                    await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                else {
+                    processedCount++;
                 }
             }
             catch (error) {
-                this.logger.error(`Error creating connection for ${document.mobile}: ${error.message}`, error);
-                const errorDetails = (0, parseError_1.parseError)(error);
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    try {
-                        await this.markAsInactive(document.mobile, errorDetails.message);
-                    }
-                    catch (markError) {
-                        this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
-                    }
-                }
+                const errorDetails = this.handleError(error, 'Error creating client connection', document.mobile);
+                this.logger.error(`Error creating connection for ${document.mobile}:`, errorDetails);
                 await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                processedCount++;
             }
         }
-        this.logger.log(`Batch completed: Created ${processedCount} new promote clients`);
-        if (clientsNeedingPromoteClients.length > 0) {
-            const stillNeeded = clientsNeedingPromoteClients
-                .map((clientId) => `${clientId}:${clientAssignmentTracker.get(clientId) || 0}`)
-                .join(', ');
-            this.logger.log(`Still needed: ${stillNeeded}`);
-        }
-        else {
-            this.logger.log('All clients have sufficient promote clients!');
-        }
+        this.logger.log(`✅ Dynamic batch completed: Created ${processedCount} new promote clients ` +
+            `(all with availableDate = ${today}, available immediately). ` +
+            `System maintains availability windows and total count requirements.`);
     }
     clearAllTimeouts() {
         this.activeTimeouts.forEach((timeout) => clearTimeout(timeout));
@@ -21867,7 +22030,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
         const [totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients, assignedCounts, activeCounts, inactiveCounts, neverUsedCounts, recentlyUsedCounts,] = await Promise.all([
             this.promoteClientModel.countDocuments({}),
             this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
@@ -21998,8 +22161,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             filter.clientId = clientId;
         }
         const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
+        const lastWeek = new Date(now.getTime() - 7 * this.ONE_DAY_MS);
         const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
             this.promoteClientModel.countDocuments(filter),
             this.promoteClientModel.countDocuments({
@@ -24951,6 +25114,47 @@ exports.SessionService = SessionService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [session_audit_service_1.SessionAuditService])
 ], SessionService);
+
+
+/***/ }),
+
+/***/ "./src/components/shared/client-helper.utils.ts":
+/*!******************************************************!*\
+  !*** ./src/components/shared/client-helper.utils.ts ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ClientHelperUtils = void 0;
+class ClientHelperUtils {
+    static getTimestamp(date) {
+        if (!date)
+            return 0;
+        try {
+            return new Date(date).getTime();
+        }
+        catch {
+            return 0;
+        }
+    }
+    static getTodayDateString() {
+        return new Date().toISOString().split('T')[0];
+    }
+    static getDateStringDaysAgo(days, oneDayMs) {
+        return new Date(Date.now() - days * oneDayMs).toISOString().split('T')[0];
+    }
+    static createBackfillTimestamps(now, oneDayMs) {
+        return {
+            privacyUpdatedAt: new Date(now - (25 * oneDayMs)),
+            profilePicsDeletedAt: new Date(now - (20 * oneDayMs)),
+            nameBioUpdatedAt: new Date(now - (14 * oneDayMs)),
+            usernameUpdatedAt: new Date(now - (10 * oneDayMs)),
+            profilePicsUpdatedAt: new Date(now - (7 * oneDayMs)),
+        };
+    }
+}
+exports.ClientHelperUtils = ClientHelperUtils;
 
 
 /***/ }),
