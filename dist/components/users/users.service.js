@@ -120,6 +120,221 @@ let UsersService = class UsersService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
+    async getTopInteractionUsers(options) {
+        const { page = 1, limit = 20, minScore = 0, minCalls = 0, minPhotos = 0, minVideos = 0, excludeExpired = true, excludeTwoFA = false, gender } = options;
+        const pageNum = Math.max(1, Math.floor(page));
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+        const skip = (pageNum - 1) * limitNum;
+        const weights = {
+            ownPhoto: 8,
+            ownVideo: 12,
+            otherPhoto: 3,
+            otherVideo: 5,
+            totalPhoto: 2,
+            totalVideo: 3,
+            incomingCall: 15,
+            outgoingCall: 8,
+            videoCall: 20,
+            totalCalls: 1,
+            movieCount: -10,
+        };
+        const filter = {};
+        if (excludeExpired) {
+            filter.expired = { $ne: true };
+        }
+        if (excludeTwoFA) {
+            filter.twoFA = { $ne: true };
+        }
+        if (gender) {
+            filter.gender = gender;
+        }
+        if (minCalls > 0) {
+            filter['calls.totalCalls'] = { $gte: minCalls };
+        }
+        if (minPhotos > 0) {
+            filter.$or = [
+                { photoCount: { $gte: minPhotos } },
+                { ownPhotoCount: { $gte: minPhotos } },
+                { otherPhotoCount: { $gte: minPhotos } }
+            ];
+        }
+        if (minVideos > 0) {
+            filter.$or = [
+                ...(filter.$or || []),
+                { videoCount: { $gte: minVideos } },
+                { ownVideoCount: { $gte: minVideos } },
+                { otherVideoCount: { $gte: minVideos } }
+            ];
+        }
+        const pipeline = [
+            { $match: filter },
+            {
+                $addFields: {
+                    photoScore: {
+                        $cond: {
+                            if: { $gt: ['$ownPhotoCount', 0] },
+                            then: { $multiply: ['$ownPhotoCount', weights.ownPhoto] },
+                            else: {
+                                $cond: {
+                                    if: { $gt: ['$otherPhotoCount', 0] },
+                                    then: { $multiply: ['$otherPhotoCount', weights.otherPhoto] },
+                                    else: {
+                                        $cond: {
+                                            if: { $gt: ['$photoCount', 0] },
+                                            then: { $multiply: ['$photoCount', weights.totalPhoto] },
+                                            else: 0
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    videoScore: {
+                        $cond: {
+                            if: { $gt: ['$ownVideoCount', 0] },
+                            then: { $multiply: ['$ownVideoCount', weights.ownVideo] },
+                            else: {
+                                $cond: {
+                                    if: { $gt: ['$otherVideoCount', 0] },
+                                    then: { $multiply: ['$otherVideoCount', weights.otherVideo] },
+                                    else: {
+                                        $cond: {
+                                            if: { $gt: ['$videoCount', 0] },
+                                            then: { $multiply: ['$videoCount', weights.totalVideo] },
+                                            else: 0
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    callScore: {
+                        $let: {
+                            vars: {
+                                incomingVal: { $ifNull: ['$calls.incoming', 0] },
+                                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
+                                videoVal: { $ifNull: ['$calls.video', 0] },
+                                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] }
+                            },
+                            in: {
+                                $add: [
+                                    {
+                                        $cond: {
+                                            if: { $gt: ['$$incomingVal', 0] },
+                                            then: { $multiply: ['$$incomingVal', weights.incomingCall] },
+                                            else: 0
+                                        }
+                                    },
+                                    {
+                                        $cond: {
+                                            if: { $gt: ['$$outgoingVal', 0] },
+                                            then: { $multiply: ['$$outgoingVal', weights.outgoingCall] },
+                                            else: 0
+                                        }
+                                    },
+                                    {
+                                        $cond: {
+                                            if: { $gt: ['$$videoVal', 0] },
+                                            then: { $multiply: ['$$videoVal', weights.videoCall] },
+                                            else: 0
+                                        }
+                                    },
+                                    {
+                                        $cond: {
+                                            if: {
+                                                $and: [
+                                                    { $eq: ['$$incomingVal', 0] },
+                                                    { $eq: ['$$outgoingVal', 0] },
+                                                    { $gt: ['$$totalCallsVal', 0] }
+                                                ]
+                                            },
+                                            then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
+                                            else: 0
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    movieScore: {
+                        $cond: {
+                            if: { $gt: ['$movieCount', 0] },
+                            then: { $multiply: ['$movieCount', weights.movieCount] },
+                            else: 0
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    interactionScore: {
+                        $round: [
+                            {
+                                $divide: [
+                                    {
+                                        $add: [
+                                            '$photoScore',
+                                            '$videoScore',
+                                            '$callScore',
+                                            '$movieScore'
+                                        ]
+                                    },
+                                    1
+                                ]
+                            },
+                            2
+                        ]
+                    }
+                }
+            },
+            {
+                $match: {
+                    interactionScore: { $gte: minScore }
+                }
+            },
+            { $sort: { interactionScore: -1 } },
+            {
+                $facet: {
+                    totalCount: [{ $count: 'count' }],
+                    paginatedResults: [
+                        { $skip: skip },
+                        { $limit: limitNum }
+                    ]
+                }
+            },
+            {
+                $project: {
+                    total: { $ifNull: [{ $arrayElemAt: ['$totalCount.count', 0] }, 0] },
+                    users: '$paginatedResults'
+                }
+            }
+        ];
+        const result = await this.userModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+        if (!result || result.length === 0) {
+            return {
+                users: [],
+                total: 0,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: 0
+            };
+        }
+        const aggregationResult = result[0];
+        const totalUsers = aggregationResult.total || 0;
+        const users = aggregationResult.users || [];
+        const cleanedUsers = users.map((user) => {
+            const { photoScore, videoScore, callScore, movieScore, ...cleanUser } = user;
+            return cleanUser;
+        });
+        const totalPages = Math.ceil(totalUsers / limitNum);
+        return {
+            users: cleanedUsers,
+            total: totalUsers,
+            page: pageNum,
+            limit: limitNum,
+            totalPages
+        };
+    }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([

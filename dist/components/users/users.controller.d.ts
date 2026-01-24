@@ -8,6 +8,15 @@ export declare class UsersController {
     constructor(usersService: UsersService);
     create(createUserDto: CreateUserDto): Promise<User>;
     search(queryParams: SearchUserDto): Promise<User[]>;
+    getTopInteractionUsers(page?: string, limit?: string, minScore?: string, minCalls?: string, minPhotos?: string, minVideos?: string, excludeExpired?: string, excludeTwoFA?: string, gender?: string): Promise<{
+        users: Array<User & {
+            interactionScore: number;
+        }>;
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     findAll(): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;

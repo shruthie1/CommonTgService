@@ -28,6 +28,11 @@ declare class TelegramManager {
     apiHash: string;
     private timeoutErr;
     private static activeClientSetup;
+    private readonly MAX_FILE_SIZE;
+    private readonly FILE_DOWNLOAD_TIMEOUT;
+    private readonly TEMP_FILE_CLEANUP_DELAY;
+    private readonly THUMBNAIL_CONCURRENCY_LIMIT;
+    private readonly THUMBNAIL_BATCH_DELAY_MS;
     constructor(sessionString: string, phoneNumber: string);
     static getActiveClientSetup(): {
         days?: number;
@@ -63,8 +68,10 @@ declare class TelegramManager {
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;
     getGrpMembers(entity: EntityLike): Promise<any[]>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<TotalList<import("telegram/tl/custom/dialog").Dialog>>;
-    getSelfMSgsInfo(): Promise<{
+    getDialogs(params: IterDialogsParams): Promise<any[] & {
+        total: number;
+    }>;
+    getSelfMSgsInfo(limit?: number): Promise<{
         photoCount: number;
         videoCount: number;
         movieCount: number;
@@ -73,6 +80,7 @@ declare class TelegramManager {
         otherPhotoCount: number;
         ownVideoCount: number;
         otherVideoCount: number;
+        analyzedMessages: number;
     }>;
     addContact(data: {
         mobile: string;
@@ -93,12 +101,24 @@ declare class TelegramManager {
     getMediaUrl(message: Api.Message): Promise<string | Buffer>;
     sendInlineMessage(chatId: string, message: string, url: string): Promise<Api.Message>;
     getMediaMessages(): Promise<Api.messages.Messages>;
-    getCallLog(): Promise<{
-        chatCallCounts: any[];
+    getCallLog(limit?: number): Promise<{
         outgoing: number;
         incoming: number;
         video: number;
+        audio: number;
+        chatCallCounts: Array<{
+            chatId: string;
+            phone?: string;
+            username?: string;
+            name: string;
+            count: number;
+            msgs?: number;
+            video?: number;
+            photo?: number;
+            peerType: 'user' | 'group' | 'channel';
+        }>;
         totalCalls: number;
+        analyzedCalls: number;
     }>;
     getCallLogsInternal(): Promise<{}>;
     handleEvents(event: NewMessageEvent): Promise<void>;
@@ -132,8 +152,11 @@ declare class TelegramManager {
     }>;
     downloadMediaFile(messageId: number, chatId: string, res: any): Promise<any>;
     private downloadWithTimeout;
+    private processWithConcurrencyLimit;
     private getMediaDetails;
     private downloadFileFromUrl;
+    private detectContentType;
+    private generateETag;
     forwardMessage(toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     updateUsername(baseUsername: any): Promise<string>;
     updatePrivacy(): Promise<void>;
@@ -158,7 +181,201 @@ declare class TelegramManager {
     }): Promise<boolean>;
     scheduleMessageSend(opts: MessageScheduleOptions): Promise<Api.Message>;
     getScheduledMessages(chatId: string): Promise<Api.TypeMessage[]>;
-    sendMediaAlbum(album: MediaAlbumOptions): Promise<Api.TypeUpdates>;
+    sendMediaAlbum(album: MediaAlbumOptions): Promise<{
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 3809980286;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdatesTooLong";
+        originalArgs: void;
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 826001400;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortMessage";
+        out?: boolean;
+        mentioned?: boolean;
+        mediaUnread?: boolean;
+        silent?: boolean;
+        id: Api.int;
+        userId: Api.long;
+        message: string;
+        pts: Api.int;
+        ptsCount: Api.int;
+        date: Api.int;
+        fwdFrom?: Api.TypeMessageFwdHeader;
+        viaBotId?: Api.long;
+        replyTo?: Api.TypeMessageReplyHeader;
+        entities?: Api.TypeMessageEntity[];
+        ttlPeriod?: Api.int;
+        originalArgs: {
+            out?: boolean;
+            mentioned?: boolean;
+            mediaUnread?: boolean;
+            silent?: boolean;
+            id: Api.int;
+            userId: Api.long;
+            message: string;
+            pts: Api.int;
+            ptsCount: Api.int;
+            date: Api.int;
+            fwdFrom?: Api.TypeMessageFwdHeader;
+            viaBotId?: Api.long;
+            replyTo?: Api.TypeMessageReplyHeader;
+            entities?: Api.TypeMessageEntity[];
+            ttlPeriod?: Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1299050149;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortChatMessage";
+        out?: boolean;
+        mentioned?: boolean;
+        mediaUnread?: boolean;
+        silent?: boolean;
+        id: Api.int;
+        fromId: Api.long;
+        chatId: Api.long;
+        message: string;
+        pts: Api.int;
+        ptsCount: Api.int;
+        date: Api.int;
+        fwdFrom?: Api.TypeMessageFwdHeader;
+        viaBotId?: Api.long;
+        replyTo?: Api.TypeMessageReplyHeader;
+        entities?: Api.TypeMessageEntity[];
+        ttlPeriod?: Api.int;
+        originalArgs: {
+            out?: boolean;
+            mentioned?: boolean;
+            mediaUnread?: boolean;
+            silent?: boolean;
+            id: Api.int;
+            fromId: Api.long;
+            chatId: Api.long;
+            message: string;
+            pts: Api.int;
+            ptsCount: Api.int;
+            date: Api.int;
+            fwdFrom?: Api.TypeMessageFwdHeader;
+            viaBotId?: Api.long;
+            replyTo?: Api.TypeMessageReplyHeader;
+            entities?: Api.TypeMessageEntity[];
+            ttlPeriod?: Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 2027216577;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShort";
+        update: Api.TypeUpdate;
+        date: Api.int;
+        originalArgs: {
+            update: Api.TypeUpdate;
+            date: Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1918567619;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdatesCombined";
+        updates: Api.TypeUpdate[];
+        users: Api.TypeUser[];
+        chats: Api.TypeChat[];
+        date: Api.int;
+        seqStart: Api.int;
+        seq: Api.int;
+        originalArgs: {
+            updates: Api.TypeUpdate[];
+            users: Api.TypeUser[];
+            chats: Api.TypeChat[];
+            date: Api.int;
+            seqStart: Api.int;
+            seq: Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 1957577280;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "Updates";
+        updates: Api.TypeUpdate[];
+        users: Api.TypeUser[];
+        chats: Api.TypeChat[];
+        date: Api.int;
+        seq: Api.int;
+        originalArgs: {
+            updates: Api.TypeUpdate[];
+            users: Api.TypeUser[];
+            chats: Api.TypeChat[];
+            date: Api.int;
+            seq: Api.int;
+        };
+    } | {
+        success: number;
+        failed: number;
+        errors: {
+            index: number;
+            error: string;
+        }[];
+        CONSTRUCTOR_ID: 2417352961;
+        SUBCLASS_OF_ID: 2331323052;
+        classType: "constructor";
+        className: "UpdateShortSentMessage";
+        out?: boolean;
+        id: Api.int;
+        pts: Api.int;
+        ptsCount: Api.int;
+        date: Api.int;
+        media?: Api.TypeMessageMedia;
+        entities?: Api.TypeMessageEntity[];
+        ttlPeriod?: Api.int;
+        originalArgs: {
+            out?: boolean;
+            id: Api.int;
+            pts: Api.int;
+            ptsCount: Api.int;
+            date: Api.int;
+            media?: Api.TypeMessageMedia;
+            entities?: Api.TypeMessageEntity[];
+            ttlPeriod?: Api.int;
+        };
+    }>;
     sendMessage(params: SendTgMessageDto): Promise<Api.Message>;
     sendVoiceMessage(voice: {
         chatId: string;
@@ -415,14 +632,14 @@ declare class TelegramManager {
         offsetPeer?: string;
         folderId?: number;
     }): Promise<{
-        id: string;
-        title: string;
-        username: string;
+        id: any;
+        title: any;
+        username: any;
         type: string;
-        unreadCount: number;
+        unreadCount: any;
         lastMessage: {
-            id: number;
-            text: string;
+            id: any;
+            text: any;
             date: Date;
         };
     }[]>;
@@ -461,6 +678,8 @@ declare class TelegramManager {
         lastName?: string;
         totalMessages: number;
         interactionScore: number;
+        engagementLevel: 'recent' | 'active' | 'dormant';
+        lastActivityDays: number;
         calls: {
             total: number;
             incoming: {
