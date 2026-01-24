@@ -284,7 +284,7 @@ export class ActiveChannelsService {
         { $project: { randomField: 0 } },
       ];
 
-      return await this.activeChannelModel.aggregate<ActiveChannel>(pipeline).exec();
+      return await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
     } catch (error) {
       throw this.handleError(error, 'Failed to fetch active channels');
     }

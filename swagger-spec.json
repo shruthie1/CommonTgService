@@ -1768,6 +1768,70 @@
         ]
       }
     },
+    "/telegram/media/thumbnail/{mobile}": {
+      "get": {
+        "description": "Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.",
+        "operationId": "TelegramController_getThumbnail",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the Telegram account",
+            "schema": {
+              "example": "1234567890",
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID or username. Use \"me\" for saved messages, channel username (e.g., \"channelname\"), or numeric ID",
+            "schema": {
+              "example": "me",
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "query",
+            "description": "Message ID containing the media (must be a positive number)",
+            "schema": {
+              "example": 12345,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thumbnail image (JPEG format)",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (when using If-None-Match header for caching)"
+          },
+          "404": {
+            "description": "Thumbnail not found - message ID does not exist, message has no media, or thumbnail is not available"
+          },
+          "500": {
+            "description": "Error getting thumbnail"
+          }
+        },
+        "summary": "Get thumbnail for a media message",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
     "/telegram/media/album/{mobile}": {
       "post": {
         "description": "Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.",
@@ -1847,7 +1911,7 @@
     },
     "/telegram/media/metadata/{mobile}": {
       "get": {
-        "description": "Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range.",
+        "description": "Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).",
         "operationId": "TelegramController_getMediaMetadata",
         "parameters": [
           {
@@ -1901,6 +1965,16 @@
             }
           },
           {
+            "name": "maxId",
+            "required": false,
+            "in": "query",
+            "description": "Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)",
+            "schema": {
+              "example": 12345,
+              "type": "number"
+            }
+          },
+          {
             "name": "minId",
             "required": false,
             "in": "query",
@@ -1911,30 +1985,10 @@
             }
           },
           {
-            "name": "maxId",
-            "required": false,
-            "in": "query",
-            "description": "Maximum message ID to include",
-            "schema": {
-              "example": 5000,
-              "type": "number"
-            }
-          },
-          {
-            "name": "all",
-            "required": false,
-            "in": "query",
-            "description": "If true, returns all media types grouped by type",
-            "schema": {
-              "example": false,
-              "type": "boolean"
-            }
-          },
-          {
             "name": "types",
             "required": false,
             "in": "query",
-            "description": "Filter by media types. If not specified, returns all media types.",
+            "description": "Filter by media types. Use \"all\" to get all types grouped by type. If not specified, returns all media types.",
             "schema": {
               "type": "array",
               "items": {
@@ -1943,7 +1997,8 @@
                   "photo",
                   "video",
                   "document",
-                  "voice"
+                  "voice",
+                  "all"
                 ]
               }
             }
@@ -1972,7 +2027,7 @@
     },
     "/telegram/media/filter/{mobile}": {
       "get": {
-        "description": "Get filtered list of media messages with detailed metadata. Returns array of media items with file information.",
+        "description": "Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).",
         "operationId": "TelegramController_getFilteredMedia",
         "parameters": [
           {
@@ -2026,6 +2081,16 @@
             }
           },
           {
+            "name": "maxId",
+            "required": false,
+            "in": "query",
+            "description": "Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)",
+            "schema": {
+              "example": 12345,
+              "type": "number"
+            }
+          },
+          {
             "name": "minId",
             "required": false,
             "in": "query",
@@ -2036,20 +2101,10 @@
             }
           },
           {
-            "name": "maxId",
-            "required": false,
-            "in": "query",
-            "description": "Maximum message ID to include",
-            "schema": {
-              "example": 5000,
-              "type": "number"
-            }
-          },
-          {
             "name": "types",
             "required": false,
             "in": "query",
-            "description": "Filter by media types. If not specified, returns all media types.",
+            "description": "Filter by media types. Use \"all\" to get all types grouped by type. If not specified, returns all media types.",
             "schema": {
               "type": "array",
               "items": {
@@ -2058,7 +2113,8 @@
                   "photo",
                   "video",
                   "document",
-                  "voice"
+                  "voice",
+                  "all"
                 ]
               }
             }
@@ -2066,14 +2122,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Array of filtered media metadata",
+            "description": "Paginated media response with standardized format",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MediaMetadataDto"
-                  }
+                  "type": "object"
                 }
               }
             }
@@ -11481,26 +11534,6 @@
         "required": [
           "chatId",
           "media"
-        ]
-      },
-      "MediaMetadataDto": {
-        "type": "object",
-        "properties": {
-          "chatId": {
-            "type": "string",
-            "description": "Chat ID to get metadata from"
-          },
-          "offset": {
-            "type": "number",
-            "description": "Message offset"
-          },
-          "limit": {
-            "type": "number",
-            "description": "Maximum number of items"
-          }
-        },
-        "required": [
-          "chatId"
         ]
       },
       "createGroupDto": {

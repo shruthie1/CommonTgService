@@ -400,38 +400,45 @@ export class TelegramService implements OnModuleDestroy {
     async getMediaMetadata(mobile: string,
         params: {
             chatId: string;
-            types?: ('photo' | 'video' | 'document' | 'voice')[];
+            types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
             startDate?: Date;
             endDate?: Date;
             limit?: number;
             maxId?: number;
             minId?: number;
-            all?: boolean;
         }) {
         const telegramClient = await connectionManager.getClient(mobile)
         try {
-            // Use getAllMediaMetaData if 'all' flag is set, otherwise use getMediaMetadata
-            if (params.all) {
-                return await telegramClient.getAllMediaMetaData(params);
-            } else {
-                return await telegramClient.getMediaMetadata(params);
-            }
+            return await telegramClient.getMediaMetadata(params);
         } catch (error) {
             this.logger.error(mobile, 'Error getting media metadata:', error);
             throw error;
         }
     }
 
-    async downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any) {
-        const telegramClient = await connectionManager.getClient(mobile)
+    async getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string) {
+        const telegramClient = await connectionManager.getClient(mobile);
         try {
-            return await telegramClient.downloadMediaFile(messageId, chatId, res)
+            this.logger.info(mobile, 'Get media file download info', { messageId, chatId });
+            return await telegramClient.getMediaFileDownloadInfo(messageId, chatId);
         } catch (error) {
-            this.logger.error(mobile, 'Error downloading media file:', error);
-            // If response hasn't been sent yet, send error
-            if (!res.headersSent) {
-                res.status(500).send('Error downloading media file');
-            }
+            this.logger.error(mobile, 'Error getting media file download info:', error);
+            throw error;
+        }
+    }
+
+    async *streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize);
+    }
+
+    async getThumbnail(mobile: string, messageId: number, chatId: string) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        try {
+            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId });
+            return await telegramClient.getThumbnail(messageId, chatId);
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting thumbnail:', error);
             throw error;
         }
     }
@@ -739,10 +746,9 @@ export class TelegramService implements OnModuleDestroy {
         mobile: string,
         params: {
             chatId: string;
-            types?: ('photo' | 'video' | 'document' | 'voice')[];
+            types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
             startDate?: Date;
             endDate?: Date;
-            offset?: number;
             limit?: number;
             maxId?: number;
             minId?: number;

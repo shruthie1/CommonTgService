@@ -38,6 +38,7 @@ import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { SendTgMessageDto } from './dto/send-message.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import bigInt from 'big-integer';
 
 @Controller('telegram')
 @ApiTags('Telegram')
@@ -519,7 +520,161 @@ export class TelegramController {
             throw new BadRequestException('Chat ID is required and cannot be empty');
         }
         
-        return this.telegramService.downloadMediaFile(mobile, messageId, chatId, res);
+        try {
+            const fileInfo = await this.telegramService.getMediaFileDownloadInfo(mobile, messageId, chatId);
+            
+            // Check If-None-Match header for 304 Not Modified
+            if (res.req.headers['if-none-match'] === fileInfo.etag) {
+                return res.status(304).end();
+            }
+            
+            // Support HTTP Range requests for video streaming
+            const range = res.req.headers.range;
+            const chunkSize = 512 * 1024; // 512 KB chunks
+            
+            if (range && fileInfo.fileSize > 0) {
+                // Parse Range header: "bytes=start-end"
+                const parts = range.replace(/bytes=/, "").split("-");
+                const start = parseInt(parts[0], 10);
+                const end = parts[1] ? parseInt(parts[1], 10) : fileInfo.fileSize - 1;
+                const chunksize = (end - start) + 1;
+
+                // Validate range
+                if (start >= fileInfo.fileSize || end >= fileInfo.fileSize || start > end) {
+                    res.status(416).setHeader('Content-Range', `bytes */${fileInfo.fileSize}`);
+                    return res.end();
+                }
+
+                res.status(206); // Partial Content
+                res.setHeader('Content-Range', `bytes ${start}-${end}/${fileInfo.fileSize}`);
+                res.setHeader('Accept-Ranges', 'bytes');
+                res.setHeader('Content-Length', chunksize);
+                res.setHeader('Content-Type', fileInfo.contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('ETag', fileInfo.etag);
+
+                // Stream only the requested range
+                for await (const chunk of this.telegramService.streamMediaFile(
+                    mobile, 
+                    fileInfo.fileLocation, 
+                    bigInt(start), 
+                    chunksize, 
+                    chunkSize
+                )) {
+                    res.write(chunk);
+                }
+            } else {
+                // Full file download
+                res.setHeader('Content-Type', fileInfo.contentType);
+                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('ETag', fileInfo.etag);
+                res.setHeader('Accept-Ranges', 'bytes');
+                
+                if (fileInfo.fileSize > 0) {
+                    res.setHeader('Content-Length', fileInfo.fileSize);
+                }
+
+                for await (const chunk of this.telegramService.streamMediaFile(
+                    mobile, 
+                    fileInfo.fileLocation, 
+                    bigInt(0), 
+                    5 * 1024 * 1024, 
+                    chunkSize
+                )) {
+                    res.write(chunk);
+                }
+            }
+            res.end();
+        } catch (error) {
+            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found')) {
+                return res.status(404).send(error.message || 'File reference expired');
+            }
+            if (!res.headersSent) {
+                res.status(500).send('Error downloading media');
+            }
+        }
+    }
+
+    @Get('media/thumbnail/:mobile')
+    @ApiOperation({ 
+        summary: 'Get thumbnail for a media message',
+        description: 'Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.'
+    })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiQuery({ 
+        name: 'chatId', 
+        required: true, 
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
+        example: 'me'
+    })
+    @ApiQuery({ 
+        name: 'messageId', 
+        required: true, 
+        description: 'Message ID containing the media (must be a positive number)',
+        type: Number,
+        example: 12345
+    })
+    @ApiResponse({ 
+        status: 200,
+        description: 'Thumbnail image (JPEG format)',
+        content: {
+            'image/jpeg': { schema: { type: 'string', format: 'binary' } }
+        }
+    })
+    @ApiResponse({ 
+        status: 304,
+        description: 'Not modified (when using If-None-Match header for caching)'
+    })
+    @ApiResponse({ 
+        status: 404, 
+        description: 'Thumbnail not found - message ID does not exist, message has no media, or thumbnail is not available' 
+    })
+    @ApiResponse({ 
+        status: 500,
+        description: 'Error getting thumbnail'
+    })
+    async getThumbnail(
+        @Param('mobile') mobile: string, 
+        @Query('chatId') chatId: string, 
+        @Query('messageId') messageId: number, 
+        @Res() res: Response
+    ) {
+        // Validate messageId
+        if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
+            throw new BadRequestException('Message ID must be a positive integer');
+        }
+        
+        // Validate chatId
+        if (!chatId || chatId.trim().length === 0) {
+            throw new BadRequestException('Chat ID is required and cannot be empty');
+        }
+        
+        try {
+            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId);
+            
+            // Check If-None-Match header for 304 Not Modified
+            if (res.req.headers['if-none-match'] === thumbnail.etag) {
+                return res.status(304).end();
+            }
+            
+            // Set response headers
+            res.setHeader('Content-Type', thumbnail.contentType);
+            res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('ETag', thumbnail.etag);
+            res.setHeader('Content-Length', thumbnail.buffer.length);
+            
+            return res.send(thumbnail.buffer);
+        } catch (error) {
+            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found') || error.message?.includes('not available')) {
+                return res.status(404).send(error.message || 'Thumbnail not available');
+            }
+            if (!res.headersSent) {
+                res.status(500).send('Error getting thumbnail');
+            }
+        }
     }
 
     @Post('media/album/:mobile')
@@ -576,7 +731,7 @@ export class TelegramController {
     @Get('media/metadata/:mobile')
     @ApiOperation({ 
         summary: 'Get media metadata from a chat',
-        description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range.'
+        description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).'
     })
     @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
     @ApiQuery({ 
@@ -587,10 +742,10 @@ export class TelegramController {
     })
     @ApiQuery({ 
         name: 'types', 
-        enum: ['photo', 'video', 'document', 'voice'], 
+        enum: ['photo', 'video', 'document', 'voice', 'all'], 
         required: false, 
         isArray: true,
-        description: 'Filter by media types. If not specified, returns all media types.',
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
         example: ['photo', 'video']
     })
     @ApiQuery({ 
@@ -613,34 +768,27 @@ export class TelegramController {
         example: 50
     })
     @ApiQuery({ 
+        name: 'maxId', 
+        required: false, 
+        type: Number,
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
+        example: 12345
+    })
+    @ApiQuery({ 
         name: 'minId', 
         required: false, 
         type: Number,
         description: 'Minimum message ID to include',
         example: 1000
     })
-    @ApiQuery({ 
-        name: 'maxId', 
-        required: false, 
-        type: Number,
-        description: 'Maximum message ID to include',
-        example: 5000
-    })
-    @ApiQuery({ 
-        name: 'all', 
-        required: false, 
-        type: Boolean,
-        description: 'If true, returns all media types grouped by type',
-        example: false
-    })
     @ApiResponse({ 
         status: 200,
         description: 'Media metadata retrieved successfully',
-        type: Object 
+        type: Object
     })
     @ApiResponse({ 
-        status: 400, 
-        description: 'Invalid request - invalid date format, chat ID, or limit value' 
+        status: 400,
+        description: 'Invalid request - invalid date format, chat ID, or limit value'
     })
     async getMediaMetadata(
         @Param('mobile') mobile: string,
@@ -649,9 +797,8 @@ export class TelegramController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
         @Query('limit') limit?: number,
-        @Query('minId') minId?: number,
         @Query('maxId') maxId?: number,
-        @Query('all') all?: boolean
+        @Query('minId') minId?: number
     ) {
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
@@ -664,13 +811,13 @@ export class TelegramController {
         }
         
         // Parse types array - handle both string and array formats
-        let parsedTypes: ('photo' | 'video' | 'document' | 'voice')[] | undefined;
+        let parsedTypes: ('photo' | 'video' | 'document' | 'voice' | 'all')[] | undefined;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
             parsedTypes = typesArray
                 .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice')[];
+                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice' | 'all')[];
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
@@ -706,16 +853,15 @@ export class TelegramController {
             startDate: parsedStartDate,
             endDate: parsedEndDate,
             limit,
-            minId,
             maxId,
-            all
+            minId
         });
     }
 
     @Get('media/filter/:mobile')
     @ApiOperation({ 
         summary: 'Get filtered media messages from a chat',
-        description: 'Get filtered list of media messages with detailed metadata. Returns array of media items with file information.'
+        description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
     })
     @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
     @ApiQuery({ 
@@ -727,9 +873,9 @@ export class TelegramController {
     @ApiQuery({ 
         name: 'types', 
         required: false, 
-        enum: ['photo', 'video', 'document', 'voice'], 
+        enum: ['photo', 'video', 'document', 'voice', 'all'], 
         isArray: true,
-        description: 'Filter by media types. If not specified, returns all media types.',
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
         example: ['photo', 'video']
     })
     @ApiQuery({ 
@@ -752,26 +898,26 @@ export class TelegramController {
         example: 50
     })
     @ApiQuery({ 
+        name: 'maxId', 
+        required: false, 
+        type: Number, 
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
+        example: 12345
+    })
+    @ApiQuery({ 
         name: 'minId', 
         required: false, 
         type: Number, 
         description: 'Minimum message ID to include',
         example: 1000
     })
-    @ApiQuery({ 
-        name: 'maxId', 
-        required: false, 
-        type: Number, 
-        description: 'Maximum message ID to include',
-        example: 5000
-    })
     @ApiResponse({ 
         status: 200,
-        description: 'Array of filtered media metadata',
-        type: [MediaMetadataDto] 
+        description: 'Paginated media response with standardized format',
+        type: Object
     })
     @ApiResponse({ 
-        status: 400, 
+        status: 400,
         description: 'Invalid request - invalid date format, chat ID, or limit value' 
     })
     async getFilteredMedia(
@@ -781,8 +927,8 @@ export class TelegramController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
         @Query('limit') limit?: number,
-        @Query('minId') minId?: number,
-        @Query('maxId') maxId?: number
+        @Query('maxId') maxId?: number,
+        @Query('minId') minId?: number
     ) {
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
@@ -795,13 +941,13 @@ export class TelegramController {
         }
         
         // Parse types array - handle both string and array formats
-        let parsedTypes: ('photo' | 'video' | 'document' | 'voice')[] | undefined;
+        let parsedTypes: ('photo' | 'video' | 'document' | 'voice' | 'all')[] | undefined;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
             parsedTypes = typesArray
                 .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice')[];
+                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice' | 'all')[];
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
@@ -837,8 +983,8 @@ export class TelegramController {
             startDate: parsedStartDate,
             endDate: parsedEndDate,
             limit,
-            minId,
-            maxId
+            maxId,
+            minId
         });
     }
 

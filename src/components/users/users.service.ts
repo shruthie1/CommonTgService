@@ -170,18 +170,19 @@ export class UsersService {
 
     // Weightages for interaction scoring
     // Higher weights for own content (user-generated) vs received content
+    // Reduced call weightage as requested
     const weights = {
-      ownPhoto: 8,           // Photos sent by user (high engagement)
-      ownVideo: 12,          // Videos sent by user (very high engagement)
+      ownPhoto: 15,           // Photos sent by user (high engagement)
+      ownVideo: 18,          // Videos sent by user (very high engagement)
       otherPhoto: 3,         // Photos received (moderate engagement)
       otherVideo: 5,         // Videos received (good engagement)
       totalPhoto: 2,         // Total photos (fallback if own/other not available)
       totalVideo: 3,         // Total videos (fallback if own/other not available)
-      incomingCall: 15,      // Incoming calls (high engagement - peer initiated)
-      outgoingCall: 8,       // Outgoing calls (good engagement - user initiated)
-      videoCall: 20,         // Video calls (highest engagement)
+      incomingCall: 5,       // Incoming calls (reduced from 15)
+      outgoingCall: 3,       // Outgoing calls (reduced from 8)
+      videoCall: 8,          // Video calls (reduced from 20)
       totalCalls: 1,         // Total calls (fallback)
-      movieCount: -10,       // NEGATIVE: Movie count indicates less genuine interaction
+      movieCount: -5,       // NEGATIVE: Movie count indicates less genuine interaction
     };
 
     // Build filter query
@@ -229,6 +230,30 @@ export class UsersService {
     const pipeline: any[] = [
       // Match stage - apply filters
       { $match: filter },
+      
+      // Lookup session_audits to exclude users whose mobile exists in session audits
+      {
+        $lookup: {
+          from: 'session_audits',
+          localField: 'mobile',
+          foreignField: 'mobile',
+          as: 'sessionAudits'
+        }
+      },
+      
+      // Exclude users whose mobile exists in session_audits collection
+      {
+        $match: {
+          sessionAudits: { $size: 0 } // Only include users with no matching session audits
+        }
+      },
+      
+      // Remove the sessionAudits field as it's no longer needed
+      {
+        $project: {
+          sessionAudits: 0
+        }
+      },
       
       // Add calculated fields for interaction score
       {
@@ -368,6 +393,22 @@ export class UsersService {
       },
       
       // Sort by interaction score (descending)
+      { $sort: { interactionScore: -1 } },
+      
+      // Remove duplicates by mobile (keep the first occurrence which has highest score)
+      {
+        $group: {
+          _id: '$mobile',
+          doc: { $first: '$$ROOT' }
+        }
+      },
+      
+      // Replace root with the document
+      {
+        $replaceRoot: { newRoot: '$doc' }
+      },
+      
+      // Re-sort after deduplication (to maintain score order)
       { $sort: { interactionScore: -1 } },
       
       // Get total count before pagination (using $facet)

@@ -207,7 +207,7 @@ export class ChannelsService {
         { $limit: limit },
         { $project: { randomField: 0 } }
       ];
-      const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline).exec();
+      const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
       return result;
     } catch (error) {
       console.error('🔴 Aggregation Error:', error);
