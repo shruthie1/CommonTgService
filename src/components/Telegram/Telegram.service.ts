@@ -169,9 +169,14 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getSelfMsgsInfo(mobile: string) {
-        const telegramClient = await connectionManager.getClient(mobile)
-        return await telegramClient.getSelfMSgsInfo();
+    async getSelfMsgsInfo(mobile: string, limit?: number) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        try {
+            return await telegramClient.getSelfMSgsInfo(limit);
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting self messages info:', error);
+            throw error;
+        }
     }
 
     async createGroup(mobile: string) {
@@ -196,7 +201,12 @@ export class TelegramService implements OnModuleDestroy {
         try {
             const telegramClient = await connectionManager.getClient(mobile);
             await telegramClient.forwardMediaToBot(fromChatId);
-            const dialogs = await telegramClient.getDialogs({ limit: 500 });
+            const dialogs: any[] = [];
+            // Use iterDialogs for memory-efficient iteration
+            for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
+                dialogs.push(dialog);
+            }
+            
             const channels = dialogs
                 .filter(chat => chat.isChannel || chat.isGroup)
                 .map(chat => {
@@ -247,9 +257,14 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.joinChannel(channelId);
     }
 
-    async getCallLog(mobile: string) {
-        const telegramClient = await connectionManager.getClient(mobile)
-        return await telegramClient.getCallLog();
+    async getCallLog(mobile: string, limit?: number) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        try {
+            return await telegramClient.getCallLog(limit);
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting call log:', error);
+            throw error;
+        }
     }
 
     async getmedia(mobile: string) {
@@ -394,16 +409,31 @@ export class TelegramService implements OnModuleDestroy {
             all?: boolean;
         }) {
         const telegramClient = await connectionManager.getClient(mobile)
-        if (params) {
-            return await telegramClient.getAllMediaMetaData(params);
-        } else {
-            return await telegramClient.getMediaMetadata(params);
+        try {
+            // Use getAllMediaMetaData if 'all' flag is set, otherwise use getMediaMetadata
+            if (params.all) {
+                return await telegramClient.getAllMediaMetaData(params);
+            } else {
+                return await telegramClient.getMediaMetadata(params);
+            }
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting media metadata:', error);
+            throw error;
         }
     }
 
     async downloadMediaFile(mobile: string, messageId: number, chatId: string, res: any) {
         const telegramClient = await connectionManager.getClient(mobile)
-        return await telegramClient.downloadMediaFile(messageId, chatId, res)
+        try {
+            return await telegramClient.downloadMediaFile(messageId, chatId, res)
+        } catch (error) {
+            this.logger.error(mobile, 'Error downloading media file:', error);
+            // If response hasn't been sent yet, send error
+            if (!res.headersSent) {
+                res.status(500).send('Error downloading media file');
+            }
+            throw error;
+        }
     }
 
     async forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number) {
@@ -448,12 +478,14 @@ export class TelegramService implements OnModuleDestroy {
     async getDialogs(mobile: string, query: DialogsQueryDto) {
         const telegramClient = await connectionManager.getClient(mobile);
         const { limit = 10, offsetId, archived = false } = query;
-        const dialogs = await telegramClient.getDialogs({ limit, offsetId, archived });
         const chatData = [];
-        for (const chat of dialogs) {
+        
+        // Use iterDialogs for memory-efficient iteration
+        for await (const chat of telegramClient.client.iterDialogs({ limit, offsetId, archived })) {
             const chatEntity = await chat.entity.toJSON();
             chatData.push(chatEntity);
         }
+        
         return chatData;
     }
 
@@ -573,7 +605,12 @@ export class TelegramService implements OnModuleDestroy {
 
     async sendMediaAlbum(mobile: string, album: MediaAlbumOptions) {
         const telegramClient = await connectionManager.getClient(mobile);
-        return await telegramClient.sendMediaAlbum(album)
+        try {
+            return await telegramClient.sendMediaAlbum(album)
+        } catch (error) {
+            this.logger.error(mobile, 'Error sending media album:', error);
+            throw error;
+        }
     }
 
     async sendMessage(mobile: string, params: SendTgMessageDto) {
@@ -591,7 +628,12 @@ export class TelegramService implements OnModuleDestroy {
         }
     ) {
         const telegramClient = await connectionManager.getClient(mobile);
-        return await telegramClient.sendVoiceMessage(voice)
+        try {
+            return await telegramClient.sendVoiceMessage(voice)
+        } catch (error) {
+            this.logger.error(mobile, 'Error sending voice message:', error);
+            throw error;
+        }
     }
 
     async cleanupChat(
@@ -707,8 +749,13 @@ export class TelegramService implements OnModuleDestroy {
         }
     ) {
         const telegramClient = await connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Get filtered media', params);
-        return await telegramClient.getFilteredMedia(params);
+        try {
+            this.logger.info(mobile, 'Get filtered media', params);
+            return await telegramClient.getFilteredMedia(params);
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting filtered media:', error);
+            throw error;
+        }
     }
 
     // Contact Management
@@ -1006,6 +1053,8 @@ export class TelegramService implements OnModuleDestroy {
         lastName?: string;
         totalMessages: number;
         interactionScore: number;
+        engagementLevel: 'recent' | 'active' | 'dormant';
+        lastActivityDays: number;
         calls: {
             total: number;
             incoming: {
@@ -1032,7 +1081,12 @@ export class TelegramService implements OnModuleDestroy {
     }[]> {
         const telegramClient = await connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get top private chats');
-        return await telegramClient.getTopPrivateChats();
+        try {
+            return await telegramClient.getTopPrivateChats();
+        } catch (error) {
+            this.logger.error(mobile, 'Error getting top private chats:', error);
+            throw error;
+        }
     }
 
     async addBotsToChannel(

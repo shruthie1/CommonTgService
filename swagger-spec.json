@@ -1446,6 +1446,7 @@
     },
     "/telegram/monitoring/calllog/{mobile}": {
       "get": {
+        "description": "Retrieves comprehensive call statistics including incoming/outgoing calls, video/audio breakdown, and per-chat call counts. Uses server-side filtering for optimal performance. Supports pagination via limit parameter (default: 1000, max: 10000).",
         "operationId": "TelegramController_getCallLogStats",
         "parameters": [
           {
@@ -1456,21 +1457,109 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of calls to analyze (default: 1000, max: 10000)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "example": 1000,
+              "type": "number"
+            }
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Call log statistics retrieved successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "outgoing": {
+                      "type": "number",
+                      "description": "Total outgoing calls"
+                    },
+                    "incoming": {
+                      "type": "number",
+                      "description": "Total incoming calls"
+                    },
+                    "video": {
+                      "type": "number",
+                      "description": "Total video calls"
+                    },
+                    "audio": {
+                      "type": "number",
+                      "description": "Total audio calls"
+                    },
+                    "chatCallCounts": {
+                      "type": "array",
+                      "description": "Per-chat call statistics (only chats with >4 calls)",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "chatId": {
+                            "type": "string"
+                          },
+                          "phone": {
+                            "type": "string"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "msgs": {
+                            "type": "number",
+                            "description": "Total messages in chat"
+                          },
+                          "video": {
+                            "type": "number",
+                            "description": "Video messages count"
+                          },
+                          "photo": {
+                            "type": "number",
+                            "description": "Photo messages count"
+                          },
+                          "peerType": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "group",
+                              "channel"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "totalCalls": {
+                      "type": "number",
+                      "description": "Total number of calls analyzed"
+                    },
+                    "analyzedCalls": {
+                      "type": "number",
+                      "description": "Number of calls actually processed"
+                    }
+                  }
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad Request - invalid limit parameter"
+          },
+          "500": {
+            "description": "Internal Server Error"
           }
         },
-        "summary": "Get call log statistics",
+        "summary": "Get call log statistics with enhanced filtering",
         "tags": [
           "Telegram"
         ]
@@ -1552,14 +1641,16 @@
     },
     "/telegram/media/send/{mobile}": {
       "post": {
+        "description": "Send a photo or file to a chat. Maximum file size is 100MB. Supports images, videos, and documents.",
         "operationId": "TelegramController_sendMedia",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           }
@@ -1575,8 +1666,8 @@
           }
         },
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Media sent successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -1584,6 +1675,12 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request - file too large, invalid URL, or missing required fields"
+          },
+          "500": {
+            "description": "Failed to send media - check Telegram connection or file accessibility"
           }
         },
         "summary": "Send media message",
@@ -1594,14 +1691,16 @@
     },
     "/telegram/media/download/{mobile}": {
       "get": {
+        "description": "Download or preview media from a Telegram message. Images and videos preview in browser, other files download. Supports HTTP Range requests for video streaming.",
         "operationId": "TelegramController_downloadMedia",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           },
@@ -1609,7 +1708,9 @@
             "name": "chatId",
             "required": true,
             "in": "query",
+            "description": "Chat ID or username. Use \"me\" for saved messages, channel username (e.g., \"channelname\"), or numeric ID",
             "schema": {
+              "example": "me",
               "type": "string"
             }
           },
@@ -1617,24 +1718,51 @@
             "name": "messageId",
             "required": true,
             "in": "query",
+            "description": "Message ID containing the media (must be a positive number)",
             "schema": {
+              "example": 12345,
               "type": "number"
             }
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Media file (preview in browser for images/videos, download for other types)",
             "content": {
-              "application/json": {
+              "image/*": {
                 "schema": {
-                  "type": "object"
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
+          },
+          "206": {
+            "description": "Partial content (when using Range header for video streaming)"
+          },
+          "304": {
+            "description": "Not modified (when using If-None-Match header for caching)"
+          },
+          "404": {
+            "description": "Media not found - message ID does not exist or message has no media"
+          },
+          "416": {
+            "description": "Range not satisfiable - invalid Range header"
           }
         },
-        "summary": "Download media from a message",
+        "summary": "Preview or download media from a message",
         "tags": [
           "Telegram"
         ]
@@ -1642,14 +1770,16 @@
     },
     "/telegram/media/album/{mobile}": {
       "post": {
+        "description": "Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.",
         "operationId": "TelegramController_sendMediaAlbum",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           }
@@ -1665,15 +1795,48 @@
           }
         },
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Album sent with summary of results",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "number",
+                      "description": "Number of successfully sent items"
+                    },
+                    "failed": {
+                      "type": "number",
+                      "description": "Number of failed items"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "number",
+                            "description": "Index of failed item"
+                          },
+                          "error": {
+                            "type": "string",
+                            "description": "Error message"
+                          }
+                        }
+                      },
+                      "description": "Details of failed items (only present if failed > 0)"
+                    }
+                  }
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request - empty album, invalid URLs, or file size exceeds limit"
+          },
+          "500": {
+            "description": "Failed to send album - all items failed or Telegram connection error"
           }
         },
         "summary": "Send media album (multiple photos/videos)",
@@ -1684,14 +1847,16 @@
     },
     "/telegram/media/metadata/{mobile}": {
       "get": {
+        "description": "Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range.",
         "operationId": "TelegramController_getMediaMetadata",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           },
@@ -1699,26 +1864,19 @@
             "name": "chatId",
             "required": true,
             "in": "query",
+            "description": "Chat ID or username. Use \"me\" for saved messages, channel username, or numeric ID",
             "schema": {
+              "example": "me",
               "type": "string"
-            }
-          },
-          {
-            "name": "types",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           },
           {
             "name": "startDate",
             "required": false,
             "in": "query",
+            "description": "Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)",
             "schema": {
+              "example": "2024-01-01",
               "type": "string"
             }
           },
@@ -1726,7 +1884,9 @@
             "name": "endDate",
             "required": false,
             "in": "query",
+            "description": "End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)",
             "schema": {
+              "example": "2024-12-31",
               "type": "string"
             }
           },
@@ -1734,8 +1894,9 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Number of messages to fetch",
+            "description": "Maximum number of messages to fetch (default: 50, max: 1000)",
             "schema": {
+              "example": 50,
               "type": "number"
             }
           },
@@ -1743,7 +1904,9 @@
             "name": "minId",
             "required": false,
             "in": "query",
+            "description": "Minimum message ID to include",
             "schema": {
+              "example": 1000,
               "type": "number"
             }
           },
@@ -1751,7 +1914,9 @@
             "name": "maxId",
             "required": false,
             "in": "query",
+            "description": "Maximum message ID to include",
             "schema": {
+              "example": 5000,
               "type": "number"
             }
           },
@@ -1759,14 +1924,34 @@
             "name": "all",
             "required": false,
             "in": "query",
+            "description": "If true, returns all media types grouped by type",
             "schema": {
+              "example": false,
               "type": "boolean"
+            }
+          },
+          {
+            "name": "types",
+            "required": false,
+            "in": "query",
+            "description": "Filter by media types. If not specified, returns all media types.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "photo",
+                  "video",
+                  "document",
+                  "voice"
+                ]
+              }
             }
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Media metadata retrieved successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -1774,6 +1959,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request - invalid date format, chat ID, or limit value"
           }
         },
         "summary": "Get media metadata from a chat",
@@ -1784,14 +1972,16 @@
     },
     "/telegram/media/filter/{mobile}": {
       "get": {
+        "description": "Get filtered list of media messages with detailed metadata. Returns array of media items with file information.",
         "operationId": "TelegramController_getFilteredMedia",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           },
@@ -1799,28 +1989,19 @@
             "name": "chatId",
             "required": true,
             "in": "query",
-            "description": "Chat ID to get media from",
+            "description": "Chat ID or username. Use \"me\" for saved messages, channel username, or numeric ID",
             "schema": {
+              "example": "me",
               "type": "string"
-            }
-          },
-          {
-            "name": "types",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           },
           {
             "name": "startDate",
             "required": false,
             "in": "query",
-            "description": "Filter media after this date",
+            "description": "Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)",
             "schema": {
+              "example": "2024-01-01",
               "type": "string"
             }
           },
@@ -1828,8 +2009,9 @@
             "name": "endDate",
             "required": false,
             "in": "query",
-            "description": "Filter media before this date",
+            "description": "Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)",
             "schema": {
+              "example": "2024-12-31",
               "type": "string"
             }
           },
@@ -1837,8 +2019,9 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Number of media items to fetch",
+            "description": "Maximum number of media items to fetch (default: 50, max: 1000)",
             "schema": {
+              "example": 50,
               "type": "number"
             }
           },
@@ -1846,8 +2029,9 @@
             "name": "minId",
             "required": false,
             "in": "query",
-            "description": "Minimum message ID",
+            "description": "Minimum message ID to include",
             "schema": {
+              "example": 1000,
               "type": "number"
             }
           },
@@ -1855,15 +2039,34 @@
             "name": "maxId",
             "required": false,
             "in": "query",
-            "description": "Maximum message ID",
+            "description": "Maximum message ID to include",
             "schema": {
+              "example": 5000,
               "type": "number"
+            }
+          },
+          {
+            "name": "types",
+            "required": false,
+            "in": "query",
+            "description": "Filter by media types. If not specified, returns all media types.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "photo",
+                  "video",
+                  "document",
+                  "voice"
+                ]
+              }
             }
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Array of filtered media metadata",
             "content": {
               "application/json": {
                 "schema": {
@@ -1874,6 +2077,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request - invalid date format, chat ID, or limit value"
           }
         },
         "summary": "Get filtered media messages from a chat",
@@ -2583,14 +2789,16 @@
     },
     "/telegram/media/voice/{mobile}": {
       "post": {
+        "description": "Send a voice message (audio file) to a chat. Maximum file size is 100MB. Duration is optional but recommended for better playback.",
         "operationId": "TelegramController_sendVoiceMessage",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
+            "description": "Mobile number of the Telegram account",
             "schema": {
+              "example": "1234567890",
               "type": "string"
             }
           }
@@ -2603,25 +2811,36 @@
                 "type": "object",
                 "properties": {
                   "chatId": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Chat ID or username",
+                    "example": "me"
                   },
                   "url": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "URL of the voice file (must be accessible)",
+                    "example": "https://example.com/voice.ogg"
                   },
                   "duration": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Duration in seconds (optional but recommended)",
+                    "example": 30
                   },
                   "caption": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Optional caption for the voice message"
                   }
-                }
+                },
+                "required": [
+                  "chatId",
+                  "url"
+                ]
               }
             }
           }
         },
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Voice message sent successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -2629,6 +2848,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request - missing chatId/url, file too large, or invalid URL"
           }
         },
         "summary": "Send voice message",
@@ -3641,6 +3863,7 @@
     },
     "/telegram/chats/top-private/{mobile}": {
       "get": {
+        "description": "Retrieves top 10 private chats ranked by engagement score using advanced filtering. Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. Considers recency, mutual engagement, reply chains, and call history.",
         "operationId": "TelegramController_getTopPrivateChats",
         "parameters": [
           {
@@ -3654,18 +3877,223 @@
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
+          "200": {
+            "description": "Top private chats retrieved successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "chatId": {
+                        "type": "string",
+                        "description": "Chat/user ID"
+                      },
+                      "username": {
+                        "type": "string",
+                        "description": "Username (if available)"
+                      },
+                      "firstName": {
+                        "type": "string",
+                        "description": "First name"
+                      },
+                      "lastName": {
+                        "type": "string",
+                        "description": "Last name"
+                      },
+                      "totalMessages": {
+                        "type": "number",
+                        "description": "Total messages in conversation"
+                      },
+                      "interactionScore": {
+                        "type": "number",
+                        "description": "Calculated engagement score (higher = more active)"
+                      },
+                      "engagementLevel": {
+                        "type": "string",
+                        "enum": [
+                          "recent",
+                          "active",
+                          "dormant"
+                        ],
+                        "description": "Activity classification: recent (≤7 days), active (7-30 days), dormant (30-90 days)"
+                      },
+                      "lastActivityDays": {
+                        "type": "number",
+                        "description": "Days since last activity"
+                      },
+                      "calls": {
+                        "type": "object",
+                        "properties": {
+                          "total": {
+                            "type": "number"
+                          },
+                          "incoming": {
+                            "type": "object",
+                            "properties": {
+                              "total": {
+                                "type": "number"
+                              },
+                              "audio": {
+                                "type": "number"
+                              },
+                              "video": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "outgoing": {
+                            "type": "object",
+                            "properties": {
+                              "total": {
+                                "type": "number"
+                              },
+                              "audio": {
+                                "type": "number"
+                              },
+                              "video": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "media": {
+                        "type": "object",
+                        "properties": {
+                          "photos": {
+                            "type": "number",
+                            "description": "Total photos shared"
+                          },
+                          "videos": {
+                            "type": "number",
+                            "description": "Total videos shared"
+                          }
+                        }
+                      },
+                      "activityBreakdown": {
+                        "type": "object",
+                        "description": "Percentage breakdown of interaction types",
+                        "properties": {
+                          "videoCalls": {
+                            "type": "number",
+                            "description": "Percentage from video calls"
+                          },
+                          "audioCalls": {
+                            "type": "number",
+                            "description": "Percentage from audio calls"
+                          },
+                          "mediaSharing": {
+                            "type": "number",
+                            "description": "Percentage from media sharing"
+                          },
+                          "textMessages": {
+                            "type": "number",
+                            "description": "Percentage from text messages"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal Server Error"
           }
         },
-        "summary": "Get top 5 private chats with detailed statistics",
+        "summary": "Get top private chats with smart activity-based filtering",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
+    "/telegram/messages/self-msg-info/{mobile}": {
+      "get": {
+        "description": "Retrieves comprehensive statistics about photos, videos, and movies in saved messages (self chat). Uses memory-efficient iterMessages for processing large message histories. Supports configurable limit for analysis scope (default: 500, max: 10000).",
+        "operationId": "TelegramController_getSelfMsgsInfo",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of messages to analyze (default: 500, max: 10000)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "example": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Self messages statistics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "number",
+                      "description": "Total messages in saved messages"
+                    },
+                    "photoCount": {
+                      "type": "number",
+                      "description": "Total photos"
+                    },
+                    "videoCount": {
+                      "type": "number",
+                      "description": "Total videos"
+                    },
+                    "movieCount": {
+                      "type": "number",
+                      "description": "Messages containing movie-related keywords (links, shared content)"
+                    },
+                    "ownPhotoCount": {
+                      "type": "number",
+                      "description": "Photos sent by user"
+                    },
+                    "otherPhotoCount": {
+                      "type": "number",
+                      "description": "Photos received from others"
+                    },
+                    "ownVideoCount": {
+                      "type": "number",
+                      "description": "Videos sent by user"
+                    },
+                    "otherVideoCount": {
+                      "type": "number",
+                      "description": "Videos received from others"
+                    },
+                    "analyzedMessages": {
+                      "type": "number",
+                      "description": "Number of messages actually analyzed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - invalid limit parameter"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get statistics about media messages in saved messages",
         "tags": [
           "Telegram"
         ]
@@ -6932,6 +7360,222 @@
           }
         },
         "summary": "Search users based on various parameters",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/top-interacted": {
+      "get": {
+        "description": "Retrieves users ranked by interaction score calculated from saved DB stats. Score is based on photos, videos, calls, and other interactions. Movie count has negative weightage as it indicates less genuine interaction. Supports filtering and pagination for efficient data retrieval.",
+        "operationId": "UsersController_getTopInteractionUsers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (default: 1, minimum: 1)",
+            "schema": {
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of results per page (default: 20, max: 100)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minScore",
+            "required": false,
+            "in": "query",
+            "description": "Minimum interaction score to include (default: 0)",
+            "schema": {
+              "minimum": 0,
+              "example": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minCalls",
+            "required": false,
+            "in": "query",
+            "description": "Minimum total calls required (default: 0)",
+            "schema": {
+              "minimum": 0,
+              "example": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minPhotos",
+            "required": false,
+            "in": "query",
+            "description": "Minimum photos required (default: 0)",
+            "schema": {
+              "minimum": 0,
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minVideos",
+            "required": false,
+            "in": "query",
+            "description": "Minimum videos required (default: 0)",
+            "schema": {
+              "minimum": 0,
+              "example": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "excludeExpired",
+            "required": false,
+            "in": "query",
+            "description": "Exclude expired users (default: true)",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "excludeTwoFA",
+            "required": false,
+            "in": "query",
+            "description": "Exclude users with 2FA enabled (default: false)",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "gender",
+            "required": false,
+            "in": "query",
+            "description": "Filter by gender",
+            "schema": {
+              "example": "male",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users retrieved successfully with interaction scores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "description": "List of users with interaction scores",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "User ID"
+                          },
+                          "mobile": {
+                            "type": "string"
+                          },
+                          "tgId": {
+                            "type": "string"
+                          },
+                          "firstName": {
+                            "type": "string"
+                          },
+                          "lastName": {
+                            "type": "string"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "photoCount": {
+                            "type": "number"
+                          },
+                          "videoCount": {
+                            "type": "number"
+                          },
+                          "ownPhotoCount": {
+                            "type": "number"
+                          },
+                          "ownVideoCount": {
+                            "type": "number"
+                          },
+                          "otherPhotoCount": {
+                            "type": "number"
+                          },
+                          "otherVideoCount": {
+                            "type": "number"
+                          },
+                          "movieCount": {
+                            "type": "number",
+                            "description": "Has negative impact on score"
+                          },
+                          "calls": {
+                            "type": "object",
+                            "properties": {
+                              "outgoing": {
+                                "type": "number"
+                              },
+                              "incoming": {
+                                "type": "number"
+                              },
+                              "video": {
+                                "type": "number"
+                              },
+                              "totalCalls": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "interactionScore": {
+                            "type": "number",
+                            "description": "Calculated interaction score (higher = more active/engaged)"
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "number",
+                      "description": "Total number of users matching filters"
+                    },
+                    "page": {
+                      "type": "number",
+                      "description": "Current page number"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "description": "Results per page"
+                    },
+                    "totalPages": {
+                      "type": "number",
+                      "description": "Total number of pages"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - invalid query parameters"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get users with top interaction scores",
         "tags": [
           "Telegram Users"
         ]
