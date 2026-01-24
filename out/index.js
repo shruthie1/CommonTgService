@@ -1526,6 +1526,9 @@ let TelegramController = class TelegramController {
                 res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
                 res.setHeader('Cache-Control', 'public, max-age=3600');
                 res.setHeader('ETag', fileInfo.etag);
+                res.setHeader('X-Content-Type-Options', 'nosniff');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
                 for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(start), chunksize, chunkSize)) {
                     res.write(chunk);
                 }
@@ -1536,6 +1539,9 @@ let TelegramController = class TelegramController {
                 res.setHeader('Cache-Control', 'public, max-age=3600');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
+                res.setHeader('X-Content-Type-Options', 'nosniff');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Accept-Ranges');
                 if (fileInfo.fileSize > 0) {
                     res.setHeader('Content-Length', fileInfo.fileSize);
                 }
