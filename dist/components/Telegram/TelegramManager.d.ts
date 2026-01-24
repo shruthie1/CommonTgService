@@ -881,7 +881,7 @@ declare class TelegramManager {
             other: number;
         };
     }>;
-    getTopPrivateChats(): Promise<Array<{
+    getTopPrivateChats(limit?: number): Promise<Array<{
         chatId: string;
         username?: string;
         firstName?: string;
