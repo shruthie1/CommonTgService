@@ -211,8 +211,35 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })
-  async findAll() {
-    return this.usersService.findAll();
+  @ApiQuery({ 
+    name: 'limit', 
+    required: false, 
+    type: Number,
+    description: 'Number of results to return (default: 100)',
+    example: 100
+  })
+  @ApiQuery({ 
+    name: 'skip', 
+    required: false, 
+    type: Number,
+    description: 'Number of results to skip (default: 0)',
+    example: 0
+  })
+  async findAll(
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string
+  ) {
+    const limitNum = limit ? parseInt(limit, 10) : 100;
+    const skipNum = skip ? parseInt(skip, 10) : 0;
+    
+    if (isNaN(limitNum) || limitNum < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+    if (isNaN(skipNum) || skipNum < 0) {
+      throw new BadRequestException('Skip must be a non-negative integer');
+    }
+    
+    return this.usersService.findAll(limitNum, skipNum);
   }
 
   @Get(':tgId')

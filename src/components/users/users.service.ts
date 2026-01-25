@@ -48,8 +48,8 @@ export class UsersService {
     }
   }
 
-  async findAll(): Promise<User[]> {
-    return this.userModel.find().exec();
+  async findAll(limit: number = 100, skip: number = 0): Promise<User[]> {
+    return this.userModel.find().limit(limit).skip(skip).exec();
   }
 
   async findOne(tgId: string): Promise<User> {
@@ -248,7 +248,20 @@ export class UsersService {
         }
       },
       
-      // Remove the sessionAudits field as it's no longer needed
+      // Remove duplicates by mobile EARLY (before scoring to reduce data volume)
+      {
+        $group: {
+          _id: '$mobile',
+          doc: { $first: '$$ROOT' }
+        }
+      },
+      
+      // Replace root with the document
+      {
+        $replaceRoot: { newRoot: '$doc' }
+      },
+      
+      // Remove the sessionAudits field
       {
         $project: {
           sessionAudits: 0
@@ -431,7 +444,10 @@ export class UsersService {
       }
     ];
 
-    const result = await this.userModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+    const result = await this.userModel.aggregate(pipeline, { 
+      allowDiskUse: true,
+      maxTimeMS: 60000
+    }).exec();
     
     if (!result || result.length === 0) {
       return {
@@ -446,17 +462,11 @@ export class UsersService {
     const aggregationResult = result[0];
     const totalUsers = aggregationResult.total || 0;
     const users = aggregationResult.users || [];
-    
-    // Remove temporary score fields from response
-    const cleanedUsers = users.map((user: any) => {
-      const { photoScore, videoScore, callScore, movieScore, ...cleanUser } = user;
-      return cleanUser;
-    });
 
     const totalPages = Math.ceil(totalUsers / limitNum);
 
     return {
-      users: cleanedUsers,
+      users,
       total: totalUsers,
       page: pageNum,
       limit: limitNum,
