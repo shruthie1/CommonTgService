@@ -319,6 +319,7 @@ let UsersService = class UsersService {
                     interactionScore: { $gte: minScore }
                 }
             },
+            { $limit: Math.max(10000, (pageNum * limitNum) + 1000) },
             { $sort: { interactionScore: -1 } },
             {
                 $facet: {
@@ -330,30 +331,33 @@ let UsersService = class UsersService {
                 }
             }
         ];
-        const result = await this.userModel.aggregate(pipeline, {
-            allowDiskUse: true,
-            maxTimeMS: 60000
-        }).exec();
-        if (!result || result.length === 0) {
+        try {
+            const result = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
+            if (!result || result.length === 0) {
+                return {
+                    users: [],
+                    total: 0,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages: 0
+                };
+            }
+            const aggregationResult = result[0];
+            const totalUsers = aggregationResult.total || 0;
+            const users = aggregationResult.users || [];
+            const totalPages = Math.ceil(totalUsers / limitNum);
             return {
-                users: [],
-                total: 0,
+                users,
+                total: totalUsers,
                 page: pageNum,
                 limit: limitNum,
-                totalPages: 0
+                totalPages
             };
         }
-        const aggregationResult = result[0];
-        const totalUsers = aggregationResult.total || 0;
-        const users = aggregationResult.users || [];
-        const totalPages = Math.ceil(totalUsers / limitNum);
-        return {
-            users,
-            total: totalUsers,
-            page: pageNum,
-            limit: limitNum,
-            totalPages
-        };
+        catch (error) {
+            console.error('Error in getTopInteractionUsers aggregation:', error);
+            throw new common_1.InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);
+        }
     }
 };
 exports.UsersService = UsersService;
