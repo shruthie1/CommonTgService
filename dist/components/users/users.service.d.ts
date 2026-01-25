@@ -13,7 +13,7 @@ export declare class UsersService {
     private readonly botsService;
     constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService);
     create(user: CreateUserDto): Promise<User | undefined>;
-    findAll(): Promise<User[]>;
+    findAll(limit?: number, skip?: number): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, user: UpdateUserDto): Promise<number>;
     updateByFilter(filter: any, user: UpdateUserDto): Promise<number>;

@@ -17,7 +17,7 @@ export declare class UsersController {
         limit: number;
         totalPages: number;
     }>;
-    findAll(): Promise<User[]>;
+    findAll(limit?: string, skip?: string): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
     remove(tgId: string): Promise<void>;
