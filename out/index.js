@@ -31794,8 +31794,8 @@ let UsersService = class UsersService {
                 };
             }
             const aggregationResult = result[0];
-            const totalUsers = aggregationResult.total || 0;
-            const users = aggregationResult.users || [];
+            const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
+            const users = aggregationResult.paginatedResults || [];
             const totalPages = Math.ceil(totalUsers / limitNum);
             return {
                 users,
