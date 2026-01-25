@@ -864,6 +864,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 lastChecked: new Date()
             });
             this.logger.debug(`Health check passed for ${mobile}`);
+            await (0, Helpers_1.sleep)(5000);
             return true;
         }
         catch (error) {
@@ -872,6 +873,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
+            await (0, Helpers_1.sleep)(5000);
             return false;
         }
         finally {
