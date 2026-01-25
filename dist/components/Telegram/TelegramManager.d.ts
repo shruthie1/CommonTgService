@@ -123,7 +123,12 @@ declare class TelegramManager {
         totalCalls: number;
         analyzedCalls: number;
     }>;
-    getCallLogsInternal(): Promise<{}>;
+    getCallLogsInternal(): Promise<Record<string, {
+        outgoing: number;
+        incoming: number;
+        video: number;
+        totalCalls: number;
+    }>>;
     handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
@@ -914,6 +919,7 @@ declare class TelegramManager {
             textMessages: number;
         };
     }>>;
+    private analyzeChatEngagement;
     createGroupOrChannel(options: GroupOptions): Promise<Api.TypeUpdates>;
     createBot(options: {
         name: string;
