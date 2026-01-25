@@ -1036,7 +1036,6 @@ export class BufferClientService implements OnModuleDestroy {
                     : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
                 this.logger.debug(`${bufferClientMobile} health check ${healthCheckPassed ? 'PASSED' : 'FAILED'}`);
-                await sleep(5000);
                 if (!healthCheckPassed) {
                     this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
                     continue; // Skip to next client if health check failed permanently
@@ -1391,7 +1390,8 @@ export class BufferClientService implements OnModuleDestroy {
                 channels: channels.ids.length,
                 lastChecked: new Date()
             });
-            this.logger.debug(`Health check passed for ${mobile}`);
+            this.logger.debug(`Health check PASSED for ${mobile}`);
+            await sleep(5000);
             return true;
         } catch (error) {
             const errorDetails = this.handleError(error, 'Health check failed', mobile);
@@ -1399,8 +1399,10 @@ export class BufferClientService implements OnModuleDestroy {
             if (isPermanentError(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
-            await connectionManager.unregisterClient(mobile);
+            await sleep(5000);
             return false;
+        } finally {
+            await connectionManager.unregisterClient(mobile);
         }
     }
 
