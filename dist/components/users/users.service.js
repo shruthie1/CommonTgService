@@ -52,8 +52,8 @@ let UsersService = class UsersService {
             return newUser.save();
         }
     }
-    async findAll() {
-        return this.userModel.find().exec();
+    async findAll(limit = 100, skip = 0) {
+        return this.userModel.find().limit(limit).skip(skip).exec();
     }
     async findOne(tgId) {
         const user = await (await this.userModel.findOne({ tgId }).exec())?.toJSON();
@@ -180,6 +180,15 @@ let UsersService = class UsersService {
                 $match: {
                     sessionAudits: { $size: 0 }
                 }
+            },
+            {
+                $group: {
+                    _id: '$mobile',
+                    doc: { $first: '$$ROOT' }
+                }
+            },
+            {
+                $replaceRoot: { newRoot: '$doc' }
             },
             {
                 $project: {
@@ -312,16 +321,6 @@ let UsersService = class UsersService {
             },
             { $sort: { interactionScore: -1 } },
             {
-                $group: {
-                    _id: '$mobile',
-                    doc: { $first: '$$ROOT' }
-                }
-            },
-            {
-                $replaceRoot: { newRoot: '$doc' }
-            },
-            { $sort: { interactionScore: -1 } },
-            {
                 $facet: {
                     totalCount: [{ $count: 'count' }],
                     paginatedResults: [
@@ -329,15 +328,12 @@ let UsersService = class UsersService {
                         { $limit: limitNum }
                     ]
                 }
-            },
-            {
-                $project: {
-                    total: { $ifNull: [{ $arrayElemAt: ['$totalCount.count', 0] }, 0] },
-                    users: '$paginatedResults'
-                }
             }
         ];
-        const result = await this.userModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+        const result = await this.userModel.aggregate(pipeline, {
+            allowDiskUse: true,
+            maxTimeMS: 60000
+        }).exec();
         if (!result || result.length === 0) {
             return {
                 users: [],
@@ -350,13 +346,9 @@ let UsersService = class UsersService {
         const aggregationResult = result[0];
         const totalUsers = aggregationResult.total || 0;
         const users = aggregationResult.users || [];
-        const cleanedUsers = users.map((user) => {
-            const { photoScore, videoScore, callScore, movieScore, ...cleanUser } = user;
-            return cleanUser;
-        });
         const totalPages = Math.ceil(totalUsers / limitNum);
         return {
-            users: cleanedUsers,
+            users,
             total: totalUsers,
             page: pageNum,
             limit: limitNum,

@@ -69,8 +69,16 @@ let UsersController = class UsersController {
             gender
         });
     }
-    async findAll() {
-        return this.usersService.findAll();
+    async findAll(limit, skip) {
+        const limitNum = limit ? parseInt(limit, 10) : 100;
+        const skipNum = skip ? parseInt(skip, 10) : 0;
+        if (isNaN(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (isNaN(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
+        return this.usersService.findAll(limitNum, skipNum);
     }
     async findOne(tgId) {
         return this.usersService.findOne(tgId);
@@ -253,8 +261,24 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all users' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Number of results to return (default: 100)',
+        example: 100
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'skip',
+        required: false,
+        type: Number,
+        description: 'Number of results to skip (default: 0)',
+        example: 0
+    }),
+    __param(0, (0, common_1.Query)('limit')),
+    __param(1, (0, common_1.Query)('skip')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findAll", null);
 __decorate([
