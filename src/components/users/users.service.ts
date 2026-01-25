@@ -405,7 +405,11 @@ export class UsersService {
         }
       },
       
-      // Sort by interaction score (descending) - allowDiskUse handles large sorts
+      // CRITICAL FIX: Limit dataset BEFORE sorting to avoid memory overflow
+      // Fetch enough for pagination but not the entire collection
+      { $limit: Math.max(10000, (pageNum * limitNum) + 1000) },
+      
+      // Sort by interaction score (descending)
       { $sort: { interactionScore: -1 } },
       
       // Use $facet for count and pagination in parallel
@@ -420,10 +424,8 @@ export class UsersService {
       }
     ];
 
-    const result = await this.userModel.aggregate(pipeline, { 
-      allowDiskUse: true,
-      maxTimeMS: 60000
-    }).exec();
+    try {
+      const result = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
     
     if (!result || result.length === 0) {
       return {
@@ -448,6 +450,10 @@ export class UsersService {
       limit: limitNum,
       totalPages
     };
+    } catch (error) {
+      console.error('Error in getTopInteractionUsers aggregation:', error);
+      throw new InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);
+    }
   }
 
 }
