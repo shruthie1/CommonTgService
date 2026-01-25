@@ -15617,7 +15617,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
                 this.logger.debug(`${bufferClientMobile} health check ${healthCheckPassed ? 'PASSED' : 'FAILED'}`);
-                await (0, Helpers_1.sleep)(5000);
                 if (!healthCheckPassed) {
                     this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
                     continue;
@@ -15845,7 +15844,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 channels: channels.ids.length,
                 lastChecked: new Date()
             });
-            this.logger.debug(`Health check passed for ${mobile}`);
+            this.logger.debug(`Health check PASSED for ${mobile}`);
+            await (0, Helpers_1.sleep)(5000);
             return true;
         }
         catch (error) {
@@ -15854,8 +15854,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
+            await (0, Helpers_1.sleep)(5000);
             return false;
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }
     getPendingUpdates(doc, now) {
