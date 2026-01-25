@@ -1000,6 +1000,7 @@ export class BufferClientService implements OnModuleDestroy {
         const MIN_COOLDOWN_HOURS = 2; // Match processBufferClient cooldown
         const MAX_UPDATES_PER_CYCLE = 5; // Increased to prevent starvation
         const now = Date.now();
+        this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`)
 
         // Collect all buffer clients with their metadata for priority sorting
         const bufferClientsToProcess: Array<{
@@ -1016,7 +1017,6 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.warn(`Client with ID ${result._id} not found, skipping buffer clients`);
                 continue;
             }
-
                 for (const bufferClientMobile of result.mobiles) {
                     const bufferClient = await this.findOne(bufferClientMobile, false);
                     if (!bufferClient) {
@@ -1056,7 +1056,7 @@ export class BufferClientService implements OnModuleDestroy {
                     if (lastUsed > 0) {
                         // Backfill timestamps for used clients
                         await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
-                        this.logger.debug(`Skipping ${bufferClientMobile} - already used, timestamps backfilled`);
+                        this.logger.debug(`Skipping ${bufferClientMobile} - already used, trying timestamps backfill`);
                         continue;
                     }
                 }
@@ -1336,7 +1336,10 @@ export class BufferClientService implements OnModuleDestroy {
             !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt ||
             !doc.profilePicsUpdatedAt;
 
-        if (!needsBackfill) return;
+        if (!needsBackfill) {
+            this.logger.debug(`Skipping timestamp backfill for ${mobile} (already has all timestamps)`);
+            return
+        };
 
         this.logger.log(`Backfilling timestamp fields for ${mobile}`);
 
@@ -1365,6 +1368,7 @@ export class BufferClientService implements OnModuleDestroy {
         const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
 
         if (!needsHealthCheck) {
+            this.logger.debug(`Health check not needed for ${mobile} (last checked: ${new Date(lastChecked).toISOString()})`);
             return true; // Health check not needed yet
         }
 
@@ -1392,9 +1396,8 @@ export class BufferClientService implements OnModuleDestroy {
             if (isPermanentError(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
-            return false;
-        } finally {
             await connectionManager.unregisterClient(mobile);
+            return false;
         }
     }
 
