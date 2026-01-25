@@ -68,6 +68,7 @@ class ConnectionManager {
                 return await this.createNewClient(mobile, { autoDisconnect, handler });
             }
             catch (error) {
+                this.logger.error(mobile, 'getClient error', error);
                 throw error;
             }
         })();
@@ -94,6 +95,10 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
         try {
             await telegramManager.createClient(options.handler);
+            await (0, Helpers_1.sleep)(500);
+            if (!telegramManager.client) {
+                throw new Error(`Client creation failed - client is null after createClient() for ${mobile}`);
+            }
             await this.validateConnection(mobile, telegramManager);
             clientInfo.state = 'connected';
             clientInfo.connectionAttempts = 1;
@@ -109,6 +114,15 @@ class ConnectionManager {
         }
     }
     async validateConnection(mobile, client) {
+        if (!client) {
+            throw new Error("TelegramManager instance not initialized");
+        }
+        if (!client.client) {
+            throw new Error(`Client not initialized for ${mobile} - createClient may have failed`);
+        }
+        if (!client.client.connected) {
+            throw new Error(`Client not connected for ${mobile}`);
+        }
         await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
             errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,

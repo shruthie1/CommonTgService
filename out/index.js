@@ -4502,28 +4502,49 @@ class TelegramManager {
         this.apiHash = tgCreds.apiHash;
         this.apiId = tgCreds.apiId;
         const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(this.phoneNumber);
-        await (0, withTimeout_1.withTimeout)(async () => {
-            this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
-            this.client.setLogLevel(Logger_1.LogLevel.ERROR);
-            this.client._errorHandler = this.errorHandler.bind(this);
-            await this.client.connect();
-            this.logger.info(this.phoneNumber, "Connected Client Succesfully");
-            this.clearTimeoutErr();
-        }, {
-            timeout: 180000,
-            errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
-        });
-        if (handler && this.client) {
-            if (handlerFn) {
-                this.logger.info(this.phoneNumber, "Adding Custom Event Handler");
-                this.client.addEventHandler(async (event) => { await handlerFn(event); }, new events_1.NewMessage());
+        try {
+            await (0, withTimeout_1.withTimeout)(async () => {
+                this.client = new telegram_1.TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
+                this.client.setLogLevel(Logger_1.LogLevel.ERROR);
+                this.client._errorHandler = this.errorHandler.bind(this);
+                await this.client.connect();
+                this.logger.info(this.phoneNumber, "Connected Client Succesfully");
+                this.clearTimeoutErr();
+            }, {
+                timeout: 180000,
+                errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
+            });
+            if (!this.client) {
+                throw new Error(`Client is null after connection attempt for ${this.phoneNumber}`);
             }
-            else {
-                this.logger.info(this.phoneNumber, "Adding Default Event Handler");
-                this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new events_1.NewMessage());
+            if (handler && this.client) {
+                if (handlerFn) {
+                    this.logger.info(this.phoneNumber, "Adding Custom Event Handler");
+                    this.client.addEventHandler(async (event) => { await handlerFn(event); }, new events_1.NewMessage());
+                }
+                else {
+                    this.logger.info(this.phoneNumber, "Adding Default Event Handler");
+                    this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new events_1.NewMessage());
+                }
+                if (!this.client.connected) {
+                    throw new Error(`Client not connected after connection attempt for ${this.phoneNumber}`);
+                }
             }
+            return this.client;
         }
-        return this.client;
+        catch (error) {
+            this.logger.error(this.phoneNumber, "Client creation failed", error);
+            if (this.client) {
+                try {
+                    await this.client.destroy();
+                }
+                catch (destroyError) {
+                    this.logger.error(this.phoneNumber, "Error destroying failed client", destroyError);
+                }
+                this.client = null;
+            }
+            throw error;
+        }
     }
     async getGrpMembers(entity) {
         try {
@@ -10202,6 +10223,7 @@ class ConnectionManager {
                 return await this.createNewClient(mobile, { autoDisconnect, handler });
             }
             catch (error) {
+                this.logger.error(mobile, 'getClient error', error);
                 throw error;
             }
         })();
@@ -10228,6 +10250,10 @@ class ConnectionManager {
         this.clients.set(mobile, clientInfo);
         try {
             await telegramManager.createClient(options.handler);
+            await (0, Helpers_1.sleep)(500);
+            if (!telegramManager.client) {
+                throw new Error(`Client creation failed - client is null after createClient() for ${mobile}`);
+            }
             await this.validateConnection(mobile, telegramManager);
             clientInfo.state = 'connected';
             clientInfo.connectionAttempts = 1;
@@ -10243,6 +10269,15 @@ class ConnectionManager {
         }
     }
     async validateConnection(mobile, client) {
+        if (!client) {
+            throw new Error("TelegramManager instance not initialized");
+        }
+        if (!client.client) {
+            throw new Error(`Client not initialized for ${mobile} - createClient may have failed`);
+        }
+        if (!client.client.connected) {
+            throw new Error(`Client not connected for ${mobile}`);
+        }
         await (0, withTimeout_1.withTimeout)(() => client.client.getMe(), {
             errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
