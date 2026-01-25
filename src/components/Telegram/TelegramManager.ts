@@ -48,7 +48,7 @@ class TelegramManager {
     public apiHash: string
     private timeoutErr: NodeJS.Timeout = null;
     private static activeClientSetup: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string };
-    
+
     // Media handling constants
     private readonly MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     private readonly FILE_DOWNLOAD_TIMEOUT = 60000; // 60 seconds
@@ -389,30 +389,56 @@ class TelegramManager {
         this.apiHash = tgCreds.apiHash
         this.apiId = tgCreds.apiId
         const tgConfiguration = await generateTGConfig(this.phoneNumber);
-        await withTimeout(async () => {
-            this.client = new TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
-            this.client.setLogLevel(LogLevel.ERROR);
-            this.client._errorHandler = this.errorHandler.bind(this)
-            await this.client.connect();
-            this.logger.info(this.phoneNumber, "Connected Client Succesfully");
-            this.clearTimeoutErr()
-        },
-            {
-                timeout: 180000,
-                errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
+
+        try {
+            await withTimeout(async () => {
+                this.client = new TelegramClient(this.session, this.apiId, this.apiHash, tgConfiguration);
+                this.client.setLogLevel(LogLevel.ERROR);
+                this.client._errorHandler = this.errorHandler.bind(this)
+                await this.client.connect();
+                this.logger.info(this.phoneNumber, "Connected Client Succesfully");
+                this.clearTimeoutErr()
+            },
+                {
+                    timeout: 180000,
+                    errorMessage: `[Tg Manager]\n${this.phoneNumber}: Client Creation TimeOut\n`
+                }
+            )
+
+            // Verify client was created successfully
+            if (!this.client) {
+                throw new Error(`Client is null after connection attempt for ${this.phoneNumber}`);
             }
-        )
-        // const me = <Api.User>await this.client.getMe();
-        if (handler && this.client) {
-            if (handlerFn) {
-                this.logger.info(this.phoneNumber, "Adding Custom Event Handler")
-                this.client.addEventHandler(async (event) => { await handlerFn(event); }, new NewMessage());
-            } else {
-                this.logger.info(this.phoneNumber, "Adding Default Event Handler")
-                this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
+
+            // Add event handlers if requested
+            if (handler && this.client) {
+                if (handlerFn) {
+                    this.logger.info(this.phoneNumber, "Adding Custom Event Handler")
+                    this.client.addEventHandler(async (event) => { await handlerFn(event); }, new NewMessage());
+                } else {
+                    this.logger.info(this.phoneNumber, "Adding Default Event Handler")
+                    this.client.addEventHandler(async (event) => { await this.handleEvents(event); }, new NewMessage());
+                }        // Verify client is connected
+                if (!this.client.connected) {
+                    throw new Error(`Client not connected after connection attempt for ${this.phoneNumber}`);
+                }
+
             }
+
+            return this.client;
+        } catch (error) {
+            // Clean up on failure
+            this.logger.error(this.phoneNumber, "Client creation failed", error);
+            if (this.client) {
+                try {
+                    await this.client.destroy();
+                } catch (destroyError) {
+                    this.logger.error(this.phoneNumber, "Error destroying failed client", destroyError);
+                }
+                this.client = null;
+            }
+            throw error;
         }
-        return this.client
     }
 
     async getGrpMembers(entity: EntityLike) {
@@ -479,7 +505,7 @@ class TelegramManager {
     }
     async getDialogs(params: IterDialogsParams) {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             // Convert iterDialogs to array for backward compatibility
             const chats: any[] = [];
@@ -518,7 +544,7 @@ class TelegramManager {
         analyzedMessages: number;
     }> {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             const self = <Api.User>await this.client.getMe();
             const selfChatId = self.id;
@@ -534,7 +560,7 @@ class TelegramManager {
 
             // Clamp limit to reasonable range
             const maxLimit = Math.min(Math.max(limit, 1), 10000);
-            
+
             // Use iterMessages for memory-efficient processing
             // This processes messages one at a time instead of loading batches into memory
             // Significantly reduces RAM usage, especially for large message histories
@@ -544,13 +570,13 @@ class TelegramManager {
                 reverse: false
             })) {
                 analyzedMessages++;
-                
+
                 // Skip empty messages
                 if (!message) continue;
 
                 // Check for media using proper API types
                 const hasMedia = message.media && !(message.media instanceof Api.MessageMediaEmpty);
-                
+
                 if (hasMedia) {
                     // Check for photo
                     if (message.media instanceof Api.MessageMediaPhoto) {
@@ -561,7 +587,7 @@ class TelegramManager {
                         } else {
                             otherPhotoCount++;
                         }
-                    } 
+                    }
                     // Check for video/document with video
                     else if (message.media instanceof Api.MessageMediaDocument) {
                         const document = message.media.document;
@@ -570,7 +596,7 @@ class TelegramManager {
                             const isVideo = document.attributes.some(
                                 attr => attr instanceof Api.DocumentAttributeVideo
                             );
-                            
+
                             if (isVideo) {
                                 videoCount++;
                                 if (message.out) {
@@ -976,30 +1002,30 @@ class TelegramManager {
             this.logger.info(this.phoneNumber, "messageId image:", message.id);
             const photo = <Api.Photo>message.photo;
             const sizes = photo?.sizes || [];
-            
+
             // Prefer medium size, fallback to largest available
-            const preferredSize = sizes.find((s: any) => s.type === 'm') || 
-                                 sizes.find((s: any) => s.type === 'x') ||
-                                 sizes[sizes.length - 1] ||
-                                 sizes[0];
-            
-            return await this.client.downloadMedia(message, { 
-                thumb: preferredSize || sizes[0] 
+            const preferredSize = sizes.find((s: any) => s.type === 'm') ||
+                sizes.find((s: any) => s.type === 'x') ||
+                sizes[sizes.length - 1] ||
+                sizes[0];
+
+            return await this.client.downloadMedia(message, {
+                thumb: preferredSize || sizes[0]
             });
 
-        } else if (message.media instanceof Api.MessageMediaDocument && 
-                   (message.document?.mimeType?.startsWith('video') || 
-                    message.document?.mimeType?.startsWith('image'))) {
+        } else if (message.media instanceof Api.MessageMediaDocument &&
+            (message.document?.mimeType?.startsWith('video') ||
+                message.document?.mimeType?.startsWith('image'))) {
             this.logger.info(this.phoneNumber, "messageId video:", message.id);
             const thumbs = message.document?.thumbs || [];
-            
+
             // Prefer medium thumb, fallback to largest available
             const preferredThumb = thumbs.find((t: any) => t.type === 'm') ||
-                                  thumbs[thumbs.length - 1] ||
-                                  thumbs[0];
-            
-            return await this.client.downloadMedia(message, { 
-                thumb: preferredThumb || thumbs[0] 
+                thumbs[thumbs.length - 1] ||
+                thumbs[0];
+
+            return await this.client.downloadMedia(message, {
+                thumb: preferredThumb || thumbs[0]
             });
         }
         return null;
@@ -1015,10 +1041,10 @@ class TelegramManager {
             if (message.media instanceof Api.MessageMediaPhoto) {
                 const sizes = (<Api.Photo>message.photo)?.sizes || [];
                 if (sizes.length > 0) {
-                    const preferredSize = sizes.find((s: any) => s.type === 'm') || 
-                                       sizes.find((s: any) => s.type === 'x') ||
-                                       sizes[sizes.length - 1] || 
-                                       sizes[0];
+                    const preferredSize = sizes.find((s: any) => s.type === 'm') ||
+                        sizes.find((s: any) => s.type === 'x') ||
+                        sizes[sizes.length - 1] ||
+                        sizes[0];
                     return await this.downloadWithTimeout(
                         this.client.downloadMedia(message, { thumb: preferredSize }) as any,
                         30000
@@ -1028,8 +1054,8 @@ class TelegramManager {
                 const thumbs = message.document?.thumbs || [];
                 if (thumbs.length > 0) {
                     const preferredThumb = thumbs.find((t: any) => t.type === 'm') ||
-                                         thumbs[thumbs.length - 1] ||
-                                         thumbs[0];
+                        thumbs[thumbs.length - 1] ||
+                        thumbs[0];
                     return await this.downloadWithTimeout(
                         this.client.downloadMedia(message, { thumb: preferredThumb }) as any,
                         30000
@@ -1087,15 +1113,15 @@ class TelegramManager {
             inputLocation = photo;
             contentType = 'image/jpeg';
             filename = 'photo.jpg';
-            
+
             const data = {
                 id: photo.id,
                 accessHash: photo.accessHash,
                 fileReference: photo.fileReference,
             };
-            
+
             fileLocation = new Api.InputPhotoFileLocation({ ...data, thumbSize: 'm' });
-            
+
             const sizes = photo?.sizes || [];
             const largestSize = sizes[sizes.length - 1];
             if (largestSize && 'size' in largestSize) {
@@ -1106,7 +1132,7 @@ class TelegramManager {
             if (!document || document instanceof Api.DocumentEmpty) {
                 throw new Error('Document not found in message');
             }
-            
+
             if (!(document instanceof Api.Document)) {
                 throw new Error('Document format not supported');
             }
@@ -1119,13 +1145,13 @@ class TelegramManager {
             filename = fileNameAttr?.fileName || 'document.bin';
             contentType = document.mimeType || this.detectContentType(filename);
             fileSize = typeof document.size === 'number' ? document.size : (document.size ? Number(document.size.toString()) : 0);
-            
+
             const data = {
                 id: document.id,
                 accessHash: document.accessHash,
                 fileReference: document.fileReference,
             };
-            
+
             fileLocation = new Api.InputDocumentFileLocation({ ...data, thumbSize: '' });
         } else {
             throw new Error('Unsupported media type');
@@ -1245,7 +1271,7 @@ class TelegramManager {
 
             // Process each call log - batch entity fetching for better performance
             const entityCache = new Map<string, { name: string; phone?: string; username?: string; peerType: 'user' | 'group' | 'channel' }>();
-            
+
             for (const log of callLogs) {
                 if (analyzedCalls >= maxLimit) break;
 
@@ -1297,7 +1323,7 @@ class TelegramManager {
                         if (!entityCache.has(chatId)) {
                             try {
                                 const entity = await this.safeGetEntity(chatId);
-                                
+
                                 if (entity instanceof Api.User) {
                                     entityCache.set(chatId, {
                                         phone: entity.phone,
@@ -1376,7 +1402,7 @@ class TelegramManager {
                             reverse: false
                         })) {
                             messageCount++;
-                            
+
                             // Skip movie-related messages early for performance
                             if (message.text) {
                                 const text = message.text.toLowerCase();
@@ -1653,11 +1679,11 @@ class TelegramManager {
      */
     async getLastActiveTime(): Promise<string> {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             const result = await this.client.invoke(new Api.account.GetAuthorizations());
             let latest = 0;
-            
+
             // Use forEach instead of map since we're not returning anything
             result.authorizations.forEach((auth) => {
                 if (!this.isAuthMine(auth)) {
@@ -1666,12 +1692,12 @@ class TelegramManager {
                     }
                 }
             });
-            
+
             // If no other sessions found, return current date
             if (latest === 0) {
                 return new Date().toISOString().split('T')[0];
             }
-            
+
             return new Date(latest * 1000).toISOString().split('T')[0];
         } catch (error) {
             this.logger.error(this.phoneNumber, 'Error getting last active time:', error);
@@ -1682,7 +1708,7 @@ class TelegramManager {
 
     async getContacts() {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             const exportedContacts = await this.client.invoke(new Api.contacts.GetContacts({
                 hash: bigInt(0)
@@ -1732,19 +1758,19 @@ class TelegramManager {
     }) {
         if (!this.client) throw new Error('Client not initialized');
 
-        let { 
-            chatId, 
-            types = ['photo', 'video', 'document'], 
-            startDate, 
-            endDate, 
-            limit = 50, 
+        let {
+            chatId,
+            types = ['photo', 'video', 'document'],
+            startDate,
+            endDate,
+            limit = 50,
             maxId,
-            minId 
+            minId
         } = params;
 
         // If "all" is in types, expand to all types and mark for grouping
         const hasAll = types.includes('all');
-        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll 
+        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
             ? ['photo', 'video', 'document', 'voice']
             : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
 
@@ -1755,11 +1781,11 @@ class TelegramManager {
             limit: queryLimit,
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
-            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && { 
-                minDate: Math.floor(startDate.getTime() / 1000) 
+            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
+                minDate: Math.floor(startDate.getTime() / 1000)
             }),
-            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && { 
-                maxDate: Math.floor(endDate.getTime() / 1000) 
+            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && {
+                maxDate: Math.floor(endDate.getTime() / 1000)
             })
         };
 
@@ -1788,7 +1814,7 @@ class TelegramManager {
                     const photo = message.photo as Api.Photo;
                     mimeType = 'image/jpeg'; // Default for photos
                     filename = 'photo.jpg'; // Default filename
-                    
+
                     if (photo?.sizes && photo.sizes.length > 0) {
                         const largestSize = photo.sizes[photo.sizes.length - 1];
                         if (largestSize && 'size' in largestSize) {
@@ -1807,7 +1833,7 @@ class TelegramManager {
                     if (doc instanceof Api.Document) {
                         fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
                         mimeType = doc.mimeType;
-                        
+
                         const fileNameAttr = doc.attributes?.find(
                             attr => attr instanceof Api.DocumentAttributeFilename
                         ) as Api.DocumentAttributeFilename;
@@ -2005,9 +2031,9 @@ class TelegramManager {
     }> {
         const message = await this.getMessageWithMedia(messageId, chatId);
         const fileInfo = this.getMediaFileInfo(message);
-        
-        const fileId = typeof fileInfo.inputLocation.id === 'object' 
-            ? fileInfo.inputLocation.id.toString() 
+
+        const fileId = typeof fileInfo.inputLocation.id === 'object'
+            ? fileInfo.inputLocation.id.toString()
             : fileInfo.inputLocation.id;
         const etag = this.generateETag(messageId, chatId, fileId);
 
@@ -2067,7 +2093,7 @@ class TelegramManager {
         // Process items in batches
         for (let i = 0; i < items.length; i += concurrencyLimit) {
             const batch = items.slice(i, i + concurrencyLimit);
-            
+
             // Process batch concurrently
             const batchResults = await Promise.allSettled(
                 batch.map(item => processor(item))
@@ -2135,24 +2161,24 @@ class TelegramManager {
                 timeout: this.FILE_DOWNLOAD_TIMEOUT,
                 validateStatus: (status) => status >= 200 && status < 400
             });
-            
+
             const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
             if (contentLength > maxSize) {
                 throw new Error(`File size ${contentLength} exceeds maximum ${maxSize} bytes`);
             }
-            
+
             const response = await axios.get(url, {
                 responseType: 'arraybuffer',
                 timeout: this.FILE_DOWNLOAD_TIMEOUT,
                 maxContentLength: maxSize,
                 validateStatus: (status) => status >= 200 && status < 300
             });
-            
+
             const buffer = Buffer.from(response.data);
             if (buffer.length > maxSize) {
                 throw new Error(`Downloaded file size ${buffer.length} exceeds maximum ${maxSize} bytes`);
             }
-            
+
             return buffer;
         } catch (error) {
             if (error.response) {
@@ -2164,7 +2190,7 @@ class TelegramManager {
             }
         }
     }
-    
+
     /**
      * Detect content type from filename and optional mime type
      * @param filename - File name with extension
@@ -2173,7 +2199,7 @@ class TelegramManager {
      */
     private detectContentType(filename: string, mimeType?: string): string {
         if (mimeType) return mimeType;
-        
+
         const ext = filename.split('.').pop()?.toLowerCase() || '';
         const mimeMap: Record<string, string> = {
             'jpg': 'image/jpeg',
@@ -2193,10 +2219,10 @@ class TelegramManager {
             'doc': 'application/msword',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         };
-        
+
         return mimeMap[ext] || 'application/octet-stream';
     }
-    
+
     /**
      * Generate ETag for media caching
      * @param messageId - Message ID
@@ -2384,15 +2410,15 @@ class TelegramManager {
         // Generate unique filename to avoid conflicts
         const uniqueFilename = `${filename}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         const filePath = `/tmp/${uniqueFilename}`;
-        
+
         try {
-            const response = await axios.get(url, { 
+            const response = await axios.get(url, {
                 responseType: 'stream',
                 timeout: this.FILE_DOWNLOAD_TIMEOUT,
                 maxContentLength: this.MAX_FILE_SIZE,
                 validateStatus: (status) => status >= 200 && status < 300
             });
-            
+
             await new Promise<void>((resolve, reject) => {
                 const writer = fs.createWriteStream(filePath);
                 writer.on('finish', () => resolve());
@@ -2400,7 +2426,7 @@ class TelegramManager {
                 response.data.pipe(writer);
                 response.data.on('error', reject);
             });
-            
+
             // Schedule cleanup after 1 hour
             setTimeout(() => {
                 try {
@@ -2412,7 +2438,7 @@ class TelegramManager {
                     this.logger.warn(this.phoneNumber, `Failed to cleanup temp file ${filePath}:`, cleanupError);
                 }
             }, this.TEMP_FILE_CLEANUP_DELAY);
-            
+
             return filePath;
         } catch (error) {
             // Cleanup on error
@@ -2423,7 +2449,7 @@ class TelegramManager {
             } catch (cleanupError) {
                 // Ignore cleanup errors
             }
-            
+
             if (error.response) {
                 throw new Error(`Failed to download file: HTTP ${error.response.status}`);
             } else if (error.code === 'ECONNABORTED') {
@@ -2458,7 +2484,7 @@ class TelegramManager {
 
     async hasPassword(): Promise<boolean> {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             const passwordInfo = await this.client.invoke(new Api.account.GetPassword());
             return passwordInfo.hasPassword || false;
@@ -2544,7 +2570,7 @@ class TelegramManager {
 
     async sendPhotoChat(id: string, url: string, caption: string, filename: string): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             // Download directly to buffer without saving to disk
             const buffer = await this.downloadFileFromUrl(url);
@@ -2558,7 +2584,7 @@ class TelegramManager {
 
     async sendFileChat(id: string, url: string, caption: string, filename: string): Promise<void> {
         if (!this.client) throw new Error('Client is not initialized');
-        
+
         try {
             // Download directly to buffer without saving to disk
             const buffer = await this.downloadFileFromUrl(url);
@@ -2835,9 +2861,9 @@ class TelegramManager {
                 results.push(media);
             } catch (error) {
                 this.logger.error(this.phoneNumber, `Error processing album item ${i}:`, error);
-                errors.push({ 
-                    index: i, 
-                    error: error.message || 'Unknown error' 
+                errors.push({
+                    index: i,
+                    error: error.message || 'Unknown error'
                 });
             }
         }
@@ -3505,10 +3531,10 @@ class TelegramManager {
     }) {
         if (!this.client) throw new Error('Client not initialized');
         let { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
-        
+
         // If "all" is in types, expand to all types
         const hasAll = types.includes('all');
-        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll 
+        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
             ? ['photo', 'video', 'document', 'voice']
             : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
         let allMedia: any[] = [];
@@ -3527,7 +3553,7 @@ class TelegramManager {
                 minId
             });
             this.logger.info(this.phoneNumber, `hasMore: ${response.pagination.hasMore}, Total: ${response.pagination.total}, nextMaxId: ${response.pagination.nextMaxId}`);
-            
+
             // Extract items based on response format
             if (response.groups) {
                 // Flatten all groups
@@ -3617,34 +3643,34 @@ class TelegramManager {
     }) {
         if (!this.client) throw new Error('Client not initialized');
 
-        let { 
-            chatId, 
-            types = ['photo', 'video', 'document'], 
-            startDate, 
-            endDate, 
-            limit = 50, 
+        let {
+            chatId,
+            types = ['photo', 'video', 'document'],
+            startDate,
+            endDate,
+            limit = 50,
             maxId,
-            minId 
+            minId
         } = params;
 
         // If "all" is in types, expand to all types and mark for grouping
         const hasAll = types.includes('all');
-        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll 
+        const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
             ? ['photo', 'video', 'document', 'voice']
             : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
 
         // When "all" is requested, fetch more messages to ensure we have enough for each type
         const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
-        
+
         const query: Partial<IterMessagesParams> = {
             limit: queryLimit,
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
-            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && { 
-                minDate: Math.floor(startDate.getTime() / 1000) 
+            ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
+                minDate: Math.floor(startDate.getTime() / 1000)
             }),
-            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && { 
-                maxDate: Math.floor(endDate.getTime() / 1000) 
+            ...(endDate && endDate instanceof Date && !isNaN(endDate.getTime()) && {
+                maxDate: Math.floor(endDate.getTime() / 1000)
             })
         };
 
@@ -3660,7 +3686,7 @@ class TelegramManager {
         });
 
         this.logger.info(this.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
-        
+
         // Process thumbnails with controlled concurrency to respect rate limits
         const mediaData = await this.processWithConcurrencyLimit(
             filteredMessages,
@@ -3668,7 +3694,7 @@ class TelegramManager {
                 const thumbBuffer = await this.getThumbnailBuffer(message);
 
                 const mediaDetails = this.getMediaDetails(message.media as Api.MessageMediaDocument);
-                
+
                 // Extract additional metadata
                 let fileSize: number | undefined;
                 let mimeType: string | undefined;
@@ -3681,7 +3707,7 @@ class TelegramManager {
                     const photo = message.photo as Api.Photo;
                     mimeType = 'image/jpeg'; // Default for photos
                     filename = 'photo.jpg'; // Default filename
-                    
+
                     if (photo?.sizes && photo.sizes.length > 0) {
                         const largestSize = photo.sizes[photo.sizes.length - 1];
                         if (largestSize && 'size' in largestSize) {
@@ -3700,7 +3726,7 @@ class TelegramManager {
                     if (doc instanceof Api.Document) {
                         fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
                         mimeType = doc.mimeType;
-                        
+
                         const fileNameAttr = doc.attributes?.find(
                             attr => attr instanceof Api.DocumentAttributeFilename
                         ) as Api.DocumentAttributeFilename;
@@ -4442,7 +4468,7 @@ class TelegramManager {
 
         // Clamp limit to valid range [1, 50], default to 10 if invalid
         const clampedLimit = Math.max(1, Math.min(50, limit || 10));
-        
+
         this.logger.info(this.phoneNumber, `Starting getTopPrivateChats analysis with limit=${clampedLimit}...`);
         const startTime = Date.now();
         const now = Date.now();
@@ -4493,14 +4519,14 @@ class TelegramManager {
             .filter(dialog => {
                 // Must be a user dialog
                 if (!dialog.isUser || !(dialog.entity instanceof Api.User)) return false;
-                
+
                 const user = dialog.entity as Api.User;
-                
+
                 // Exclude bots, fake accounts, and service accounts
                 if (user.bot || user.fake) return false;
                 const userId = user.id.toString();
                 if (userId === "777000" || userId === "42777") return false;
-                
+
                 return true;
             })
             // Sort by last activity (most recent first) for priority processing
@@ -4514,21 +4540,21 @@ class TelegramManager {
 
         // Get call logs once for all chats
         const callLogs = await this.getCallLogsInternal();
-        
+
         // Always process self chat (chatId: "me") first
         let selfChatData = null;
         try {
             const me = await this.getMe();
             const selfChatId = me.id.toString();
             this.logger.info(this.phoneNumber, `Processing self chat (me) with chatId: ${selfChatId}`);
-            
+
             // Process self chat using same logic as other chats
             let messageCount = 0;
             let ownMessageCount = 0;
             let replyChainCount = 0;
             const messageDates: number[] = [];
             const mediaStats = { photos: 0, videos: 0 };
-            
+
             for await (const message of this.client.iterMessages('me', {
                 limit: 500,
                 reverse: false
@@ -4559,7 +4585,7 @@ class TelegramManager {
                     }
                 }
             }
-            
+
             let totalMessages = messageCount;
             try {
                 const firstBatch = await this.client.getMessages('me', { limit: 1 });
@@ -4569,27 +4595,27 @@ class TelegramManager {
             } catch (totalError) {
                 // Use analyzed count as fallback
             }
-            
+
             const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : now;
             const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
             const timeDecay = getTimeDecayMultiplier(daysSinceLastActivity);
             const mutualEngagementScore = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
             const conversationDepthScore = messageCount > 0 ? Math.min(1.3, 1 + (replyChainCount / messageCount) * 0.3) : 1.0;
-            
+
             const callStats = {
                 total: 0,
                 incoming: { total: 0, audio: 0, video: 0 },
                 outgoing: { total: 0, audio: 0, video: 0 }
             };
-            
+
             const baseScore = (
                 mediaStats.videos * weights.sharedVideo +
                 mediaStats.photos * weights.sharedPhoto +
                 totalMessages * weights.textMessage
             );
-            
+
             const interactionScore = baseScore * timeDecay * mutualEngagementScore * conversationDepthScore;
-            
+
             let engagementLevel: 'recent' | 'active' | 'dormant';
             if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
                 engagementLevel = 'recent';
@@ -4598,10 +4624,10 @@ class TelegramManager {
             } else {
                 engagementLevel = 'dormant';
             }
-            
+
             const totalActivity = (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                                totalMessages * weights.textMessage;
-            
+                totalMessages * weights.textMessage;
+
             const activityBreakdown = totalActivity > 0 ? {
                 videoCalls: 0,
                 audioCalls: 0,
@@ -4613,7 +4639,7 @@ class TelegramManager {
                 mediaSharing: 0,
                 textMessages: 100
             };
-            
+
             selfChatData = {
                 chatId: 'me',
                 username: me.username,
@@ -4627,28 +4653,28 @@ class TelegramManager {
                 media: mediaStats,
                 activityBreakdown
             };
-            
+
             this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}, Total Messages: ${totalMessages}`);
         } catch (selfChatError) {
             this.logger.warn(this.phoneNumber, `Error processing self chat, will continue without it:`, selfChatError);
         }
-        
+
         // Process chats in batches to avoid overwhelming the API
         const batchSize = 10;
         const chatStats = [];
         const CHAT_TIMEOUT_MS = 30000; // 30 seconds per chat
         const BATCH_DELAY_MS = 100; // Small delay between batches
-        
+
         // Early termination: stop when we have enough high-quality candidates
         const targetCandidates = clampedLimit * 2;
-        
+
         for (let i = 0; i < privateChats.length; i += batchSize) {
             // Early termination check
             if (chatStats.length >= targetCandidates) {
                 this.logger.info(this.phoneNumber, `Early termination: Found ${chatStats.length} candidates (target: ${targetCandidates})`);
                 break;
             }
-            
+
             this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)} (${chatStats.length} candidates so far)`);
             const batch = privateChats.slice(i, i + batchSize);
 
@@ -4656,7 +4682,7 @@ class TelegramManager {
                 const processingStart = Date.now();
                 const chatId = dialog.entity.id.toString();
                 const user = dialog.entity as Api.User;
-                
+
                 // Extract dialog metadata
                 const lastMessageDate = dialog.message?.date ? dialog.message.date * 1000 : now;
                 const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
@@ -4676,33 +4702,33 @@ class TelegramManager {
                         let recentMediaCount = 0;
                         const messageDates: number[] = [];
                         const mediaStats = { photos: 0, videos: 0 };
-                        
+
                         // Analyze messages with time-decay consideration
                         for await (const message of this.client.iterMessages(chatId, {
                             limit: 400, // Analyze last 100 messages for patterns
                             reverse: false
                         })) {
                             messageCount++;
-                            
+
                             // Track message dates for recency analysis
                             if (message.date) {
                                 messageDates.push(message.date * 1000);
                             }
-                            
+
                             // Count own vs peer messages for engagement pattern
                             if (message.out) {
                                 ownMessageCount++;
                             }
-                            
+
                             // Detect reply chains (conversation depth indicator)
                             if (message.replyTo) {
                                 replyChainCount++;
                             }
-                            
+
                             // Count media with time-decay
                             if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
                                 recentMediaCount++;
-                                
+
                                 if (message.media instanceof Api.MessageMediaPhoto) {
                                     mediaStats.photos++;
                                 } else if (message.media instanceof Api.MessageMediaDocument) {
@@ -4734,12 +4760,12 @@ class TelegramManager {
                     })();
 
                     // Race between processing and timeout
-                    const timeoutPromise = new Promise((resolve) => 
+                    const timeoutPromise = new Promise((resolve) =>
                         setTimeout(() => resolve(null), CHAT_TIMEOUT_MS)
                     );
 
                     const result = await Promise.race([chatProcessingPromise, timeoutPromise]) as any;
-                    
+
                     // Skip this chat if it timed out
                     if (result === null) {
                         this.logger.warn(this.phoneNumber, `Chat ${chatId} processing timed out after ${CHAT_TIMEOUT_MS}ms - skipping`);
@@ -4785,8 +4811,8 @@ class TelegramManager {
                         unreadCount * weights.unreadMessages
                     );
 
-                    const interactionScore = baseScore 
-                    
+                    const interactionScore = baseScore
+
                     // Add pinned chat bonus (indicates user importance)
                     const finalScore = isPinned ? interactionScore * 1.2 : interactionScore;
 
@@ -4802,10 +4828,10 @@ class TelegramManager {
 
                     // Calculate activity breakdown (with safety check)
                     const totalActivity = callStats.incoming.video * weights.videoCall +
-                                        callStats.incoming.total * weights.incomingCall +
-                                        callStats.outgoing.total * weights.outgoingCall +
-                                        (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                                        totalMessages * weights.textMessage;
+                        callStats.incoming.total * weights.incomingCall +
+                        callStats.outgoing.total * weights.outgoingCall +
+                        (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
+                        totalMessages * weights.textMessage;
 
                     const activityBreakdown = totalActivity > 0 ? {
                         videoCalls: Math.round((callStats.incoming.video * weights.videoCall / totalActivity) * 100),
@@ -4851,7 +4877,7 @@ class TelegramManager {
             }));
 
             chatStats.push(...batchResults.filter(Boolean));
-            
+
             // Add small delay between batches to prevent rate limiting
             if (i + batchSize < privateChats.length && chatStats.length < targetCandidates) {
                 await sleep(BATCH_DELAY_MS);
@@ -4874,7 +4900,7 @@ class TelegramManager {
                 return a.lastActivityDays - b.lastActivityDays;
             })
             .slice(0, clampedLimit);
-        
+
         // Always include self chat (chatId: "me") in results
         if (selfChatData) {
             // Remove self chat if it already exists (by chatId)

@@ -99,6 +99,7 @@ class ConnectionManager {
 
                 return await this.createNewClient(mobile, { autoDisconnect, handler });
             } catch (error) {
+                this.logger.error(mobile, 'getClient error', error);
                 throw error;
             }
         })();
@@ -135,7 +136,15 @@ class ConnectionManager {
         try {
             // Create client with timeout
             await telegramManager.createClient(options.handler);
-
+            
+            // Wait a bit for client to stabilize
+            await sleep(500);
+            
+            // Verify client was actually created
+            if (!telegramManager.client) {
+                throw new Error(`Client creation failed - client is null after createClient() for ${mobile}`);
+            }
+            
             // Validate connection
             await this.validateConnection(mobile, telegramManager);
 
@@ -144,10 +153,7 @@ class ConnectionManager {
             clientInfo.connectionAttempts = 1;
             delete clientInfo.lastError;
             this.clients.set(mobile, clientInfo);
-
-            // this.logger.info(mobile, 'Client created successfully');
             return telegramManager;
-
         } catch (error) {
             this.logger.error(mobile, 'Client creation failed', error);
             await this.handleConnectionError(mobile, clientInfo, error as Error);
@@ -157,6 +163,18 @@ class ConnectionManager {
     }
 
     private async validateConnection(mobile: string, client: TelegramManager): Promise<void> {
+        if (!client) {
+            throw new Error("TelegramManager instance not initialized");
+        }
+        
+        if (!client.client) {
+            throw new Error(`Client not initialized for ${mobile} - createClient may have failed`);
+        }
+        
+        if (!client.client.connected) {
+            throw new Error(`Client not connected for ${mobile}`);
+        }
+        
         await withTimeout(() => client.client.getMe(), {
             errorMessage: `getMe TimeOut for ${mobile}\napiId: ${client.apiId}\napiHash:${client.apiHash}`,
             maxRetries: 3,
