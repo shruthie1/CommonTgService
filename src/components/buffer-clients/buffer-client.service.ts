@@ -71,7 +71,7 @@ export class BufferClientService implements OnModuleDestroy {
     // Per-client buffer client management constants
     private readonly MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER = 10; // Rate limiting constant
     private readonly MIN_TOTAL_BUFFER_CLIENTS = 10; // Minimum total buffer clients per client (even if windows satisfied)
-    
+
     // Dynamic availability windows configuration
     // Each window defines minimum required buffer clients available by that date
     private readonly AVAILABILITY_WINDOWS = [
@@ -458,8 +458,8 @@ export class BufferClientService implements OnModuleDestroy {
 
             this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
 
-            const lastChecked = client.lastChecked 
-                ? new Date(client.lastChecked).getTime() 
+            const lastChecked = client.lastChecked
+                ? new Date(client.lastChecked).getTime()
                 : 0;
             await this.performHealthCheck(mobile, lastChecked, now);
 
@@ -1017,37 +1017,30 @@ export class BufferClientService implements OnModuleDestroy {
                 this.logger.warn(`Client with ID ${result._id} not found, skipping buffer clients`);
                 continue;
             }
-                for (const bufferClientMobile of result.mobiles) {
-                    const bufferClient = await this.findOne(bufferClientMobile, false);
-                    if (!bufferClient) {
-                        this.logger.warn(`Buffer client ${bufferClientMobile} not found, skipping`);
-                        continue;
-                    }
+            for (const bufferClientMobile of result.mobiles) {
+                const bufferClient = await this.findOne(bufferClientMobile, false);
+                if (!bufferClient) {
+                    this.logger.warn(`Buffer client ${bufferClientMobile} not found, skipping`);
+                    continue;
+                }
 
-                    // Check cooldown before processing
-                    const lastUpdateAttempt = bufferClient.lastUpdateAttempt
-                        ? new Date(bufferClient.lastUpdateAttempt).getTime()
-                        : 0;
-                    if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                        const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                        this.logger.debug(`Skipping ${bufferClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                        continue;
-                    }
+                // Check if in use
+                if (bufferClient.inUse === true) {
+                    this.logger.debug(`Skipping ${bufferClientMobile} - currently in use`);
+                    continue;
+                }
 
-                    // Check if in use
-                    if (bufferClient.inUse === true) {
-                        this.logger.debug(`Skipping ${bufferClientMobile} - currently in use`);
-                        continue;
-                    }
-
-                    // Health check: verify client is still alive (check every 7 days)
-                    const lastChecked = bufferClient.lastChecked 
-                        ? new Date(bufferClient.lastChecked).getTime() 
-                        : 0;
-                    const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
-                    if (!healthCheckPassed) {
-                        continue; // Skip to next client if health check failed permanently
-                    }
+                // Health check: verify client is still alive (check every 7 days)
+                const lastChecked = bufferClient.lastChecked
+                    ? new Date(bufferClient.lastChecked).getTime()
+                    : 0;
+                const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
+                this.logger.debug(`${bufferClientMobile} health check ${healthCheckPassed ? 'PASSED' : 'FAILED'}`);
+                await sleep(5000);
+                if (!healthCheckPassed) {
+                    this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
+                    continue; // Skip to next client if health check failed permanently
+                }
 
                 // Skip clients that have been used (updates were done manually)
                 // But backfill their timestamps for record keeping
@@ -1061,22 +1054,32 @@ export class BufferClientService implements OnModuleDestroy {
                     }
                 }
 
+                // Check cooldown before processing
+                const lastUpdateAttempt = bufferClient.lastUpdateAttempt
+                    ? new Date(bufferClient.lastUpdateAttempt).getTime()
+                    : 0;
+                if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
+                    const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
+                    this.logger.debug(`Skipping ${bufferClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
+                    continue;
+                }
+
                 // Calculate priority for sorting
                 const pendingUpdates = this.getPendingUpdates(bufferClient, now);
                 const accountAge = bufferClient.createdAt ? now - new Date(bufferClient.createdAt).getTime() : 0;
                 const DAY = this.ONE_DAY_MS;
                 const failedAttempts = bufferClient.failedUpdateAttempts || 0;
-                
+
                 // Priority calculation:
                 // 1. More pending updates = higher priority (multiply by 10000 for highest weight)
                 // 2. Older lastUpdateAttempt = higher priority (stuck clients) - use hours since last attempt
                 // 3. Fewer failed attempts = higher priority (subtract penalty)
                 // 4. Never attempted clients get maximum priority boost
-                const lastAttemptAgeHours = lastUpdateAttempt > 0 
+                const lastAttemptAgeHours = lastUpdateAttempt > 0
                     ? (now - lastUpdateAttempt) / (60 * 60 * 1000) // Hours since last attempt
                     : 10000; // Never attempted = very high priority
-                
-                const priority = 
+
+                const priority =
                     (pendingUpdates.totalPending * 10000) + // Most important: pending updates
                     lastAttemptAgeHours + // Older attempts = higher priority
                     (accountAge / DAY) - // Older accounts slightly higher priority
@@ -1100,8 +1103,8 @@ export class BufferClientService implements OnModuleDestroy {
         for (const { bufferClient, client, clientId } of bufferClientsToProcess) {
             if (totalUpdates >= MAX_UPDATES_PER_CYCLE) {
                 this.logger.warn(`Reached total update limit of ${MAX_UPDATES_PER_CYCLE} for this check cycle`);
-                        break;
-                    }
+                break;
+            }
 
             const currentUpdates = await this.processBufferClient(bufferClient, client);
             this.logger.debug(`Processed buffer client ${bufferClient.mobile} for client ${clientId}, current updates: ${currentUpdates} | total updates: ${totalUpdates + currentUpdates}`);
@@ -1183,7 +1186,7 @@ export class BufferClientService implements OnModuleDestroy {
         const clientNeedsSummary = clientNeedingBufferClients
             .map(c => `${c.clientId}: ${c.totalNeeded} (${c.calculationReason})`)
             .join('\n');
-        
+
         await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Buffer Client Check (Dynamic Availability):\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\n\nClients Needing Buffer Clients:\n${clientNeedsSummary || 'None'}\n\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
 
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
@@ -1238,7 +1241,7 @@ export class BufferClientService implements OnModuleDestroy {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const todayStr = today.toISOString().split('T')[0];
-        
+
         const windows = this.AVAILABILITY_WINDOWS.map(window => ({
             ...window,
             targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS)
@@ -1268,7 +1271,7 @@ export class BufferClientService implements OnModuleDestroy {
             });
 
             const needed = Math.max(0, window.minRequired - availableCount);
-            
+
             windowNeeds.push({
                 window: window.name,
                 available: availableCount,
@@ -1314,8 +1317,8 @@ export class BufferClientService implements OnModuleDestroy {
             calculationReason = 'All windows satisfied';
         }
 
-        return { 
-            totalNeeded, 
+        return {
+            totalNeeded,
             windowNeeds,
             totalActive,
             totalNeededForCount,
@@ -1479,32 +1482,32 @@ export class BufferClientService implements OnModuleDestroy {
     private async updatePrivacySettings(doc: BufferClient, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
         try {
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
             await telegramClient.updatePrivacyforDeletedAccount();
-                    await this.update(doc.mobile, {
-                        privacyUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-                    await sleep(30000 + Math.random() * 20000);
+            await this.update(doc.mobile, {
+                privacyUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
+            await sleep(30000 + Math.random() * 20000);
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
             return 0;
         } finally {
             await this.safeUnregisterClient(doc.mobile);
-                }
-            }
+        }
+    }
 
     /**
      * Delete profile photos for a buffer client
@@ -1512,39 +1515,39 @@ export class BufferClientService implements OnModuleDestroy {
     private async deleteProfilePhotos(doc: BufferClient, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
         try {
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
             const photos = await telegramClient.client.invoke(new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
 
-                    if (photos.photos.length > 0) {
+            if (photos.photos.length > 0) {
                 await telegramClient.deleteProfilePhotos();
-                        this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
-                    } else {
-                        this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
-                    }
+                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
+            } else {
+                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
+            }
 
-                    await this.update(doc.mobile, {
-                        profilePicsDeletedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    await sleep(30000 + Math.random() * 20000);
+            await this.update(doc.mobile, {
+                profilePicsDeletedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            await sleep(30000 + Math.random() * 20000);
             return photos.photos.length > 0 ? 1 : 0;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
             return 0;
         } finally {
             await this.safeUnregisterClient(doc.mobile);
-                }
-            }
+        }
+    }
 
     /**
      * Update name and bio for a buffer client
@@ -1552,48 +1555,48 @@ export class BufferClientService implements OnModuleDestroy {
     private async updateNameAndBio(doc: BufferClient, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
         try {
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
             const me = await telegramClient.getMe();
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
 
             let updateCount = 0;
-                    if (!isIncludedWithTolerance(safeAttemptReverse(me.firstName), client.name)) {
-                        this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+            if (!isIncludedWithTolerance(safeAttemptReverse(me.firstName), client.name)) {
+                this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
                 await telegramClient.updateProfile(
-                            `${obfuscateText(client.name, {
-                                maintainFormatting: false,
-                                preserveCase: true,
-                                useInvisibleChars: false
-                            })} ${getCuteEmoji()}`,
-                            ''
-                        );
+                    `${obfuscateText(client.name, {
+                        maintainFormatting: false,
+                        preserveCase: true,
+                        useInvisibleChars: false
+                    })} ${getCuteEmoji()}`,
+                    ''
+                );
                 updateCount = 1;
-                    }
+            }
 
-                    await this.update(doc.mobile, {
-                        nameBioUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-                    await sleep(30000 + Math.random() * 20000);
-                    return updateCount;
+            await this.update(doc.mobile, {
+                nameBioUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            await sleep(30000 + Math.random() * 20000);
+            return updateCount;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
             return 0;
         } finally {
             await this.safeUnregisterClient(doc.mobile);
-                }
-            }
+        }
+    }
 
     /**
      * Update username for a buffer client
@@ -1601,34 +1604,34 @@ export class BufferClientService implements OnModuleDestroy {
     private async updateUsername(doc: BufferClient, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
         try {
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
             const me = await telegramClient.getMe();
-                    await sleep(5000 + Math.random() * 5000);
-                    await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
-                    await this.update(doc.mobile, {
-                        usernameUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    this.logger.debug(`Updated username for ${doc.mobile}`);
-                    await sleep(30000 + Math.random() * 20000);
+            await sleep(5000 + Math.random() * 5000);
+            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            this.logger.debug(`Updated username for ${doc.mobile}`);
+            await sleep(30000 + Math.random() * 20000);
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
             return 0;
         } finally {
             await this.safeUnregisterClient(doc.mobile);
-                }
-            }
+        }
+    }
 
     /**
      * Update profile photos for a buffer client
@@ -1636,39 +1639,39 @@ export class BufferClientService implements OnModuleDestroy {
     private async updateProfilePhotos(doc: BufferClient, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
         try {
-                    await sleep(5000 + Math.random() * 5000);
+            await sleep(5000 + Math.random() * 5000);
             const photos = await telegramClient.client.invoke(new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
 
             let updateCount = 0;
-                    if (photos.photos.length < 2) {
-                        await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                        await sleep(10000 + Math.random() * 5000);
+            if (photos.photos.length < 2) {
+                await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                await sleep(10000 + Math.random() * 5000);
 
-                        const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                        const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
+                const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+                const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
                 await telegramClient.updateProfilePic(path.join(process.cwd(), randomPhoto));
                 updateCount = 1;
-                        this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
-                    }
+                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
+            }
 
-                    await this.update(doc.mobile, {
-                        profilePicsUpdatedAt: new Date(),
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: 0,
-                        lastUpdateFailure: null
-                    });
-                    await sleep(40000 + Math.random() * 20000);
-                    return updateCount;
+            await this.update(doc.mobile, {
+                profilePicsUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null
+            });
+            await sleep(40000 + Math.random() * 20000);
+            return updateCount;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
-                    await this.update(doc.mobile, {
-                        lastUpdateAttempt: new Date(),
-                        failedUpdateAttempts: failedAttempts + 1,
-                        lastUpdateFailure: new Date()
-                    });
-                    if (isPermanentError(errorDetails)) {
-                        await this.markAsInactive(doc.mobile, errorDetails.message);
-                    }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date()
+            });
+            if (isPermanentError(errorDetails)) {
+                await this.markAsInactive(doc.mobile, errorDetails.message);
+            }
             return 0;
         } finally {
             await this.safeUnregisterClient(doc.mobile);
@@ -1748,8 +1751,8 @@ export class BufferClientService implements OnModuleDestroy {
             // PRIORITY 1: Privacy update
             if (pendingUpdates.needsPrivacy) {
                 updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                    return updateCount;
-                }
+                return updateCount;
+            }
 
             // PRIORITY 2: Delete profile photos
             if (pendingUpdates.needsDeletePhotos) {
@@ -1845,16 +1848,16 @@ export class BufferClientService implements OnModuleDestroy {
             await telegramClient.set2fa();
             this.logger.debug('Waiting for setting 2FA');
             await sleep(30000 + Math.random() * 30000);
-            
+
             // Get channel info and create session
             const channels = await this.telegramService.getChannelInfo(document.mobile, true);
             await sleep(5000 + Math.random() * 5000);
             const newSession = await this.telegramService.createNewSession(document.mobile);
-            
+
             // Use provided availableDate or default to today
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
             this.logger.debug(`Inserting Document for client ${targetClientId} with availableDate ${targetAvailableDate}`);
-            
+
             const bufferClient: CreateBufferClientDto = {
                 tgId: document.tgId,
                 session: newSession,
@@ -1864,11 +1867,11 @@ export class BufferClientService implements OnModuleDestroy {
                 channels: channels.ids.length,
                 clientId: targetClientId,
                 status: 'active',
-                message: availableDate 
+                message: availableDate
                     ? 'Account successfully configured as buffer client - available immediately'
                     : 'Account successfully configured as buffer client',
             };
-            
+
             await this.create(bufferClient);
             await this.updateUser2FAStatus(document.tgId, document.mobile);
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
