@@ -1075,6 +1075,7 @@ export class PromoteClientService implements OnModuleDestroy {
                 lastChecked: new Date()
             });
             this.logger.debug(`Health check passed for ${mobile}`);
+            await sleep(5000);
             return true;
         } catch (error) {
             const errorDetails = this.handleError(error, 'Health check failed', mobile);
@@ -1082,6 +1083,7 @@ export class PromoteClientService implements OnModuleDestroy {
             if (isPermanentError(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
+            await sleep(5000)
             return false;
         } finally {
             await connectionManager.unregisterClient(mobile);
