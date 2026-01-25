@@ -405,26 +405,10 @@ export class UsersService {
         }
       },
       
-      // Sort by interaction score (descending)
+      // Sort by interaction score (descending) - allowDiskUse handles large sorts
       { $sort: { interactionScore: -1 } },
       
-      // Remove duplicates by mobile (keep the first occurrence which has highest score)
-      {
-        $group: {
-          _id: '$mobile',
-          doc: { $first: '$$ROOT' }
-        }
-      },
-      
-      // Replace root with the document
-      {
-        $replaceRoot: { newRoot: '$doc' }
-      },
-      
-      // Re-sort after deduplication (to maintain score order)
-      { $sort: { interactionScore: -1 } },
-      
-      // Get total count before pagination (using $facet)
+      // Use $facet for count and pagination in parallel
       {
         $facet: {
           totalCount: [{ $count: 'count' }],
@@ -432,14 +416,6 @@ export class UsersService {
             { $skip: skip },
             { $limit: limitNum }
           ]
-        }
-      },
-      
-      // Unwind and format
-      {
-        $project: {
-          total: { $ifNull: [{ $arrayElemAt: ['$totalCount.count', 0] }, 0] },
-          users: '$paginatedResults'
         }
       }
     ];
