@@ -15593,6 +15593,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const MIN_COOLDOWN_HOURS = 2;
         const MAX_UPDATES_PER_CYCLE = 5;
         const now = Date.now();
+        this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
         const bufferClientsToProcess = [];
         for (const result of bufferClientCounts) {
             bufferClientsPerClient.set(result._id, result.count);
@@ -15607,14 +15608,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     this.logger.warn(`Buffer client ${bufferClientMobile} not found, skipping`);
                     continue;
                 }
-                const lastUpdateAttempt = bufferClient.lastUpdateAttempt
-                    ? new Date(bufferClient.lastUpdateAttempt).getTime()
-                    : 0;
-                if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                    const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                    this.logger.debug(`Skipping ${bufferClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                    continue;
-                }
                 if (bufferClient.inUse === true) {
                     this.logger.debug(`Skipping ${bufferClientMobile} - currently in use`);
                     continue;
@@ -15623,16 +15616,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                     ? new Date(bufferClient.lastChecked).getTime()
                     : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
+                this.logger.debug(`${bufferClientMobile} health check ${healthCheckPassed ? 'PASSED' : 'FAILED'}`);
+                await (0, Helpers_1.sleep)(5000);
                 if (!healthCheckPassed) {
+                    this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
                     continue;
                 }
                 if (bufferClient.lastUsed) {
                     const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
                     if (lastUsed > 0) {
                         await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
-                        this.logger.debug(`Skipping ${bufferClientMobile} - already used, timestamps backfilled`);
+                        this.logger.debug(`Skipping ${bufferClientMobile} - already used, trying timestamps backfill`);
                         continue;
                     }
+                }
+                const lastUpdateAttempt = bufferClient.lastUpdateAttempt
+                    ? new Date(bufferClient.lastUpdateAttempt).getTime()
+                    : 0;
+                if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
+                    const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
+                    this.logger.debug(`Skipping ${bufferClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
+                    continue;
                 }
                 const pendingUpdates = this.getPendingUpdates(bufferClient, now);
                 const accountAge = bufferClient.createdAt ? now - new Date(bufferClient.createdAt).getTime() : 0;
@@ -15800,8 +15804,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         const needsBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
             !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt ||
             !doc.profilePicsUpdatedAt;
-        if (!needsBackfill)
+        if (!needsBackfill) {
+            this.logger.debug(`Skipping timestamp backfill for ${mobile} (already has all timestamps)`);
             return;
+        }
+        ;
         this.logger.log(`Backfilling timestamp fields for ${mobile}`);
         const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
         const backfillData = {};
@@ -15821,6 +15828,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     async performHealthCheck(mobile, lastChecked, now) {
         const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
         if (!needsHealthCheck) {
+            this.logger.debug(`Health check not needed for ${mobile} (last checked: ${new Date(lastChecked).toISOString()})`);
             return true;
         }
         try {
@@ -15846,10 +15854,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
             }
-            return false;
-        }
-        finally {
             await connection_manager_1.connectionManager.unregisterClient(mobile);
+            return false;
         }
     }
     getPendingUpdates(doc, now) {
