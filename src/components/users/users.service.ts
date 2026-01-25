@@ -408,7 +408,7 @@ export class UsersService {
       // CRITICAL FIX: Limit dataset BEFORE sorting to avoid memory overflow
       // Fetch enough for pagination but not the entire collection
       { $limit: Math.max(10000, (pageNum * limitNum) + 1000) },
-      
+       
       // Sort by interaction score (descending)
       { $sort: { interactionScore: -1 } },
       
@@ -427,29 +427,29 @@ export class UsersService {
     try {
       const result = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
     
-    if (!result || result.length === 0) {
+      if (!result || result.length === 0) {
+        return {
+          users: [],
+          total: 0,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: 0
+        };
+      }
+
+      const aggregationResult = result[0];
+      const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
+      const users = aggregationResult.paginatedResults || [];
+
+      const totalPages = Math.ceil(totalUsers / limitNum);
+
       return {
-        users: [],
-        total: 0,
+        users,
+        total: totalUsers,
         page: pageNum,
         limit: limitNum,
-        totalPages: 0
+        totalPages
       };
-    }
-
-    const aggregationResult = result[0];
-    const totalUsers = aggregationResult.total || 0;
-    const users = aggregationResult.users || [];
-
-    const totalPages = Math.ceil(totalUsers / limitNum);
-
-    return {
-      users,
-      total: totalUsers,
-      page: pageNum,
-      limit: limitNum,
-      totalPages
-    };
     } catch (error) {
       console.error('Error in getTopInteractionUsers aggregation:', error);
       throw new InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);

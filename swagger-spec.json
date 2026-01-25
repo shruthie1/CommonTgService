@@ -3916,7 +3916,7 @@
     },
     "/telegram/chats/top-private/{mobile}": {
       "get": {
-        "description": "Retrieves top 10 private chats ranked by engagement score using advanced filtering. Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. Considers recency, mutual engagement, reply chains, and call history.",
+        "description": "Retrieves top private chats ranked by engagement score using advanced filtering. Uses time-decay scoring, conversation patterns, and dialog metadata for accurate results. Considers recency, mutual engagement, reply chains, and call history. Supports configurable limit (default: 10, max: 50).",
         "operationId": "TelegramController_getTopPrivateChats",
         "parameters": [
           {
@@ -3926,6 +3926,16 @@
             "description": "Mobile number",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of top chats to return (default: 10, min: 1, max: 50)",
+            "schema": {
+              "example": 10,
+              "type": "number"
             }
           }
         ],
@@ -7192,7 +7202,28 @@
       },
       "get": {
         "operationId": "UsersController_findAll",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of results to return (default: 100)",
+            "schema": {
+              "example": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "skip",
+            "required": false,
+            "in": "query",
+            "description": "Number of results to skip (default: 0)",
+            "schema": {
+              "example": 0,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
