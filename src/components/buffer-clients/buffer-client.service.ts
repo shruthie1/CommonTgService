@@ -1035,7 +1035,6 @@ export class BufferClientService implements OnModuleDestroy {
                     ? new Date(bufferClient.lastChecked).getTime()
                     : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
-                this.logger.debug(`${bufferClientMobile} health check ${healthCheckPassed ? 'PASSED' : 'FAILED'}`);
                 if (!healthCheckPassed) {
                     this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
                     continue; // Skip to next client if health check failed permanently
