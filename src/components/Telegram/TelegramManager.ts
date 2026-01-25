@@ -1480,7 +1480,7 @@ class TelegramManager {
     }
 
     async getCallLogsInternal() {
-        const finalResult = {}
+        const finalResult: Record<string, { outgoing: number, incoming: number, video: number, totalCalls: number }> = {};
         const result = <Api.messages.Messages>await this.client.invoke(
             new Api.messages.Search({
                 peer: new Api.InputPeerEmpty(),
@@ -1501,27 +1501,32 @@ class TelegramManager {
             (message: Api.Message) => message.action instanceof Api.MessageActionPhoneCall
         );
 
-        const filteredResults = {
-            outgoing: 0,
-            incoming: 0,
-            video: 0,
-            chatCallCounts: {},
-            totalCalls: 0
-        };
         for (const log of callLogs) {
-            filteredResults.totalCalls++;
-            const logAction = <Api.MessageActionPhoneCall>log.action
+            if (!log.peerId || !(log.peerId instanceof Api.PeerUser)) continue;
+
+            const chatId = log.peerId.userId.toString();
+            if (!finalResult[chatId]) {
+                finalResult[chatId] = {
+                    outgoing: 0,
+                    incoming: 0,
+                    video: 0,
+                    totalCalls: 0
+                };
+            }
+
+            const stats = finalResult[chatId];
+            stats.totalCalls++;
+            const logAction = <Api.MessageActionPhoneCall>log.action;
+
             if (log.out) {
-                filteredResults.outgoing++;
+                stats.outgoing++;
             } else {
-                filteredResults.incoming++;
+                stats.incoming++;
             }
 
             if (logAction.video) {
-                filteredResults.video++;
+                stats.video++;
             }
-            const chatId = (log.peerId as Api.PeerUser).userId.toString();
-            finalResult[chatId] = filteredResults
         }
         return finalResult;
     }
@@ -4466,460 +4471,220 @@ class TelegramManager {
     }>> {
         if (!this.client) throw new Error('Client not initialized');
 
-        // Clamp limit to valid range [1, 50], default to 10 if invalid
         const clampedLimit = Math.max(1, Math.min(50, limit || 10));
+        this.logger.info(this.phoneNumber, `Starting optimized getTopPrivateChats analysis with limit=${clampedLimit}...`);
 
-        this.logger.info(this.phoneNumber, `Starting getTopPrivateChats analysis with limit=${clampedLimit}...`);
         const startTime = Date.now();
         const now = Date.now();
         const nowSeconds = Math.floor(now / 1000);
 
-        // Enhanced weighting factors with time-decay consideration
         const weights = {
-            videoCall: 5,           // Video calls indicate highest engagement
-            incomingCall: 4,         // Incoming calls show peer interest
-            outgoingCall: 3,         // Outgoing calls show user interest
-            sharedVideo: 12,          // Videos require more effort/intent
-            sharedPhoto: 10,          // Photos show moderate engagement
-            textMessage: 1,          // Base weight for messages
-            unreadMessages: 1,       // Unread messages indicate active conversation
-            recentActivity: 1,     // Recent activity multiplier (time-decay)
+            videoCall: 2,
+            incomingCall: 4,
+            outgoingCall: 1,
+            sharedVideo: 12,
+            sharedPhoto: 10,
+            textMessage: 1,
+            unreadMessages: 1,
         };
 
-        // Time windows for activity classification (in days)
         const ACTIVITY_WINDOWS = {
-            recent: 7,      // Last 7 days - highest priority
-            active: 30,    // Last 30 days - medium priority
-            dormant: 90    // Beyond 90 days - low priority
+            recent: 7,
+            active: 30,
+            dormant: 90
         };
 
-        // Time-decay function: exponential decay based on days since activity
-        const getTimeDecayMultiplier = (daysSinceActivity: number): number => {
-            if (daysSinceActivity <= 1) return 1.5;      // Last 24 hours - 50% boost
-            if (daysSinceActivity <= 7) return 1.2;      // Last week - 20% boost
-            if (daysSinceActivity <= 30) return 1.0;     // Last month - normal
-            if (daysSinceActivity <= 90) return 0.7;     // 1-3 months - 30% reduction
-            return 0.3;                                   // Beyond 3 months - 70% reduction
-        };
+        // 1. Parallel initial fetches for speed
+        this.logger.info(this.phoneNumber, 'Fetching initial metadata in parallel...');
+        const [me, callLogs, dialogs] = await Promise.all([
+            this.getMe().catch(() => null),
+            this.getCallLogsInternal().catch(() => ({})),
+            (async () => {
+                const results = [];
+                for await (const dialog of this.client.iterDialogs({ limit: 150 })) {
+                    results.push(dialog);
+                }
+                return results;
+            })()
+        ]);
 
-        this.logger.info(this.phoneNumber, 'Fetching dialogs with metadata...');
-        const dialogs: any[] = [];
+        if (!me) throw new Error('Failed to fetch self userInfo');
 
-        // Use iterDialogs for memory-efficient iteration
-        for await (const dialog of this.client.iterDialogs({
-            limit: 200
-        })) {
-            dialogs.push(dialog);
-        }
-
-        this.logger.info(this.phoneNumber, `Found ${dialogs.length} total dialogs`);
-
-        // Smart filtering: Use dialog metadata for initial filtering
-        const privateChats = dialogs
+        // 2. Stage 1: Fast filtering and preliminary scoring based on dialog metadata
+        const candidateChats = dialogs
             .filter(dialog => {
-                // Must be a user dialog
                 if (!dialog.isUser || !(dialog.entity instanceof Api.User)) return false;
-
                 const user = dialog.entity as Api.User;
-
-                // Exclude bots, fake accounts, and service accounts
                 if (user.bot || user.fake) return false;
                 const userId = user.id.toString();
-                if (userId === "777000" || userId === "42777") return false;
-
-                return true;
+                return userId !== "777000" && userId !== "42777";
             })
-            // Sort by last activity (most recent first) for priority processing
-            .sort((a, b) => {
-                const dateA = a.message?.date || 0;
-                const dateB = b.message?.date || 0;
-                return dateB - dateA; // Descending (newest first)
-            });
+            .map(dialog => {
+                const lastDate = dialog.message?.date || 0;
+                const daysSinceLast = (nowSeconds - lastDate) / 86400;
+                const recencyScore = Math.max(0, 100 - daysSinceLast * 2);
+                const unreadScore = (dialog.unreadCount || 0) * 10;
+                const pinnedScore = dialog.pinned ? 50 : 0;
 
-        this.logger.info(this.phoneNumber, `Found ${privateChats.length} valid private chats after smart filtering`);
+                return {
+                    dialog,
+                    preliminaryScore: recencyScore + unreadScore + pinnedScore,
+                    daysSinceLast
+                };
+            })
+            // Sort by potential engagement
+            .sort((a, b) => b.preliminaryScore - a.preliminaryScore);
 
-        // Get call logs once for all chats
-        const callLogs = await this.getCallLogsInternal();
-
-        // Always process self chat (chatId: "me") first
+        // Process "me" chat with high priority
         let selfChatData = null;
         try {
-            const me = await this.getMe();
             const selfChatId = me.id.toString();
-            this.logger.info(this.phoneNumber, `Processing self chat (me) with chatId: ${selfChatId}`);
-
-            // Process self chat using same logic as other chats
-            let messageCount = 0;
-            let ownMessageCount = 0;
-            let replyChainCount = 0;
-            const messageDates: number[] = [];
-            const mediaStats = { photos: 0, videos: 0 };
-
-            for await (const message of this.client.iterMessages('me', {
-                limit: 500,
-                reverse: false
-            })) {
-                messageCount++;
-                if (message.date) {
-                    messageDates.push(message.date * 1000);
-                }
-                if (message.out) {
-                    ownMessageCount++;
-                }
-                if (message.replyTo) {
-                    replyChainCount++;
-                }
-                if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
-                    if (message.media instanceof Api.MessageMediaPhoto) {
-                        mediaStats.photos++;
-                    } else if (message.media instanceof Api.MessageMediaDocument) {
-                        const document = message.media.document;
-                        if (document instanceof Api.Document) {
-                            const isVideo = document.attributes.some(
-                                attr => attr instanceof Api.DocumentAttributeVideo
-                            );
-                            if (isVideo) {
-                                mediaStats.videos++;
-                            }
-                        }
-                    }
-                }
-            }
-
-            let totalMessages = messageCount;
-            try {
-                const firstBatch = await this.client.getMessages('me', { limit: 1 });
-                if (firstBatch.total) {
-                    totalMessages = firstBatch.total;
-                }
-            } catch (totalError) {
-                // Use analyzed count as fallback
-            }
-
-            const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : now;
-            const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-            const timeDecay = getTimeDecayMultiplier(daysSinceLastActivity);
-            const mutualEngagementScore = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
-            const conversationDepthScore = messageCount > 0 ? Math.min(1.3, 1 + (replyChainCount / messageCount) * 0.3) : 1.0;
-
-            const callStats = {
-                total: 0,
-                incoming: { total: 0, audio: 0, video: 0 },
-                outgoing: { total: 0, audio: 0, video: 0 }
-            };
-
-            const baseScore = (
-                mediaStats.videos * weights.sharedVideo +
-                mediaStats.photos * weights.sharedPhoto +
-                totalMessages * weights.textMessage
-            );
-
-            const interactionScore = baseScore * timeDecay * mutualEngagementScore * conversationDepthScore;
-
-            let engagementLevel: 'recent' | 'active' | 'dormant';
-            if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
-                engagementLevel = 'recent';
-            } else if (daysSinceLastActivity <= ACTIVITY_WINDOWS.active) {
-                engagementLevel = 'active';
-            } else {
-                engagementLevel = 'dormant';
-            }
-
-            const totalActivity = (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                totalMessages * weights.textMessage;
-
-            const activityBreakdown = totalActivity > 0 ? {
-                videoCalls: 0,
-                audioCalls: 0,
-                mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-                textMessages: Math.round((totalMessages * weights.textMessage / totalActivity) * 100)
-            } : {
-                videoCalls: 0,
-                audioCalls: 0,
-                mediaSharing: 0,
-                textMessages: 100
-            };
-
-            selfChatData = {
-                chatId: 'me',
-                username: me.username,
-                firstName: me.firstName || 'Saved Messages',
-                lastName: me.lastName,
-                totalMessages,
-                interactionScore: Math.round(interactionScore * 100) / 100,
-                engagementLevel,
-                lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
-                calls: callStats,
-                media: mediaStats,
-                activityBreakdown
-            };
-
-            this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}, Total Messages: ${totalMessages}`);
-        } catch (selfChatError) {
-            this.logger.warn(this.phoneNumber, `Error processing self chat, will continue without it:`, selfChatError);
+            // Deep analysis for self chat because it's always relevant
+            const results = await this.analyzeChatEngagement('me', me, 300, callLogs[selfChatId], weights, now, ACTIVITY_WINDOWS);
+            selfChatData = results;
+            this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
+        } catch (e) {
+            this.logger.warn(this.phoneNumber, 'Error processing self chat:', e);
         }
 
-        // Process chats in batches to avoid overwhelming the API
-        const batchSize = 10;
+        // 3. Stage 2: Detailed analysis for top candidates only
+        // We only analyze the top N candidates in depth to save time
+        const topCandidates = candidateChats.slice(0, clampedLimit * 2);
+        this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
+
         const chatStats = [];
-        const CHAT_TIMEOUT_MS = 30000; // 30 seconds per chat
-        const BATCH_DELAY_MS = 100; // Small delay between batches
+        const batchSize = 5;
 
-        // Early termination: stop when we have enough high-quality candidates
-        const targetCandidates = clampedLimit * 2;
-
-        for (let i = 0; i < privateChats.length; i += batchSize) {
-            // Early termination check
-            if (chatStats.length >= targetCandidates) {
-                this.logger.info(this.phoneNumber, `Early termination: Found ${chatStats.length} candidates (target: ${targetCandidates})`);
-                break;
-            }
-
-            this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)} (${chatStats.length} candidates so far)`);
-            const batch = privateChats.slice(i, i + batchSize);
-
-            const batchResults = await Promise.all(batch.map(async (dialog) => {
-                const processingStart = Date.now();
-                const chatId = dialog.entity.id.toString();
-                const user = dialog.entity as Api.User;
-
-                // Extract dialog metadata
-                const lastMessageDate = dialog.message?.date ? dialog.message.date * 1000 : now;
-                const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-                const unreadCount = dialog.unreadCount || 0;
-                const isPinned = dialog.pinned || false;
-
-                this.logger.info(this.phoneNumber, `Processing chat ${chatId} (${user.firstName || 'Unknown'}) - Last activity: ${daysSinceLastActivity.toFixed(1)} days ago, Unread: ${unreadCount}`);
+        for (let i = 0; i < topCandidates.length; i += batchSize) {
+            const batch = topCandidates.slice(i, i + batchSize);
+            const batchResults = await Promise.all(batch.map(async (candidate) => {
+                const user = candidate.dialog.entity as Api.User;
+                const chatId = user.id.toString();
 
                 try {
-                    // Wrap processing in timeout protection
-                    const chatProcessingPromise = (async () => {
-                        // Use iterMessages for memory-efficient message analysis
-                        // Analyze recent messages (last 100) for conversation patterns
-                        let messageCount = 0;
-                        let ownMessageCount = 0;
-                        let replyChainCount = 0;
-                        let recentMediaCount = 0;
-                        const messageDates: number[] = [];
-                        const mediaStats = { photos: 0, videos: 0 };
-
-                        // Analyze messages with time-decay consideration
-                        for await (const message of this.client.iterMessages(chatId, {
-                            limit: 400, // Analyze last 100 messages for patterns
-                            reverse: false
-                        })) {
-                            messageCount++;
-
-                            // Track message dates for recency analysis
-                            if (message.date) {
-                                messageDates.push(message.date * 1000);
-                            }
-
-                            // Count own vs peer messages for engagement pattern
-                            if (message.out) {
-                                ownMessageCount++;
-                            }
-
-                            // Detect reply chains (conversation depth indicator)
-                            if (message.replyTo) {
-                                replyChainCount++;
-                            }
-
-                            // Count media with time-decay
-                            if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
-                                recentMediaCount++;
-
-                                if (message.media instanceof Api.MessageMediaPhoto) {
-                                    mediaStats.photos++;
-                                } else if (message.media instanceof Api.MessageMediaDocument) {
-                                    const document = message.media.document;
-                                    if (document instanceof Api.Document) {
-                                        const isVideo = document.attributes.some(
-                                            attr => attr instanceof Api.DocumentAttributeVideo
-                                        );
-                                        if (isVideo) {
-                                            mediaStats.videos++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Get total message count (lightweight call)
-                        let totalMessages = messageCount;
-                        try {
-                            const firstBatch = await this.client.getMessages(chatId, { limit: 1 });
-                            if (firstBatch.total) {
-                                totalMessages = firstBatch.total;
-                            }
-                        } catch (totalError) {
-                            // Use analyzed count as fallback
-                        }
-
-                        return { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages };
-                    })();
-
-                    // Race between processing and timeout
-                    const timeoutPromise = new Promise((resolve) =>
-                        setTimeout(() => resolve(null), CHAT_TIMEOUT_MS)
-                    );
-
-                    const result = await Promise.race([chatProcessingPromise, timeoutPromise]) as any;
-
-                    // Skip this chat if it timed out
-                    if (result === null) {
-                        this.logger.warn(this.phoneNumber, `Chat ${chatId} processing timed out after ${CHAT_TIMEOUT_MS}ms - skipping`);
-                        return null;
-                    }
-
-                    const { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages } = result;
-
-                    // Adaptive filtering: Skip chats with very low engagement
-                    // // Threshold adapts based on overall activity level
-                    // const minMessagesThreshold = Math.max(10, Math.floor(totalMessages * 0.1)); // At least 10% of total or 10 messages
-                    // if (messageCount < minMessagesThreshold && daysSinceLastActivity > 30) {
-                    //     this.logger.info(this.phoneNumber, `Skipping chat ${chatId} - low recent engagement (${messageCount} recent, ${totalMessages} total, ${daysSinceLastActivity.toFixed(1)} days inactive)`);
-                    //     return null;
-                    // }
-
-                    // Get call statistics
-                    const callStats = {
-                        total: 0,
-                        incoming: { total: 0, audio: 0, video: 0 },
-                        outgoing: { total: 0, audio: 0, video: 0 }
-                    };
-
-                    const userCalls = callLogs[chatId];
-                    if (userCalls) {
-                        callStats.total = userCalls.totalCalls || 0;
-                        callStats.incoming.total = userCalls.incoming || 0;
-                        callStats.outgoing.total = userCalls.outgoing || 0;
-                        callStats.incoming.video = userCalls.video || 0;
-                        callStats.incoming.audio = callStats.incoming.total - callStats.incoming.video;
-                        callStats.outgoing.audio = callStats.outgoing.total; // Assuming outgoing calls are audio unless specified
-                    }
-
-
-                    // Calculate comprehensive interaction score with time-decay and patterns
-                    const baseScore = (
-                        callStats.incoming.total * weights.incomingCall +
-                        callStats.outgoing.total * weights.outgoingCall +
-                        (callStats.incoming.video + (callStats.outgoing.total > 0 ? 1 : 0)) * weights.videoCall + // Approximate video calls
-                        mediaStats.videos * weights.sharedVideo +
-                        mediaStats.photos * weights.sharedPhoto +
-                        totalMessages * weights.textMessage +
-                        unreadCount * weights.unreadMessages
-                    );
-
-                    const interactionScore = baseScore
-
-                    // Add pinned chat bonus (indicates user importance)
-                    const finalScore = isPinned ? interactionScore * 1.2 : interactionScore;
-
-                    // Classify engagement level
-                    let engagementLevel: 'recent' | 'active' | 'dormant';
-                    if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
-                        engagementLevel = 'recent';
-                    } else if (daysSinceLastActivity <= ACTIVITY_WINDOWS.active) {
-                        engagementLevel = 'active';
-                    } else {
-                        engagementLevel = 'dormant';
-                    }
-
-                    // Calculate activity breakdown (with safety check)
-                    const totalActivity = callStats.incoming.video * weights.videoCall +
-                        callStats.incoming.total * weights.incomingCall +
-                        callStats.outgoing.total * weights.outgoingCall +
-                        (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                        totalMessages * weights.textMessage;
-
-                    const activityBreakdown = totalActivity > 0 ? {
-                        videoCalls: Math.round((callStats.incoming.video * weights.videoCall / totalActivity) * 100),
-                        audioCalls: Math.round(((callStats.incoming.total + callStats.outgoing.total) * weights.incomingCall / totalActivity) * 100),
-                        mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-                        textMessages: Math.round((totalMessages * weights.textMessage / totalActivity) * 100)
-                    } : {
-                        videoCalls: 0,
-                        audioCalls: 0,
-                        mediaSharing: 0,
-                        textMessages: 100
-                    };
-
-                    const processingTime = Date.now() - processingStart;
-                    this.logger.info(this.phoneNumber, `Finished processing chat ${chatId} in ${processingTime}ms - Score: ${finalScore.toFixed(2)}, Level: ${engagementLevel}, Days: ${daysSinceLastActivity.toFixed(1)}`);
-
-                    return {
+                    // Reduce analysis depth for candidates to 100-150 messages (was 400)
+                    return await this.analyzeChatEngagement(
                         chatId,
-                        username: user.username,
-                        firstName: user.firstName,
-                        lastName: user.lastName,
-                        totalMessages,
-                        interactionScore: Math.round(finalScore * 100) / 100,
-                        engagementLevel,
-                        lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
-                        calls: {
-                            total: callStats.total,
-                            incoming: callStats.incoming,
-                            outgoing: callStats.outgoing
-                        },
-                        media: mediaStats,
-                        activityBreakdown
-                    };
+                        user,
+                        150,
+                        callLogs[chatId],
+                        weights,
+                        now,
+                        ACTIVITY_WINDOWS,
+                        candidate.dialog
+                    );
                 } catch (error) {
-                    const processingTime = Date.now() - processingStart;
-                    if (error.message === 'Chat processing timeout') {
-                        this.logger.warn(this.phoneNumber, `Chat ${chatId} timed out after ${processingTime}ms, skipping...`);
-                    } else {
-                        this.logger.error(this.phoneNumber, `Error processing chat ${chatId} after ${processingTime}ms:`, error);
-                    }
+                    this.logger.warn(this.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
                     return null;
                 }
             }));
-
             chatStats.push(...batchResults.filter(Boolean));
-
-            // Add small delay between batches to prevent rate limiting
-            if (i + batchSize < privateChats.length && chatStats.length < targetCandidates) {
-                await sleep(BATCH_DELAY_MS);
-            }
         }
 
-        // Sort by interaction score (prioritize recent/active chats with same score)
+        // 4. Final Ranking
         let topChats = chatStats
-            .sort((a, b) => {
-                // Primary sort: interaction score
-                if (Math.abs(b.interactionScore - a.interactionScore) > 0.1) {
-                    return b.interactionScore - a.interactionScore;
-                }
-                // Secondary sort: engagement level (recent > active > dormant)
-                const levelOrder = { recent: 3, active: 2, dormant: 1 };
-                if (levelOrder[b.engagementLevel] !== levelOrder[a.engagementLevel]) {
-                    return levelOrder[b.engagementLevel] - levelOrder[a.engagementLevel];
-                }
-                // Tertiary sort: last activity (most recent first)
-                return a.lastActivityDays - b.lastActivityDays;
-            })
+            .sort((a, b) => b.interactionScore - a.interactionScore)
             .slice(0, clampedLimit);
 
-        // Always include self chat (chatId: "me") in results
         if (selfChatData) {
-            // Remove self chat if it already exists (by chatId)
-            topChats = topChats.filter(chat => chat.chatId !== 'me');
-            // Add self chat at the beginning (highest priority)
+            // Ensure self chat is present and at the top if it's among results
+            topChats = topChats.filter(chat => chat.chatId !== 'me' && chat.chatId !== me.id.toString());
             topChats.unshift(selfChatData);
-            // If we have more than limit, remove the last one
-            if (topChats.length > clampedLimit) {
-                topChats = topChats.slice(0, clampedLimit);
-            }
+            if (topChats.length > clampedLimit) topChats = topChats.slice(0, clampedLimit);
         }
 
         const totalTime = Date.now() - startTime;
-        this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats (requested: ${clampedLimit})`);
-        topChats.forEach((chat, index) => {
-            this.logger.info(this.phoneNumber, `Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}, Level: ${chat.engagementLevel}, Days: ${chat.lastActivityDays}`);
-        });
+        this.logger.info(this.phoneNumber, `getTopPrivateChats optimized completed in ${totalTime}ms. Found ${topChats.length} results.`);
 
         return topChats;
+    }
+
+    /**
+     * Internal helper to analyze engagement for a specific chat
+     */
+    private async analyzeChatEngagement(
+        chatId: string,
+        user: Api.User,
+        messageLimit: number,
+        callStats: any,
+        weights: any,
+        now: number,
+        windows: any,
+        dialog?: any
+    ) {
+        let messageCount = 0;
+        let ownMessageCount = 0;
+        let replyChainCount = 0;
+        const mediaStats = { photos: 0, videos: 0 };
+        const messageDates: number[] = [];
+
+        for await (const message of this.client.iterMessages(chatId, {
+            limit: messageLimit,
+            reverse: false
+        })) {
+            messageCount++;
+            if (message.date) messageDates.push(message.date * 1000);
+            if (message.out) ownMessageCount++;
+            if (message.replyTo) replyChainCount++;
+
+            if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
+                if (message.media instanceof Api.MessageMediaPhoto) {
+                    mediaStats.photos++;
+                } else if (message.media instanceof Api.MessageMediaDocument) {
+                    const doc = message.media.document;
+                    if (doc instanceof Api.Document && doc.attributes.some(a => a instanceof Api.DocumentAttributeVideo)) {
+                        mediaStats.videos++;
+                    }
+                }
+            }
+        }
+
+        const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : (dialog?.message?.date ? dialog.message.date * 1000 : now);
+        const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
+
+        const cCalls = callStats || { total: 0, incoming: 0, outgoing: 0, video: 0 };
+        const baseScore = (
+            cCalls.incoming * weights.incomingCall +
+            cCalls.outgoing * weights.outgoingCall +
+            cCalls.video * weights.videoCall +
+            mediaStats.videos * weights.sharedVideo +
+            mediaStats.photos * weights.sharedPhoto +
+            messageCount * weights.textMessage
+        );
+
+        const mutualEngagementMultiplier = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
+        const interactionScore = baseScore * mutualEngagementMultiplier * (dialog?.pinned ? 1.2 : 1.0);
+
+        let engagementLevel: 'recent' | 'active' | 'dormant';
+        if (daysSinceLastActivity <= windows.recent) engagementLevel = 'recent';
+        else if (daysSinceLastActivity <= windows.active) engagementLevel = 'active';
+        else engagementLevel = 'dormant';
+
+        const totalActivity = Math.max(1, baseScore);
+        const activityBreakdown = {
+            videoCalls: Math.round((cCalls.video * weights.videoCall / totalActivity) * 100),
+            audioCalls: Math.round(((cCalls.total - cCalls.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
+            mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
+            textMessages: Math.round((messageCount * weights.textMessage / totalActivity) * 100)
+        };
+
+        return {
+            chatId: chatId === 'me' ? 'me' : user.id.toString(),
+            username: user.username,
+            firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
+            lastName: user.lastName,
+            totalMessages: messageCount,
+            interactionScore: Math.round(interactionScore * 100) / 100,
+            engagementLevel,
+            lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
+            calls: {
+                total: cCalls.total || 0,
+                incoming: { total: cCalls.incoming || 0, audio: Math.max(0, cCalls.incoming - cCalls.video) || 0, video: cCalls.video || 0 },
+                outgoing: { total: cCalls.outgoing || 0, audio: cCalls.outgoing || 0, video: 0 }
+            },
+            media: mediaStats,
+            activityBreakdown
+        };
     }
 
     async createGroupOrChannel(options: GroupOptions) {
