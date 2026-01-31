@@ -5343,27 +5343,30 @@ class TelegramManager {
             hash: (0, big_integer_1.default)(0),
         }));
         const callLogs = result.messages.filter((message) => message.action instanceof telegram_1.Api.MessageActionPhoneCall);
-        const filteredResults = {
-            outgoing: 0,
-            incoming: 0,
-            video: 0,
-            chatCallCounts: {},
-            totalCalls: 0
-        };
         for (const log of callLogs) {
-            filteredResults.totalCalls++;
+            if (!log.peerId || !(log.peerId instanceof telegram_1.Api.PeerUser))
+                continue;
+            const chatId = log.peerId.userId.toString();
+            if (!finalResult[chatId]) {
+                finalResult[chatId] = {
+                    outgoing: 0,
+                    incoming: 0,
+                    video: 0,
+                    totalCalls: 0
+                };
+            }
+            const stats = finalResult[chatId];
+            stats.totalCalls++;
             const logAction = log.action;
             if (log.out) {
-                filteredResults.outgoing++;
+                stats.outgoing++;
             }
             else {
-                filteredResults.incoming++;
+                stats.incoming++;
             }
             if (logAction.video) {
-                filteredResults.video++;
+                stats.video++;
             }
-            const chatId = log.peerId.userId.toString();
-            finalResult[chatId] = filteredResults;
         }
         return finalResult;
     }
@@ -7681,45 +7684,39 @@ class TelegramManager {
         if (!this.client)
             throw new Error('Client not initialized');
         const clampedLimit = Math.max(1, Math.min(50, limit || 10));
-        this.logger.info(this.phoneNumber, `Starting getTopPrivateChats analysis with limit=${clampedLimit}...`);
+        this.logger.info(this.phoneNumber, `Starting optimized getTopPrivateChats analysis with limit=${clampedLimit}...`);
         const startTime = Date.now();
         const now = Date.now();
         const nowSeconds = Math.floor(now / 1000);
         const weights = {
-            videoCall: 5,
+            videoCall: 2,
             incomingCall: 4,
-            outgoingCall: 3,
+            outgoingCall: 1,
             sharedVideo: 12,
             sharedPhoto: 10,
             textMessage: 1,
             unreadMessages: 1,
-            recentActivity: 1,
         };
         const ACTIVITY_WINDOWS = {
             recent: 7,
             active: 30,
             dormant: 90
         };
-        const getTimeDecayMultiplier = (daysSinceActivity) => {
-            if (daysSinceActivity <= 1)
-                return 1.5;
-            if (daysSinceActivity <= 7)
-                return 1.2;
-            if (daysSinceActivity <= 30)
-                return 1.0;
-            if (daysSinceActivity <= 90)
-                return 0.7;
-            return 0.3;
-        };
-        this.logger.info(this.phoneNumber, 'Fetching dialogs with metadata...');
-        const dialogs = [];
-        for await (const dialog of this.client.iterDialogs({
-            limit: 200
-        })) {
-            dialogs.push(dialog);
-        }
-        this.logger.info(this.phoneNumber, `Found ${dialogs.length} total dialogs`);
-        const privateChats = dialogs
+        this.logger.info(this.phoneNumber, 'Fetching initial metadata in parallel...');
+        const [me, callLogs, dialogs] = await Promise.all([
+            this.getMe().catch(() => null),
+            this.getCallLogsInternal().catch(() => ({})),
+            (async () => {
+                const results = [];
+                for await (const dialog of this.client.iterDialogs({ limit: 150 })) {
+                    results.push(dialog);
+                }
+                return results;
+            })()
+        ]);
+        if (!me)
+            throw new Error('Failed to fetch self userInfo');
+        const candidateChats = dialogs
             .filter(dialog => {
             if (!dialog.isUser || !(dialog.entity instanceof telegram_1.Api.User))
                 return false;
@@ -7727,307 +7724,134 @@ class TelegramManager {
             if (user.bot || user.fake)
                 return false;
             const userId = user.id.toString();
-            if (userId === "777000" || userId === "42777")
-                return false;
-            return true;
+            return userId !== "777000" && userId !== "42777";
         })
-            .sort((a, b) => {
-            const dateA = a.message?.date || 0;
-            const dateB = b.message?.date || 0;
-            return dateB - dateA;
-        });
-        this.logger.info(this.phoneNumber, `Found ${privateChats.length} valid private chats after smart filtering`);
-        const callLogs = await this.getCallLogsInternal();
+            .map(dialog => {
+            const lastDate = dialog.message?.date || 0;
+            const daysSinceLast = (nowSeconds - lastDate) / 86400;
+            const recencyScore = Math.max(0, 100 - daysSinceLast * 2);
+            const unreadScore = (dialog.unreadCount || 0) * 10;
+            const pinnedScore = dialog.pinned ? 50 : 0;
+            return {
+                dialog,
+                preliminaryScore: recencyScore + unreadScore + pinnedScore,
+                daysSinceLast
+            };
+        })
+            .sort((a, b) => b.preliminaryScore - a.preliminaryScore);
         let selfChatData = null;
         try {
-            const me = await this.getMe();
             const selfChatId = me.id.toString();
-            this.logger.info(this.phoneNumber, `Processing self chat (me) with chatId: ${selfChatId}`);
-            let messageCount = 0;
-            let ownMessageCount = 0;
-            let replyChainCount = 0;
-            const messageDates = [];
-            const mediaStats = { photos: 0, videos: 0 };
-            for await (const message of this.client.iterMessages('me', {
-                limit: 500,
-                reverse: false
-            })) {
-                messageCount++;
-                if (message.date) {
-                    messageDates.push(message.date * 1000);
-                }
-                if (message.out) {
-                    ownMessageCount++;
-                }
-                if (message.replyTo) {
-                    replyChainCount++;
-                }
-                if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
-                    if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
-                        mediaStats.photos++;
-                    }
-                    else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-                        const document = message.media.document;
-                        if (document instanceof telegram_1.Api.Document) {
-                            const isVideo = document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
-                            if (isVideo) {
-                                mediaStats.videos++;
-                            }
-                        }
-                    }
-                }
-            }
-            let totalMessages = messageCount;
-            try {
-                const firstBatch = await this.client.getMessages('me', { limit: 1 });
-                if (firstBatch.total) {
-                    totalMessages = firstBatch.total;
-                }
-            }
-            catch (totalError) {
-            }
-            const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : now;
-            const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-            const timeDecay = getTimeDecayMultiplier(daysSinceLastActivity);
-            const mutualEngagementScore = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
-            const conversationDepthScore = messageCount > 0 ? Math.min(1.3, 1 + (replyChainCount / messageCount) * 0.3) : 1.0;
-            const callStats = {
-                total: 0,
-                incoming: { total: 0, audio: 0, video: 0 },
-                outgoing: { total: 0, audio: 0, video: 0 }
-            };
-            const baseScore = (mediaStats.videos * weights.sharedVideo +
-                mediaStats.photos * weights.sharedPhoto +
-                totalMessages * weights.textMessage);
-            const interactionScore = baseScore * timeDecay * mutualEngagementScore * conversationDepthScore;
-            let engagementLevel;
-            if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
-                engagementLevel = 'recent';
-            }
-            else if (daysSinceLastActivity <= ACTIVITY_WINDOWS.active) {
-                engagementLevel = 'active';
-            }
-            else {
-                engagementLevel = 'dormant';
-            }
-            const totalActivity = (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                totalMessages * weights.textMessage;
-            const activityBreakdown = totalActivity > 0 ? {
-                videoCalls: 0,
-                audioCalls: 0,
-                mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-                textMessages: Math.round((totalMessages * weights.textMessage / totalActivity) * 100)
-            } : {
-                videoCalls: 0,
-                audioCalls: 0,
-                mediaSharing: 0,
-                textMessages: 100
-            };
-            selfChatData = {
-                chatId: 'me',
-                username: me.username,
-                firstName: me.firstName || 'Saved Messages',
-                lastName: me.lastName,
-                totalMessages,
-                interactionScore: Math.round(interactionScore * 100) / 100,
-                engagementLevel,
-                lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
-                calls: callStats,
-                media: mediaStats,
-                activityBreakdown
-            };
-            this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}, Total Messages: ${totalMessages}`);
+            const results = await this.analyzeChatEngagement('me', me, 300, callLogs[selfChatId], weights, now, ACTIVITY_WINDOWS);
+            selfChatData = results;
+            this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
         }
-        catch (selfChatError) {
-            this.logger.warn(this.phoneNumber, `Error processing self chat, will continue without it:`, selfChatError);
+        catch (e) {
+            this.logger.warn(this.phoneNumber, 'Error processing self chat:', e);
         }
-        const batchSize = 10;
+        const topCandidates = candidateChats.slice(0, clampedLimit * 2);
+        this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
         const chatStats = [];
-        const CHAT_TIMEOUT_MS = 30000;
-        const BATCH_DELAY_MS = 100;
-        const targetCandidates = clampedLimit * 2;
-        for (let i = 0; i < privateChats.length; i += batchSize) {
-            if (chatStats.length >= targetCandidates) {
-                this.logger.info(this.phoneNumber, `Early termination: Found ${chatStats.length} candidates (target: ${targetCandidates})`);
-                break;
-            }
-            this.logger.info(this.phoneNumber, `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(privateChats.length / batchSize)} (${chatStats.length} candidates so far)`);
-            const batch = privateChats.slice(i, i + batchSize);
-            const batchResults = await Promise.all(batch.map(async (dialog) => {
-                const processingStart = Date.now();
-                const chatId = dialog.entity.id.toString();
-                const user = dialog.entity;
-                const lastMessageDate = dialog.message?.date ? dialog.message.date * 1000 : now;
-                const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-                const unreadCount = dialog.unreadCount || 0;
-                const isPinned = dialog.pinned || false;
-                this.logger.info(this.phoneNumber, `Processing chat ${chatId} (${user.firstName || 'Unknown'}) - Last activity: ${daysSinceLastActivity.toFixed(1)} days ago, Unread: ${unreadCount}`);
+        const batchSize = 5;
+        for (let i = 0; i < topCandidates.length; i += batchSize) {
+            const batch = topCandidates.slice(i, i + batchSize);
+            const batchResults = await Promise.all(batch.map(async (candidate) => {
+                const user = candidate.dialog.entity;
+                const chatId = user.id.toString();
                 try {
-                    const chatProcessingPromise = (async () => {
-                        let messageCount = 0;
-                        let ownMessageCount = 0;
-                        let replyChainCount = 0;
-                        let recentMediaCount = 0;
-                        const messageDates = [];
-                        const mediaStats = { photos: 0, videos: 0 };
-                        for await (const message of this.client.iterMessages(chatId, {
-                            limit: 400,
-                            reverse: false
-                        })) {
-                            messageCount++;
-                            if (message.date) {
-                                messageDates.push(message.date * 1000);
-                            }
-                            if (message.out) {
-                                ownMessageCount++;
-                            }
-                            if (message.replyTo) {
-                                replyChainCount++;
-                            }
-                            if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
-                                recentMediaCount++;
-                                if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
-                                    mediaStats.photos++;
-                                }
-                                else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-                                    const document = message.media.document;
-                                    if (document instanceof telegram_1.Api.Document) {
-                                        const isVideo = document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
-                                        if (isVideo) {
-                                            mediaStats.videos++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        let totalMessages = messageCount;
-                        try {
-                            const firstBatch = await this.client.getMessages(chatId, { limit: 1 });
-                            if (firstBatch.total) {
-                                totalMessages = firstBatch.total;
-                            }
-                        }
-                        catch (totalError) {
-                        }
-                        return { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages };
-                    })();
-                    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), CHAT_TIMEOUT_MS));
-                    const result = await Promise.race([chatProcessingPromise, timeoutPromise]);
-                    if (result === null) {
-                        this.logger.warn(this.phoneNumber, `Chat ${chatId} processing timed out after ${CHAT_TIMEOUT_MS}ms - skipping`);
-                        return null;
-                    }
-                    const { messageCount, ownMessageCount, replyChainCount, messageDates, mediaStats, totalMessages } = result;
-                    const callStats = {
-                        total: 0,
-                        incoming: { total: 0, audio: 0, video: 0 },
-                        outgoing: { total: 0, audio: 0, video: 0 }
-                    };
-                    const userCalls = callLogs[chatId];
-                    if (userCalls) {
-                        callStats.total = userCalls.totalCalls || 0;
-                        callStats.incoming.total = userCalls.incoming || 0;
-                        callStats.outgoing.total = userCalls.outgoing || 0;
-                        callStats.incoming.video = userCalls.video || 0;
-                        callStats.incoming.audio = callStats.incoming.total - callStats.incoming.video;
-                        callStats.outgoing.audio = callStats.outgoing.total;
-                    }
-                    const baseScore = (callStats.incoming.total * weights.incomingCall +
-                        callStats.outgoing.total * weights.outgoingCall +
-                        (callStats.incoming.video + (callStats.outgoing.total > 0 ? 1 : 0)) * weights.videoCall +
-                        mediaStats.videos * weights.sharedVideo +
-                        mediaStats.photos * weights.sharedPhoto +
-                        totalMessages * weights.textMessage +
-                        unreadCount * weights.unreadMessages);
-                    const interactionScore = baseScore;
-                    const finalScore = isPinned ? interactionScore * 1.2 : interactionScore;
-                    let engagementLevel;
-                    if (daysSinceLastActivity <= ACTIVITY_WINDOWS.recent) {
-                        engagementLevel = 'recent';
-                    }
-                    else if (daysSinceLastActivity <= ACTIVITY_WINDOWS.active) {
-                        engagementLevel = 'active';
-                    }
-                    else {
-                        engagementLevel = 'dormant';
-                    }
-                    const totalActivity = callStats.incoming.video * weights.videoCall +
-                        callStats.incoming.total * weights.incomingCall +
-                        callStats.outgoing.total * weights.outgoingCall +
-                        (mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) +
-                        totalMessages * weights.textMessage;
-                    const activityBreakdown = totalActivity > 0 ? {
-                        videoCalls: Math.round((callStats.incoming.video * weights.videoCall / totalActivity) * 100),
-                        audioCalls: Math.round(((callStats.incoming.total + callStats.outgoing.total) * weights.incomingCall / totalActivity) * 100),
-                        mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-                        textMessages: Math.round((totalMessages * weights.textMessage / totalActivity) * 100)
-                    } : {
-                        videoCalls: 0,
-                        audioCalls: 0,
-                        mediaSharing: 0,
-                        textMessages: 100
-                    };
-                    const processingTime = Date.now() - processingStart;
-                    this.logger.info(this.phoneNumber, `Finished processing chat ${chatId} in ${processingTime}ms - Score: ${finalScore.toFixed(2)}, Level: ${engagementLevel}, Days: ${daysSinceLastActivity.toFixed(1)}`);
-                    return {
-                        chatId,
-                        username: user.username,
-                        firstName: user.firstName,
-                        lastName: user.lastName,
-                        totalMessages,
-                        interactionScore: Math.round(finalScore * 100) / 100,
-                        engagementLevel,
-                        lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
-                        calls: {
-                            total: callStats.total,
-                            incoming: callStats.incoming,
-                            outgoing: callStats.outgoing
-                        },
-                        media: mediaStats,
-                        activityBreakdown
-                    };
+                    return await this.analyzeChatEngagement(chatId, user, 150, callLogs[chatId], weights, now, ACTIVITY_WINDOWS, candidate.dialog);
                 }
                 catch (error) {
-                    const processingTime = Date.now() - processingStart;
-                    if (error.message === 'Chat processing timeout') {
-                        this.logger.warn(this.phoneNumber, `Chat ${chatId} timed out after ${processingTime}ms, skipping...`);
-                    }
-                    else {
-                        this.logger.error(this.phoneNumber, `Error processing chat ${chatId} after ${processingTime}ms:`, error);
-                    }
+                    this.logger.warn(this.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
                     return null;
                 }
             }));
             chatStats.push(...batchResults.filter(Boolean));
-            if (i + batchSize < privateChats.length && chatStats.length < targetCandidates) {
-                await (0, Helpers_1.sleep)(BATCH_DELAY_MS);
-            }
         }
         let topChats = chatStats
-            .sort((a, b) => {
-            if (Math.abs(b.interactionScore - a.interactionScore) > 0.1) {
-                return b.interactionScore - a.interactionScore;
-            }
-            const levelOrder = { recent: 3, active: 2, dormant: 1 };
-            if (levelOrder[b.engagementLevel] !== levelOrder[a.engagementLevel]) {
-                return levelOrder[b.engagementLevel] - levelOrder[a.engagementLevel];
-            }
-            return a.lastActivityDays - b.lastActivityDays;
-        })
+            .sort((a, b) => b.interactionScore - a.interactionScore)
             .slice(0, clampedLimit);
         if (selfChatData) {
-            topChats = topChats.filter(chat => chat.chatId !== 'me');
+            topChats = topChats.filter(chat => chat.chatId !== 'me' && chat.chatId !== me.id.toString());
             topChats.unshift(selfChatData);
-            if (topChats.length > clampedLimit) {
+            if (topChats.length > clampedLimit)
                 topChats = topChats.slice(0, clampedLimit);
-            }
         }
         const totalTime = Date.now() - startTime;
-        this.logger.info(this.phoneNumber, `getTopPrivateChats completed in ${totalTime}ms. Found ${topChats.length} top chats (requested: ${clampedLimit})`);
-        topChats.forEach((chat, index) => {
-            this.logger.info(this.phoneNumber, `Top ${index + 1}: ${chat.firstName} (${chat.username || 'no username'}) - Score: ${chat.interactionScore}, Level: ${chat.engagementLevel}, Days: ${chat.lastActivityDays}`);
-        });
+        this.logger.info(this.phoneNumber, `getTopPrivateChats optimized completed in ${totalTime}ms. Found ${topChats.length} results.`);
         return topChats;
+    }
+    async analyzeChatEngagement(chatId, user, messageLimit, callStats, weights, now, windows, dialog) {
+        let messageCount = 0;
+        let ownMessageCount = 0;
+        let replyChainCount = 0;
+        const mediaStats = { photos: 0, videos: 0 };
+        const messageDates = [];
+        for await (const message of this.client.iterMessages(chatId, {
+            limit: messageLimit,
+            reverse: false
+        })) {
+            messageCount++;
+            if (message.date)
+                messageDates.push(message.date * 1000);
+            if (message.out)
+                ownMessageCount++;
+            if (message.replyTo)
+                replyChainCount++;
+            if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
+                if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+                    mediaStats.photos++;
+                }
+                else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+                    const doc = message.media.document;
+                    if (doc instanceof telegram_1.Api.Document && doc.attributes.some(a => a instanceof telegram_1.Api.DocumentAttributeVideo)) {
+                        mediaStats.videos++;
+                    }
+                }
+            }
+        }
+        const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : (dialog?.message?.date ? dialog.message.date * 1000 : now);
+        const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
+        const cCalls = callStats || { total: 0, incoming: 0, outgoing: 0, video: 0 };
+        const baseScore = (cCalls.incoming * weights.incomingCall +
+            cCalls.outgoing * weights.outgoingCall +
+            cCalls.video * weights.videoCall +
+            mediaStats.videos * weights.sharedVideo +
+            mediaStats.photos * weights.sharedPhoto +
+            messageCount * weights.textMessage);
+        const mutualEngagementMultiplier = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
+        const interactionScore = baseScore * mutualEngagementMultiplier * (dialog?.pinned ? 1.2 : 1.0);
+        let engagementLevel;
+        if (daysSinceLastActivity <= windows.recent)
+            engagementLevel = 'recent';
+        else if (daysSinceLastActivity <= windows.active)
+            engagementLevel = 'active';
+        else
+            engagementLevel = 'dormant';
+        const totalActivity = Math.max(1, baseScore);
+        const activityBreakdown = {
+            videoCalls: Math.round((cCalls.video * weights.videoCall / totalActivity) * 100),
+            audioCalls: Math.round(((cCalls.total - cCalls.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
+            mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
+            textMessages: Math.round((messageCount * weights.textMessage / totalActivity) * 100)
+        };
+        return {
+            chatId: chatId === 'me' ? 'me' : user.id.toString(),
+            username: user.username,
+            firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
+            lastName: user.lastName,
+            totalMessages: messageCount,
+            interactionScore: Math.round(interactionScore * 100) / 100,
+            engagementLevel,
+            lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
+            calls: {
+                total: cCalls.total || 0,
+                incoming: { total: cCalls.incoming || 0, audio: Math.max(0, cCalls.incoming - cCalls.video) || 0, video: cCalls.video || 0 },
+                outgoing: { total: cCalls.outgoing || 0, audio: cCalls.outgoing || 0, video: 0 }
+            },
+            media: mediaStats,
+            activityBreakdown
+        };
     }
     async createGroupOrChannel(options) {
         if (!this.client)
