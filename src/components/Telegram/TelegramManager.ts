@@ -4610,12 +4610,15 @@ class TelegramManager {
         windows: any,
         dialog?: any
     ) {
-        const [photosList, videosList, photosByUsList, videosByUsList, lastMessage] = await Promise.all([
+
+        const lastMessage = await this.client.getMessages(chatId, { limit: 1 });
+        if ((lastMessage?.total ?? 0) < 10) return null;
+
+        const [photosList, videosList, photosByUsList, videosByUsList] = await Promise.all([
             this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
             this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
             this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterPhotos(), limit: 1, fromUser: 'me' }).catch(() => []),
             this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterVideo(), limit: 1, fromUser: 'me' }).catch(() => []),
-            this.client.getMessages(chatId, { limit: 1 })
         ]);
 
         const totalPhotos = (photosList as { total?: number })?.total ?? 0;
@@ -4642,7 +4645,7 @@ class TelegramManager {
             cCalls.outgoing * weights.outgoingCall +
             cCalls.video * weights.videoCall +
             mediaStats.videos * weights.sharedVideo +
-            mediaStats.photos * weights.sharedPhoto 
+            mediaStats.photos * weights.sharedPhoto
         );
 
         const engagementLevel: 'recent' | 'active' | 'dormant' = baseScore > 0 ? 'active' : 'dormant';
