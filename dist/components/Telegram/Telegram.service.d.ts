@@ -806,6 +806,10 @@ export declare class TelegramService implements OnModuleDestroy {
         media: {
             photos: number;
             videos: number;
+            photosByUs: number;
+            photosByThem: number;
+            videosByUs: number;
+            videosByThem: number;
         };
         activityBreakdown: {
             videoCalls: number;
