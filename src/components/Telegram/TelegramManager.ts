@@ -4531,8 +4531,6 @@ class TelegramManager {
                     preliminaryScore: unreadScore + pinnedScore
                 };
             })
-            // Sort by potential engagement
-            .sort((a, b) => b.preliminaryScore - a.preliminaryScore);
 
         // Process "me" chat with high priority
         let selfChatData = null;
