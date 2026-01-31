@@ -527,9 +527,9 @@ class TelegramManager {
 
     /**
      * Get statistics about media messages in saved messages (self chat)
-     * Uses iterMessages for memory-efficient processing - processes messages one at a time
-     * instead of loading batches into memory, significantly reducing RAM usage
-     * @param limit - Maximum number of messages to analyze (default: 500, max: 10000)
+     * Uses Search (filter + limit 1) for photo/video counts like analyzeChatEngagement;
+     * one iteration only for movie detection and analyzed count.
+     * @param limit - Max messages to scan for movie count (default: 500, max: 10000)
      * @returns Statistics about photos, videos, and movies in saved messages
      */
     async getSelfMSgsInfo(limit: number = 500): Promise<{
@@ -546,102 +546,41 @@ class TelegramManager {
         if (!this.client) throw new Error('Client is not initialized');
 
         try {
-            const self = <Api.User>await this.client.getMe();
-            const selfChatId = self.id;
-
-            let photoCount = 0;
-            let ownPhotoCount = 0;
-            let ownVideoCount = 0;
-            let otherPhotoCount = 0;
-            let otherVideoCount = 0;
-            let videoCount = 0;
-            let movieCount = 0;
-            let analyzedMessages = 0;
-
-            // Clamp limit to reasonable range
             const maxLimit = Math.min(Math.max(limit, 1), 10000);
+            const movieKeywords = ['movie', 'series', '1080', '720', 'terabox', '640', 'title', 'aac', '265', '264', 'instagr', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'];
 
-            // Use iterMessages for memory-efficient processing
-            // This processes messages one at a time instead of loading batches into memory
-            // Significantly reduces RAM usage, especially for large message histories
-            for await (const message of this.client.iterMessages(selfChatId, {
-                limit: maxLimit,
-                // Process messages in reverse chronological order (newest first)
-                reverse: false
-            })) {
-                analyzedMessages++;
-
-                // Skip empty messages
-                if (!message) continue;
-
-                // Check for media using proper API types
-                const hasMedia = message.media && !(message.media instanceof Api.MessageMediaEmpty);
-
-                if (hasMedia) {
-                    // Check for photo
-                    if (message.media instanceof Api.MessageMediaPhoto) {
-                        photoCount++;
-                        // Use message.out to determine if it's own message (more reliable than fwdFrom)
-                        if (message.out) {
-                            ownPhotoCount++;
-                        } else {
-                            otherPhotoCount++;
-                        }
+            const [photosList, videosList, photosByUsList, videosByUsList, totalBatch, movieScan] = await Promise.all([
+                this.client.getMessages('me', { filter: new Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
+                this.client.getMessages('me', { filter: new Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
+                this.client.getMessages('me', { filter: new Api.InputMessagesFilterPhotos(), limit: 1, fromUser: 'me' }).catch(() => []),
+                this.client.getMessages('me', { filter: new Api.InputMessagesFilterVideo(), limit: 1, fromUser: 'me' }).catch(() => []),
+                this.client.getMessages('me', { limit: 1 }).catch(() => []),
+                (async () => {
+                    let analyzedMessages = 0;
+                    let movieCount = 0;
+                    for await (const message of this.client.iterMessages('me', { limit: maxLimit, reverse: false })) {
+                        analyzedMessages++;
+                        if (message?.text && contains(message.text.toLowerCase(), movieKeywords)) movieCount++;
                     }
-                    // Check for video/document with video
-                    else if (message.media instanceof Api.MessageMediaDocument) {
-                        const document = message.media.document;
-                        if (document instanceof Api.Document) {
-                            // Check if it's a video by looking for video attributes
-                            const isVideo = document.attributes.some(
-                                attr => attr instanceof Api.DocumentAttributeVideo
-                            );
+                    return { analyzedMessages, movieCount };
+                })()
+            ]);
 
-                            if (isVideo) {
-                                videoCount++;
-                                if (message.out) {
-                                    ownVideoCount++;
-                                } else {
-                                    otherVideoCount++;
-                                }
-                            }
-                        }
-                    }
-                }
+            const photoCount = (photosList as { total?: number })?.total ?? 0;
+            const videoCount = (videosList as { total?: number })?.total ?? 0;
+            const ownPhotoCount = (photosByUsList as { total?: number })?.total ?? 0;
+            const ownVideoCount = (videosByUsList as { total?: number })?.total ?? 0;
+            const otherPhotoCount = Math.max(0, photoCount - ownPhotoCount);
+            const otherVideoCount = Math.max(0, videoCount - ownVideoCount);
 
-                // Movie detection based on text content (for links/shared content)
-                // Only check if message has text - early exit for performance
-                if (message.text) {
-                    const text = message.text.toLowerCase();
-                    const movieKeywords = ['movie', 'series', '1080', '720', 'terabox', '640', 'title', 'aac', '265', '264', 'instagr', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'];
-                    if (contains(text, movieKeywords)) {
-                        movieCount++;
-                    }
-                }
+            let totalMessages = movieScan.analyzedMessages;
+            const totalFromBatch = (totalBatch as { total?: number })?.total;
+            if (totalFromBatch != null) totalMessages = totalFromBatch;
 
-                // Early exit if we've reached the limit
-                if (analyzedMessages >= maxLimit) {
-                    break;
-                }
-            }
-
-            // Get total message count (separate lightweight call)
-            // This is optional - can be expensive for very large chats
-            let totalMessages = analyzedMessages;
-            try {
-                const firstBatch = await this.client.getMessages(selfChatId, { limit: 1 });
-                if (firstBatch.total) {
-                    totalMessages = firstBatch.total;
-                }
-            } catch (totalError) {
-                // If getting total fails, use analyzed count as fallback
-                this.logger.debug(this.phoneNumber, 'Could not fetch total message count, using analyzed count');
-            }
-
-            this.logger.info(this.phoneNumber, `getSelfMSgsInfo: Analyzed ${analyzedMessages} messages`, {
+            this.logger.info(this.phoneNumber, `getSelfMSgsInfo: Analyzed ${movieScan.analyzedMessages} messages`, {
                 photoCount,
                 videoCount,
-                movieCount,
+                movieCount: movieScan.movieCount,
                 total: totalMessages
             });
 
@@ -649,12 +588,12 @@ class TelegramManager {
                 total: totalMessages,
                 photoCount,
                 videoCount,
-                movieCount,
+                movieCount: movieScan.movieCount,
                 ownPhotoCount,
                 otherPhotoCount,
                 ownVideoCount,
                 otherVideoCount,
-                analyzedMessages
+                analyzedMessages: movieScan.analyzedMessages
             };
         } catch (error) {
             this.logger.error(this.phoneNumber, 'Error in getSelfMSgsInfo:', error);
@@ -1228,152 +1167,108 @@ class TelegramManager {
 
         try {
             const maxLimit = Math.min(Math.max(limit, 1), 10000);
-            let analyzedCalls = 0;
+            const chunkSize = 100;
+            const callLogs: Api.Message[] = [];
+            let offsetId = 0;
+
+            while (callLogs.length < maxLimit) {
+                const result = <Api.messages.Messages>await this.client.invoke(
+                    new Api.messages.Search({
+                        peer: new Api.InputPeerEmpty(),
+                        q: '',
+                        filter: new Api.InputMessagesFilterPhoneCalls({ missed: false }),
+                        minDate: 0,
+                        maxDate: 0,
+                        offsetId,
+                        addOffset: 0,
+                        limit: chunkSize,
+                        maxId: 0,
+                        minId: 0,
+                        hash: bigInt(0),
+                    })
+                );
+                const messages = result.messages || [];
+                for (const m of messages) {
+                    if (m instanceof Api.Message && m.action instanceof Api.MessageActionPhoneCall) {
+                        callLogs.push(m);
+                        if (callLogs.length >= maxLimit) break;
+                    }
+                }
+                if (messages.length < chunkSize) break;
+                const lastMsg = messages[messages.length - 1];
+                offsetId = lastMsg?.id ?? 0;
+            }
 
             const filteredResults = {
                 outgoing: 0,
                 incoming: 0,
                 video: 0,
                 audio: 0,
-                chatCallCounts: {} as Record<string, {
-                    phone?: string;
-                    username?: string;
-                    name: string;
-                    count: number;
-                    peerType: 'user' | 'group' | 'channel';
-                }>,
                 totalCalls: 0
             };
-
-            // Use messages.Search with InputMessagesFilterPhoneCalls filter
-            // This performs server-side filtering, which is much more efficient than
-            // fetching all messages and filtering client-side
-            // The API returns only call messages, reducing bandwidth and processing time
-            const result = <Api.messages.Messages>await this.client.invoke(
-                new Api.messages.Search({
-                    peer: new Api.InputPeerEmpty(), // Search all chats
-                    q: '', // Empty query to get all calls
-                    filter: new Api.InputMessagesFilterPhoneCalls({}), // Server-side filter for calls only
-                    minDate: 0,
-                    maxDate: 0,
-                    offsetId: 0,
-                    addOffset: 0,
-                    limit: maxLimit, // Request only what we need
-                    maxId: 0,
-                    minId: 0,
-                    hash: bigInt(0),
-                })
-            );
-
-            const callLogs = <Api.Message[]>result.messages.filter(
-                (message: Api.Message) => message.action instanceof Api.MessageActionPhoneCall
-            );
-
-            // Process each call log - batch entity fetching for better performance
-            const entityCache = new Map<string, { name: string; phone?: string; username?: string; peerType: 'user' | 'group' | 'channel' }>();
+            const rawChatStats: Record<string, { count: number; peerType: 'user' | 'group' | 'channel' }> = {};
 
             for (const log of callLogs) {
-                if (analyzedCalls >= maxLimit) break;
+                const logAction = log.action as Api.MessageActionPhoneCall;
+                filteredResults.totalCalls++;
+                if (log.out) filteredResults.outgoing++;
+                else filteredResults.incoming++;
+                if (logAction.video) filteredResults.video++;
+                else filteredResults.audio++;
 
-                try {
-                    if (!log.action || !(log.action instanceof Api.MessageActionPhoneCall)) {
-                        continue;
-                    }
+                let chatId: string;
+                let peerType: 'user' | 'group' | 'channel' = 'user';
+                if (log.peerId instanceof Api.PeerUser) {
+                    chatId = log.peerId.userId.toString();
+                    peerType = 'user';
+                } else if (log.peerId instanceof Api.PeerChat) {
+                    chatId = log.peerId.chatId.toString();
+                    peerType = 'group';
+                } else if (log.peerId instanceof Api.PeerChannel) {
+                    chatId = log.peerId.channelId.toString();
+                    peerType = 'channel';
+                } else continue;
 
-                    filteredResults.totalCalls++;
-                    analyzedCalls++;
-                    const logAction = <Api.MessageActionPhoneCall>log.action;
-
-                    // Categorize by direction
-                    if (log.out) {
-                        filteredResults.outgoing++;
-                    } else {
-                        filteredResults.incoming++;
-                    }
-
-                    // Categorize by call type
-                    if (logAction.video) {
-                        filteredResults.video++;
-                    } else {
-                        filteredResults.audio++;
-                    }
-
-                    // Extract chat ID - handle different peer types
-                    let chatId: string;
-                    let peerType: 'user' | 'group' | 'channel' = 'user';
-
-                    if (log.peerId instanceof Api.PeerUser) {
-                        chatId = log.peerId.userId.toString();
-                        peerType = 'user';
-                    } else if (log.peerId instanceof Api.PeerChat) {
-                        chatId = log.peerId.chatId.toString();
-                        peerType = 'group';
-                    } else if (log.peerId instanceof Api.PeerChannel) {
-                        chatId = log.peerId.channelId.toString();
-                        peerType = 'channel';
-                    } else {
-                        // Unknown peer type, skip
-                        const peerTypeName = (log.peerId as any)?.className || 'Unknown';
-                        this.logger.warn(this.phoneNumber, `Unknown peer type in call log: ${peerTypeName}`);
-                        continue;
-                    }
-
-                    // Initialize chat entry if not exists - use cache to avoid duplicate entity fetches
-                    if (!filteredResults.chatCallCounts[chatId]) {
-                        if (!entityCache.has(chatId)) {
-                            try {
-                                const entity = await this.safeGetEntity(chatId);
-
-                                if (entity instanceof Api.User) {
-                                    entityCache.set(chatId, {
-                                        phone: entity.phone,
-                                        username: entity.username,
-                                        name: `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || 'Unknown',
-                                        peerType: 'user'
-                                    });
-                                } else if (entity instanceof Api.Chat) {
-                                    entityCache.set(chatId, {
-                                        name: entity.title || 'Unknown Group',
-                                        peerType: 'group'
-                                    });
-                                } else if (entity instanceof Api.Channel) {
-                                    entityCache.set(chatId, {
-                                        username: entity.username,
-                                        name: entity.title || 'Unknown Channel',
-                                        peerType: 'channel'
-                                    });
-                                } else {
-                                    // Fallback for unknown entity types
-                                    entityCache.set(chatId, {
-                                        name: 'Unknown',
-                                        peerType
-                                    });
-                                }
-                            } catch (entityError) {
-                                // If entity fetch fails, use fallback
-                                this.logger.warn(this.phoneNumber, `Failed to get entity for chatId ${chatId}:`, entityError);
-                                entityCache.set(chatId, {
-                                    name: 'Unknown',
-                                    peerType
-                                });
-                            }
-                        }
-
-                        const cachedEntity = entityCache.get(chatId)!;
-                        filteredResults.chatCallCounts[chatId] = {
-                            ...cachedEntity,
-                            count: 0
-                        };
-                    }
-
-                    filteredResults.chatCallCounts[chatId].count++;
-                } catch (logError) {
-                    this.logger.warn(this.phoneNumber, 'Error processing call log entry:', logError);
-                    // Continue processing other calls
-                }
+                if (!rawChatStats[chatId]) rawChatStats[chatId] = { count: 0, peerType };
+                rawChatStats[chatId].count++;
             }
 
-            // Process chat call counts - get additional info for chats with >4 calls
+            const uniqueChatIds = Object.keys(rawChatStats);
+            const entityCache = new Map<string, { name: string; phone?: string; username?: string; peerType: 'user' | 'group' | 'channel' }>();
+            await Promise.all(uniqueChatIds.map(async (chatId) => {
+                const peerType = rawChatStats[chatId].peerType;
+                try {
+                    const entity = await this.safeGetEntity(chatId);
+                    if (entity instanceof Api.User) {
+                        entityCache.set(chatId, {
+                            phone: entity.phone,
+                            username: entity.username,
+                            name: `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || 'Unknown',
+                            peerType: 'user'
+                        });
+                    } else if (entity instanceof Api.Chat) {
+                        entityCache.set(chatId, { name: entity.title || 'Unknown Group', peerType: 'group' });
+                    } else if (entity instanceof Api.Channel) {
+                        entityCache.set(chatId, {
+                            username: entity.username,
+                            name: entity.title || 'Unknown Channel',
+                            peerType: 'channel'
+                        });
+                    } else {
+                        entityCache.set(chatId, { name: 'Unknown', peerType });
+                    }
+                } catch (e) {
+                    this.logger.warn(this.phoneNumber, `Failed to get entity for chatId ${chatId}:`, e);
+                    entityCache.set(chatId, { name: 'Unknown', peerType });
+                }
+            }));
+
+            const chatCallCountsWithDetails: Record<string, { phone?: string; username?: string; name: string; count: number; peerType: 'user' | 'group' | 'channel' }> = {};
+            for (const chatId of uniqueChatIds) {
+                const cached = entityCache.get(chatId)!;
+                chatCallCountsWithDetails[chatId] = { ...cached, count: rawChatStats[chatId].count };
+            }
+
             const filteredChatCallCounts: Array<{
                 chatId: string;
                 phone?: string;
@@ -1386,72 +1281,37 @@ class TelegramManager {
                 peerType: 'user' | 'group' | 'channel';
             }> = [];
 
-            for (const [chatId, details] of Object.entries(filteredResults.chatCallCounts)) {
-                if (details.count > 4) {
-                    try {
-                        let video = 0;
-                        let photo = 0;
-                        let totalMsgs = 0;
-                        const maxMessagesToAnalyze = 600;
+            const chatsWithManyCalls = uniqueChatIds.filter(id => rawChatStats[id].count > 4);
+            await Promise.all(chatsWithManyCalls.map(async (chatId) => {
+                const details = chatCallCountsWithDetails[chatId];
+                try {
+                    const [photosList, videosList, msgCount] = await Promise.all([
+                        this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
+                        this.client.getMessages(chatId, { filter: new Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
+                        this.client.getMessages(chatId, { limit: 3 }).catch(() => ({ total: 0 }))
+                    ]);
+                    const photo = (photosList as { total?: number })?.total ?? 0;
+                    const video = (videosList as { total?: number })?.total ?? 0;
+                    filteredChatCallCounts.push({
+                        chatId,
+                        ...details,
+                        msgs: msgCount.total,
+                        video,
+                        photo
+                    });
+                } catch (msgError) {
+                    this.logger.warn(this.phoneNumber, `Failed to get messages for chatId ${chatId}:`, msgError);
+                    filteredChatCallCounts.push({ chatId, ...details });
+                }
+            }));
 
-                        // Use iterMessages for memory-efficient message processing
-                        // This processes messages one at a time instead of loading 600 into memory
-                        let messageCount = 0;
-                        for await (const message of this.client.iterMessages(chatId, {
-                            limit: maxMessagesToAnalyze,
-                            reverse: false
-                        })) {
-                            messageCount++;
-
-                            // Skip movie-related messages early for performance
-                            if (message.text) {
-                                const text = message.text.toLowerCase();
-                                if (contains(text, ['movie', 'series', '1080', '720', 'terabox', '640', 'title', 'aac', '265', '264', 'instagr', 'hdrip', 'mkv', 'hq', '480', 'blura', 's0', 'se0', 'uncut'])) {
-                                    continue;
-                                }
-                            }
-
-                            // Count media - only check if message has media
-                            if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
-                                if (message.media instanceof Api.MessageMediaPhoto) {
-                                    photo++;
-                                } else if (message.media instanceof Api.MessageMediaDocument) {
-                                    const document = message.media.document;
-                                    if (document instanceof Api.Document) {
-                                        const isVideo = document.attributes.some(
-                                            attr => attr instanceof Api.DocumentAttributeVideo
-                                        );
-                                        const isImage = document.mimeType?.startsWith('image/');
-                                        if (isVideo) {
-                                            video++;
-                                        } else if (isImage) {
-                                            photo++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        totalMsgs = messageCount;
-
-                        filteredChatCallCounts.push({
-                            chatId,
-                            ...details,
-                            msgs: totalMsgs,
-                            video,
-                            photo
-                        });
-                    } catch (msgError) {
-                        // If message fetch fails, still include the chat with basic info
-                        this.logger.warn(this.phoneNumber, `Failed to get messages for chatId ${chatId}:`, msgError);
-                        filteredChatCallCounts.push({
-                            chatId,
-                            ...details
-                        });
-                    }
+            for (const [chatId, details] of Object.entries(chatCallCountsWithDetails)) {
+                if (details.count <= 4) {
+                    filteredChatCallCounts.push({ chatId, ...details });
                 }
             }
 
-            // Sort by call count (descending)
+            const analyzedCalls = filteredResults.totalCalls;
             filteredChatCallCounts.sort((a, b) => b.count - a.count);
 
             this.logger.info(this.phoneNumber, 'CallLog completed:', {
