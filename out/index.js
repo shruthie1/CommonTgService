@@ -7742,8 +7742,7 @@ class TelegramManager {
                 dialog,
                 preliminaryScore: unreadScore + pinnedScore
             };
-        })
-            .sort((a, b) => b.preliminaryScore - a.preliminaryScore);
+        });
         let selfChatData = null;
         try {
             const selfChatId = me.id.toString();
@@ -7787,12 +7786,14 @@ class TelegramManager {
         return topChats;
     }
     async analyzeChatEngagement(chatId, user, messageLimit, callStats, weights, now, windows, dialog) {
-        const [photosList, videosList, photosByUsList, videosByUsList, lastMessage] = await Promise.all([
+        const lastMessage = await this.client.getMessages(chatId, { limit: 1 });
+        if ((lastMessage?.total ?? 0) < 10)
+            return null;
+        const [photosList, videosList, photosByUsList, videosByUsList] = await Promise.all([
             this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
             this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
             this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterPhotos(), limit: 1, fromUser: 'me' }).catch(() => []),
             this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterVideo(), limit: 1, fromUser: 'me' }).catch(() => []),
-            this.client.getMessages(chatId, { limit: 1 })
         ]);
         const totalPhotos = photosList?.total ?? 0;
         const totalVideos = videosList?.total ?? 0;
