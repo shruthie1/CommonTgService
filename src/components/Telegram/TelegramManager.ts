@@ -4371,14 +4371,15 @@ class TelegramManager {
         if (!me) throw new Error('Failed to fetch self userInfo');
         const candidateChats = Array.from(dialogs)
             .map(dialog => {
-                const unreadScore = (dialog.unreadCount || 0) * 10;
-                const pinnedScore = dialog.pinned ? 50 : 0;
-
-                return {
-                    dialog,
-                    preliminaryScore: unreadScore + pinnedScore
-                };
+                if (dialog.entity instanceof Api.User) {
+                    return {
+                        dialog,
+                        preliminaryScore: 0
+                    };
+                }
+                return null;
             })
+            .filter(Boolean);
 
         // Process "me" chat with high priority
         let selfChatData = null;
