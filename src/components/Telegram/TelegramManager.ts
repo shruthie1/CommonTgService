@@ -4372,10 +4372,7 @@ class TelegramManager {
         const candidateChats = Array.from(dialogs)
             .map(dialog => {
                 if (dialog.entity instanceof Api.User) {
-                    return {
-                        dialog,
-                        preliminaryScore: 0
-                    };
+                    return dialog
                 }
                 return null;
             })
@@ -4399,13 +4396,13 @@ class TelegramManager {
 
         const chatStats = [];
         const batchSize = 10;
-        const delayBetweenBatchesMs = 500;
+        const delayBetweenBatchesMs = 0; // 500ms
 
         for (let i = 0; i < topCandidates.length; i += batchSize) {
             if (i > 0) await sleep(delayBetweenBatchesMs);
             const batch = topCandidates.slice(i, i + batchSize);
             const batchResults = await Promise.all(batch.map(async (candidate) => {
-                const user = candidate.dialog.entity as Api.User;
+                const user = candidate.entity as Api.User;
                 const chatId = user.id.toString();
 
                 try {
@@ -4415,7 +4412,7 @@ class TelegramManager {
                         user,
                         weights,
                         now,
-                        candidate.dialog,
+                        candidate,
                         callLogs[chatId]
                     );
                 } catch (error) {
