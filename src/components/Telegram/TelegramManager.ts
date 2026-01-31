@@ -4391,7 +4391,7 @@ class TelegramManager {
 
         // 3. Stage 2: Detailed analysis for top candidates only
         // We only analyze the top N candidates in depth to save time
-        const topCandidates = candidateChats.slice(0, clampedLimit * 4);
+        const topCandidates = candidateChats.slice(0, Math.min(clampedLimit * 4, 49));
         this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
 
         const chatStats = [];
