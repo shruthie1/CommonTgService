@@ -4371,7 +4371,7 @@ class TelegramManager {
         if (!me) throw new Error('Failed to fetch self userInfo');
         const candidateChats = Array.from(dialogs)
             .map(dialog => {
-                if (dialog.entity instanceof Api.User) {
+                if (dialog.isUser) {
                     return dialog
                 }
                 return null;
