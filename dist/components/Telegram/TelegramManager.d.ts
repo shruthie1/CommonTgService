@@ -123,12 +123,12 @@ declare class TelegramManager {
         totalCalls: number;
         analyzedCalls: number;
     }>;
-    getCallLogsInternal(maxCalls?: number): Promise<Record<string, {
+    getCallLogsInternal(maxCalls: number, peer: EntityLike): Promise<{
         outgoing: number;
         incoming: number;
         video: number;
-        totalCalls: number;
-    }>>;
+        total: number;
+    }>;
     handleEvents(event: NewMessageEvent): Promise<void>;
     updatePrivacyforDeletedAccount(): Promise<void>;
     updateProfile(firstName: string, about: string): Promise<void>;
