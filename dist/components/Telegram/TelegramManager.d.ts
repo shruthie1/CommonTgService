@@ -123,7 +123,7 @@ declare class TelegramManager {
         totalCalls: number;
         analyzedCalls: number;
     }>;
-    getCallLogsInternal(): Promise<Record<string, {
+    getCallLogsInternal(maxCalls?: number): Promise<Record<string, {
         outgoing: number;
         incoming: number;
         video: number;
@@ -911,6 +911,10 @@ declare class TelegramManager {
         media: {
             photos: number;
             videos: number;
+            photosByUs: number;
+            photosByThem: number;
+            videosByUs: number;
+            videosByThem: number;
         };
         activityBreakdown: {
             videoCalls: number;

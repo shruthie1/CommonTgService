@@ -686,6 +686,10 @@ export declare class TelegramController {
         media: {
             photos: number;
             videos: number;
+            photosByUs: number;
+            photosByThem: number;
+            videosByUs: number;
+            videosByThem: number;
         };
         activityBreakdown: {
             videoCalls: number;

@@ -3143,7 +3143,11 @@ __decorate([
                         type: 'object',
                         properties: {
                             photos: { type: 'number', description: 'Total photos shared' },
-                            videos: { type: 'number', description: 'Total videos shared' }
+                            videos: { type: 'number', description: 'Total videos shared' },
+                            photosByUs: { type: 'number', description: 'Photos shared by current user' },
+                            photosByThem: { type: 'number', description: 'Photos shared by other party' },
+                            videosByUs: { type: 'number', description: 'Videos shared by current user' },
+                            videosByThem: { type: 'number', description: 'Videos shared by other party' }
                         }
                     },
                     activityBreakdown: {
@@ -5327,46 +5331,51 @@ class TelegramManager {
             throw error;
         }
     }
-    async getCallLogsInternal() {
+    async getCallLogsInternal(maxCalls = 300) {
         const finalResult = {};
-        const result = await this.client.invoke(new telegram_1.Api.messages.Search({
-            peer: new telegram_1.Api.InputPeerEmpty(),
-            q: '',
-            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
-            minDate: 0,
-            maxDate: 0,
-            offsetId: 0,
-            addOffset: 0,
-            limit: 200,
-            maxId: 0,
-            minId: 0,
-            hash: (0, big_integer_1.default)(0),
-        }));
-        const callLogs = result.messages.filter((message) => message.action instanceof telegram_1.Api.MessageActionPhoneCall);
-        for (const log of callLogs) {
-            if (!log.peerId || !(log.peerId instanceof telegram_1.Api.PeerUser))
-                continue;
-            const chatId = log.peerId.userId.toString();
-            if (!finalResult[chatId]) {
-                finalResult[chatId] = {
-                    outgoing: 0,
-                    incoming: 0,
-                    video: 0,
-                    totalCalls: 0
-                };
+        const chunkSize = 100;
+        let offsetId = 0;
+        let totalFetched = 0;
+        while (totalFetched < maxCalls) {
+            const result = await this.client.invoke(new telegram_1.Api.messages.Search({
+                peer: new telegram_1.Api.InputPeerEmpty(),
+                q: '',
+                filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
+                minDate: 0,
+                maxDate: 0,
+                offsetId,
+                addOffset: 0,
+                limit: chunkSize,
+                maxId: 0,
+                minId: 0,
+                hash: (0, big_integer_1.default)(0),
+            }));
+            const messages = result.messages || [];
+            if (messages.length === 0)
+                break;
+            for (const log of messages) {
+                if (!(log instanceof telegram_1.Api.Message) || !(log.action instanceof telegram_1.Api.MessageActionPhoneCall))
+                    continue;
+                if (!log.peerId || !(log.peerId instanceof telegram_1.Api.PeerUser))
+                    continue;
+                const chatId = log.peerId.userId.toString();
+                if (!finalResult[chatId]) {
+                    finalResult[chatId] = { outgoing: 0, incoming: 0, video: 0, totalCalls: 0 };
+                }
+                const stats = finalResult[chatId];
+                stats.totalCalls++;
+                if (log.out)
+                    stats.outgoing++;
+                else
+                    stats.incoming++;
+                if (log.action.video)
+                    stats.video++;
             }
-            const stats = finalResult[chatId];
-            stats.totalCalls++;
-            const logAction = log.action;
-            if (log.out) {
-                stats.outgoing++;
-            }
-            else {
-                stats.incoming++;
-            }
-            if (logAction.video) {
-                stats.video++;
-            }
+            totalFetched += messages.length;
+            if (messages.length < chunkSize)
+                break;
+            const lastMsg = messages[messages.length - 1];
+            offsetId = lastMsg.id ?? 0;
         }
         return finalResult;
     }
@@ -7708,7 +7717,7 @@ class TelegramManager {
             this.getCallLogsInternal().catch(() => ({})),
             (async () => {
                 const results = [];
-                for await (const dialog of this.client.iterDialogs({ limit: 150 })) {
+                for await (const dialog of this.client.iterDialogs({ limit: 350 })) {
                     results.push(dialog);
                 }
                 return results;
@@ -7727,39 +7736,35 @@ class TelegramManager {
             return userId !== "777000" && userId !== "42777";
         })
             .map(dialog => {
-            const lastDate = dialog.message?.date || 0;
-            const daysSinceLast = (nowSeconds - lastDate) / 86400;
-            const recencyScore = Math.max(0, 100 - daysSinceLast * 2);
             const unreadScore = (dialog.unreadCount || 0) * 10;
             const pinnedScore = dialog.pinned ? 50 : 0;
             return {
                 dialog,
-                preliminaryScore: recencyScore + unreadScore + pinnedScore,
-                daysSinceLast
+                preliminaryScore: unreadScore + pinnedScore
             };
         })
             .sort((a, b) => b.preliminaryScore - a.preliminaryScore);
         let selfChatData = null;
         try {
             const selfChatId = me.id.toString();
-            const results = await this.analyzeChatEngagement('me', me, 300, callLogs[selfChatId], weights, now, ACTIVITY_WINDOWS);
+            const results = await this.analyzeChatEngagement('me', me, 100, callLogs[selfChatId], weights, now, ACTIVITY_WINDOWS);
             selfChatData = results;
             this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
         }
         catch (e) {
             this.logger.warn(this.phoneNumber, 'Error processing self chat:', e);
         }
-        const topCandidates = candidateChats.slice(0, clampedLimit * 2);
+        const topCandidates = candidateChats.slice(0, clampedLimit * 4);
         this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
         const chatStats = [];
-        const batchSize = 5;
+        const batchSize = 10;
         for (let i = 0; i < topCandidates.length; i += batchSize) {
             const batch = topCandidates.slice(i, i + batchSize);
             const batchResults = await Promise.all(batch.map(async (candidate) => {
                 const user = candidate.dialog.entity;
                 const chatId = user.id.toString();
                 try {
-                    return await this.analyzeChatEngagement(chatId, user, 150, callLogs[chatId], weights, now, ACTIVITY_WINDOWS, candidate.dialog);
+                    return await this.analyzeChatEngagement(chatId, user, 100, callLogs[chatId], weights, now, ACTIVITY_WINDOWS, candidate.dialog);
                 }
                 catch (error) {
                     this.logger.warn(this.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
@@ -7782,66 +7787,50 @@ class TelegramManager {
         return topChats;
     }
     async analyzeChatEngagement(chatId, user, messageLimit, callStats, weights, now, windows, dialog) {
-        let messageCount = 0;
-        let ownMessageCount = 0;
-        let replyChainCount = 0;
-        const mediaStats = { photos: 0, videos: 0 };
-        const messageDates = [];
-        for await (const message of this.client.iterMessages(chatId, {
-            limit: messageLimit,
-            reverse: false
-        })) {
-            messageCount++;
-            if (message.date)
-                messageDates.push(message.date * 1000);
-            if (message.out)
-                ownMessageCount++;
-            if (message.replyTo)
-                replyChainCount++;
-            if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
-                if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
-                    mediaStats.photos++;
-                }
-                else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-                    const doc = message.media.document;
-                    if (doc instanceof telegram_1.Api.Document && doc.attributes.some(a => a instanceof telegram_1.Api.DocumentAttributeVideo)) {
-                        mediaStats.videos++;
-                    }
-                }
-            }
-        }
-        const lastMessageDate = messageDates.length > 0 ? Math.max(...messageDates) : (dialog?.message?.date ? dialog.message.date * 1000 : now);
+        const [photosList, videosList, photosByUsList, videosByUsList, lastMessage] = await Promise.all([
+            this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
+            this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
+            this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterPhotos(), limit: 1, fromUser: 'me' }).catch(() => []),
+            this.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterVideo(), limit: 1, fromUser: 'me' }).catch(() => []),
+            this.client.getMessages(chatId, { limit: 1 })
+        ]);
+        const totalPhotos = photosList?.total ?? 0;
+        const totalVideos = videosList?.total ?? 0;
+        const photosByUs = photosByUsList?.total ?? 0;
+        const videosByUs = videosByUsList?.total ?? 0;
+        const mediaStats = {
+            photos: totalPhotos,
+            videos: totalVideos,
+            photosByUs,
+            photosByThem: Math.max(0, totalPhotos - photosByUs),
+            videosByUs,
+            videosByThem: Math.max(0, totalVideos - videosByUs)
+        };
+        const lastMessageDate = dialog?.message?.date ? dialog.message.date * 1000 : now;
         const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-        const cCalls = callStats || { total: 0, incoming: 0, outgoing: 0, video: 0 };
+        const cCalls = callStats
+            ? { ...callStats, total: callStats.total ?? callStats.totalCalls ?? 0 }
+            : { total: 0, incoming: 0, outgoing: 0, video: 0 };
         const baseScore = (cCalls.incoming * weights.incomingCall +
             cCalls.outgoing * weights.outgoingCall +
             cCalls.video * weights.videoCall +
             mediaStats.videos * weights.sharedVideo +
-            mediaStats.photos * weights.sharedPhoto +
-            messageCount * weights.textMessage);
-        const mutualEngagementMultiplier = messageCount > 0 ? Math.min(1.5, (ownMessageCount / messageCount) * 2) : 1.0;
-        const interactionScore = baseScore * mutualEngagementMultiplier * (dialog?.pinned ? 1.2 : 1.0);
-        let engagementLevel;
-        if (daysSinceLastActivity <= windows.recent)
-            engagementLevel = 'recent';
-        else if (daysSinceLastActivity <= windows.active)
-            engagementLevel = 'active';
-        else
-            engagementLevel = 'dormant';
+            mediaStats.photos * weights.sharedPhoto);
+        const engagementLevel = baseScore > 0 ? 'active' : 'dormant';
         const totalActivity = Math.max(1, baseScore);
         const activityBreakdown = {
             videoCalls: Math.round((cCalls.video * weights.videoCall / totalActivity) * 100),
             audioCalls: Math.round(((cCalls.total - cCalls.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
             mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-            textMessages: Math.round((messageCount * weights.textMessage / totalActivity) * 100)
+            textMessages: lastMessage.total ?? 0
         };
         return {
             chatId: chatId === 'me' ? 'me' : user.id.toString(),
             username: user.username,
             firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
             lastName: user.lastName,
-            totalMessages: messageCount,
-            interactionScore: Math.round(interactionScore * 100) / 100,
+            totalMessages: lastMessage.total ?? 0,
+            interactionScore: baseScore,
             engagementLevel,
             lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
             calls: {
