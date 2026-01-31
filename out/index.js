@@ -7669,10 +7669,11 @@ class TelegramManager {
                 const user = candidate.dialog.entity;
                 const chatId = user.id.toString();
                 try {
+                    this.logger.info(this.phoneNumber, `Analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}...`);
                     return await this.analyzeChatEngagement(chatId, user, weights, now, ACTIVITY_WINDOWS);
                 }
                 catch (error) {
-                    this.logger.warn(this.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
+                    this.logger.warn(this.phoneNumber, `Error analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}:`, error.message);
                     return null;
                 }
             }));
