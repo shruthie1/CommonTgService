@@ -1339,8 +1339,8 @@ class TelegramManager {
         }
     }
 
-    async getCallLogsInternal(maxCalls: number = 300) {
-        const finalResult: Record<string, { outgoing: number, incoming: number, video: number, totalCalls: number }> = {};
+    async getCallLogsInternal(maxCalls: number = 300, peer: EntityLike): Promise<{ outgoing: number, incoming: number, video: number, total: number }> {
+        const finalResult: { outgoing: number, incoming: number, video: number, total: number } = { outgoing: 0, incoming: 0, video: 0, total: 0 };
         const chunkSize = 100;
         let offsetId = 0;
         let totalFetched = 0;
@@ -1348,7 +1348,7 @@ class TelegramManager {
         while (totalFetched < maxCalls) {
             const result = <Api.messages.Messages>await this.client.invoke(
                 new Api.messages.Search({
-                    peer: new Api.InputPeerEmpty(),
+                    peer: peer,
                     q: '',
                     filter: new Api.InputMessagesFilterPhoneCalls({}),
                     minDate: 0,
@@ -1369,16 +1369,10 @@ class TelegramManager {
                 if (!(log instanceof Api.Message) || !(log.action instanceof Api.MessageActionPhoneCall)) continue;
                 if (!log.peerId || !(log.peerId instanceof Api.PeerUser)) continue;
 
-                const chatId = log.peerId.userId.toString();
-                if (!finalResult[chatId]) {
-                    finalResult[chatId] = { outgoing: 0, incoming: 0, video: 0, totalCalls: 0 };
-                }
-
-                const stats = finalResult[chatId];
-                stats.totalCalls++;
-                if (log.out) stats.outgoing++;
-                else stats.incoming++;
-                if ((log.action as Api.MessageActionPhoneCall).video) stats.video++;
+                finalResult.total++;
+                if (log.out) finalResult.outgoing++;
+                else finalResult.incoming++;
+                if ((log.action as Api.MessageActionPhoneCall).video) finalResult.video++;
             }
 
             totalFetched += messages.length;
@@ -1387,7 +1381,7 @@ class TelegramManager {
             offsetId = lastMsg.id ?? 0;
         }
 
-        return finalResult;
+        return finalResult
     }
     async handleEvents(event: NewMessageEvent) {
         if (event.isPrivate) {
@@ -4359,29 +4353,13 @@ class TelegramManager {
 
         // 1. Parallel initial fetches for speed
         this.logger.info(this.phoneNumber, 'Fetching initial metadata in parallel...');
-        const [me, callLogs, dialogs] = await Promise.all([
+        const [me, dialogs] = await Promise.all([
             this.getMe().catch(() => null),
-            this.getCallLogsInternal().catch(() => ({})),
-            (async () => {
-                const results = [];
-                for await (const dialog of this.client.iterDialogs({ limit: 350 })) {
-                    results.push(dialog);
-                }
-                return results;
-            })()
+            this.client.getDialogs({ limit: 350 })
         ]);
 
         if (!me) throw new Error('Failed to fetch self userInfo');
-
-        // 2. Stage 1: Fast filtering and preliminary scoring based on dialog metadata
-        const candidateChats = dialogs
-            .filter(dialog => {
-                if (!dialog.isUser || !(dialog.entity instanceof Api.User)) return false;
-                const user = dialog.entity as Api.User;
-                if (user.bot || user.fake) return false;
-                const userId = user.id.toString();
-                return userId !== "777000" && userId !== "42777";
-            })
+        const candidateChats = Array.from(dialogs)
             .map(dialog => {
                 const unreadScore = (dialog.unreadCount || 0) * 10;
                 const pinnedScore = dialog.pinned ? 50 : 0;
@@ -4397,7 +4375,7 @@ class TelegramManager {
         try {
             const selfChatId = me.id.toString();
             // Deep analysis for self chat because it's always relevant
-            const results = await this.analyzeChatEngagement('me', me, 100, callLogs[selfChatId], weights, now, ACTIVITY_WINDOWS);
+            const results = await this.analyzeChatEngagement('me', me, weights, now);
             selfChatData = results;
             this.logger.info(this.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
         } catch (e) {
@@ -4422,12 +4400,9 @@ class TelegramManager {
                     return await this.analyzeChatEngagement(
                         chatId,
                         user,
-                        100,
-                        callLogs[chatId],
                         weights,
                         now,
                         ACTIVITY_WINDOWS,
-                        candidate.dialog
                     );
                 } catch (error) {
                     this.logger.warn(this.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
@@ -4461,11 +4436,8 @@ class TelegramManager {
     private async analyzeChatEngagement(
         chatId: string,
         user: Api.User,
-        messageLimit: number,
-        callStats: any,
         weights: any,
         now: number,
-        windows: any,
         dialog?: any
     ) {
 
@@ -4494,14 +4466,11 @@ class TelegramManager {
 
         const lastMessageDate = dialog?.message?.date ? dialog.message.date * 1000 : now;
         const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
-
-        const cCalls = callStats
-            ? { ...callStats, total: callStats.total ?? callStats.totalCalls ?? 0 }
-            : { total: 0, incoming: 0, outgoing: 0, video: 0 };
+        const callStats = await this.getCallLogsInternal(300, user);
         const baseScore = (
-            cCalls.incoming * weights.incomingCall +
-            cCalls.outgoing * weights.outgoingCall +
-            cCalls.video * weights.videoCall +
+            callStats.incoming * weights.incomingCall +
+            callStats.outgoing * weights.outgoingCall +
+            callStats.video * weights.videoCall +
             mediaStats.videos * weights.sharedVideo +
             mediaStats.photos * weights.sharedPhoto
         );
@@ -4510,8 +4479,8 @@ class TelegramManager {
 
         const totalActivity = Math.max(1, baseScore);
         const activityBreakdown = {
-            videoCalls: Math.round((cCalls.video * weights.videoCall / totalActivity) * 100),
-            audioCalls: Math.round(((cCalls.total - cCalls.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
+            videoCalls: Math.round((callStats.video * weights.videoCall / totalActivity) * 100),
+            audioCalls: Math.round(((callStats.total - callStats.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
             mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
             textMessages: lastMessage.total ?? 0
         };
@@ -4526,9 +4495,9 @@ class TelegramManager {
             engagementLevel,
             lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
             calls: {
-                total: cCalls.total || 0,
-                incoming: { total: cCalls.incoming || 0, audio: Math.max(0, cCalls.incoming - cCalls.video) || 0, video: cCalls.video || 0 },
-                outgoing: { total: cCalls.outgoing || 0, audio: cCalls.outgoing || 0, video: 0 }
+                total: callStats.total || 0,
+                incoming: { total: callStats.incoming || 0, audio: Math.max(0, callStats.incoming - callStats.video) || 0, video: callStats.video || 0 },
+                outgoing: { total: callStats.outgoing || 0, audio: callStats.outgoing || 0, video: 0 }
             },
             media: mediaStats,
             activityBreakdown
