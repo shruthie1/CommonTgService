@@ -1496,7 +1496,11 @@ export class TelegramController {
                         type: 'object',
                         properties: {
                             photos: { type: 'number', description: 'Total photos shared' },
-                            videos: { type: 'number', description: 'Total videos shared' }
+                            videos: { type: 'number', description: 'Total videos shared' },
+                            photosByUs: { type: 'number', description: 'Photos shared by current user' },
+                            photosByThem: { type: 'number', description: 'Photos shared by other party' },
+                            videosByUs: { type: 'number', description: 'Videos shared by current user' },
+                            videosByThem: { type: 'number', description: 'Videos shared by other party' }
                         }
                     },
                     activityBreakdown: {

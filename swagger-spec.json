@@ -4032,6 +4032,40 @@
                           "videos": {
                             "type": "number",
                             "description": "Total videos shared"
+                          },
+                          "photosByUs": {
+                            "type": "number",
+                            "description": "Photos shared by current user"
+                          },
+                          "photosByThem": {
+                            "type": "number",
+                            "description": "Photos shared by other party"
+                          },
+                          "videosByUs": {
+                            "type": "number",
+                            "description": "Videos shared by current user"
+                          },
+                          "videosByThem": {
+                            "type": "number",
+                            "description": "Videos shared by other party"
+                          }
+                        }
+                      },
+                      "forwarded": {
+                        "type": "object",
+                        "description": "Forwarded messages in the same window as totalMessages (last N messages)",
+                        "properties": {
+                          "count": {
+                            "type": "number",
+                            "description": "Total forwarded messages"
+                          },
+                          "byUs": {
+                            "type": "number",
+                            "description": "Forwarded by current user"
+                          },
+                          "byThem": {
+                            "type": "number",
+                            "description": "Forwarded by other party"
                           }
                         }
                       },
