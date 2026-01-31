@@ -3455,10 +3455,7 @@ class TelegramManager {
         const candidateChats = Array.from(dialogs)
             .map(dialog => {
             if (dialog.entity instanceof telegram_1.Api.User) {
-                return {
-                    dialog,
-                    preliminaryScore: 0
-                };
+                return dialog;
             }
             return null;
         })
@@ -3477,17 +3474,17 @@ class TelegramManager {
         this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
         const chatStats = [];
         const batchSize = 10;
-        const delayBetweenBatchesMs = 500;
+        const delayBetweenBatchesMs = 0;
         for (let i = 0; i < topCandidates.length; i += batchSize) {
             if (i > 0)
                 await (0, Helpers_1.sleep)(delayBetweenBatchesMs);
             const batch = topCandidates.slice(i, i + batchSize);
             const batchResults = await Promise.all(batch.map(async (candidate) => {
-                const user = candidate.dialog.entity;
+                const user = candidate.entity;
                 const chatId = user.id.toString();
                 try {
                     this.logger.info(this.phoneNumber, `Analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}...`);
-                    return await this.analyzeChatEngagement(chatId, user, weights, now, candidate.dialog, callLogs[chatId]);
+                    return await this.analyzeChatEngagement(chatId, user, weights, now, candidate, callLogs[chatId]);
                 }
                 catch (error) {
                     this.logger.warn(this.phoneNumber, `Error analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}:`, error.message);
