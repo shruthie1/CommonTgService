@@ -295,8 +295,7 @@ export interface TopPrivateChat {
     lastName?: string;
     totalMessages: number;
     interactionScore: number;
-    engagementLevel: 'recent' | 'active' | 'dormant';
-    lastActivityDays: number;
+    engagementLevel: 'active' | 'dormant';
     calls: CallBreakdown;
     media: MediaBreakdown;
     activityBreakdown: ActivityBreakdown;
@@ -335,7 +334,6 @@ export interface EngagementWeights {
     sharedVideo: number;
     sharedPhoto: number;
     textMessage: number;
-    unreadMessages: number;
 }
 export interface PerChatCallStats {
     outgoing: number;
