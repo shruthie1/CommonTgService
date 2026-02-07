@@ -8160,26 +8160,27 @@ async function getTopPrivateChats(ctx, limit = 10) {
         videoCall: 2, incomingCall: 4, outgoingCall: 1,
         sharedVideo: 12, sharedPhoto: 10, textMessage: 1, unreadMessages: 1,
     };
-    const [me, callLogResult, dialogs] = await Promise.all([
+    const [me, callLogResult] = await Promise.all([
         getMe(ctx).catch(() => null),
         getCallLog(ctx, 300).catch(() => ({ totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0, chats: [] })),
-        ctx.client.getDialogs({ limit: 350 }),
     ]);
     if (!me)
         throw new Error('Failed to fetch self userInfo');
     const selfChatId = me.id.toString();
-    const privateUserDialogs = Array.from(dialogs).filter((d) => !!d.isUser && d.entity instanceof telegram_1.Api.User);
+    const candidateChats = [];
     const seenIds = new Set();
-    const candidateChats = privateUserDialogs.filter((d) => {
+    for await (const d of ctx.client.iterDialogs({ limit: 500 })) {
+        if (!d.isUser || !(d.entity instanceof telegram_1.Api.User))
+            continue;
         const user = d.entity;
         if (user.bot)
-            return false;
+            continue;
         const id = user.id.toString();
         if (id === selfChatId || seenIds.has(id))
-            return false;
+            continue;
         seenIds.add(id);
-        return true;
-    });
+        candidateChats.push(d);
+    }
     const callLogsByChat = Object.fromEntries((callLogResult.chats ?? []).map(c => [c.chatId, c.calls]));
     let selfChatData = null;
     try {
