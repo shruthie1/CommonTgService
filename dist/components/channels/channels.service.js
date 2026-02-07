@@ -29,21 +29,23 @@ let ChannelsService = class ChannelsService {
     }
     async createMultiple(createChannelDtos) {
         const bulkOps = createChannelDtos.map((dto) => {
-            const cleanDto = Object.fromEntries(Object.entries(dto).filter(([_, value]) => value !== undefined));
+            const setFields = {};
+            if (dto.title != null)
+                setFields.title = dto.title;
+            if (dto.username != null)
+                setFields.username = dto.username;
+            if (dto.participantsCount != null)
+                setFields.participantsCount = dto.participantsCount;
             return {
                 updateOne: {
                     filter: { channelId: dto.channelId },
                     update: {
-                        $set: {
-                            title: { $ifNull: [dto.title, "$title"] },
-                            username: { $ifNull: [dto.username, "$username"] },
-                            participantsCount: { $ifNull: [dto.participantsCount, "$participantsCount"] },
-                        },
+                        $set: setFields,
                         $setOnInsert: {
                             channelId: dto.channelId,
                             broadcast: false,
                             canSendMsgs: true,
-                            participantsCount: cleanDto.participantsCount,
+                            participantsCount: dto.participantsCount ?? 0,
                             restricted: false,
                             sendMessages: true,
                             reactRestricted: false,
@@ -51,7 +53,7 @@ let ChannelsService = class ChannelsService {
                             dMRestriction: 0,
                             availableMsgs: [],
                             banned: false,
-                            megagroup: cleanDto.megagroup !== undefined ? cleanDto.megagroup : true,
+                            megagroup: dto.megagroup !== undefined ? dto.megagroup : true,
                             private: false,
                         }
                     },

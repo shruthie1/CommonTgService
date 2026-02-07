@@ -20,10 +20,12 @@ export declare class UsersService {
     delete(tgId: string): Promise<void>;
     deleteById(userId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
-    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<(import("mongoose").Document<unknown, {}, UserDocument, {}, {}> & User & import("mongoose").Document<unknown, any, any, Record<string, any>, {}> & Required<{
-        _id: unknown;
+    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<(import("mongoose").Document<unknown, {}, UserDocument, {}, import("mongoose").DefaultSchemaOptions> & User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        _id: import("mongoose").Types.ObjectId;
     }> & {
         __v: number;
+    } & {
+        id: string;
     })[]>;
     getTopInteractionUsers(options: {
         page?: number;

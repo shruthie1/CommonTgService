@@ -57,22 +57,23 @@ let ActiveChannelsService = class ActiveChannelsService {
                 if (!dto.channelId) {
                     throw new common_1.BadRequestException('Channel ID is required for all DTOs');
                 }
-                const cleanDto = Object.fromEntries(Object.entries(dto).filter(([_, value]) => value !== undefined && value !== null));
+                const setFields = { updatedAt: new Date() };
+                if (dto.title != null)
+                    setFields.title = dto.title;
+                if (dto.username != null)
+                    setFields.username = dto.username;
+                if (dto.participantsCount != null)
+                    setFields.participantsCount = dto.participantsCount;
                 return {
                     updateOne: {
                         filter: { channelId: dto.channelId },
                         update: {
-                            $set: {
-                                title: { $ifNull: [dto.title, '$title'] },
-                                username: { $ifNull: [dto.username, '$username'] },
-                                participantsCount: { $ifNull: [dto.participantsCount, '$participantsCount'] },
-                                updatedAt: new Date(),
-                            },
+                            $set: setFields,
                             $setOnInsert: {
                                 channelId: dto.channelId,
                                 broadcast: false,
                                 canSendMsgs: true,
-                                participantsCount: cleanDto.participantsCount ?? 0,
+                                participantsCount: dto.participantsCount ?? 0,
                                 restricted: false,
                                 sendMessages: true,
                                 reactRestricted: false,
@@ -80,7 +81,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                                 dMRestriction: 0,
                                 availableMsgs: [],
                                 banned: false,
-                                megagroup: cleanDto.megagroup ?? true,
+                                megagroup: dto.megagroup ?? true,
                                 private: false,
                                 createdAt: new Date(),
                             },

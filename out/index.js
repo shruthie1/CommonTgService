@@ -2,11 +2,11 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ "./src/IMap/IMap.ts":
+/***/ "./src/IMap/IMap.ts"
 /*!**************************!*\
   !*** ./src/IMap/IMap.ts ***!
   \**************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -169,13 +169,13 @@ class MailReader {
 exports.MailReader = MailReader;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/app.controller.ts":
+/***/ "./src/app.controller.ts"
 /*!*******************************!*\
   !*** ./src/app.controller.ts ***!
   \*******************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -456,13 +456,13 @@ exports.AppController = AppController = AppController_1 = __decorate([
 ], AppController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/app.module.ts":
+/***/ "./src/app.module.ts"
 /*!***************************!*\
   !*** ./src/app.module.ts ***!
   \***************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -563,13 +563,13 @@ exports.AppModule = AppModule = __decorate([
 ], AppModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/cloudinary.ts":
+/***/ "./src/cloudinary.ts"
 /*!***************************!*\
   !*** ./src/cloudinary.ts ***!
   \***************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -788,13 +788,13 @@ async function saveFile(url, name) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ConfigurationInit/configuration.schema.ts":
+/***/ "./src/components/ConfigurationInit/configuration.schema.ts"
 /*!******************************************************************!*\
   !*** ./src/components/ConfigurationInit/configuration.schema.ts ***!
   \******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -828,13 +828,13 @@ exports.ConfigurationSchema = mongoose_1.SchemaFactory.createForClass(Configurat
 exports.ConfigurationSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ConfigurationInit/index.ts":
+/***/ "./src/components/ConfigurationInit/index.ts"
 /*!***************************************************!*\
   !*** ./src/components/ConfigurationInit/index.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -858,13 +858,13 @@ __exportStar(__webpack_require__(/*! ./init.module */ "./src/components/Configur
 __exportStar(__webpack_require__(/*! ./init.service */ "./src/components/ConfigurationInit/init.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ConfigurationInit/init.controller.ts":
+/***/ "./src/components/ConfigurationInit/init.controller.ts"
 /*!*************************************************************!*\
   !*** ./src/components/ConfigurationInit/init.controller.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -923,13 +923,13 @@ exports.ConfigurationController = ConfigurationController = __decorate([
 ], ConfigurationController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ConfigurationInit/init.module.ts":
+/***/ "./src/components/ConfigurationInit/init.module.ts"
 /*!*********************************************************!*\
   !*** ./src/components/ConfigurationInit/init.module.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1142,13 +1142,13 @@ exports.InitModule = InitModule = InitModule_1 = __decorate([
 ], InitModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ConfigurationInit/init.service.ts":
+/***/ "./src/components/ConfigurationInit/init.service.ts"
 /*!**********************************************************!*\
   !*** ./src/components/ConfigurationInit/init.service.ts ***!
   \**********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -1263,13 +1263,13 @@ exports.ConfigurationService = ConfigurationService = ConfigurationService_1 = _
 ], ConfigurationService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/Telegram.controller.ts":
+/***/ "./src/components/Telegram/Telegram.controller.ts"
 /*!********************************************************!*\
   !*** ./src/components/Telegram/Telegram.controller.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -3250,13 +3250,13 @@ exports.TelegramController = TelegramController = __decorate([
 ], TelegramController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/Telegram.module.ts":
+/***/ "./src/components/Telegram/Telegram.module.ts"
 /*!****************************************************!*\
   !*** ./src/components/Telegram/Telegram.module.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -3303,13 +3303,13 @@ exports.TelegramModule = TelegramModule = __decorate([
 ], TelegramModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/Telegram.service.ts":
+/***/ "./src/components/Telegram/Telegram.service.ts"
 /*!*****************************************************!*\
   !*** ./src/components/Telegram/Telegram.service.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -4182,13 +4182,13 @@ exports.TelegramService = TelegramService = __decorate([
 ], TelegramService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/TelegramManager.ts":
+/***/ "./src/components/Telegram/TelegramManager.ts"
 /*!****************************************************!*\
   !*** ./src/components/Telegram/TelegramManager.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -4215,13 +4215,13 @@ Object.defineProperty(exports, "default", ({ enumerable: true, get: function () 
 __exportStar(__webpack_require__(/*! ./manager/types */ "./src/components/Telegram/manager/types.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/config/telegram-validation.config.ts":
+/***/ "./src/components/Telegram/config/telegram-validation.config.ts"
 /*!**********************************************************************!*\
   !*** ./src/components/Telegram/config/telegram-validation.config.ts ***!
   \**********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4271,13 +4271,13 @@ exports.TelegramValidationConfig = TelegramValidationConfig = __decorate([
 ], TelegramValidationConfig);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/batch-operations.dto.ts":
+/***/ "./src/components/Telegram/dto/batch-operations.dto.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/dto/batch-operations.dto.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4382,13 +4382,13 @@ __decorate([
 ], ForwardBatchDto.prototype, "messageIds", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/channel-operation.dto.ts":
+/***/ "./src/components/Telegram/dto/channel-operation.dto.ts"
 /*!**************************************************************!*\
   !*** ./src/components/Telegram/dto/channel-operation.dto.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4426,13 +4426,13 @@ __decorate([
 ], ChannelOperationDto.prototype, "fromChatId", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/connection-management.dto.ts":
+/***/ "./src/components/Telegram/dto/connection-management.dto.ts"
 /*!******************************************************************!*\
   !*** ./src/components/Telegram/dto/connection-management.dto.ts ***!
   \******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4483,13 +4483,13 @@ __decorate([
 ], GetClientOptionsDto.prototype, "handler", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/contact-management.dto.ts":
+/***/ "./src/components/Telegram/dto/contact-management.dto.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/dto/contact-management.dto.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4580,13 +4580,13 @@ __decorate([
 ], AddContactsDto.prototype, "prefix", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/create-bot.dto.ts":
+/***/ "./src/components/Telegram/dto/create-bot.dto.ts"
 /*!*******************************************************!*\
   !*** ./src/components/Telegram/dto/create-bot.dto.ts ***!
   \*******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4659,13 +4659,13 @@ __decorate([
 ], CreateTgBotDto.prototype, "profilePhotoUrl", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/create-chat-folder.dto.ts":
+/***/ "./src/components/Telegram/dto/create-chat-folder.dto.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/dto/create-chat-folder.dto.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4752,13 +4752,13 @@ __decorate([
 ], CreateChatFolderDto.prototype, "excludeArchived", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/delete-chat.dto.ts":
+/***/ "./src/components/Telegram/dto/delete-chat.dto.ts"
 /*!********************************************************!*\
   !*** ./src/components/Telegram/dto/delete-chat.dto.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -4832,13 +4832,13 @@ __decorate([
 ], DeleteHistoryDto.prototype, "maxDate", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/group-operations.dto.ts":
+/***/ "./src/components/Telegram/dto/group-operations.dto.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/dto/group-operations.dto.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5130,13 +5130,13 @@ __decorate([
 ], createGroupDto.prototype, "memberRestrictions", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/index.ts":
+/***/ "./src/components/Telegram/dto/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/Telegram/dto/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -5173,13 +5173,13 @@ var group_operations_dto_1 = __webpack_require__(/*! ./group-operations.dto */ "
 Object.defineProperty(exports, "AdminPermission", ({ enumerable: true, get: function () { return group_operations_dto_1.AdminPermission; } }));
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/media-operations.dto.ts":
+/***/ "./src/components/Telegram/dto/media-operations.dto.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/dto/media-operations.dto.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5334,13 +5334,13 @@ __decorate([
 ], VoiceMessageDto.prototype, "caption", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/message-search.dto.ts":
+/***/ "./src/components/Telegram/dto/message-search.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/dto/message-search.dto.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5603,13 +5603,13 @@ __decorate([
 ], SearchMessagesResponseDto.prototype, "roundVoice", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/metadata-operations.dto.ts":
+/***/ "./src/components/Telegram/dto/metadata-operations.dto.ts"
 /*!****************************************************************!*\
   !*** ./src/components/Telegram/dto/metadata-operations.dto.ts ***!
   \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5713,13 +5713,13 @@ __decorate([
 ], BulkMessageOperationDto.prototype, "messageIds", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/profile-settings.dto.ts":
+/***/ "./src/components/Telegram/dto/profile-settings.dto.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/dto/profile-settings.dto.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5799,13 +5799,13 @@ __decorate([
 ], ProfilePhotoDto.prototype, "name", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/schedule-operations.dto.ts":
+/***/ "./src/components/Telegram/dto/schedule-operations.dto.ts"
 /*!****************************************************************!*\
   !*** ./src/components/Telegram/dto/schedule-operations.dto.ts ***!
   \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5905,13 +5905,13 @@ __decorate([
 ], BatchProcessItemDto.prototype, "messageId", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/send-message.dto.ts":
+/***/ "./src/components/Telegram/dto/send-message.dto.ts"
 /*!*********************************************************!*\
   !*** ./src/components/Telegram/dto/send-message.dto.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5958,13 +5958,13 @@ __decorate([
 ], SendTgMessageDto.prototype, "parseMode", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/update-profile.dto.ts":
+/***/ "./src/components/Telegram/dto/update-profile.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/dto/update-profile.dto.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -5997,13 +5997,13 @@ __decorate([
 ], UpdateProfileDto.prototype, "about", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/update-username.dto.ts":
+/***/ "./src/components/Telegram/dto/update-username.dto.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/dto/update-username.dto.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -6032,13 +6032,13 @@ __decorate([
 ], UpdateUsernameDto.prototype, "newUsername", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/dto/view-once-media.dto.ts":
+/***/ "./src/components/Telegram/dto/view-once-media.dto.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/dto/view-once-media.dto.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -6136,13 +6136,13 @@ __decorate([
 ], ViewOnceMediaDto.prototype, "filename", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/index.ts":
+/***/ "./src/components/Telegram/index.ts"
 /*!******************************************!*\
   !*** ./src/components/Telegram/index.ts ***!
   \******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -6170,13 +6170,13 @@ __exportStar(__webpack_require__(/*! ./utils/telegram-logger */ "./src/component
 __exportStar(__webpack_require__(/*! ./utils/rate-limiter */ "./src/components/Telegram/utils/rate-limiter.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/TelegramManager.ts":
+/***/ "./src/components/Telegram/manager/TelegramManager.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/manager/TelegramManager.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -6547,13 +6547,13 @@ class TelegramManager {
 exports["default"] = TelegramManager;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/auth-operations.ts":
+/***/ "./src/components/Telegram/manager/auth-operations.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/manager/auth-operations.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -6829,13 +6829,13 @@ async function terminateSession(ctx, options) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/channel-operations.ts":
+/***/ "./src/components/Telegram/manager/channel-operations.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/manager/channel-operations.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -7344,13 +7344,13 @@ async function updateGroupSettings(ctx, settings) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/chat-operations.ts":
+/***/ "./src/components/Telegram/manager/chat-operations.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/manager/chat-operations.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -8184,13 +8184,13 @@ async function createBot(ctx, options) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/client-operations.ts":
+/***/ "./src/components/Telegram/manager/client-operations.ts"
 /*!**************************************************************!*\
   !*** ./src/components/Telegram/manager/client-operations.ts ***!
   \**************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -8312,13 +8312,13 @@ async function handleIncomingEvent(ctx, event) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/contact-operations.ts":
+/***/ "./src/components/Telegram/manager/contact-operations.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/manager/contact-operations.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -8551,13 +8551,13 @@ async function sendContactsFile(ctx, chatId, contacts, filename = 'contacts.vcf'
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/helpers.ts":
+/***/ "./src/components/Telegram/manager/helpers.ts"
 /*!****************************************************!*\
   !*** ./src/components/Telegram/manager/helpers.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -8986,13 +8986,13 @@ function getUserOnlineStatus(user) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/index.ts":
+/***/ "./src/components/Telegram/manager/index.ts"
 /*!**************************************************!*\
   !*** ./src/components/Telegram/manager/index.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -9021,13 +9021,13 @@ Object.defineProperty(exports, "TelegramManager", ({ enumerable: true, get: func
 __exportStar(__webpack_require__(/*! ./types */ "./src/components/Telegram/manager/types.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/media-operations.ts":
+/***/ "./src/components/Telegram/manager/media-operations.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/manager/media-operations.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -9560,13 +9560,13 @@ async function getFileUrl(ctx, url, filename) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/message-operations.ts":
+/***/ "./src/components/Telegram/manager/message-operations.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/manager/message-operations.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -10102,13 +10102,13 @@ async function deleteChat(ctx, params) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/profile-operations.ts":
+/***/ "./src/components/Telegram/manager/profile-operations.ts"
 /*!***************************************************************!*\
   !*** ./src/components/Telegram/manager/profile-operations.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -10358,25 +10358,25 @@ async function deleteProfilePhotos(ctx) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/manager/types.ts":
+/***/ "./src/components/Telegram/manager/types.ts"
 /*!**************************************************!*\
   !*** ./src/components/Telegram/manager/types.ts ***!
   \**************************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/connection-manager.ts":
+/***/ "./src/components/Telegram/utils/connection-manager.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/utils/connection-manager.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -10702,13 +10702,13 @@ async function unregisterClient(mobile) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/deleteProfilePics.ts":
+/***/ "./src/components/Telegram/utils/deleteProfilePics.ts"
 /*!************************************************************!*\
   !*** ./src/components/Telegram/utils/deleteProfilePics.ts ***!
   \************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -10736,13 +10736,13 @@ async function deleteProfilePhotos(client, photos) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/generateTGConfig.ts":
+/***/ "./src/components/Telegram/utils/generateTGConfig.ts"
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/utils/generateTGConfig.ts ***!
   \***********************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -10795,13 +10795,13 @@ async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/getProfilePics.ts":
+/***/ "./src/components/Telegram/utils/getProfilePics.ts"
 /*!*********************************************************!*\
   !*** ./src/components/Telegram/utils/getProfilePics.ts ***!
   \*********************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -10813,13 +10813,13 @@ async function getProfilePics(client, user = "me") {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/rate-limiter.ts":
+/***/ "./src/components/Telegram/utils/rate-limiter.ts"
 /*!*******************************************************!*\
   !*** ./src/components/Telegram/utils/rate-limiter.ts ***!
   \*******************************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -10853,13 +10853,13 @@ class RateLimiter {
 exports.RateLimiter = RateLimiter;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/Telegram/utils/telegram-logger.ts":
+/***/ "./src/components/Telegram/utils/telegram-logger.ts"
 /*!**********************************************************!*\
   !*** ./src/components/Telegram/utils/telegram-logger.ts ***!
   \**********************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -10891,13 +10891,13 @@ class TelegramLogger {
 exports.TelegramLogger = TelegramLogger;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/dto/index.ts":
+/***/ "./src/components/TgSignup/dto/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/TgSignup/dto/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -10918,13 +10918,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./tg-signup.dto */ "./src/components/TgSignup/dto/tg-signup.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/dto/tg-signup.dto.ts":
+/***/ "./src/components/TgSignup/dto/tg-signup.dto.ts"
 /*!******************************************************!*\
   !*** ./src/components/TgSignup/dto/tg-signup.dto.ts ***!
   \******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11038,13 +11038,13 @@ __decorate([
 ], TgSignupResponse.prototype, "requires2FA", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/index.ts":
+/***/ "./src/components/TgSignup/index.ts"
 /*!******************************************!*\
   !*** ./src/components/TgSignup/index.ts ***!
   \******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -11068,13 +11068,13 @@ __exportStar(__webpack_require__(/*! ./tg-signup.module */ "./src/components/TgS
 __exportStar(__webpack_require__(/*! ./tg-signup.service */ "./src/components/TgSignup/tg-signup.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/tg-signup.controller.ts":
+/***/ "./src/components/TgSignup/tg-signup.controller.ts"
 /*!*********************************************************!*\
   !*** ./src/components/TgSignup/tg-signup.controller.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11214,13 +11214,13 @@ exports.TgSignupController = TgSignupController = TgSignupController_1 = __decor
 ], TgSignupController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/tg-signup.module.ts":
+/***/ "./src/components/TgSignup/tg-signup.module.ts"
 /*!*****************************************************!*\
   !*** ./src/components/TgSignup/tg-signup.module.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11252,13 +11252,13 @@ exports.TgSignupModule = TgSignupModule = __decorate([
 ], TgSignupModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/TgSignup/tg-signup.service.ts":
+/***/ "./src/components/TgSignup/tg-signup.service.ts"
 /*!******************************************************!*\
   !*** ./src/components/TgSignup/tg-signup.service.ts ***!
   \******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11599,13 +11599,13 @@ exports.TgSignupService = TgSignupService = TgSignupService_1 = __decorate([
 ], TgSignupService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/active-channels.controller.ts":
+/***/ "./src/components/active-channels/active-channels.controller.ts"
 /*!**********************************************************************!*\
   !*** ./src/components/active-channels/active-channels.controller.ts ***!
   \**********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11732,13 +11732,13 @@ exports.ActiveChannelsController = ActiveChannelsController = __decorate([
 ], ActiveChannelsController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/active-channels.module.ts":
+/***/ "./src/components/active-channels/active-channels.module.ts"
 /*!******************************************************************!*\
   !*** ./src/components/active-channels/active-channels.module.ts ***!
   \******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11773,13 +11773,13 @@ exports.ActiveChannelsModule = ActiveChannelsModule = __decorate([
 ], ActiveChannelsModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/active-channels.service.ts":
+/***/ "./src/components/active-channels/active-channels.service.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/active-channels/active-channels.service.ts ***!
   \*******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -11840,22 +11840,23 @@ let ActiveChannelsService = class ActiveChannelsService {
                 if (!dto.channelId) {
                     throw new common_1.BadRequestException('Channel ID is required for all DTOs');
                 }
-                const cleanDto = Object.fromEntries(Object.entries(dto).filter(([_, value]) => value !== undefined && value !== null));
+                const setFields = { updatedAt: new Date() };
+                if (dto.title != null)
+                    setFields.title = dto.title;
+                if (dto.username != null)
+                    setFields.username = dto.username;
+                if (dto.participantsCount != null)
+                    setFields.participantsCount = dto.participantsCount;
                 return {
                     updateOne: {
                         filter: { channelId: dto.channelId },
                         update: {
-                            $set: {
-                                title: { $ifNull: [dto.title, '$title'] },
-                                username: { $ifNull: [dto.username, '$username'] },
-                                participantsCount: { $ifNull: [dto.participantsCount, '$participantsCount'] },
-                                updatedAt: new Date(),
-                            },
+                            $set: setFields,
                             $setOnInsert: {
                                 channelId: dto.channelId,
                                 broadcast: false,
                                 canSendMsgs: true,
-                                participantsCount: cleanDto.participantsCount ?? 0,
+                                participantsCount: dto.participantsCount ?? 0,
                                 restricted: false,
                                 sendMessages: true,
                                 reactRestricted: false,
@@ -11863,7 +11864,7 @@ let ActiveChannelsService = class ActiveChannelsService {
                                 dMRestriction: 0,
                                 availableMsgs: [],
                                 banned: false,
-                                megagroup: cleanDto.megagroup ?? true,
+                                megagroup: dto.megagroup ?? true,
                                 private: false,
                                 createdAt: new Date(),
                             },
@@ -12139,13 +12140,13 @@ exports.ActiveChannelsService = ActiveChannelsService = __decorate([
 ], ActiveChannelsService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/dto/create-active-channel.dto.ts":
+/***/ "./src/components/active-channels/dto/create-active-channel.dto.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/active-channels/dto/create-active-channel.dto.ts ***!
   \*************************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -12240,13 +12241,13 @@ __decorate([
 ], CreateActiveChannelDto.prototype, "private", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/dto/index.ts":
+/***/ "./src/components/active-channels/dto/index.ts"
 /*!*****************************************************!*\
   !*** ./src/components/active-channels/dto/index.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -12268,13 +12269,13 @@ __exportStar(__webpack_require__(/*! ./create-active-channel.dto */ "./src/compo
 __exportStar(__webpack_require__(/*! ./update-active-channel.dto */ "./src/components/active-channels/dto/update-active-channel.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/dto/update-active-channel.dto.ts":
+/***/ "./src/components/active-channels/dto/update-active-channel.dto.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/active-channels/dto/update-active-channel.dto.ts ***!
   \*************************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -12286,13 +12287,13 @@ class UpdateActiveChannelDto extends (0, swagger_1.PartialType)(create_active_ch
 exports.UpdateActiveChannelDto = UpdateActiveChannelDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/index.ts":
+/***/ "./src/components/active-channels/index.ts"
 /*!*************************************************!*\
   !*** ./src/components/active-channels/index.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -12321,13 +12322,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/active-channels/
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/active-channels/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/schemas/active-channel.schema.ts":
+/***/ "./src/components/active-channels/schemas/active-channel.schema.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/active-channels/schemas/active-channel.schema.ts ***!
   \*************************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -12469,13 +12470,13 @@ exports.ActiveChannel = ActiveChannel = __decorate([
 exports.ActiveChannelSchema = mongoose_1.SchemaFactory.createForClass(ActiveChannel);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/active-channels/schemas/index.ts":
+/***/ "./src/components/active-channels/schemas/index.ts"
 /*!*********************************************************!*\
   !*** ./src/components/active-channels/schemas/index.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -12496,13 +12497,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./active-channel.schema */ "./src/components/active-channels/schemas/active-channel.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/bots.controller.ts":
+/***/ "./src/components/bots/bots.controller.ts"
 /*!************************************************!*\
   !*** ./src/components/bots/bots.controller.ts ***!
   \************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -13004,13 +13005,13 @@ exports.BotsController = BotsController = __decorate([
 ], BotsController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/bots.module.ts":
+/***/ "./src/components/bots/bots.module.ts"
 /*!********************************************!*\
   !*** ./src/components/bots/bots.module.ts ***!
   \********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -13052,13 +13053,13 @@ exports.BotsModule = BotsModule = __decorate([
 ], BotsModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/bots.service.ts":
+/***/ "./src/components/bots/bots.service.ts"
 /*!*********************************************!*\
   !*** ./src/components/bots/bots.service.ts ***!
   \*********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -13681,13 +13682,13 @@ exports.BotsService = BotsService = __decorate([
 ], BotsService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/create-bot.dto.ts":
+/***/ "./src/components/bots/dto/create-bot.dto.ts"
 /*!***************************************************!*\
   !*** ./src/components/bots/dto/create-bot.dto.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -13744,13 +13745,13 @@ __decorate([
 ], CreateBotDto.prototype, "description", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/index.ts":
+/***/ "./src/components/bots/dto/index.ts"
 /*!******************************************!*\
   !*** ./src/components/bots/dto/index.ts ***!
   \******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -13775,13 +13776,13 @@ __exportStar(__webpack_require__(/*! ./media-extras.dto */ "./src/components/bot
 __exportStar(__webpack_require__(/*! ./media-group.dto */ "./src/components/bots/dto/media-group.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/media-extras.dto.ts":
+/***/ "./src/components/bots/dto/media-extras.dto.ts"
 /*!*****************************************************!*\
   !*** ./src/components/bots/dto/media-extras.dto.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -13913,13 +13914,13 @@ __decorate([
 ], SendStickerDto.prototype, "options", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/media-group.dto.ts":
+/***/ "./src/components/bots/dto/media-group.dto.ts"
 /*!****************************************************!*\
   !*** ./src/components/bots/dto/media-group.dto.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -14069,13 +14070,13 @@ __decorate([
 ], SendMediaGroupDto.prototype, "options", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/media.dto.ts":
+/***/ "./src/components/bots/dto/media.dto.ts"
 /*!**********************************************!*\
   !*** ./src/components/bots/dto/media.dto.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -14330,13 +14331,13 @@ __decorate([
 ], SendDocumentDto.prototype, "options", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/dto/send-message.dto.ts":
+/***/ "./src/components/bots/dto/send-message.dto.ts"
 /*!*****************************************************!*\
   !*** ./src/components/bots/dto/send-message.dto.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -14494,13 +14495,13 @@ __decorate([
 ], SendMessageDto.prototype, "options", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/index.ts":
+/***/ "./src/components/bots/index.ts"
 /*!**************************************!*\
   !*** ./src/components/bots/index.ts ***!
   \**************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -14525,13 +14526,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/bots/dto/index.t
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/bots/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/schemas/bot.schema.ts":
+/***/ "./src/components/bots/schemas/bot.schema.ts"
 /*!***************************************************!*\
   !*** ./src/components/bots/schemas/bot.schema.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -14592,13 +14593,13 @@ exports.Bot = Bot = __decorate([
 exports.BotSchema = mongoose_1.SchemaFactory.createForClass(Bot);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/bots/schemas/index.ts":
+/***/ "./src/components/bots/schemas/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/bots/schemas/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -14619,13 +14620,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./bot.schema */ "./src/components/bots/schemas/bot.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/buffer-client.controller.ts":
+/***/ "./src/components/buffer-clients/buffer-client.controller.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/buffer-clients/buffer-client.controller.ts ***!
   \*******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -15017,13 +15018,13 @@ exports.BufferClientController = BufferClientController = __decorate([
 ], BufferClientController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/buffer-client.module.ts":
+/***/ "./src/components/buffer-clients/buffer-client.module.ts"
 /*!***************************************************************!*\
   !*** ./src/components/buffer-clients/buffer-client.module.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -15072,13 +15073,13 @@ exports.BufferClientModule = BufferClientModule = __decorate([
 ], BufferClientModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/buffer-client.service.ts":
+/***/ "./src/components/buffer-clients/buffer-client.service.ts"
 /*!****************************************************************!*\
   !*** ./src/components/buffer-clients/buffer-client.service.ts ***!
   \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -16871,13 +16872,13 @@ exports.BufferClientService = BufferClientService = BufferClientService_1 = __de
 ], BufferClientService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/dto/create-buffer-client.dto.ts":
+/***/ "./src/components/buffer-clients/dto/create-buffer-client.dto.ts"
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/dto/create-buffer-client.dto.ts ***!
   \***********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -16979,13 +16980,13 @@ __decorate([
 ], CreateBufferClientDto.prototype, "lastUsed", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/dto/index.ts":
+/***/ "./src/components/buffer-clients/dto/index.ts"
 /*!****************************************************!*\
   !*** ./src/components/buffer-clients/dto/index.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -17008,13 +17009,13 @@ __exportStar(__webpack_require__(/*! ./search-buffer-client.dto */ "./src/compon
 __exportStar(__webpack_require__(/*! ./update-buffer-client.dto */ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts":
+/***/ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts"
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/dto/search-buffer-client.dto.ts ***!
   \***********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17085,13 +17086,13 @@ __decorate([
 ], SearchBufferClientDto.prototype, "tgId", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts":
+/***/ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts"
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/dto/update-buffer-client.dto.ts ***!
   \***********************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -17103,13 +17104,13 @@ class UpdateBufferClientDto extends (0, swagger_1.PartialType)(create_buffer_cli
 exports.UpdateBufferClientDto = UpdateBufferClientDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/index.ts":
+/***/ "./src/components/buffer-clients/index.ts"
 /*!************************************************!*\
   !*** ./src/components/buffer-clients/index.ts ***!
   \************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -17134,13 +17135,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/buffer-clients/d
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/buffer-clients/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/schemas/buffer-client.schema.ts":
+/***/ "./src/components/buffer-clients/schemas/buffer-client.schema.ts"
 /*!***********************************************************************!*\
   !*** ./src/components/buffer-clients/schemas/buffer-client.schema.ts ***!
   \***********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17263,13 +17264,13 @@ exports.BufferClient = BufferClient = __decorate([
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/buffer-clients/schemas/index.ts":
+/***/ "./src/components/buffer-clients/schemas/index.ts"
 /*!********************************************************!*\
   !*** ./src/components/buffer-clients/schemas/index.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -17290,13 +17291,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./buffer-client.schema */ "./src/components/buffer-clients/schemas/buffer-client.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/builds/build.controller.ts":
+/***/ "./src/components/builds/build.controller.ts"
 /*!***************************************************!*\
   !*** ./src/components/builds/build.controller.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17355,13 +17356,13 @@ exports.BuildController = BuildController = __decorate([
 ], BuildController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/builds/build.module.ts":
+/***/ "./src/components/builds/build.module.ts"
 /*!***********************************************!*\
   !*** ./src/components/builds/build.module.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17398,13 +17399,13 @@ exports.BuildModule = BuildModule = __decorate([
 ], BuildModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/builds/build.service.ts":
+/***/ "./src/components/builds/build.service.ts"
 /*!************************************************!*\
   !*** ./src/components/builds/build.service.ts ***!
   \************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17465,13 +17466,13 @@ exports.BuildService = BuildService = __decorate([
 ], BuildService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/builds/builds.schema.ts":
+/***/ "./src/components/builds/builds.schema.ts"
 /*!************************************************!*\
   !*** ./src/components/builds/builds.schema.ts ***!
   \************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17503,13 +17504,13 @@ exports.BuildSchema = mongoose_1.SchemaFactory.createForClass(Build);
 exports.BuildSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/builds/index.ts":
+/***/ "./src/components/builds/index.ts"
 /*!****************************************!*\
   !*** ./src/components/builds/index.ts ***!
   \****************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -17533,13 +17534,13 @@ __exportStar(__webpack_require__(/*! ./build.service */ "./src/components/builds
 __exportStar(__webpack_require__(/*! ./builds.schema */ "./src/components/builds/builds.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/channels.controller.ts":
+/***/ "./src/components/channels/channels.controller.ts"
 /*!********************************************************!*\
   !*** ./src/components/channels/channels.controller.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17662,13 +17663,13 @@ exports.ChannelsController = ChannelsController = __decorate([
 ], ChannelsController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/channels.module.ts":
+/***/ "./src/components/channels/channels.module.ts"
 /*!****************************************************!*\
   !*** ./src/components/channels/channels.module.ts ***!
   \****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17701,13 +17702,13 @@ exports.ChannelsModule = ChannelsModule = __decorate([
 ], ChannelsModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/channels.service.ts":
+/***/ "./src/components/channels/channels.service.ts"
 /*!*****************************************************!*\
   !*** ./src/components/channels/channels.service.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -17740,21 +17741,23 @@ let ChannelsService = class ChannelsService {
     }
     async createMultiple(createChannelDtos) {
         const bulkOps = createChannelDtos.map((dto) => {
-            const cleanDto = Object.fromEntries(Object.entries(dto).filter(([_, value]) => value !== undefined));
+            const setFields = {};
+            if (dto.title != null)
+                setFields.title = dto.title;
+            if (dto.username != null)
+                setFields.username = dto.username;
+            if (dto.participantsCount != null)
+                setFields.participantsCount = dto.participantsCount;
             return {
                 updateOne: {
                     filter: { channelId: dto.channelId },
                     update: {
-                        $set: {
-                            title: { $ifNull: [dto.title, "$title"] },
-                            username: { $ifNull: [dto.username, "$username"] },
-                            participantsCount: { $ifNull: [dto.participantsCount, "$participantsCount"] },
-                        },
+                        $set: setFields,
                         $setOnInsert: {
                             channelId: dto.channelId,
                             broadcast: false,
                             canSendMsgs: true,
-                            participantsCount: cleanDto.participantsCount,
+                            participantsCount: dto.participantsCount ?? 0,
                             restricted: false,
                             sendMessages: true,
                             reactRestricted: false,
@@ -17762,7 +17765,7 @@ let ChannelsService = class ChannelsService {
                             dMRestriction: 0,
                             availableMsgs: [],
                             banned: false,
-                            megagroup: cleanDto.megagroup !== undefined ? cleanDto.megagroup : true,
+                            megagroup: dto.megagroup !== undefined ? dto.megagroup : true,
                             private: false,
                         }
                     },
@@ -17911,13 +17914,13 @@ exports.ChannelsService = ChannelsService = __decorate([
 ], ChannelsService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/dto/create-channel.dto.ts":
+/***/ "./src/components/channels/dto/create-channel.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/channels/dto/create-channel.dto.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -18024,13 +18027,13 @@ __decorate([
 ], CreateChannelDto.prototype, "forbidden", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/dto/index.ts":
+/***/ "./src/components/channels/dto/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/channels/dto/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -18053,13 +18056,13 @@ __exportStar(__webpack_require__(/*! ./search-channel.dto */ "./src/components/c
 __exportStar(__webpack_require__(/*! ./update-channel.dto */ "./src/components/channels/dto/update-channel.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/dto/search-channel.dto.ts":
+/***/ "./src/components/channels/dto/search-channel.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/channels/dto/search-channel.dto.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -18128,13 +18131,13 @@ __decorate([
 ], SearchChannelDto.prototype, "maxParticipantsCount", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/dto/update-channel.dto.ts":
+/***/ "./src/components/channels/dto/update-channel.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/channels/dto/update-channel.dto.ts ***!
   \***********************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -18146,13 +18149,13 @@ class UpdateChannelDto extends (0, swagger_1.PartialType)(create_channel_dto_1.C
 exports.UpdateChannelDto = UpdateChannelDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/index.ts":
+/***/ "./src/components/channels/index.ts"
 /*!******************************************!*\
   !*** ./src/components/channels/index.ts ***!
   \******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -18177,13 +18180,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/channels/dto/ind
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/channels/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/schemas/channel.schema.ts":
+/***/ "./src/components/channels/schemas/channel.schema.ts"
 /*!***********************************************************!*\
   !*** ./src/components/channels/schemas/channel.schema.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -18289,13 +18292,13 @@ exports.Channel = Channel = __decorate([
 exports.ChannelSchema = mongoose_1.SchemaFactory.createForClass(Channel);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/channels/schemas/index.ts":
+/***/ "./src/components/channels/schemas/index.ts"
 /*!**************************************************!*\
   !*** ./src/components/channels/schemas/index.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -18316,13 +18319,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./channel.schema */ "./src/components/channels/schemas/channel.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/client.controller.ts":
+/***/ "./src/components/clients/client.controller.ts"
 /*!*****************************************************!*\
   !*** ./src/components/clients/client.controller.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -18610,13 +18613,13 @@ exports.ClientController = ClientController = __decorate([
 ], ClientController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/client.module.ts":
+/***/ "./src/components/clients/client.module.ts"
 /*!*************************************************!*\
   !*** ./src/components/clients/client.module.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -18665,13 +18668,13 @@ exports.ClientModule = ClientModule = __decorate([
 ], ClientModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/client.service.ts":
+/***/ "./src/components/clients/client.service.ts"
 /*!**************************************************!*\
   !*** ./src/components/clients/client.service.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -19421,13 +19424,13 @@ exports.ClientService = ClientService = ClientService_1 = __decorate([
 ], ClientService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/dto/create-client.dto.ts":
+/***/ "./src/components/clients/dto/create-client.dto.ts"
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/create-client.dto.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -19523,13 +19526,13 @@ __decorate([
 ], CreateClientDto.prototype, "autoAssignIps", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/dto/index.ts":
+/***/ "./src/components/clients/dto/index.ts"
 /*!*********************************************!*\
   !*** ./src/components/clients/dto/index.ts ***!
   \*********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -19553,13 +19556,13 @@ __exportStar(__webpack_require__(/*! ./update-client.dto */ "./src/components/cl
 __exportStar(__webpack_require__(/*! ./setup-client.dto */ "./src/components/clients/dto/setup-client.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/dto/search-client.dto.ts":
+/***/ "./src/components/clients/dto/search-client.dto.ts"
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/search-client.dto.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -19694,13 +19697,13 @@ __decorate([
 ], SearchClientDto.prototype, "gpayId", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/dto/setup-client.dto.ts":
+/***/ "./src/components/clients/dto/setup-client.dto.ts"
 /*!********************************************************!*\
   !*** ./src/components/clients/dto/setup-client.dto.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -19769,13 +19772,13 @@ __decorate([
 ], SetupClientQueryDto.prototype, "formalities", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/dto/update-client.dto.ts":
+/***/ "./src/components/clients/dto/update-client.dto.ts"
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/update-client.dto.ts ***!
   \*********************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -19787,13 +19790,13 @@ class UpdateClientDto extends (0, swagger_1.PartialType)(create_client_dto_1.Cre
 exports.UpdateClientDto = UpdateClientDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/index.ts":
+/***/ "./src/components/clients/index.ts"
 /*!*****************************************!*\
   !*** ./src/components/clients/index.ts ***!
   \*****************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -19822,13 +19825,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/clients/dto/inde
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/clients/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/schemas/client.schema.ts":
+/***/ "./src/components/clients/schemas/client.schema.ts"
 /*!*********************************************************!*\
   !*** ./src/components/clients/schemas/client.schema.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -19946,13 +19949,13 @@ exports.Client = Client = __decorate([
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/clients/schemas/index.ts":
+/***/ "./src/components/clients/schemas/index.ts"
 /*!*************************************************!*\
   !*** ./src/components/clients/schemas/index.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -19973,13 +19976,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./client.schema */ "./src/components/clients/schemas/client.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts":
+/***/ "./src/components/dynamic-data/dto/create-dynamic-data.dto.ts"
 /*!********************************************************************!*\
   !*** ./src/components/dynamic-data/dto/create-dynamic-data.dto.ts ***!
   \********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20026,13 +20029,13 @@ __decorate([
 ], CreateDynamicDataDto.prototype, "data", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts":
+/***/ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/dynamic-data/dto/get-dynamic-data.dto.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20066,13 +20069,13 @@ __decorate([
 ], GetDynamicDataDto.prototype, "path", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts":
+/***/ "./src/components/dynamic-data/dto/update-dynamic-data.dto.ts"
 /*!********************************************************************!*\
   !*** ./src/components/dynamic-data/dto/update-dynamic-data.dto.ts ***!
   \********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20150,13 +20153,13 @@ __decorate([
 ], UpdateDynamicDataDto.prototype, "arrayOperation", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dynamic-data.controller.ts":
+/***/ "./src/components/dynamic-data/dynamic-data.controller.ts"
 /*!****************************************************************!*\
   !*** ./src/components/dynamic-data/dynamic-data.controller.ts ***!
   \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20293,13 +20296,13 @@ exports.DynamicDataController = DynamicDataController = __decorate([
 ], DynamicDataController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dynamic-data.module.ts":
+/***/ "./src/components/dynamic-data/dynamic-data.module.ts"
 /*!************************************************************!*\
   !*** ./src/components/dynamic-data/dynamic-data.module.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20334,13 +20337,13 @@ exports.DynamicDataModule = DynamicDataModule = __decorate([
 ], DynamicDataModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dynamic-data.schema.ts":
+/***/ "./src/components/dynamic-data/dynamic-data.schema.ts"
 /*!************************************************************!*\
   !*** ./src/components/dynamic-data/dynamic-data.schema.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20384,13 +20387,13 @@ exports.DynamicData = DynamicData = __decorate([
 exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/dynamic-data.service.ts":
+/***/ "./src/components/dynamic-data/dynamic-data.service.ts"
 /*!*************************************************************!*\
   !*** ./src/components/dynamic-data/dynamic-data.service.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -20686,13 +20689,13 @@ exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decor
 ], DynamicDataService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/dynamic-data/index.ts":
+/***/ "./src/components/dynamic-data/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/dynamic-data/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -20719,13 +20722,13 @@ __exportStar(__webpack_require__(/*! ./dto/update-dynamic-data.dto */ "./src/com
 __exportStar(__webpack_require__(/*! ./dto/get-dynamic-data.dto */ "./src/components/dynamic-data/dto/get-dynamic-data.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/index.ts":
+/***/ "./src/components/index.ts"
 /*!*********************************!*\
   !*** ./src/components/index.ts ***!
   \*********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -20769,13 +20772,13 @@ __exportStar(__webpack_require__(/*! ./dynamic-data */ "./src/components/dynamic
 __exportStar(__webpack_require__(/*! ./bots */ "./src/components/bots/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/dto/create-proxy-ip.dto.ts":
+/***/ "./src/components/ip-management/dto/create-proxy-ip.dto.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/ip-management/dto/create-proxy-ip.dto.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20835,13 +20838,13 @@ __decorate([
 ], CreateProxyIpDto.prototype, "assignedToClient", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/dto/search-ip.dto.ts":
+/***/ "./src/components/ip-management/dto/search-ip.dto.ts"
 /*!***********************************************************!*\
   !*** ./src/components/ip-management/dto/search-ip.dto.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -20937,13 +20940,13 @@ __decorate([
 ], SearchIpMobileMappingDto.prototype, "status", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/dto/update-proxy-ip.dto.ts":
+/***/ "./src/components/ip-management/dto/update-proxy-ip.dto.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/ip-management/dto/update-proxy-ip.dto.ts ***!
   \*****************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -20955,13 +20958,13 @@ class UpdateProxyIpDto extends (0, swagger_1.PartialType)(create_proxy_ip_dto_1.
 exports.UpdateProxyIpDto = UpdateProxyIpDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/index.ts":
+/***/ "./src/components/ip-management/index.ts"
 /*!***********************************************!*\
   !*** ./src/components/ip-management/index.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -20988,13 +20991,13 @@ __exportStar(__webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/compone
 __exportStar(__webpack_require__(/*! ./dto/search-ip.dto */ "./src/components/ip-management/dto/search-ip.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/ip-management.controller.ts":
+/***/ "./src/components/ip-management/ip-management.controller.ts"
 /*!******************************************************************!*\
   !*** ./src/components/ip-management/ip-management.controller.ts ***!
   \******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21202,13 +21205,13 @@ exports.IpManagementController = IpManagementController = __decorate([
 ], IpManagementController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/ip-management.module.ts":
+/***/ "./src/components/ip-management/ip-management.module.ts"
 /*!**************************************************************!*\
   !*** ./src/components/ip-management/ip-management.module.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21245,13 +21248,13 @@ exports.IpManagementModule = IpManagementModule = __decorate([
 ], IpManagementModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/ip-management.service.ts":
+/***/ "./src/components/ip-management/ip-management.service.ts"
 /*!***************************************************************!*\
   !*** ./src/components/ip-management/ip-management.service.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21498,13 +21501,13 @@ exports.IpManagementService = IpManagementService = IpManagementService_1 = __de
 ], IpManagementService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/ip-management/schemas/proxy-ip.schema.ts":
+/***/ "./src/components/ip-management/schemas/proxy-ip.schema.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/ip-management/schemas/proxy-ip.schema.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21583,13 +21586,13 @@ exports.ProxyIpSchema.index({ status: 1, isAssigned: 1 });
 exports.ProxyIpSchema.index({ assignedToClient: 1 });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/n-point/index.ts":
+/***/ "./src/components/n-point/index.ts"
 /*!*****************************************!*\
   !*** ./src/components/n-point/index.ts ***!
   \*****************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -21612,13 +21615,13 @@ __exportStar(__webpack_require__(/*! ./npoint.module */ "./src/components/n-poin
 __exportStar(__webpack_require__(/*! ./npoint.service */ "./src/components/n-point/npoint.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/n-point/npoint.controller.ts":
+/***/ "./src/components/n-point/npoint.controller.ts"
 /*!*****************************************************!*\
   !*** ./src/components/n-point/npoint.controller.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21755,13 +21758,13 @@ exports.NpointController = NpointController = __decorate([
 ], NpointController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/n-point/npoint.module.ts":
+/***/ "./src/components/n-point/npoint.module.ts"
 /*!*************************************************!*\
   !*** ./src/components/n-point/npoint.module.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21791,13 +21794,13 @@ exports.NpointModule = NpointModule = __decorate([
 ], NpointModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/n-point/npoint.service.ts":
+/***/ "./src/components/n-point/npoint.service.ts"
 /*!**************************************************!*\
   !*** ./src/components/n-point/npoint.service.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -21960,13 +21963,13 @@ exports.NpointService = NpointService = NpointService_1 = __decorate([
 ], NpointService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/dto/create-promote-client.dto.ts":
+/***/ "./src/components/promote-clients/dto/create-promote-client.dto.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/promote-clients/dto/create-promote-client.dto.ts ***!
   \*************************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -22070,13 +22073,13 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "lastUsed", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/dto/index.ts":
+/***/ "./src/components/promote-clients/dto/index.ts"
 /*!*****************************************************!*\
   !*** ./src/components/promote-clients/dto/index.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -22099,13 +22102,13 @@ __exportStar(__webpack_require__(/*! ./search-promote-client.dto */ "./src/compo
 __exportStar(__webpack_require__(/*! ./update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/dto/search-promote-client.dto.ts":
+/***/ "./src/components/promote-clients/dto/search-promote-client.dto.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/promote-clients/dto/search-promote-client.dto.ts ***!
   \*************************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -22163,13 +22166,13 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "channels", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/dto/update-promote-client.dto.ts":
+/***/ "./src/components/promote-clients/dto/update-promote-client.dto.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/promote-clients/dto/update-promote-client.dto.ts ***!
   \*************************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -22181,13 +22184,13 @@ class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_c
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/index.ts":
+/***/ "./src/components/promote-clients/index.ts"
 /*!*************************************************!*\
   !*** ./src/components/promote-clients/index.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -22212,13 +22215,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/promote-clients/
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-clients/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/promote-client.controller.ts":
+/***/ "./src/components/promote-clients/promote-client.controller.ts"
 /*!*********************************************************************!*\
   !*** ./src/components/promote-clients/promote-client.controller.ts ***!
   \*********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -22650,13 +22653,13 @@ exports.PromoteClientController = PromoteClientController = __decorate([
 ], PromoteClientController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/promote-client.module.ts":
+/***/ "./src/components/promote-clients/promote-client.module.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/promote-clients/promote-client.module.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -22705,13 +22708,13 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
 ], PromoteClientModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/promote-client.service.ts":
+/***/ "./src/components/promote-clients/promote-client.service.ts"
 /*!******************************************************************!*\
   !*** ./src/components/promote-clients/promote-client.service.ts ***!
   \******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24403,13 +24406,13 @@ exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = _
 ], PromoteClientService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/schemas/index.ts":
+/***/ "./src/components/promote-clients/schemas/index.ts"
 /*!*********************************************************!*\
   !*** ./src/components/promote-clients/schemas/index.ts ***!
   \*********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -24430,13 +24433,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-clients/schemas/promote-client.schema.ts":
+/***/ "./src/components/promote-clients/schemas/promote-client.schema.ts"
 /*!*************************************************************************!*\
   !*** ./src/components/promote-clients/schemas/promote-client.schema.ts ***!
   \*************************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24550,13 +24553,13 @@ exports.PromoteClientSchema = mongoose_1.SchemaFactory.createForClass(PromoteCli
 exports.PromoteClientSchema.index({ clientId: 1 });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-msgs/index.ts":
+/***/ "./src/components/promote-msgs/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/promote-msgs/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -24580,13 +24583,13 @@ __exportStar(__webpack_require__(/*! ./promote-msgs.service */ "./src/components
 __exportStar(__webpack_require__(/*! ./promote-msgs.schema */ "./src/components/promote-msgs/promote-msgs.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-msgs/promote-msgs.controller.ts":
+/***/ "./src/components/promote-msgs/promote-msgs.controller.ts"
 /*!****************************************************************!*\
   !*** ./src/components/promote-msgs/promote-msgs.controller.ts ***!
   \****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24641,13 +24644,13 @@ exports.PromoteMsgsController = PromoteMsgsController = __decorate([
 ], PromoteMsgsController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-msgs/promote-msgs.module.ts":
+/***/ "./src/components/promote-msgs/promote-msgs.module.ts"
 /*!************************************************************!*\
   !*** ./src/components/promote-msgs/promote-msgs.module.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24682,13 +24685,13 @@ exports.PromoteMsgModule = PromoteMsgModule = __decorate([
 ], PromoteMsgModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-msgs/promote-msgs.schema.ts":
+/***/ "./src/components/promote-msgs/promote-msgs.schema.ts"
 /*!************************************************************!*\
   !*** ./src/components/promote-msgs/promote-msgs.schema.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24720,13 +24723,13 @@ exports.PromoteMsgSchema = mongoose_1.SchemaFactory.createForClass(PromoteMsg);
 exports.PromoteMsgSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-msgs/promote-msgs.service.ts":
+/***/ "./src/components/promote-msgs/promote-msgs.service.ts"
 /*!*************************************************************!*\
   !*** ./src/components/promote-msgs/promote-msgs.service.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24777,13 +24780,13 @@ exports.PromoteMsgsService = PromoteMsgsService = __decorate([
 ], PromoteMsgsService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/dto/create-promote-stat.dto.ts":
+/***/ "./src/components/promote-stats/dto/create-promote-stat.dto.ts"
 /*!*********************************************************************!*\
   !*** ./src/components/promote-stats/dto/create-promote-stat.dto.ts ***!
   \*********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -24835,13 +24838,13 @@ __decorate([
 ], CreatePromoteStatDto.prototype, "channels", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/dto/index.ts":
+/***/ "./src/components/promote-stats/dto/index.ts"
 /*!***************************************************!*\
   !*** ./src/components/promote-stats/dto/index.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -24863,13 +24866,13 @@ __exportStar(__webpack_require__(/*! ./create-promote-stat.dto */ "./src/compone
 __exportStar(__webpack_require__(/*! ./update-promote-stat.dto */ "./src/components/promote-stats/dto/update-promote-stat.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/dto/update-promote-stat.dto.ts":
+/***/ "./src/components/promote-stats/dto/update-promote-stat.dto.ts"
 /*!*********************************************************************!*\
   !*** ./src/components/promote-stats/dto/update-promote-stat.dto.ts ***!
   \*********************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -24881,13 +24884,13 @@ class UpdatePromoteStatDto extends (0, swagger_1.PartialType)(create_promote_sta
 exports.UpdatePromoteStatDto = UpdatePromoteStatDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/index.ts":
+/***/ "./src/components/promote-stats/index.ts"
 /*!***********************************************!*\
   !*** ./src/components/promote-stats/index.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -24912,13 +24915,13 @@ __exportStar(__webpack_require__(/*! ./dto */ "./src/components/promote-stats/dt
 __exportStar(__webpack_require__(/*! ./schemas */ "./src/components/promote-stats/schemas/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/promote-stat.controller.ts":
+/***/ "./src/components/promote-stats/promote-stat.controller.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/promote-stats/promote-stat.controller.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25003,13 +25006,13 @@ exports.PromoteStatController = PromoteStatController = __decorate([
 ], PromoteStatController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/promote-stat.module.ts":
+/***/ "./src/components/promote-stats/promote-stat.module.ts"
 /*!*************************************************************!*\
   !*** ./src/components/promote-stats/promote-stat.module.ts ***!
   \*************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25044,13 +25047,13 @@ exports.PromoteStatModule = PromoteStatModule = __decorate([
 ], PromoteStatModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/promote-stat.service.ts":
+/***/ "./src/components/promote-stats/promote-stat.service.ts"
 /*!**************************************************************!*\
   !*** ./src/components/promote-stats/promote-stat.service.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25133,13 +25136,13 @@ exports.PromoteStatService = PromoteStatService = __decorate([
 ], PromoteStatService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/schemas/index.ts":
+/***/ "./src/components/promote-stats/schemas/index.ts"
 /*!*******************************************************!*\
   !*** ./src/components/promote-stats/schemas/index.ts ***!
   \*******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -25160,13 +25163,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./promote-stat.schema */ "./src/components/promote-stats/schemas/promote-stat.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/promote-stats/schemas/promote-stat.schema.ts":
+/***/ "./src/components/promote-stats/schemas/promote-stat.schema.ts"
 /*!*********************************************************************!*\
   !*** ./src/components/promote-stats/schemas/promote-stat.schema.ts ***!
   \*********************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25231,13 +25234,13 @@ exports.PromoteStat = PromoteStat = __decorate([
 exports.PromoteStatSchema = mongoose_1.SchemaFactory.createForClass(PromoteStat);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/client-registry.ts":
+/***/ "./src/components/session-manager/client-registry.ts"
 /*!***********************************************************!*\
   !*** ./src/components/session-manager/client-registry.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25478,13 +25481,13 @@ exports.ClientRegistry = ClientRegistry = ClientRegistry_1 = __decorate([
 ], ClientRegistry);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/index.ts":
+/***/ "./src/components/session-manager/index.ts"
 /*!*************************************************!*\
   !*** ./src/components/session-manager/index.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -25510,13 +25513,13 @@ __exportStar(__webpack_require__(/*! ./session-audit.service */ "./src/component
 __exportStar(__webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/schemas/sessions.schema.ts":
+/***/ "./src/components/session-manager/schemas/sessions.schema.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/session-manager/schemas/sessions.schema.ts ***!
   \*******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -25681,13 +25684,13 @@ exports.SessionAuditSchema.pre('findOneAndUpdate', function () {
 });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/session-audit.service.ts":
+/***/ "./src/components/session-manager/session-audit.service.ts"
 /*!*****************************************************************!*\
   !*** ./src/components/session-manager/session-audit.service.ts ***!
   \*****************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -26046,13 +26049,13 @@ exports.SessionAuditService = SessionAuditService = __decorate([
 ], SessionAuditService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/session.controller.ts":
+/***/ "./src/components/session-manager/session.controller.ts"
 /*!**************************************************************!*\
   !*** ./src/components/session-manager/session.controller.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -26475,13 +26478,13 @@ exports.SessionController = SessionController = __decorate([
 ], SessionController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/session.module.ts":
+/***/ "./src/components/session-manager/session.module.ts"
 /*!**********************************************************!*\
   !*** ./src/components/session-manager/session.module.ts ***!
   \**********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -26515,13 +26518,13 @@ exports.SessionModule = SessionModule = __decorate([
 ], SessionModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/session-manager/session.service.ts":
+/***/ "./src/components/session-manager/session.service.ts"
 /*!***********************************************************!*\
   !*** ./src/components/session-manager/session.service.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27290,13 +27293,13 @@ exports.SessionService = SessionService = __decorate([
 ], SessionService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/shared/client-helper.utils.ts":
+/***/ "./src/components/shared/client-helper.utils.ts"
 /*!******************************************************!*\
   !*** ./src/components/shared/client-helper.utils.ts ***!
   \******************************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -27331,13 +27334,13 @@ class ClientHelperUtils {
 exports.ClientHelperUtils = ClientHelperUtils;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/shared/dto/execute-request.dto.ts":
+/***/ "./src/components/shared/dto/execute-request.dto.ts"
 /*!**********************************************************!*\
   !*** ./src/components/shared/dto/execute-request.dto.ts ***!
   \**********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27426,13 +27429,13 @@ __decorate([
 ], ExecuteRequestDto.prototype, "maxRedirects", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/shared/index.ts":
+/***/ "./src/components/shared/index.ts"
 /*!****************************************!*\
   !*** ./src/components/shared/index.ts ***!
   \****************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -27453,13 +27456,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./dto/execute-request.dto */ "./src/components/shared/dto/execute-request.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/create-stat.dto.ts":
+/***/ "./src/components/stats/create-stat.dto.ts"
 /*!*************************************************!*\
   !*** ./src/components/stats/create-stat.dto.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27527,13 +27530,13 @@ __decorate([
 ], CreateStatDto.prototype, "profile", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/index.ts":
+/***/ "./src/components/stats/index.ts"
 /*!***************************************!*\
   !*** ./src/components/stats/index.ts ***!
   \***************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -27553,13 +27556,13 @@ var update_stat_dto_1 = __webpack_require__(/*! ./update-stat.dto */ "./src/comp
 Object.defineProperty(exports, "Stat1UpdateDto", ({ enumerable: true, get: function () { return update_stat_dto_1.UpdateStatDto; } }));
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/stat.controller.ts":
+/***/ "./src/components/stats/stat.controller.ts"
 /*!*************************************************!*\
   !*** ./src/components/stats/stat.controller.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27647,13 +27650,13 @@ exports.StatController = StatController = __decorate([
 ], StatController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/stat.module.ts":
+/***/ "./src/components/stats/stat.module.ts"
 /*!*********************************************!*\
   !*** ./src/components/stats/stat.module.ts ***!
   \*********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27686,13 +27689,13 @@ exports.StatModule = StatModule = __decorate([
 ], StatModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/stat.schema.ts":
+/***/ "./src/components/stats/stat.schema.ts"
 /*!*********************************************!*\
   !*** ./src/components/stats/stat.schema.ts ***!
   \*********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27778,13 +27781,13 @@ exports.StatSchema = mongoose_1.SchemaFactory.createForClass(Stat);
 exports.StatSchema.index({ chatId: 1, profile: 1, client: 1 }, { unique: true });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/stat.service.ts":
+/***/ "./src/components/stats/stat.service.ts"
 /*!**********************************************!*\
   !*** ./src/components/stats/stat.service.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27848,13 +27851,13 @@ exports.StatService = StatService = __decorate([
 ], StatService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats/update-stat.dto.ts":
+/***/ "./src/components/stats/update-stat.dto.ts"
 /*!*************************************************!*\
   !*** ./src/components/stats/update-stat.dto.ts ***!
   \*************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -27866,13 +27869,13 @@ class UpdateStatDto extends (0, swagger_1.PartialType)(create_stat_dto_1.CreateS
 exports.UpdateStatDto = UpdateStatDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/create-stat2.dto.ts":
+/***/ "./src/components/stats2/create-stat2.dto.ts"
 /*!***************************************************!*\
   !*** ./src/components/stats2/create-stat2.dto.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -27940,13 +27943,13 @@ __decorate([
 ], CreateStatDto.prototype, "profile", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/index.ts":
+/***/ "./src/components/stats2/index.ts"
 /*!****************************************!*\
   !*** ./src/components/stats2/index.ts ***!
   \****************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -27966,13 +27969,13 @@ var update_stat2_dto_1 = __webpack_require__(/*! ./update-stat2.dto */ "./src/co
 Object.defineProperty(exports, "Stat2UpdateDto", ({ enumerable: true, get: function () { return update_stat2_dto_1.UpdateStatDto; } }));
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/stat2.controller.ts":
+/***/ "./src/components/stats2/stat2.controller.ts"
 /*!***************************************************!*\
   !*** ./src/components/stats2/stat2.controller.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28060,13 +28063,13 @@ exports.Stat2Controller = Stat2Controller = __decorate([
 ], Stat2Controller);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/stat2.module.ts":
+/***/ "./src/components/stats2/stat2.module.ts"
 /*!***********************************************!*\
   !*** ./src/components/stats2/stat2.module.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28099,13 +28102,13 @@ exports.Stat2Module = Stat2Module = __decorate([
 ], Stat2Module);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/stat2.schema.ts":
+/***/ "./src/components/stats2/stat2.schema.ts"
 /*!***********************************************!*\
   !*** ./src/components/stats2/stat2.schema.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28191,13 +28194,13 @@ exports.StatSchema = mongoose_1.SchemaFactory.createForClass(Stat2);
 exports.StatSchema.index({ chatId: 1, profile: 1, client: 1 }, { unique: true });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/stat2.service.ts":
+/***/ "./src/components/stats2/stat2.service.ts"
 /*!************************************************!*\
   !*** ./src/components/stats2/stat2.service.ts ***!
   \************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28261,13 +28264,13 @@ exports.Stat2Service = Stat2Service = __decorate([
 ], Stat2Service);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/stats2/update-stat2.dto.ts":
+/***/ "./src/components/stats2/update-stat2.dto.ts"
 /*!***************************************************!*\
   !*** ./src/components/stats2/update-stat2.dto.ts ***!
   \***************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -28279,13 +28282,13 @@ class UpdateStatDto extends (0, swagger_1.PartialType)(create_stat2_dto_1.Create
 exports.UpdateStatDto = UpdateStatDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/timestamps/index.ts":
+/***/ "./src/components/timestamps/index.ts"
 /*!********************************************!*\
   !*** ./src/components/timestamps/index.ts ***!
   \********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -28308,13 +28311,13 @@ __exportStar(__webpack_require__(/*! ./timestamp.module */ "./src/components/tim
 __exportStar(__webpack_require__(/*! ./timestamp.service */ "./src/components/timestamps/timestamp.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/timestamps/timestamp.controller.ts":
+/***/ "./src/components/timestamps/timestamp.controller.ts"
 /*!***********************************************************!*\
   !*** ./src/components/timestamps/timestamp.controller.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28387,13 +28390,13 @@ exports.TimestampController = TimestampController = __decorate([
 ], TimestampController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/timestamps/timestamp.module.ts":
+/***/ "./src/components/timestamps/timestamp.module.ts"
 /*!*******************************************************!*\
   !*** ./src/components/timestamps/timestamp.module.ts ***!
   \*******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28433,13 +28436,13 @@ exports.TimestampModule = TimestampModule = __decorate([
 ], TimestampModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/timestamps/timestamp.service.ts":
+/***/ "./src/components/timestamps/timestamp.service.ts"
 /*!********************************************************!*\
   !*** ./src/components/timestamps/timestamp.service.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28568,13 +28571,13 @@ exports.TimestampService = TimestampService = __decorate([
 ], TimestampService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/timestamps/timestamps.schema.ts":
+/***/ "./src/components/timestamps/timestamps.schema.ts"
 /*!********************************************************!*\
   !*** ./src/components/timestamps/timestamps.schema.ts ***!
   \********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28611,13 +28614,13 @@ exports.TimestampSchema = mongoose_1.SchemaFactory.createForClass(Timestamp);
 exports.TimestampSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/dto/create-transaction.dto.ts":
+/***/ "./src/components/transactions/dto/create-transaction.dto.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/transactions/dto/create-transaction.dto.ts ***!
   \*******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28744,13 +28747,13 @@ __decorate([
 ], CreateTransactionDto.prototype, "status", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/dto/index.ts":
+/***/ "./src/components/transactions/dto/index.ts"
 /*!**************************************************!*\
   !*** ./src/components/transactions/dto/index.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -28772,13 +28775,13 @@ __exportStar(__webpack_require__(/*! ./create-transaction.dto */ "./src/componen
 __exportStar(__webpack_require__(/*! ./update-transaction.dto */ "./src/components/transactions/dto/update-transaction.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/dto/update-transaction.dto.ts":
+/***/ "./src/components/transactions/dto/update-transaction.dto.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/transactions/dto/update-transaction.dto.ts ***!
   \*******************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -28790,13 +28793,13 @@ class UpdateTransactionDto extends (0, swagger_1.PartialType)(create_transaction
 exports.UpdateTransactionDto = UpdateTransactionDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/index.ts":
+/***/ "./src/components/transactions/index.ts"
 /*!**********************************************!*\
   !*** ./src/components/transactions/index.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -28821,13 +28824,13 @@ __exportStar(__webpack_require__(/*! ./schemas/transaction.schema */ "./src/comp
 __exportStar(__webpack_require__(/*! ./dto */ "./src/components/transactions/dto/index.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/schemas/transaction.schema.ts":
+/***/ "./src/components/transactions/schemas/transaction.schema.ts"
 /*!*******************************************************************!*\
   !*** ./src/components/transactions/schemas/transaction.schema.ts ***!
   \*******************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -28962,13 +28965,13 @@ exports.Transaction = Transaction = __decorate([
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/transaction.controller.ts":
+/***/ "./src/components/transactions/transaction.controller.ts"
 /*!***************************************************************!*\
   !*** ./src/components/transactions/transaction.controller.ts ***!
   \***************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29154,13 +29157,13 @@ exports.TransactionController = TransactionController = __decorate([
 ], TransactionController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/transaction.module.ts":
+/***/ "./src/components/transactions/transaction.module.ts"
 /*!***********************************************************!*\
   !*** ./src/components/transactions/transaction.module.ts ***!
   \***********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29195,13 +29198,13 @@ exports.TransactionModule = TransactionModule = __decorate([
 ], TransactionModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/transactions/transaction.service.ts":
+/***/ "./src/components/transactions/transaction.service.ts"
 /*!************************************************************!*\
   !*** ./src/components/transactions/transaction.service.ts ***!
   \************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29421,13 +29424,13 @@ exports.TransactionService = TransactionService = TransactionService_1 = __decor
 ], TransactionService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/upi-ids/index.ts":
+/***/ "./src/components/upi-ids/index.ts"
 /*!*****************************************!*\
   !*** ./src/components/upi-ids/index.ts ***!
   \*****************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -29451,13 +29454,13 @@ __exportStar(__webpack_require__(/*! ./upi-ids.service */ "./src/components/upi-
 __exportStar(__webpack_require__(/*! ./upi-ids.schema */ "./src/components/upi-ids/upi-ids.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/upi-ids/upi-ids.controller.ts":
+/***/ "./src/components/upi-ids/upi-ids.controller.ts"
 /*!******************************************************!*\
   !*** ./src/components/upi-ids/upi-ids.controller.ts ***!
   \******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29516,13 +29519,13 @@ exports.UpiIdController = UpiIdController = __decorate([
 ], UpiIdController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/upi-ids/upi-ids.module.ts":
+/***/ "./src/components/upi-ids/upi-ids.module.ts"
 /*!**************************************************!*\
   !*** ./src/components/upi-ids/upi-ids.module.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29559,13 +29562,13 @@ exports.UpiIdModule = UpiIdModule = __decorate([
 ], UpiIdModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/upi-ids/upi-ids.schema.ts":
+/***/ "./src/components/upi-ids/upi-ids.schema.ts"
 /*!**************************************************!*\
   !*** ./src/components/upi-ids/upi-ids.schema.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29601,13 +29604,13 @@ exports.UpiIdSchema = mongoose_1.SchemaFactory.createForClass(UpiId);
 exports.UpiIdSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/upi-ids/upi-ids.service.ts":
+/***/ "./src/components/upi-ids/upi-ids.service.ts"
 /*!***************************************************!*\
   !*** ./src/components/upi-ids/upi-ids.service.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29802,13 +29805,13 @@ exports.UpiIdService = UpiIdService = UpiIdService_1 = __decorate([
 ], UpiIdService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/dto/create-user-data.dto.ts":
+/***/ "./src/components/user-data/dto/create-user-data.dto.ts"
 /*!**************************************************************!*\
   !*** ./src/components/user-data/dto/create-user-data.dto.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -29908,13 +29911,13 @@ __decorate([
 ], CreateUserDataDto.prototype, "videos", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/dto/index.ts":
+/***/ "./src/components/user-data/dto/index.ts"
 /*!***********************************************!*\
   !*** ./src/components/user-data/dto/index.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -29937,13 +29940,13 @@ __exportStar(__webpack_require__(/*! ./search-user-data.dto */ "./src/components
 __exportStar(__webpack_require__(/*! ./update-user-data.dto */ "./src/components/user-data/dto/update-user-data.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/dto/search-user-data.dto.ts":
+/***/ "./src/components/user-data/dto/search-user-data.dto.ts"
 /*!**************************************************************!*\
   !*** ./src/components/user-data/dto/search-user-data.dto.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30029,13 +30032,13 @@ __decorate([
 ], SearchDto.prototype, "picsSent", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/dto/update-user-data.dto.ts":
+/***/ "./src/components/user-data/dto/update-user-data.dto.ts"
 /*!**************************************************************!*\
   !*** ./src/components/user-data/dto/update-user-data.dto.ts ***!
   \**************************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -30047,13 +30050,13 @@ class UpdateUserDataDto extends (0, swagger_1.PartialType)(create_user_data_dto_
 exports.UpdateUserDataDto = UpdateUserDataDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/index.ts":
+/***/ "./src/components/user-data/index.ts"
 /*!*******************************************!*\
   !*** ./src/components/user-data/index.ts ***!
   \*******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -30078,13 +30081,13 @@ __exportStar(__webpack_require__(/*! ./user-data.module */ "./src/components/use
 __exportStar(__webpack_require__(/*! ./user-data.service */ "./src/components/user-data/user-data.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/schemas/index.ts":
+/***/ "./src/components/user-data/schemas/index.ts"
 /*!***************************************************!*\
   !*** ./src/components/user-data/schemas/index.ts ***!
   \***************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -30105,13 +30108,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./user-data.schema */ "./src/components/user-data/schemas/user-data.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/schemas/user-data.schema.ts":
+/***/ "./src/components/user-data/schemas/user-data.schema.ts"
 /*!**************************************************************!*\
   !*** ./src/components/user-data/schemas/user-data.schema.ts ***!
   \**************************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30227,13 +30230,13 @@ exports.UserData = UserData = __decorate([
 exports.UserDataSchema = mongoose_1.SchemaFactory.createForClass(UserData);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/user-data.controller.ts":
+/***/ "./src/components/user-data/user-data.controller.ts"
 /*!**********************************************************!*\
   !*** ./src/components/user-data/user-data.controller.ts ***!
   \**********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30429,13 +30432,13 @@ exports.UserDataController = UserDataController = __decorate([
 ], UserDataController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/user-data.module.ts":
+/***/ "./src/components/user-data/user-data.module.ts"
 /*!******************************************************!*\
   !*** ./src/components/user-data/user-data.module.ts ***!
   \******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30468,13 +30471,13 @@ exports.UserDataModule = UserDataModule = __decorate([
 ], UserDataModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/user-data/user-data.service.ts":
+/***/ "./src/components/user-data/user-data.service.ts"
 /*!*******************************************************!*\
   !*** ./src/components/user-data/user-data.service.ts ***!
   \*******************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30680,13 +30683,13 @@ exports.UserDataService = UserDataService = UserDataService_1 = __decorate([
 ], UserDataService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/dto/create-user.dto.ts":
+/***/ "./src/components/users/dto/create-user.dto.ts"
 /*!*****************************************************!*\
   !*** ./src/components/users/dto/create-user.dto.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -30831,13 +30834,13 @@ __decorate([
 ], CreateUserDto.prototype, "recentUsers", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/dto/index.ts":
+/***/ "./src/components/users/dto/index.ts"
 /*!*******************************************!*\
   !*** ./src/components/users/dto/index.ts ***!
   \*******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -30860,13 +30863,13 @@ __exportStar(__webpack_require__(/*! ./search-user.dto */ "./src/components/user
 __exportStar(__webpack_require__(/*! ./update-user.dto */ "./src/components/users/dto/update-user.dto.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/dto/search-user.dto.ts":
+/***/ "./src/components/users/dto/search-user.dto.ts"
 /*!*****************************************************!*\
   !*** ./src/components/users/dto/search-user.dto.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -31021,13 +31024,13 @@ __decorate([
 ], SearchUserDto.prototype, "ownVideoCount", void 0);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/dto/update-user.dto.ts":
+/***/ "./src/components/users/dto/update-user.dto.ts"
 /*!*****************************************************!*\
   !*** ./src/components/users/dto/update-user.dto.ts ***!
   \*****************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -31039,13 +31042,13 @@ class UpdateUserDto extends (0, mapped_types_1.PartialType)(create_user_dto_1.Cr
 exports.UpdateUserDto = UpdateUserDto;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/index.ts":
+/***/ "./src/components/users/index.ts"
 /*!***************************************!*\
   !*** ./src/components/users/index.ts ***!
   \***************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -31070,13 +31073,13 @@ __exportStar(__webpack_require__(/*! ./users.module */ "./src/components/users/u
 __exportStar(__webpack_require__(/*! ./users.service */ "./src/components/users/users.service.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/schemas/index.ts":
+/***/ "./src/components/users/schemas/index.ts"
 /*!***********************************************!*\
   !*** ./src/components/users/schemas/index.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -31097,13 +31100,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./user.schema */ "./src/components/users/schemas/user.schema.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/schemas/user.schema.ts":
+/***/ "./src/components/users/schemas/user.schema.ts"
 /*!*****************************************************!*\
   !*** ./src/components/users/schemas/user.schema.ts ***!
   \*****************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -31287,13 +31290,13 @@ exports.User = User = __decorate([
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/users.controller.ts":
+/***/ "./src/components/users/users.controller.ts"
 /*!**************************************************!*\
   !*** ./src/components/users/users.controller.ts ***!
   \**************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -31621,13 +31624,13 @@ exports.UsersController = UsersController = __decorate([
 ], UsersController);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/users.module.ts":
+/***/ "./src/components/users/users.module.ts"
 /*!**********************************************!*\
   !*** ./src/components/users/users.module.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -31666,13 +31669,13 @@ exports.UsersModule = UsersModule = __decorate([
 ], UsersModule);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/components/users/users.service.ts":
+/***/ "./src/components/users/users.service.ts"
 /*!***********************************************!*\
   !*** ./src/components/users/users.service.ts ***!
   \***********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32049,13 +32052,13 @@ exports.UsersService = UsersService = __decorate([
 ], UsersService);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/decorators/cloudflare-cache.decorator.ts":
+/***/ "./src/decorators/cloudflare-cache.decorator.ts"
 /*!******************************************************!*\
   !*** ./src/decorators/cloudflare-cache.decorator.ts ***!
   \******************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32069,13 +32072,13 @@ const CloudflareCache = (edgeSeconds, browserSeconds = 0) => (0, common_1.SetMet
 exports.CloudflareCache = CloudflareCache;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/decorators/index.ts":
+/***/ "./src/decorators/index.ts"
 /*!*********************************!*\
   !*** ./src/decorators/index.ts ***!
   \*********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -32097,13 +32100,13 @@ __exportStar(__webpack_require__(/*! ./cloudflare-cache.decorator */ "./src/deco
 __exportStar(__webpack_require__(/*! ./no-cache.decorator */ "./src/decorators/no-cache.decorator.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/decorators/no-cache.decorator.ts":
+/***/ "./src/decorators/no-cache.decorator.ts"
 /*!**********************************************!*\
   !*** ./src/decorators/no-cache.decorator.ts ***!
   \**********************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32114,13 +32117,13 @@ const NoCache = () => (0, common_1.SetMetadata)(exports.NO_CACHE_KEY, true);
 exports.NoCache = NoCache;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/guards/auth.guard.ts":
+/***/ "./src/guards/auth.guard.ts"
 /*!**********************************!*\
   !*** ./src/guards/auth.guard.ts ***!
   \**********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32331,13 +32334,13 @@ exports.AuthGuard = AuthGuard = AuthGuard_1 = __decorate([
 ], AuthGuard);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/guards/index.ts":
+/***/ "./src/guards/index.ts"
 /*!*****************************!*\
   !*** ./src/guards/index.ts ***!
   \*****************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -32358,13 +32361,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./auth.guard */ "./src/guards/auth.guard.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/interceptors/Exception-filter.ts":
+/***/ "./src/interceptors/Exception-filter.ts"
 /*!**********************************************!*\
   !*** ./src/interceptors/Exception-filter.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32406,13 +32409,13 @@ exports.ExceptionsFilter = ExceptionsFilter = __decorate([
 ], ExceptionsFilter);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/interceptors/cloudflare-cache.interceptor.ts":
+/***/ "./src/interceptors/cloudflare-cache.interceptor.ts"
 /*!**********************************************************!*\
   !*** ./src/interceptors/cloudflare-cache.interceptor.ts ***!
   \**********************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32457,13 +32460,13 @@ exports.CloudflareCacheInterceptor = CloudflareCacheInterceptor = __decorate([
 ], CloudflareCacheInterceptor);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/interceptors/index.ts":
+/***/ "./src/interceptors/index.ts"
 /*!***********************************!*\
   !*** ./src/interceptors/index.ts ***!
   \***********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -32486,13 +32489,13 @@ __exportStar(__webpack_require__(/*! ./Exception-filter */ "./src/interceptors/E
 __exportStar(__webpack_require__(/*! ./timeout.interceptor */ "./src/interceptors/timeout.interceptor.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/interceptors/timeout.interceptor.ts":
+/***/ "./src/interceptors/timeout.interceptor.ts"
 /*!*************************************************!*\
   !*** ./src/interceptors/timeout.interceptor.ts ***!
   \*************************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32529,13 +32532,13 @@ exports.TimeoutInterceptor = TimeoutInterceptor = __decorate([
 ], TimeoutInterceptor);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/interfaces/telegram.ts":
+/***/ "./src/interfaces/telegram.ts"
 /*!************************************!*\
   !*** ./src/interfaces/telegram.ts ***!
   \************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32548,13 +32551,13 @@ var PrivacyLevelEnum;
 })(PrivacyLevelEnum || (exports.PrivacyLevelEnum = PrivacyLevelEnum = {}));
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/main.ts":
+/***/ "./src/main.ts"
 /*!*********************!*\
   !*** ./src/main.ts ***!
   \*********************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -32658,13 +32661,13 @@ async function bootstrap() {
 bootstrap();
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/middlewares/logger.middleware.ts":
+/***/ "./src/middlewares/logger.middleware.ts"
 /*!**********************************************!*\
   !*** ./src/middlewares/logger.middleware.ts ***!
   \**********************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
@@ -32743,13 +32746,13 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 ], LoggerMiddleware);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/processListeners.ts":
+/***/ "./src/processListeners.ts"
 /*!*********************************!*\
   !*** ./src/processListeners.ts ***!
   \*********************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32780,13 +32783,13 @@ function setProcessListeners() {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/bot.service.instance.ts":
+/***/ "./src/utils/bot.service.instance.ts"
 /*!*******************************************!*\
   !*** ./src/utils/bot.service.instance.ts ***!
   \*******************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32804,13 +32807,13 @@ function getBotsServiceInstance() {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/checkMe.utils.ts":
+/***/ "./src/utils/checkMe.utils.ts"
 /*!************************************!*\
   !*** ./src/utils/checkMe.utils.ts ***!
   \************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -32885,13 +32888,13 @@ const isIncludedWithTolerance = (actual, expected, maxDiff = 2) => {
 exports.isIncludedWithTolerance = isIncludedWithTolerance;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/common.ts":
+/***/ "./src/utils/common.ts"
 /*!*****************************!*\
   !*** ./src/utils/common.ts ***!
   \*****************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -33051,13 +33054,13 @@ function parseObjectToString(obj) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/fetchWithTimeout.ts":
+/***/ "./src/utils/fetchWithTimeout.ts"
 /*!***************************************!*\
   !*** ./src/utils/fetchWithTimeout.ts ***!
   \***************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -33340,13 +33343,13 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/getRandomEmoji.ts":
+/***/ "./src/utils/getRandomEmoji.ts"
 /*!*************************************!*\
   !*** ./src/utils/getRandomEmoji.ts ***!
   \*************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -33379,13 +33382,13 @@ function getRandomPetName() {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/index.ts":
+/***/ "./src/utils/index.ts"
 /*!****************************!*\
   !*** ./src/utils/index.ts ***!
   \****************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -33421,13 +33424,13 @@ __exportStar(__webpack_require__(/*! ./isPermanentError */ "./src/utils/isPerman
 __exportStar(__webpack_require__(/*! ./readbleTimeDifference */ "./src/utils/readbleTimeDifference.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/isPermanentError.ts":
+/***/ "./src/utils/isPermanentError.ts"
 /*!***************************************!*\
   !*** ./src/utils/isPermanentError.ts ***!
   \***************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -33452,13 +33455,13 @@ function isPermanentError(errorDetails) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/logbots.ts":
+/***/ "./src/utils/logbots.ts"
 /*!******************************!*\
   !*** ./src/utils/logbots.ts ***!
   \******************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -33504,13 +33507,13 @@ function ppplbot(chatId = process.env.updatesChannel || '-1001972065816', botTok
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/logger.ts":
+/***/ "./src/utils/logger.ts"
 /*!*****************************!*\
   !*** ./src/utils/logger.ts ***!
   \*****************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -33704,13 +33707,13 @@ exports.Logger = Logger;
 const logger = new Logger();
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/obfuscateText.ts":
+/***/ "./src/utils/obfuscateText.ts"
 /*!************************************!*\
   !*** ./src/utils/obfuscateText.ts ***!
   \************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -34164,13 +34167,13 @@ function validateConfig(config) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/parseError.ts":
+/***/ "./src/utils/parseError.ts"
 /*!*********************************!*\
   !*** ./src/utils/parseError.ts ***!
   \*********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -34416,13 +34419,13 @@ exports.ErrorUtils = {
 };
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/readbleTimeDifference.ts":
+/***/ "./src/utils/readbleTimeDifference.ts"
 /*!********************************************!*\
   !*** ./src/utils/readbleTimeDifference.ts ***!
   \********************************************/
-/***/ ((__unused_webpack_module, exports) => {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -34447,13 +34450,13 @@ function getReadableTimeDifference(ms1, ms2 = Date.now()) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/redisClient.ts":
+/***/ "./src/utils/redisClient.ts"
 /*!**********************************!*\
   !*** ./src/utils/redisClient.ts ***!
   \**********************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -34643,13 +34646,13 @@ exports.RedisClient = RedisClient;
 RedisClient.instance = null;
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/telegram-utils/channelinfo.ts":
+/***/ "./src/utils/telegram-utils/channelinfo.ts"
 /*!*************************************************!*\
   !*** ./src/utils/telegram-utils/channelinfo.ts ***!
   \*************************************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -34694,13 +34697,13 @@ async function channelInfo(client, sendIds = false) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/telegram-utils/index.ts":
+/***/ "./src/utils/telegram-utils/index.ts"
 /*!*******************************************!*\
   !*** ./src/utils/telegram-utils/index.ts ***!
   \*******************************************/
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -34721,13 +34724,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./channelinfo */ "./src/utils/telegram-utils/channelinfo.ts"), exports);
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/tg-apps.ts":
+/***/ "./src/utils/tg-apps.ts"
 /*!******************************!*\
   !*** ./src/utils/tg-apps.ts ***!
   \******************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -34759,13 +34762,13 @@ async function getCredentialsForMobile(mobile, ttl = 24 * 60 * 60 * 60) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "./src/utils/withTimeout.ts":
+/***/ "./src/utils/withTimeout.ts"
 /*!**********************************!*\
   !*** ./src/utils/withTimeout.ts ***!
   \**********************************/
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+(__unused_webpack_module, exports, __webpack_require__) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
@@ -34853,377 +34856,377 @@ function defaultShouldRetry(error, attempt) {
 }
 
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/common":
+/***/ "@nestjs/common"
 /*!*********************************!*\
   !*** external "@nestjs/common" ***!
   \*********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/common");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/config":
+/***/ "@nestjs/config"
 /*!*********************************!*\
   !*** external "@nestjs/config" ***!
   \*********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/config");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/core":
+/***/ "@nestjs/core"
 /*!*******************************!*\
   !*** external "@nestjs/core" ***!
   \*******************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/core");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/mapped-types":
+/***/ "@nestjs/mapped-types"
 /*!***************************************!*\
   !*** external "@nestjs/mapped-types" ***!
   \***************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/mapped-types");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/mongoose":
+/***/ "@nestjs/mongoose"
 /*!***********************************!*\
   !*** external "@nestjs/mongoose" ***!
   \***********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/mongoose");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/platform-express":
+/***/ "@nestjs/platform-express"
 /*!*******************************************!*\
   !*** external "@nestjs/platform-express" ***!
   \*******************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/platform-express");
 
-/***/ }),
+/***/ },
 
-/***/ "@nestjs/swagger":
+/***/ "@nestjs/swagger"
 /*!**********************************!*\
   !*** external "@nestjs/swagger" ***!
   \**********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("@nestjs/swagger");
 
-/***/ }),
+/***/ },
 
-/***/ "adm-zip":
+/***/ "adm-zip"
 /*!**************************!*\
   !*** external "adm-zip" ***!
   \**************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("adm-zip");
 
-/***/ }),
+/***/ },
 
-/***/ "axios":
+/***/ "axios"
 /*!************************!*\
   !*** external "axios" ***!
   \************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("axios");
 
-/***/ }),
+/***/ },
 
-/***/ "big-integer":
+/***/ "big-integer"
 /*!******************************!*\
   !*** external "big-integer" ***!
   \******************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("big-integer");
 
-/***/ }),
+/***/ },
 
-/***/ "chalk":
+/***/ "chalk"
 /*!************************!*\
   !*** external "chalk" ***!
   \************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("chalk");
 
-/***/ }),
+/***/ },
 
-/***/ "class-transformer":
+/***/ "class-transformer"
 /*!************************************!*\
   !*** external "class-transformer" ***!
   \************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("class-transformer");
 
-/***/ }),
+/***/ },
 
-/***/ "class-validator":
+/***/ "class-validator"
 /*!**********************************!*\
   !*** external "class-validator" ***!
   \**********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("class-validator");
 
-/***/ }),
+/***/ },
 
-/***/ "cloudinary":
+/***/ "cloudinary"
 /*!*****************************!*\
   !*** external "cloudinary" ***!
   \*****************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("cloudinary");
 
-/***/ }),
+/***/ },
 
-/***/ "crypto":
-/*!*************************!*\
-  !*** external "crypto" ***!
-  \*************************/
-/***/ ((module) => {
-
-module.exports = require("crypto");
-
-/***/ }),
-
-/***/ "form-data":
+/***/ "form-data"
 /*!****************************!*\
   !*** external "form-data" ***!
   \****************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("form-data");
 
-/***/ }),
+/***/ },
 
-/***/ "fs":
-/*!*********************!*\
-  !*** external "fs" ***!
-  \*********************/
-/***/ ((module) => {
-
-module.exports = require("fs");
-
-/***/ }),
-
-/***/ "https":
+/***/ "https"
 /*!************************!*\
   !*** external "https" ***!
   \************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("https");
 
-/***/ }),
+/***/ },
 
-/***/ "imap":
+/***/ "imap"
 /*!***********************!*\
   !*** external "imap" ***!
   \***********************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("imap");
 
-/***/ }),
+/***/ },
 
-/***/ "ioredis":
+/***/ "ioredis"
 /*!**************************!*\
   !*** external "ioredis" ***!
   \**************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("ioredis");
 
-/***/ }),
+/***/ },
 
-/***/ "lodash":
+/***/ "lodash"
 /*!*************************!*\
   !*** external "lodash" ***!
   \*************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("lodash");
 
-/***/ }),
+/***/ },
 
-/***/ "mongoose":
+/***/ "mongoose"
 /*!***************************!*\
   !*** external "mongoose" ***!
   \***************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("mongoose");
 
-/***/ }),
+/***/ },
 
-/***/ "multer":
+/***/ "multer"
 /*!*************************!*\
   !*** external "multer" ***!
   \*************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("multer");
 
-/***/ }),
+/***/ },
 
-/***/ "node-cache":
+/***/ "node-cache"
 /*!*****************************!*\
   !*** external "node-cache" ***!
   \*****************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("node-cache");
 
-/***/ }),
+/***/ },
 
-/***/ "path":
-/*!***********************!*\
-  !*** external "path" ***!
-  \***********************/
-/***/ ((module) => {
-
-module.exports = require("path");
-
-/***/ }),
-
-/***/ "reflect-metadata":
+/***/ "reflect-metadata"
 /*!***********************************!*\
   !*** external "reflect-metadata" ***!
   \***********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("reflect-metadata");
 
-/***/ }),
+/***/ },
 
-/***/ "rxjs":
+/***/ "rxjs"
 /*!***********************!*\
   !*** external "rxjs" ***!
   \***********************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("rxjs");
 
-/***/ }),
+/***/ },
 
-/***/ "rxjs/operators":
+/***/ "rxjs/operators"
 /*!*********************************!*\
   !*** external "rxjs/operators" ***!
   \*********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("rxjs/operators");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram":
+/***/ "telegram"
 /*!***************************!*\
   !*** external "telegram" ***!
   \***************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/Helpers":
+/***/ "telegram/Helpers"
 /*!***********************************!*\
   !*** external "telegram/Helpers" ***!
   \***********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/Helpers");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/Password":
+/***/ "telegram/Password"
 /*!************************************!*\
   !*** external "telegram/Password" ***!
   \************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/Password");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/client/uploads":
+/***/ "telegram/client/uploads"
 /*!******************************************!*\
   !*** external "telegram/client/uploads" ***!
   \******************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/client/uploads");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/events":
+/***/ "telegram/events"
 /*!**********************************!*\
   !*** external "telegram/events" ***!
   \**********************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/events");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/extensions/Logger":
+/***/ "telegram/extensions/Logger"
 /*!*********************************************!*\
   !*** external "telegram/extensions/Logger" ***!
   \*********************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/extensions/Logger");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/sessions":
+/***/ "telegram/sessions"
 /*!************************************!*\
   !*** external "telegram/sessions" ***!
   \************************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/sessions");
 
-/***/ }),
+/***/ },
 
-/***/ "telegram/tl":
+/***/ "telegram/tl"
 /*!******************************!*\
   !*** external "telegram/tl" ***!
   \******************************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("telegram/tl");
 
-/***/ }),
+/***/ },
 
-/***/ "url":
+/***/ "crypto"
+/*!*************************!*\
+  !*** external "crypto" ***!
+  \*************************/
+(module) {
+
+module.exports = require("crypto");
+
+/***/ },
+
+/***/ "fs"
+/*!*********************!*\
+  !*** external "fs" ***!
+  \*********************/
+(module) {
+
+module.exports = require("fs");
+
+/***/ },
+
+/***/ "path"
+/*!***********************!*\
+  !*** external "path" ***!
+  \***********************/
+(module) {
+
+module.exports = require("path");
+
+/***/ },
+
+/***/ "url"
 /*!**********************!*\
   !*** external "url" ***!
   \**********************/
-/***/ ((module) => {
+(module) {
 
 module.exports = require("url");
 
-/***/ })
+/***/ }
 
 /******/ 	});
 /************************************************************************/
@@ -35236,6 +35239,12 @@ module.exports = require("url");
 /******/ 		var cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Check if module exists (development only)
+/******/ 		if (__webpack_modules__[moduleId] === undefined) {
+/******/ 			var e = new Error("Cannot find module '" + moduleId + "'");
+/******/ 			e.code = 'MODULE_NOT_FOUND';
+/******/ 			throw e;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
 /******/ 		var module = __webpack_module_cache__[moduleId] = {
