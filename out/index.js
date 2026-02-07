@@ -1700,8 +1700,16 @@ let TelegramController = class TelegramController {
     async sendMessageWithInlineButton(mobile, chatId, message, url) {
         return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
-    async getAllDialogs(mobile, limit = 500, offsetId = 0, archived = false) {
-        return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
+    async getDialogs(mobile, limit, offsetDate, folderId, archived, peerType, ignorePinned, includePhotos) {
+        return this.telegramService.getDialogs(mobile, {
+            limit,
+            offsetDate,
+            folderId,
+            archived: archived === true,
+            peerType: peerType,
+            ignorePinned: ignorePinned === true,
+            includePhotos,
+        });
     }
     async getLastActiveTime(mobile) {
         return this.telegramService.getLastActiveTime(mobile);
@@ -1837,9 +1845,6 @@ let TelegramController = class TelegramController {
     }
     async hasPassword(mobile) {
         return this.telegramService.hasPassword(mobile);
-    }
-    async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos) {
-        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos });
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -2671,20 +2676,41 @@ __decorate([
 ], TelegramController.prototype, "sendMessageWithInlineButton", null);
 __decorate([
     (0, common_1.Get)('dialogs/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all dialogs' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get dialogs (paginated dialog list)',
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
+    }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 }),
-    (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number, description: 'Cursor: Unix seconds from previous nextOffsetDate' }),
+    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number, enum: [0, 1], description: '0 = main, 1 = archived (overrides archived)' }),
+    (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived folder (folder=1)' }),
+    (0, swagger_1.ApiQuery)({ name: 'peerType', required: false, enum: ['all', 'user', 'group', 'channel'], description: 'Filter by type' }),
+    (0, swagger_1.ApiQuery)({ name: 'ignorePinned', required: false, type: Boolean, description: 'Exclude pinned dialogs' }),
+    (0, swagger_1.ApiQuery)({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false)' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        schema: {
+            type: 'object',
+            properties: {
+                items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
+                hasMore: { type: 'boolean' },
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('offsetId')),
-    __param(3, (0, common_1.Query)('archived')),
+    __param(2, (0, common_1.Query)('offsetDate')),
+    __param(3, (0, common_1.Query)('folderId')),
+    __param(4, (0, common_1.Query)('archived')),
+    __param(5, (0, common_1.Query)('peerType')),
+    __param(6, (0, common_1.Query)('ignorePinned')),
+    __param(7, (0, common_1.Query)('includePhotos')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number, Boolean]),
+    __metadata("design:paramtypes", [String, Number, Number, Number, Boolean, String, Boolean, Boolean]),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getAllDialogs", null);
+], TelegramController.prototype, "getDialogs", null);
 __decorate([
     (0, common_1.Get)('last-active/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get last active time' }),
@@ -3058,28 +3084,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "hasPassword", null);
-__decorate([
-    (0, common_1.Get)('chats/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chats with advanced filtering' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetPeer', required: false, type: String }),
-    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false, can be slow for large lists)' }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('offsetDate')),
-    __param(3, (0, common_1.Query)('offsetId')),
-    __param(4, (0, common_1.Query)('offsetPeer')),
-    __param(5, (0, common_1.Query)('folderId')),
-    __param(6, (0, common_1.Query)('includePhotos')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number, Number, String, Number, Boolean]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getChats", null);
 __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),
@@ -3767,16 +3771,6 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updateProfile(firstName, about);
     }
-    async getDialogs(mobile, query) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        const { limit = 10, offsetId, archived = false } = query;
-        const chatData = [];
-        for await (const chat of telegramClient.client.iterDialogs({ limit, offsetId, archived })) {
-            const chatEntity = await chat.entity.toJSON();
-            chatData.push(chatEntity);
-        }
-        return chatData;
-    }
     async getConnectionStatus() {
         const status = {
             activeConnections: connection_manager_1.connectionManager.getActiveConnectionCount(),
@@ -4004,7 +3998,7 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Get contacts list');
         return await telegramClient.getContacts();
     }
-    async getChats(mobile, options) {
+    async getDialogs(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get chats', options);
         return await telegramClient.getChats(options);
@@ -5652,7 +5646,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BulkMessageOperationDto = exports.DialogsQueryDto = exports.MediaMetadataDto = exports.MetadataType = void 0;
+exports.BulkMessageOperationDto = exports.DialogsPeerType = exports.MediaMetadataDto = exports.MetadataType = void 0;
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
@@ -5685,44 +5679,13 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], MediaMetadataDto.prototype, "limit", void 0);
-class DialogsQueryDto {
-    constructor() {
-        this.limit = 100;
-        this.offsetId = 0;
-        this.archived = false;
-    }
-}
-exports.DialogsQueryDto = DialogsQueryDto;
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Number of dialogs to fetch', required: false, type: Number, minimum: 1, maximum: 1000 }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
-    (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(1),
-    (0, class_validator_1.Max)(1000),
-    __metadata("design:type", Number)
-], DialogsQueryDto.prototype, "limit", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Dialog offset', required: false, type: Number, minimum: 0 }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
-    (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(0),
-    __metadata("design:type", Number)
-], DialogsQueryDto.prototype, "offsetId", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Include archived chats', required: false, type: Boolean }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => {
-        if (value === 'true')
-            return true;
-        if (value === 'false')
-            return false;
-        return value;
-    }),
-    (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
-], DialogsQueryDto.prototype, "archived", void 0);
+var DialogsPeerType;
+(function (DialogsPeerType) {
+    DialogsPeerType["ALL"] = "all";
+    DialogsPeerType["USER"] = "user";
+    DialogsPeerType["GROUP"] = "group";
+    DialogsPeerType["CHANNEL"] = "channel";
+})(DialogsPeerType || (exports.DialogsPeerType = DialogsPeerType = {}));
 class BulkMessageOperationDto {
 }
 exports.BulkMessageOperationDto = BulkMessageOperationDto;
@@ -6320,9 +6283,6 @@ class TelegramManager {
     }
     async getMessages(entityLike, limit = 8) {
         return chatOps.getMessages(this.ctx, entityLike, limit);
-    }
-    async getDialogs(params) {
-        return chatOps.getDialogs(this.ctx, params);
     }
     async getAllChats() {
         return chatOps.getAllChats(this.ctx);
@@ -7389,7 +7349,6 @@ exports.getMe = getMe;
 exports.getchatId = getchatId;
 exports.getEntity = getEntity;
 exports.getMessages = getMessages;
-exports.getDialogs = getDialogs;
 exports.getAllChats = getAllChats;
 exports.getMessagesNew = getMessagesNew;
 exports.getSelfMSgsInfo = getSelfMSgsInfo;
@@ -7461,24 +7420,6 @@ async function getEntity(ctx, entity) {
 }
 async function getMessages(ctx, entityLike, limit = 8) {
     return await ctx.client.getMessages(entityLike, { limit });
-}
-async function getDialogs(ctx, params) {
-    if (!ctx.client)
-        throw new Error('Client is not initialized');
-    try {
-        const chats = [];
-        let total = 0;
-        for await (const dialog of ctx.client.iterDialogs(params)) {
-            chats.push(dialog);
-            total++;
-        }
-        ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
-        return Object.assign(chats, { total });
-    }
-    catch (error) {
-        ctx.logger.error(ctx.phoneNumber, 'Error getting dialogs:', error);
-        throw error;
-    }
 }
 async function getAllChats(ctx) {
     if (!ctx.client)
@@ -7981,14 +7922,28 @@ async function getChats(ctx, options) {
     const dialogs = [];
     const limit = options.limit || 100;
     const includePhotos = options.includePhotos || false;
-    let count = 0;
-    for await (const dialog of ctx.client.iterDialogs({ ...options, limit })) {
-        dialogs.push(dialog);
-        count++;
-        if (count >= limit)
+    const peerType = options.peerType ?? 'all';
+    const folder = options.folderId !== undefined ? options.folderId : (options.archived ? 1 : 0);
+    const requestLimit = peerType === 'all' ? limit : Math.min(limit * 3, 100);
+    const params = { limit: requestLimit, folder, ignorePinned: options.ignorePinned ?? false };
+    if (options.offsetDate != null && options.offsetDate > 0)
+        params.offsetDate = options.offsetDate;
+    const me = await ctx.client.getMe();
+    for await (const dialog of ctx.client.iterDialogs(params)) {
+        const entity = dialog.entity;
+        const match = peerType === 'all' ||
+            (peerType === 'user' && entity instanceof telegram_1.Api.User) ||
+            (peerType === 'group' && entity instanceof telegram_1.Api.Chat) ||
+            (peerType === 'channel' && entity instanceof telegram_1.Api.Channel);
+        if (match)
+            dialogs.push(dialog);
+        if (dialogs.length >= limit)
             break;
     }
-    return Promise.all(dialogs.map(async (dialog) => {
+    const last = dialogs[dialogs.length - 1];
+    const hasMore = dialogs.length === limit;
+    const nextOffsetDate = hasMore && last?.message?.date != null ? last.message.date : undefined;
+    const items = await Promise.all(dialogs.map(async (dialog) => {
         const entity = dialog.entity;
         const type = entity instanceof telegram_1.Api.User ? 'user' :
             entity instanceof telegram_1.Api.Chat ? 'group' :
@@ -7996,15 +7951,27 @@ async function getChats(ctx, options) {
         let senderName = null;
         if (dialog.message?.senderId) {
             try {
-                const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
-                if (senderEntity instanceof telegram_1.Api.User) {
-                    senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || null;
+                if (dialog.message.senderId.toString() === me.id.toString()) {
+                    senderName = `${me.firstName || ''} ${me.lastName || ''} (Self)`.trim();
                 }
-                else if (senderEntity instanceof telegram_1.Api.Channel) {
-                    senderName = senderEntity.title || null;
+                else {
+                    if (type === 'user') {
+                        const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
+                        if (senderEntity instanceof telegram_1.Api.User) {
+                            senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || senderEntity.username || null;
+                        }
+                        else {
+                            senderName = "Unknown";
+                        }
+                    }
+                    else {
+                        senderName = dialog.title || "Unknown Channel User";
+                    }
                 }
             }
-            catch { }
+            catch {
+                senderName = "Unknown";
+            }
         }
         let onlineStatus = null;
         let lastSeen = null;
@@ -8034,7 +8001,7 @@ async function getChats(ctx, options) {
         }
         return {
             id: entity.id.toString(),
-            title: 'title' in entity ? entity.title : null,
+            title: entity.id.toString() === me.id.toString() ? `${dialog.title} (Self)` : dialog.title ? dialog.title : 'title' in entity ? entity.title : null,
             username: 'username' in entity ? entity.username : null,
             type,
             unreadCount: dialog.unreadCount,
@@ -8051,6 +8018,7 @@ async function getChats(ctx, options) {
             participantCount,
         };
     }));
+    return { items, hasMore, ...(nextOffsetDate != null && { nextOffsetDate }) };
 }
 async function updateChatSettings(ctx, settings) {
     if (!ctx.client)

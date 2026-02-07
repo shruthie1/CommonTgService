@@ -5,7 +5,6 @@ import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { ChannelInfo } from './types/telegram-responses';
-import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ChatStatistics, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
@@ -87,7 +86,6 @@ export declare class TelegramService implements OnModuleDestroy {
         maxDate?: number;
     }): Promise<void>;
     updateNameandBio(mobile: string, firstName?: string, about?: string): Promise<void>;
-    getDialogs(mobile: string, query: DialogsQueryDto): Promise<any[]>;
     getConnectionStatus(): Promise<{
         activeConnections: number;
         rateLimited: number;
@@ -228,14 +226,15 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<Api.TypeUpdates>;
     hasPassword(mobile: string): Promise<boolean>;
     getContacts(mobile: string): Promise<Api.contacts.TypeContacts>;
-    getChats(mobile: string, options: {
+    getDialogs(mobile: string, options: {
         limit?: number;
         offsetDate?: number;
-        offsetId?: number;
-        offsetPeer?: string;
         folderId?: number;
+        archived?: boolean;
+        peerType?: 'all' | 'user' | 'group' | 'channel';
+        ignorePinned?: boolean;
         includePhotos?: boolean;
-    }): Promise<import("./TelegramManager").ChatListItem[]>;
+    }): Promise<import("./TelegramManager").ChatListResult>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
         chatId: string;
