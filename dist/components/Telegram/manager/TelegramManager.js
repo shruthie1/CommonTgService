@@ -132,6 +132,9 @@ class TelegramManager {
     async getMessageStats(options) {
         return chatOps.getMessageStats(this.ctx, options);
     }
+    async getDialogs(iterDialogsParams) {
+        return await this.ctx.client.getDialogs(iterDialogsParams);
+    }
     async getChats(options) {
         return chatOps.getChats(this.ctx, options);
     }
