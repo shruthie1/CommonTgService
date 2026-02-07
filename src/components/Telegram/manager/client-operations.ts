@@ -29,7 +29,7 @@ export async function createClient(
         await withTimeout(async () => {
             client = new TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(LogLevel.ERROR);
-            (client as any)._errorHandler = (error: Error) => { handleClientError(ctx, error); };
+            (client as TelegramClient & { _errorHandler: (error: Error) => Promise<void> })._errorHandler = async (error: Error) => { handleClientError(ctx, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {

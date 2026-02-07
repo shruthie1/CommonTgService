@@ -113,11 +113,11 @@ class TelegramManager {
         return chatOps.getMessages(this.ctx, entityLike, limit);
     }
 
-    async getDialogs(params: IterDialogsParams): Promise<unknown[] & { total: number }> {
+    async getDialogs(params: IterDialogsParams): Promise<import('telegram/tl/custom/dialog').Dialog[] & { total: number }> {
         return chatOps.getDialogs(this.ctx, params);
     }
 
-    async getAllChats(): Promise<Record<string, unknown>[]> {
+    async getAllChats(): ReturnType<typeof chatOps.getAllChats> {
         return chatOps.getAllChats(this.ctx);
     }
 

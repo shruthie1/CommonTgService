@@ -91,8 +91,8 @@ export async function exportContacts(ctx: TgContext, format: 'vcard' | 'csv', in
             lastName: contact.lastName || '',
             phone: contact.phone || '',
             blocked: blockedContacts && 'peerBlocked' in blockedContacts
-                ? ((blockedContacts as Api.contacts.Blocked).blocked || []).some((p: any) =>
-                    ('peerId' in p && p.peerId instanceof Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false
+                ? ((blockedContacts as Api.contacts.Blocked).blocked || []).some((p: Api.PeerBlocked) =>
+                    (p.peerId instanceof Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false
                 )
                 : false,
         }));

@@ -3,6 +3,7 @@ import { sleep } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
 import { CustomFile } from 'telegram/client/uploads';
+import { Dialog } from 'telegram/tl/custom/dialog';
 import { TgContext, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, GroupSettingsUpdate } from './types';
 import { GroupOptions } from '../../../interfaces/telegram';
 import { parseError } from '../../../utils/parseError';
@@ -144,7 +145,7 @@ export async function leaveChannels(ctx: TgContext, chats: string[]): Promise<vo
         }
     }
 
-    const entityMap = new Map<string, { entity: Api.Channel | Api.Chat; dialog: unknown }>();
+    const entityMap = new Map<string, { entity: Api.Channel | Api.Chat; dialog: Dialog }>();
     let foundCount = 0;
 
     try {

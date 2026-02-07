@@ -31,8 +31,7 @@ export async function forwardSecretMsgs(ctx: TgContext, fromChatId: string, toCh
     let forwardedCount = 0;
     let messages: Api.Message[] = [];
     do {
-        const fetched = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
-        messages = fetched as unknown as Api.Message[];
+        const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
         const messageIds = messages.map((message: Api.Message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -40,7 +39,7 @@ export async function forwardSecretMsgs(ctx: TgContext, fromChatId: string, toCh
             }
             return undefined;
         }).filter((id): id is number => id !== undefined);
-        ctx.logger.info(ctx.phoneNumber, messageIds as unknown as string);
+        ctx.logger.info(ctx.phoneNumber, `Message IDs: ${messageIds.join(', ')}`);
         if (messageIds.length > 0) {
             try {
                 await ctx.client.forwardMessages(toChatId, {
@@ -137,37 +136,40 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
         };
 
         ctx.logger.info(ctx.phoneNumber, type, queryFilter);
-        const searchQuery: Record<string, unknown> = {
-            q: query,
-            filter: filter,
-            ...queryFilter,
-            hash: bigInt(0),
-        };
-
         let messages: Api.Message[] = [];
         let count = 0;
-        ctx.logger.info(ctx.phoneNumber, 'Search Query: ', searchQuery);
 
         if (chatId) {
-            searchQuery['peer'] = await safeGetEntityById(ctx, chatId);
+            const peer = await safeGetEntityById(ctx, chatId);
             ctx.logger.info(ctx.phoneNumber, 'Performing search in chat: ', chatId);
-            const result = await ctx.client.invoke(new Api.messages.Search(searchQuery as any));
+            const result = await ctx.client.invoke(new Api.messages.Search({
+                peer,
+                q: query,
+                filter,
+                ...queryFilter,
+                hash: bigInt(0),
+                minDate: 0,
+                maxDate: 0,
+                addOffset: 0,
+                offsetId: 0,
+            }));
             if (!('messages' in result)) return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${(result as Api.messages.ChannelMessages).count}`);
+            count = (result as Api.messages.ChannelMessages).count || 0;
             messages = result.messages as Api.Message[];
         } else {
             ctx.logger.info(ctx.phoneNumber, 'Performing global search');
             const result = await ctx.client.invoke(new Api.messages.SearchGlobal({
-                ...searchQuery,
+                q: query,
+                filter,
+                ...queryFilter,
                 offsetRate: 0,
                 offsetPeer: new Api.InputPeerEmpty(),
                 offsetId: 0,
-                usersOnly: true,
-            } as any));
+            }));
             if (!('messages' in result)) return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${(result as Api.messages.ChannelMessages).count}`);
+            count = (result as Api.messages.ChannelMessages).count || 0;
             messages = result.messages as Api.Message[];
         }
 

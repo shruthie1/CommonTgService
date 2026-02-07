@@ -16,6 +16,7 @@ import {
 } from './helpers';
 import { getThumbnailBuffer } from './media-operations';
 import { CustomFile } from 'telegram/client/uploads';
+import { Dialog } from 'telegram/tl/custom/dialog';
 
 // ---- Entity resolution ----
 
@@ -72,10 +73,10 @@ export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike
     return await ctx.client.getMessages(entityLike, { limit });
 }
 
-export async function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<unknown[] & { total: number }> {
+export async function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<Dialog[] & { total: number }> {
     if (!ctx.client) throw new Error('Client is not initialized');
     try {
-        const chats: unknown[] = [];
+        const chats :Dialog[] = [];
         let total = 0;
         for await (const dialog of ctx.client.iterDialogs(params)) {
             chats.push(dialog);
@@ -89,13 +90,13 @@ export async function getDialogs(ctx: TgContext, params: IterDialogsParams): Pro
     }
 }
 
-export async function getAllChats(ctx: TgContext): Promise<Record<string, unknown>[]> {
+export async function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeChat['toJSON']>[]> {
     if (!ctx.client) throw new Error('Client is not initialized');
-    const chatData: Record<string, unknown>[] = [];
+    const chatData: ReturnType<Api.TypeChat['toJSON']>[] = [];
     let total = 0;
 
     for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
-        const chatEntity = await chat.entity.toJSON();
+        const chatEntity = chat.entity.toJSON();
         chatData.push(chatEntity);
         total++;
     }
@@ -508,7 +509,7 @@ export async function getChats(ctx: TgContext, options: {
 }): Promise<ChatListItem[]> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    const dialogs: unknown[] = [];
+    const dialogs: Dialog[] = [];
     const limit = options.limit || 100;
     const includePhotos = options.includePhotos || false;
     let count = 0;
@@ -519,7 +520,7 @@ export async function getChats(ctx: TgContext, options: {
         if (count >= limit) break;
     }
 
-    return Promise.all(dialogs.map(async (dialog: any) => {
+    return Promise.all(dialogs.map(async (dialog: Dialog) => {
         const entity = dialog.entity;
         const type: 'user' | 'group' | 'channel' | 'unknown' =
             entity instanceof Api.User ? 'user' :
@@ -562,7 +563,7 @@ export async function getChats(ctx: TgContext, options: {
 
         // Chat photo (opt-in)
         let photoBase64: string | null = null;
-        if (includePhotos && entity.photo && !(entity.photo instanceof Api.ChatPhotoEmpty)) {
+        if (includePhotos && 'photo' in entity && entity.photo && !(entity.photo instanceof Api.ChatPhotoEmpty)) {
             try {
                 const photoResult = await ctx.client.downloadProfilePhoto(entity, { isBig: false });
                 if (photoResult && Buffer.isBuffer(photoResult) && (photoResult as Buffer).length > 0) {
@@ -595,7 +596,7 @@ export async function getChats(ctx: TgContext, options: {
 export async function updateChatSettings(ctx: TgContext, settings: ChatSettingsUpdate): Promise<boolean> {
     if (!ctx.client) throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
-    const updates: Promise<unknown>[] = [];
+    const updates: Promise<Api.TypeUpdates | boolean>[] = [];
 
     if (settings.title) {
         updates.push(ctx.client.invoke(new Api.channels.EditTitle({ channel: chat, title: settings.title })));
@@ -679,7 +680,7 @@ export async function getChatFolders(ctx: TgContext): Promise<ChatFolder[]> {
 async function analyzeChatEngagement(
     ctx: TgContext, chatId: string, user: Api.User,
     weights: EngagementWeights, now: number,
-    dialog?: unknown, callStats?: PerChatCallStats
+    dialog?: Dialog, callStats?: PerChatCallStats
 ): Promise<TopPrivateChat | null> {
     const lastMessage = await ctx.client.getMessages(chatId, { limit: 1 });
     if ((lastMessage?.total ?? 0) < 10) return null;
@@ -701,7 +702,7 @@ async function analyzeChatEngagement(
         videosByUs, videosByThem: Math.max(0, totalVideos - videosByUs),
     };
 
-    const lastMessageDate = (dialog as any)?.message?.date ? (dialog as any).message.date * 1000 : now;
+    const lastMessageDate = dialog?.message?.date ? dialog.message.date * 1000 : now;
     const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
     const cCalls = callStats ?? { outgoing: 0, incoming: 0, video: 0, total: 0 };
     const baseScore = (
