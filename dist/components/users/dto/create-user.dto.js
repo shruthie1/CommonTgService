@@ -121,13 +121,14 @@ __decorate([
 ], CreateUserDto.prototype, "contacts", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Call details of the user',
+        description: 'Call log summary and per-chat details',
         example: {
+            totalCalls: 1,
             outgoing: 1,
             incoming: 0,
             video: 1,
-            chatCallCounts: [],
-            totalCalls: 1,
+            audio: 0,
+            chats: [],
         },
     }),
     __metadata("design:type", Object)

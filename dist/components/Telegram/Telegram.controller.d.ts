@@ -67,19 +67,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getCallLogStats(mobile: string, limit?: number): Promise<import("./manager").CallLogResult & {
-        chatCallCounts: Array<{
-            chatId: string;
-            phone?: string;
-            username?: string;
-            name: string;
-            count: number;
-            msgs?: number;
-            video?: number;
-            photo?: number;
-            peerType: "user" | "group" | "channel";
-        }>;
-    }>;
+    getCallLogStats(mobile: string, limit?: number, includeCallLog?: string): Promise<import("./manager").CallLogResult>;
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;

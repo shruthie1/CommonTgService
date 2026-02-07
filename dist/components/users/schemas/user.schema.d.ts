@@ -26,11 +26,12 @@ export declare class User {
     ownVideoCount: number;
     contacts: number;
     calls: {
+        totalCalls: number;
         outgoing: number;
         incoming: number;
         video: number;
-        chatCallCounts: any[];
-        totalCalls: number;
+        audio: number;
+        chats: any[];
     };
     recentUsers: any[];
 }
@@ -270,11 +271,12 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         id: string;
     }>;
     calls?: mongoose.SchemaDefinitionProperty<{
+        totalCalls: number;
         outgoing: number;
         incoming: number;
         video: number;
-        chatCallCounts: any[];
-        totalCalls: number;
+        audio: number;
+        chats: any[];
     }, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {

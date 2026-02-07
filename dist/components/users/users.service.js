@@ -104,7 +104,7 @@ let UsersService = class UsersService {
             if (!query) {
                 throw new common_1.BadRequestException('Query is invalid.');
             }
-            const queryExec = this.userModel.find(query);
+            const queryExec = this.userModel.find(query).lean();
             if (sort) {
                 queryExec.sort(sort);
             }
@@ -149,7 +149,15 @@ let UsersService = class UsersService {
             filter.gender = gender;
         }
         if (minCalls > 0) {
-            filter['calls.totalCalls'] = { $gte: minCalls };
+            filter.$and = [
+                ...(filter.$and || []),
+                {
+                    $or: [
+                        { 'calls.totalCalls': { $gte: minCalls } },
+                        { $expr: { $gte: [{ $size: { $ifNull: ['$calls.chatCallCounts', []] } }, minCalls] } },
+                    ],
+                },
+            ];
         }
         if (minPhotos > 0) {
             filter.$or = [
@@ -241,7 +249,12 @@ let UsersService = class UsersService {
                                 incomingVal: { $ifNull: ['$calls.incoming', 0] },
                                 outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
                                 videoVal: { $ifNull: ['$calls.video', 0] },
-                                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] }
+                                totalCallsVal: {
+                                    $ifNull: [
+                                        '$calls.totalCalls',
+                                        { $size: { $ifNull: ['$calls.chatCallCounts', []] } },
+                                    ],
+                                },
                             },
                             in: {
                                 $add: [
@@ -344,7 +357,17 @@ let UsersService = class UsersService {
             }
             const aggregationResult = result[0];
             const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
-            const users = aggregationResult.paginatedResults || [];
+            const rawUsers = aggregationResult.paginatedResults || [];
+            const users = rawUsers.map((u) => {
+                const calls = u?.calls ?? {};
+                const hasNew = Array.isArray(calls.chats);
+                const hasOld = Array.isArray(calls.chatCallCounts);
+                const normalizedCalls = {
+                    ...calls,
+                    ...(hasNew && !hasOld ? { chatCallCounts: calls.chats } : {}),
+                };
+                return { ...u, calls: normalizedCalls };
+            });
             const totalPages = Math.ceil(totalUsers / limitNum);
             return {
                 users,

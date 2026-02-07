@@ -22,25 +22,38 @@ export interface GroupCreationResult {
 export interface ForwardResult {
     forwardedCount: number;
 }
-export interface CallLogResult {
-    outgoing: number;
-    incoming: number;
-    video: number;
-    audio: number;
-    chatCallCounts: ChatCallCount[];
-    totalCalls: number;
-    analyzedCalls: number;
+export interface CallLogEntry {
+    messageId: number;
+    date: number;
+    durationSeconds: number;
+    video: boolean;
+    outgoing: boolean;
 }
-export interface ChatCallCount {
+export interface CallLogChat {
     chatId: string;
     phone?: string;
     username?: string;
     name: string;
-    count: number;
-    msgs?: number;
-    video?: number;
-    photo?: number;
     peerType: 'user' | 'group' | 'channel';
+    calls: {
+        total: number;
+        outgoing: number;
+        incoming: number;
+        video: number;
+        audio: number;
+    };
+    totalMessages?: number;
+    photoCount?: number;
+    videoCount?: number;
+    callLog?: CallLogEntry[];
+}
+export interface CallLogResult {
+    totalCalls: number;
+    outgoing: number;
+    incoming: number;
+    video: number;
+    audio: number;
+    chats: CallLogChat[];
 }
 export interface SelfMessagesInfo {
     photoCount: number;
