@@ -7660,7 +7660,7 @@ class TelegramManager {
         catch (e) {
             this.logger.warn(this.phoneNumber, 'Error processing self chat:', e);
         }
-        const topCandidates = candidateChats.slice(0, clampedLimit * 4);
+        const topCandidates = candidateChats.slice(0, Math.min(clampedLimit * 4, 49));
         this.logger.info(this.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
         const chatStats = [];
         const batchSize = 10;
