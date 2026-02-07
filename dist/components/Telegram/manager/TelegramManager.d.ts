@@ -9,6 +9,8 @@ import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
 import { GroupOptions } from '../../../interfaces/telegram';
 import * as chatOps from './chat-operations';
+import { IterDialogsParams } from 'telegram/client/dialogs';
+import { Dialog } from 'telegram/tl/custom/dialog';
 declare class TelegramManager {
     private logger;
     private session;
@@ -45,6 +47,7 @@ declare class TelegramManager {
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
     }): Promise<MessageStats>;
+    getDialogs(iterDialogsParams: IterDialogsParams): Promise<TotalList<Dialog>>;
     getChats(options: {
         limit?: number;
         offsetDate?: number;
