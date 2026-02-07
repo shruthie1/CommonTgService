@@ -790,8 +790,8 @@ async function analyzeChatEngagement(ctx, chatId, user, weights, now, dialog, ca
     return {
         chatId: user.id.toString(),
         username: user.username,
-        firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
-        lastName: user.lastName,
+        firstName: (chatId === 'me' ? 'Saved Messages' : user.firstName),
+        lastName: (chatId === 'me' ? '(Self)' : user.lastName),
         totalMessages: lastMessage.total ?? 0,
         interactionScore: baseScore,
         engagementLevel,
@@ -827,7 +827,10 @@ async function getTopPrivateChats(ctx, limit = 10) {
     const privateUserDialogs = Array.from(dialogs).filter((d) => !!d.isUser && d.entity instanceof telegram_1.Api.User);
     const seenIds = new Set();
     const candidateChats = privateUserDialogs.filter((d) => {
-        const id = d.entity.id.toString();
+        const user = d.entity;
+        if (user.bot)
+            return false;
+        const id = user.id.toString();
         if (id === selfChatId || seenIds.has(id))
             return false;
         seenIds.add(id);
