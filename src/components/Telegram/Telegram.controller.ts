@@ -1404,9 +1404,10 @@ export class TelegramController {
     @ApiQuery({ name: 'offsetId', required: false, type: Number })
     @ApiQuery({ name: 'offsetPeer', required: false, type: String })
     @ApiQuery({ name: 'folderId', required: false, type: Number })
+    @ApiQuery({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false, can be slow for large lists)' })
     @ApiResponse({ type: Object })
-    async getChats(@Param('mobile') mobile: string, @Query('limit') limit?: number, @Query('offsetDate') offsetDate?: number, @Query('offsetId') offsetId?: number, @Query('offsetPeer') offsetPeer?: string, @Query('folderId') folderId?: number) {
-        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId });
+    async getChats(@Param('mobile') mobile: string, @Query('limit') limit?: number, @Query('offsetDate') offsetDate?: number, @Query('offsetId') offsetId?: number, @Query('offsetPeer') offsetPeer?: string, @Query('folderId') folderId?: number, @Query('includePhotos') includePhotos?: boolean) {
+        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos });
     }
 
     @Get('file/url/:mobile')

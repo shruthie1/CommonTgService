@@ -154,7 +154,23 @@ export class MessageTypeResult {
   @Min(0)
   total: number;
 
-  data?: any
+  @ApiPropertyOptional({
+    description: 'Enriched search result items with resolved sender names and dates',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        id: { type: 'number' },
+        text: { type: 'string' },
+        date: { type: 'string', description: 'ISO 8601 date' },
+        chatId: { type: 'string' },
+        senderName: { type: 'string', nullable: true },
+        mediaType: { type: 'string', nullable: true },
+      },
+    },
+  })
+  @IsOptional()
+  data?: Array<{ id: number; text: string; date: string; chatId: string; senderName: string | null; mediaType: string | null }>
 }
 
 /**

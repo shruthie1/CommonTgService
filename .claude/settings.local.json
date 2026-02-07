@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(node -e:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(npx nest build:*)",
+      "Bash(lsof:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

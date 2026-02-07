@@ -3787,6 +3787,15 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "includePhotos",
+            "required": false,
+            "in": "query",
+            "description": "Include base64 chat photos (default: false, can be slow for large lists)",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -11313,6 +11322,36 @@
             "type": "number",
             "description": "Total count of messages matching the search criteria",
             "example": 3
+          },
+          "data": {
+            "type": "array",
+            "description": "Enriched search result items with resolved sender names and dates",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "ISO 8601 date"
+                },
+                "chatId": {
+                  "type": "string"
+                },
+                "senderName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "mediaType": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
           }
         },
         "required": [

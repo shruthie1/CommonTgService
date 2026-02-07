@@ -200,7 +200,7 @@ export class TelegramService implements OnModuleDestroy {
     async forwardMediaToBot(mobile: string, fromChatId: string): Promise<string> {
         try {
             const telegramClient = await connectionManager.getClient(mobile);
-            await telegramClient.forwardMediaToBot(fromChatId);
+            await telegramClient.forwardMedia('', fromChatId);
             const dialogs: any[] = [];
             // Use iterDialogs for memory-efficient iteration
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
@@ -521,11 +521,11 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.forwardMessages(fromChatId, toChatId, messageIds)
     }
 
-    async getAuths(mobile: string): Promise<any[]> {
+    async getAuths(mobile: string): Promise<any> {
         const telegramClient = await connectionManager.getClient(mobile);
         const auths = await telegramClient.getAuths();
         this.logger.info(mobile, 'Retrieved authorizations', {
-            count: auths?.length || 0
+            count: auths?.authorizations?.length || 0
         });
         return auths;
     }
@@ -932,6 +932,7 @@ export class TelegramService implements OnModuleDestroy {
             offsetId?: number;
             offsetPeer?: string;
             folderId?: number;
+            includePhotos?: boolean;
         }
     ) {
         const telegramClient = await connectionManager.getClient(mobile);
