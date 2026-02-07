@@ -7493,6 +7493,20 @@ async function getAllChats(ctx) {
     ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
     return chatData;
 }
+function formatReactions(reactions) {
+    if (!reactions?.results?.length)
+        return [];
+    return reactions.results.map((r) => {
+        let reaction = '';
+        if (r.reaction instanceof telegram_1.Api.ReactionEmoji)
+            reaction = r.reaction.emoticon ?? '';
+        else if (r.reaction instanceof telegram_1.Api.ReactionCustomEmoji)
+            reaction = `documentId:${r.reaction.documentId}`;
+        else if (r.reaction && typeof r.reaction.emoticon === 'string')
+            reaction = r.reaction.emoticon;
+        return { reaction, count: r.count ?? 0 };
+    }).filter(x => (x.count ?? 0) > 0);
+}
 async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
     const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit });
     const senderIds = new Set();
@@ -7511,9 +7525,8 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             entityCache.set(sid, null);
         }
     }));
-    return await Promise.all(messages.map(async (message) => {
+    const messageList = await Promise.all(messages.map(async (message) => {
         const senderId = message.senderId?.toString() || '';
-        const senderEntity = entityCache.get(senderId) || null;
         let media = null;
         if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
             const thumbBuffer = await (0, media_operations_1.getThumbnailBuffer)(ctx, message);
@@ -7538,21 +7551,28 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
                 forwardedFrom = message.fwdFrom.fromName;
             }
         }
+        const msgDate = message.date ?? 0;
         return {
             id: message.id,
             text: message.message || '',
-            date: (0, helpers_1.toISODate)(message.date),
-            sender: (0, helpers_1.resolveEntityToSenderInfo)(senderEntity, senderId, message.out),
+            date: (0, helpers_1.toISODate)(msgDate),
+            time: (0, helpers_1.toTimeString)(msgDate),
+            dateUnix: msgDate,
+            senderId,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? (0, helpers_1.toISODate)(message.editDate) : null,
             isPinned: !!message.pinned,
             isForwarded: !!message.fwdFrom,
             forwardedFrom,
-            replyToMessageId: message.replyTo?.replyToMsgId || null,
+            replyToMessageId: message.replyTo?.replyToMsgId ?? null,
             groupedId: message.groupedId ? message.groupedId.toString() : null,
+            views: message.views ?? null,
+            forwards: message.forwards ?? null,
+            reactions: message.reactions ? formatReactions(message.reactions) : null,
         };
     }));
+    return messageList;
 }
 async function getSelfMSgsInfo(ctx, limit = 500) {
     if (!ctx.client)
@@ -8702,6 +8722,7 @@ exports.generateCSV = generateCSV;
 exports.generateVCard = generateVCard;
 exports.createVCardContent = createVCardContent;
 exports.toISODate = toISODate;
+exports.toTimeString = toTimeString;
 exports.bufferToBase64DataUrl = bufferToBase64DataUrl;
 exports.resolveEntityToSenderInfo = resolveEntityToSenderInfo;
 exports.extractMediaInfo = extractMediaInfo;
@@ -9013,6 +9034,12 @@ function createVCardContent(contacts) {
 }
 function toISODate(timestamp) {
     return new Date(timestamp * 1000).toISOString();
+}
+function toTimeString(timestamp) {
+    const d = new Date(timestamp * 1000);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 function bufferToBase64DataUrl(buffer, mimeType = 'image/jpeg') {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;

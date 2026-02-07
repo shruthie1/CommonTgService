@@ -36,6 +36,7 @@ export declare function generateVCard(contacts: Array<{
 }>): string;
 export declare function createVCardContent(contacts: Api.contacts.Contacts): string;
 export declare function toISODate(timestamp: number): string;
+export declare function toTimeString(timestamp: number): string;
 export declare function bufferToBase64DataUrl(buffer: Buffer, mimeType?: string): string;
 export declare function resolveEntityToSenderInfo(entity: Api.User | Api.Chat | Api.Channel | null, senderId: string, isSelf: boolean): SenderInfo;
 export declare function extractMediaInfo(message: Api.Message, thumbnailBuffer: Buffer | null): MediaInfo | null;

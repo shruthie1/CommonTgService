@@ -482,11 +482,17 @@ export interface MediaInfo {
     height: number | null;
     duration: number | null;
 }
+export interface MessageReactionItem {
+    reaction: string;
+    count: number;
+}
 export interface MessageItem {
     id: number;
     text: string;
     date: string;
-    sender: SenderInfo;
+    time: string;
+    dateUnix: number;
+    senderId: string;
     media: MediaInfo | null;
     isEdited: boolean;
     editDate: string | null;
@@ -495,6 +501,9 @@ export interface MessageItem {
     forwardedFrom: string | null;
     replyToMessageId: number | null;
     groupedId: string | null;
+    views: number | null;
+    forwards: number | null;
+    reactions: MessageReactionItem[] | null;
 }
 export interface ScheduledMessageItem {
     id: number;

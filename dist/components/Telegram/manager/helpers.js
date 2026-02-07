@@ -22,6 +22,7 @@ exports.generateCSV = generateCSV;
 exports.generateVCard = generateVCard;
 exports.createVCardContent = createVCardContent;
 exports.toISODate = toISODate;
+exports.toTimeString = toTimeString;
 exports.bufferToBase64DataUrl = bufferToBase64DataUrl;
 exports.resolveEntityToSenderInfo = resolveEntityToSenderInfo;
 exports.extractMediaInfo = extractMediaInfo;
@@ -333,6 +334,12 @@ function createVCardContent(contacts) {
 }
 function toISODate(timestamp) {
     return new Date(timestamp * 1000).toISOString();
+}
+function toTimeString(timestamp) {
+    const d = new Date(timestamp * 1000);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 function bufferToBase64DataUrl(buffer, mimeType = 'image/jpeg') {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
