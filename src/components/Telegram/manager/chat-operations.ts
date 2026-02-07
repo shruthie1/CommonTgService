@@ -837,8 +837,8 @@ async function analyzeChatEngagement(
     return {
         chatId: user.id.toString(),
         username: user.username,
-        firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
-        lastName: user.lastName,
+        firstName: (chatId === 'me' ? 'Saved Messages' : user.firstName),
+        lastName: (chatId === 'me' ? '(Self)' : user.lastName),
         totalMessages: lastMessage.total ?? 0,
         interactionScore: baseScore,
         engagementLevel,
