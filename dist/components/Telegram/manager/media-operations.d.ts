@@ -1,0 +1,13 @@
+import { Api } from 'telegram';
+import bigInt from 'big-integer';
+import { TgContext, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams } from './types';
+export declare function getThumbnailBuffer(ctx: TgContext, message: Api.Message): Promise<Buffer | null>;
+export declare function getMediaUrl(ctx: TgContext, message: Api.Message): Promise<string | Buffer>;
+export declare function getMediaMessages(ctx: TgContext): Promise<Api.messages.Messages>;
+export declare function getThumbnail(ctx: TgContext, messageId: number, chatId?: string): Promise<ThumbnailResult>;
+export declare function getMediaFileDownloadInfo(ctx: TgContext, messageId: number, chatId?: string): Promise<MediaFileDownloadInfo>;
+export declare function streamMediaFile(ctx: TgContext, fileLocation: Api.TypeInputFileLocation, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer>;
+export declare function getMediaMetadata(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse>;
+export declare function getAllMediaMetaData(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse>;
+export declare function getFilteredMedia(ctx: TgContext, params: MediaQueryParams): Promise<FilteredMediaListResponse>;
+export declare function getFileUrl(ctx: TgContext, url: string, filename: string): Promise<string>;

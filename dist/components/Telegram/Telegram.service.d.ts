@@ -21,14 +21,7 @@ export declare class TelegramService implements OnModuleDestroy {
     private readonly logger;
     constructor(usersService: UsersService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
-    getActiveClientSetup(): {
-        days?: number;
-        archiveOld: boolean;
-        formalities: boolean;
-        newMobile: string;
-        existingMobile: string;
-        clientId: string;
-    };
+    getActiveClientSetup(): import("./TelegramManager").ActiveClientSetup;
     setActiveClientSetup(data: {
         days?: number;
         archiveOld: boolean;
@@ -38,42 +31,25 @@ export declare class TelegramService implements OnModuleDestroy {
         clientId: string;
     } | undefined): void;
     getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
-    getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<any>;
+    getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<import("./TelegramManager").MessageItem[]>;
     sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
-    getChatId(mobile: string, username: string): Promise<any>;
+    getChatId(mobile: string, username: string): Promise<Api.TypeInputPeer>;
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel | ActiveChannel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string, mobile: string): Promise<void>;
-    getGrpMembers(mobile: string, entity: EntityLike): Promise<any[]>;
+    getGrpMembers(mobile: string, entity: EntityLike): Promise<import("./TelegramManager").GroupMember[]>;
     addContact(mobile: string, data: {
         mobile: string;
         tgId: string;
     }[], prefix: string): Promise<void>;
     addContacts(mobile: string, phoneNumbers: string[], prefix: string): Promise<void>;
-    getSelfMsgsInfo(mobile: string, limit?: number): Promise<{
-        photoCount: number;
-        videoCount: number;
-        movieCount: number;
-        total: number;
-        ownPhotoCount: number;
-        otherPhotoCount: number;
-        ownVideoCount: number;
-        otherVideoCount: number;
-        analyzedMessages: number;
-    }>;
-    createGroup(mobile: string): Promise<{
-        id: any;
-        accessHash: any;
-    }>;
+    getSelfMsgsInfo(mobile: string, limit?: number): Promise<import("./TelegramManager").SelfMessagesInfo>;
+    createGroup(mobile: string): Promise<import("./TelegramManager").GroupCreationResult>;
     forwardMedia(mobile: string, channel: string, fromChatId: string): Promise<string>;
     forwardMediaToBot(mobile: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
-    getCallLog(mobile: string, limit?: number): Promise<{
-        outgoing: number;
-        incoming: number;
-        video: number;
-        audio: number;
+    getCallLog(mobile: string, limit?: number): Promise<import("./TelegramManager").CallLogResult & {
         chatCallCounts: Array<{
             chatId: string;
             phone?: string;
@@ -85,13 +61,11 @@ export declare class TelegramService implements OnModuleDestroy {
             photo?: number;
             peerType: "user" | "group" | "channel";
         }>;
-        totalCalls: number;
-        analyzedCalls: number;
     }>;
     getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
     getMe(mobile: string): Promise<Api.User>;
-    getEntity(mobile: string, entity: EntityLike): Promise<import("telegram/define").Entity>;
+    getEntity(mobile: string, entity: EntityLike): Promise<Api.User | Api.Chat | Api.Channel>;
     createNewSession(mobile: string): Promise<string>;
     set2Fa(mobile: string): Promise<string>;
     updatePrivacyforDeletedAccount(mobile: string): Promise<void>;
@@ -109,102 +83,10 @@ export declare class TelegramService implements OnModuleDestroy {
         limit?: number;
         maxId?: number;
         minId?: number;
-    }): Promise<{
-        groups: {
-            type: "document" | "video" | "photo" | "voice";
-            count: number;
-            items: {
-                messageId: number;
-                chatId: string;
-                type: "document" | "video" | "photo";
-                date: number;
-                caption: string;
-                fileSize: number;
-                mimeType: string;
-                filename: string;
-                width: number;
-                height: number;
-                duration: number;
-                mediaDetails: any;
-            }[];
-            pagination: {
-                page: number;
-                limit: number;
-                total: number;
-                totalPages: number;
-                hasMore: boolean;
-                nextMaxId: number;
-                firstMessageId: number;
-                lastMessageId: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: string[];
-            startDate: string;
-            endDate: string;
-        };
-        data?: undefined;
-    } | {
-        data: {
-            messageId: number;
-            chatId: string;
-            type: "document" | "video" | "photo";
-            date: number;
-            caption: string;
-            fileSize: number;
-            mimeType: string;
-            filename: string;
-            width: number;
-            height: number;
-            duration: number;
-            mediaDetails: any;
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: ("document" | "video" | "photo" | "voice")[];
-            startDate: string;
-            endDate: string;
-        };
-        groups?: undefined;
-    }>;
-    getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string): Promise<{
-        fileLocation: Api.TypeInputFileLocation;
-        contentType: string;
-        filename: string;
-        fileSize: number;
-        etag: string;
-        inputLocation: Api.Photo | Api.Document;
-    }>;
+    }): Promise<import("./TelegramManager").MediaListResponse>;
+    getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string): Promise<import("./TelegramManager").MediaFileDownloadInfo>;
     streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer<ArrayBufferLike>, void, any>;
-    getThumbnail(mobile: string, messageId: number, chatId: string): Promise<{
-        buffer: Buffer;
-        etag: string;
-        contentType: string;
-        filename: string;
-    }>;
+    getThumbnail(mobile: string, messageId: number, chatId: string): Promise<import("./TelegramManager").ThumbnailResult>;
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
@@ -224,7 +106,7 @@ export declare class TelegramService implements OnModuleDestroy {
         totalOperations: number;
     }>;
     forwardBulkMessages(mobile: string, fromChatId: string, toChatId: string, messageIds: number[]): Promise<number>;
-    getAuths(mobile: string): Promise<any[]>;
+    getAuths(mobile: string): Promise<any>;
     removeOtherAuths(mobile: string): Promise<string>;
     processBatch<T>(items: T[], batchSize: number, processor: (batch: T[]) => Promise<void>, delayMs?: number): Promise<{
         processed: number;
@@ -239,203 +121,9 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message>;
-    getScheduledMessages(mobile: string, chatId: string): Promise<Api.TypeMessage[]>;
-    sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<{
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 3809980286;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdatesTooLong";
-        originalArgs: void;
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 826001400;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortMessage";
-        out?: boolean;
-        mentioned?: boolean;
-        mediaUnread?: boolean;
-        silent?: boolean;
-        id: Api.int;
-        userId: Api.long;
-        message: string;
-        pts: Api.int;
-        ptsCount: Api.int;
-        date: Api.int;
-        fwdFrom?: Api.TypeMessageFwdHeader;
-        viaBotId?: Api.long;
-        replyTo?: Api.TypeMessageReplyHeader;
-        entities?: Api.TypeMessageEntity[];
-        ttlPeriod?: Api.int;
-        originalArgs: {
-            out?: boolean;
-            mentioned?: boolean;
-            mediaUnread?: boolean;
-            silent?: boolean;
-            id: Api.int;
-            userId: Api.long;
-            message: string;
-            pts: Api.int;
-            ptsCount: Api.int;
-            date: Api.int;
-            fwdFrom?: Api.TypeMessageFwdHeader;
-            viaBotId?: Api.long;
-            replyTo?: Api.TypeMessageReplyHeader;
-            entities?: Api.TypeMessageEntity[];
-            ttlPeriod?: Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1299050149;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortChatMessage";
-        out?: boolean;
-        mentioned?: boolean;
-        mediaUnread?: boolean;
-        silent?: boolean;
-        id: Api.int;
-        fromId: Api.long;
-        chatId: Api.long;
-        message: string;
-        pts: Api.int;
-        ptsCount: Api.int;
-        date: Api.int;
-        fwdFrom?: Api.TypeMessageFwdHeader;
-        viaBotId?: Api.long;
-        replyTo?: Api.TypeMessageReplyHeader;
-        entities?: Api.TypeMessageEntity[];
-        ttlPeriod?: Api.int;
-        originalArgs: {
-            out?: boolean;
-            mentioned?: boolean;
-            mediaUnread?: boolean;
-            silent?: boolean;
-            id: Api.int;
-            fromId: Api.long;
-            chatId: Api.long;
-            message: string;
-            pts: Api.int;
-            ptsCount: Api.int;
-            date: Api.int;
-            fwdFrom?: Api.TypeMessageFwdHeader;
-            viaBotId?: Api.long;
-            replyTo?: Api.TypeMessageReplyHeader;
-            entities?: Api.TypeMessageEntity[];
-            ttlPeriod?: Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 2027216577;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShort";
-        update: Api.TypeUpdate;
-        date: Api.int;
-        originalArgs: {
-            update: Api.TypeUpdate;
-            date: Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1918567619;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdatesCombined";
-        updates: Api.TypeUpdate[];
-        users: Api.TypeUser[];
-        chats: Api.TypeChat[];
-        date: Api.int;
-        seqStart: Api.int;
-        seq: Api.int;
-        originalArgs: {
-            updates: Api.TypeUpdate[];
-            users: Api.TypeUser[];
-            chats: Api.TypeChat[];
-            date: Api.int;
-            seqStart: Api.int;
-            seq: Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1957577280;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "Updates";
-        updates: Api.TypeUpdate[];
-        users: Api.TypeUser[];
-        chats: Api.TypeChat[];
-        date: Api.int;
-        seq: Api.int;
-        originalArgs: {
-            updates: Api.TypeUpdate[];
-            users: Api.TypeUser[];
-            chats: Api.TypeChat[];
-            date: Api.int;
-            seq: Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 2417352961;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortSentMessage";
-        out?: boolean;
-        id: Api.int;
-        pts: Api.int;
-        ptsCount: Api.int;
-        date: Api.int;
-        media?: Api.TypeMessageMedia;
-        entities?: Api.TypeMessageEntity[];
-        ttlPeriod?: Api.int;
-        originalArgs: {
-            out?: boolean;
-            id: Api.int;
-            pts: Api.int;
-            ptsCount: Api.int;
-            date: Api.int;
-            media?: Api.TypeMessageMedia;
-            entities?: Api.TypeMessageEntity[];
-            ttlPeriod?: Api.int;
-        };
-    }>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message | Api.TypeUpdates>;
+    getScheduledMessages(mobile: string, chatId: string): Promise<import("./TelegramManager").ScheduledMessageItem[]>;
+    sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("./TelegramManager").AlbumSendResult>;
     sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
@@ -476,36 +164,8 @@ export declare class TelegramService implements OnModuleDestroy {
     }, rank?: string): Promise<void>;
     demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void>;
     unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void>;
-    getGroupAdmins(mobile: string, groupId: string): Promise<{
-        userId: string;
-        rank?: string;
-        permissions: {
-            changeInfo: boolean;
-            postMessages: boolean;
-            editMessages: boolean;
-            deleteMessages: boolean;
-            banUsers: boolean;
-            inviteUsers: boolean;
-            pinMessages: boolean;
-            addAdmins: boolean;
-            anonymous: boolean;
-            manageCall: boolean;
-        };
-    }[]>;
-    getGroupBannedUsers(mobile: string, groupId: string): Promise<{
-        userId: string;
-        bannedRights: {
-            viewMessages: boolean;
-            sendMessages: boolean;
-            sendMedia: boolean;
-            sendStickers: boolean;
-            sendGifs: boolean;
-            sendGames: boolean;
-            sendInline: boolean;
-            embedLinks: boolean;
-            untilDate: number;
-        };
-    }[]>;
+    getGroupAdmins(mobile: string, groupId: string): Promise<import("./TelegramManager").AdminInfo[]>;
+    getGroupBannedUsers(mobile: string, groupId: string): Promise<import("./TelegramManager").BannedUserInfo[]>;
     searchMessages(mobile: string, params: SearchMessagesDto): Promise<import("./dto/message-search.dto").SearchMessagesResponseDto>;
     getFilteredMedia(mobile: string, params: {
         chatId: string;
@@ -515,133 +175,15 @@ export declare class TelegramService implements OnModuleDestroy {
         limit?: number;
         maxId?: number;
         minId?: number;
-    }): Promise<{
-        groups: {
-            type: "document" | "video" | "photo" | "voice";
-            count: number;
-            items: {
-                messageId: number;
-                chatId: string;
-                type: "document" | "video" | "photo";
-                date: number;
-                caption: string;
-                thumbnail: string;
-                fileSize: number;
-                mimeType: string;
-                filename: string;
-                width: number;
-                height: number;
-                duration: number;
-                mediaDetails: {
-                    size: import("big-integer").BigInteger;
-                    mimeType: string;
-                    fileName: string;
-                    duration: number;
-                    width: number;
-                    height: number;
-                };
-            }[];
-            pagination: {
-                page: number;
-                limit: number;
-                total: number;
-                totalPages: number;
-                hasMore: boolean;
-                nextMaxId: number;
-                firstMessageId: number;
-                lastMessageId: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: string[];
-            startDate: string;
-            endDate: string;
-        };
-        data?: undefined;
-    } | {
-        data: {
-            messageId: number;
-            chatId: string;
-            type: "document" | "video" | "photo";
-            date: number;
-            caption: string;
-            thumbnail: string;
-            fileSize: number;
-            mimeType: string;
-            filename: string;
-            width: number;
-            height: number;
-            duration: number;
-            mediaDetails: {
-                size: import("big-integer").BigInteger;
-                mimeType: string;
-                fileName: string;
-                duration: number;
-                width: number;
-                height: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: ("document" | "video" | "photo" | "voice")[];
-            startDate: string;
-            endDate: string;
-        };
-        groups?: undefined;
-    }>;
+    }): Promise<import("./TelegramManager").FilteredMediaListResponse>;
     exportContacts(mobile: string, format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
     importContacts(mobile: string, contacts: {
         firstName: string;
         lastName?: string;
         phone: string;
-    }[]): Promise<({
-        success: boolean;
-        phone: string;
-        error?: undefined;
-    } | {
-        success: boolean;
-        phone: string;
-        error: any;
-    })[]>;
-    manageBlockList(mobile: string, userIds: string[], block: boolean): Promise<({
-        success: boolean;
-        userId: string;
-        error?: undefined;
-    } | {
-        success: boolean;
-        userId: string;
-        error: any;
-    })[]>;
-    getContactStatistics(mobile: string): Promise<{
-        total: any;
-        online: any;
-        withPhone: any;
-        mutual: any;
-        lastWeekActive: any;
-    }>;
+    }[]): Promise<import("./TelegramManager").ImportContactResult[]>;
+    manageBlockList(mobile: string, userIds: string[], block: boolean): Promise<import("./TelegramManager").BlockListResult[]>;
+    getContactStatistics(mobile: string): Promise<import("./TelegramManager").ContactStats>;
     createChatFolder(mobile: string, options: {
         name: string;
         includedChats: string[];
@@ -657,47 +199,10 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<{
         id: number;
         name: string;
-        options: {
-            includeContacts: boolean;
-            includeNonContacts: boolean;
-            includeGroups: boolean;
-            includeBroadcasts: boolean;
-            includeBots: boolean;
-            excludeMuted: boolean;
-            excludeRead: boolean;
-            excludeArchived: boolean;
-        };
+        options: Record<string, boolean>;
     }>;
-    getChatFolders(mobile: string): Promise<{
-        id: any;
-        title: any;
-        includedChatsCount: any;
-        excludedChatsCount: any;
-    }[]>;
-    getSessionInfo(mobile: string): Promise<{
-        sessions: {
-            hash: string;
-            deviceModel: string;
-            platform: string;
-            systemVersion: string;
-            appName: string;
-            dateCreated: Date;
-            dateActive: Date;
-            ip: string;
-            country: string;
-            region: string;
-        }[];
-        webSessions: {
-            hash: string;
-            domain: string;
-            browser: string;
-            platform: string;
-            dateCreated: Date;
-            dateActive: Date;
-            ip: string;
-            region: string;
-        }[];
-    }>;
+    getChatFolders(mobile: string): Promise<import("./TelegramManager").ChatFolder[]>;
+    getSessionInfo(mobile: string): Promise<import("./TelegramManager").SessionInfo>;
     terminateSession(mobile: string, options: {
         hash: string;
         type: 'app' | 'web';
@@ -741,37 +246,14 @@ export declare class TelegramService implements OnModuleDestroy {
         offsetId?: number;
         offsetPeer?: string;
         folderId?: number;
-    }): Promise<{
-        id: any;
-        title: any;
-        username: any;
-        type: string;
-        unreadCount: any;
-        lastMessage: {
-            id: any;
-            text: any;
-            date: Date;
-        };
-    }[]>;
+        includePhotos?: boolean;
+    }): Promise<import("./TelegramManager").ChatListItem[]>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
         chatId: string;
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
-    }): Promise<{
-        total: number;
-        withMedia: number;
-        withLinks: number;
-        withForwards: number;
-        byHour: any[];
-        byType: {
-            text: number;
-            photo: number;
-            video: number;
-            document: number;
-            other: number;
-        };
-    }>;
+    }): Promise<import("./TelegramManager").MessageStats>;
     sendViewOnceMedia(mobile: string, options: {
         chatId: string;
         sourceType: 'path' | 'base64' | 'binary';
@@ -828,10 +310,7 @@ export declare class TelegramService implements OnModuleDestroy {
         anonymous?: boolean;
         manageCall?: boolean;
     }): Promise<void>;
-    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<{
-        botToken: string;
-        username: string;
-    }>;
+    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<import("./TelegramManager").BotCreationResult>;
     connect(mobile: string, options?: GetClientOptionsDto): Promise<void>;
     disconnect(mobile: string): Promise<void>;
     disconnectAll(): Promise<void>;

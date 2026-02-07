@@ -155,6 +155,25 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], MessageTypeResult.prototype, "total", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Enriched search result items with resolved sender names and dates',
+        type: 'array',
+        items: {
+            type: 'object',
+            properties: {
+                id: { type: 'number' },
+                text: { type: 'string' },
+                date: { type: 'string', description: 'ISO 8601 date' },
+                chatId: { type: 'string' },
+                senderName: { type: 'string', nullable: true },
+                mediaType: { type: 'string', nullable: true },
+            },
+        },
+    }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Array)
+], MessageTypeResult.prototype, "data", void 0);
 class SearchMessagesResponseDto {
 }
 exports.SearchMessagesResponseDto = SearchMessagesResponseDto;

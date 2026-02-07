@@ -564,8 +564,8 @@ let TelegramController = class TelegramController {
     async hasPassword(mobile) {
         return this.telegramService.hasPassword(mobile);
     }
-    async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId) {
-        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId });
+    async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos) {
+        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos });
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -1764,6 +1764,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'offsetPeer', required: false, type: String }),
     (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false, can be slow for large lists)' }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
@@ -1771,8 +1772,9 @@ __decorate([
     __param(3, (0, common_1.Query)('offsetId')),
     __param(4, (0, common_1.Query)('offsetPeer')),
     __param(5, (0, common_1.Query)('folderId')),
+    __param(6, (0, common_1.Query)('includePhotos')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number, Number, String, Number]),
+    __metadata("design:paramtypes", [String, Number, Number, Number, String, Number, Boolean]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getChats", null);
 __decorate([

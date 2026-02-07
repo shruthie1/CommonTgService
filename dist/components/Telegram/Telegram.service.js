@@ -192,7 +192,7 @@ let TelegramService = class TelegramService {
     async forwardMediaToBot(mobile, fromChatId) {
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-            await telegramClient.forwardMediaToBot(fromChatId);
+            await telegramClient.forwardMedia('', fromChatId);
             const dialogs = [];
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
                 dialogs.push(dialog);
@@ -451,7 +451,7 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         const auths = await telegramClient.getAuths();
         this.logger.info(mobile, 'Retrieved authorizations', {
-            count: auths?.length || 0
+            count: auths?.authorizations?.length || 0
         });
         return auths;
     }

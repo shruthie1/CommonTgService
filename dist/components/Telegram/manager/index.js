@@ -17,8 +17,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.default = void 0;
-var manager_1 = require("./manager");
-Object.defineProperty(exports, "default", { enumerable: true, get: function () { return __importDefault(manager_1).default; } });
-__exportStar(require("./manager/types"), exports);
-//# sourceMappingURL=TelegramManager.js.map
+exports.TelegramManager = exports.default = void 0;
+var TelegramManager_1 = require("./TelegramManager");
+Object.defineProperty(exports, "default", { enumerable: true, get: function () { return __importDefault(TelegramManager_1).default; } });
+var TelegramManager_2 = require("./TelegramManager");
+Object.defineProperty(exports, "TelegramManager", { enumerable: true, get: function () { return __importDefault(TelegramManager_2).default; } });
+__exportStar(require("./types"), exports);
+//# sourceMappingURL=index.js.map

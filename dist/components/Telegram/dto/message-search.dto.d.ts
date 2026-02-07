@@ -32,7 +32,14 @@ export declare class SearchMessagesDto {
 export declare class MessageTypeResult {
     messages: number[];
     total: number;
-    data?: any;
+    data?: Array<{
+        id: number;
+        text: string;
+        date: string;
+        chatId: string;
+        senderName: string | null;
+        mediaType: string | null;
+    }>;
 }
 export declare class SearchMessagesResponseDto {
     all?: MessageTypeResult;

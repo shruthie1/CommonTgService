@@ -10,7 +10,6 @@ import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { SendTgMessageDto } from './dto/send-message.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import bigInt from 'big-integer';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
@@ -33,7 +32,7 @@ export declare class TelegramController {
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
-    getEntity(mobile: string, entity: string): Promise<import("telegram/define").Entity>;
+    getEntity(mobile: string, entity: string): Promise<import("telegram").Api.User | import("telegram").Api.Chat | import("telegram").Api.Channel>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
@@ -52,33 +51,10 @@ export declare class TelegramController {
     setup2FA(mobile: string): Promise<string>;
     updatePrivacy(mobile: string): Promise<string>;
     updatePrivacyBatch(mobile: string, settings: PrivacySettingsDto): Promise<boolean>;
-    getActiveSessions(mobile: string): Promise<any[]>;
+    getActiveSessions(mobile: string): Promise<any>;
     terminateOtherSessions(mobile: string): Promise<string>;
     createNewSession(mobile: string): Promise<string>;
-    getSessionInfo(mobile: string): Promise<{
-        sessions: {
-            hash: string;
-            deviceModel: string;
-            platform: string;
-            systemVersion: string;
-            appName: string;
-            dateCreated: Date;
-            dateActive: Date;
-            ip: string;
-            country: string;
-            region: string;
-        }[];
-        webSessions: {
-            hash: string;
-            domain: string;
-            browser: string;
-            platform: string;
-            dateCreated: Date;
-            dateActive: Date;
-            ip: string;
-            region: string;
-        }[];
-    }>;
+    getSessionInfo(mobile: string): Promise<import("./manager").SessionInfo>;
     terminateSession(mobile: string, data: {
         hash: string;
         type: 'app' | 'web';
@@ -91,11 +67,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getCallLogStats(mobile: string, limit?: number): Promise<{
-        outgoing: number;
-        incoming: number;
-        video: number;
-        audio: number;
+    getCallLogStats(mobile: string, limit?: number): Promise<import("./manager").CallLogResult & {
         chatCallCounts: Array<{
             chatId: string;
             phone?: string;
@@ -107,388 +79,16 @@ export declare class TelegramController {
             photo?: number;
             peerType: "user" | "group" | "channel";
         }>;
-        totalCalls: number;
-        analyzedCalls: number;
     }>;
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
     downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
     getThumbnail(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
-    sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<{
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 3809980286;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdatesTooLong";
-        originalArgs: void;
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 826001400;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortMessage";
-        out?: boolean;
-        mentioned?: boolean;
-        mediaUnread?: boolean;
-        silent?: boolean;
-        id: import("telegram").Api.int;
-        userId: import("telegram").Api.long;
-        message: string;
-        pts: import("telegram").Api.int;
-        ptsCount: import("telegram").Api.int;
-        date: import("telegram").Api.int;
-        fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
-        viaBotId?: import("telegram").Api.long;
-        replyTo?: import("telegram").Api.TypeMessageReplyHeader;
-        entities?: import("telegram").Api.TypeMessageEntity[];
-        ttlPeriod?: import("telegram").Api.int;
-        originalArgs: {
-            out?: boolean;
-            mentioned?: boolean;
-            mediaUnread?: boolean;
-            silent?: boolean;
-            id: import("telegram").Api.int;
-            userId: import("telegram").Api.long;
-            message: string;
-            pts: import("telegram").Api.int;
-            ptsCount: import("telegram").Api.int;
-            date: import("telegram").Api.int;
-            fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
-            viaBotId?: import("telegram").Api.long;
-            replyTo?: import("telegram").Api.TypeMessageReplyHeader;
-            entities?: import("telegram").Api.TypeMessageEntity[];
-            ttlPeriod?: import("telegram").Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1299050149;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortChatMessage";
-        out?: boolean;
-        mentioned?: boolean;
-        mediaUnread?: boolean;
-        silent?: boolean;
-        id: import("telegram").Api.int;
-        fromId: import("telegram").Api.long;
-        chatId: import("telegram").Api.long;
-        message: string;
-        pts: import("telegram").Api.int;
-        ptsCount: import("telegram").Api.int;
-        date: import("telegram").Api.int;
-        fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
-        viaBotId?: import("telegram").Api.long;
-        replyTo?: import("telegram").Api.TypeMessageReplyHeader;
-        entities?: import("telegram").Api.TypeMessageEntity[];
-        ttlPeriod?: import("telegram").Api.int;
-        originalArgs: {
-            out?: boolean;
-            mentioned?: boolean;
-            mediaUnread?: boolean;
-            silent?: boolean;
-            id: import("telegram").Api.int;
-            fromId: import("telegram").Api.long;
-            chatId: import("telegram").Api.long;
-            message: string;
-            pts: import("telegram").Api.int;
-            ptsCount: import("telegram").Api.int;
-            date: import("telegram").Api.int;
-            fwdFrom?: import("telegram").Api.TypeMessageFwdHeader;
-            viaBotId?: import("telegram").Api.long;
-            replyTo?: import("telegram").Api.TypeMessageReplyHeader;
-            entities?: import("telegram").Api.TypeMessageEntity[];
-            ttlPeriod?: import("telegram").Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 2027216577;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShort";
-        update: import("telegram").Api.TypeUpdate;
-        date: import("telegram").Api.int;
-        originalArgs: {
-            update: import("telegram").Api.TypeUpdate;
-            date: import("telegram").Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1918567619;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdatesCombined";
-        updates: import("telegram").Api.TypeUpdate[];
-        users: import("telegram").Api.TypeUser[];
-        chats: import("telegram").Api.TypeChat[];
-        date: import("telegram").Api.int;
-        seqStart: import("telegram").Api.int;
-        seq: import("telegram").Api.int;
-        originalArgs: {
-            updates: import("telegram").Api.TypeUpdate[];
-            users: import("telegram").Api.TypeUser[];
-            chats: import("telegram").Api.TypeChat[];
-            date: import("telegram").Api.int;
-            seqStart: import("telegram").Api.int;
-            seq: import("telegram").Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 1957577280;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "Updates";
-        updates: import("telegram").Api.TypeUpdate[];
-        users: import("telegram").Api.TypeUser[];
-        chats: import("telegram").Api.TypeChat[];
-        date: import("telegram").Api.int;
-        seq: import("telegram").Api.int;
-        originalArgs: {
-            updates: import("telegram").Api.TypeUpdate[];
-            users: import("telegram").Api.TypeUser[];
-            chats: import("telegram").Api.TypeChat[];
-            date: import("telegram").Api.int;
-            seq: import("telegram").Api.int;
-        };
-    } | {
-        success: number;
-        failed: number;
-        errors: {
-            index: number;
-            error: string;
-        }[];
-        CONSTRUCTOR_ID: 2417352961;
-        SUBCLASS_OF_ID: 2331323052;
-        classType: "constructor";
-        className: "UpdateShortSentMessage";
-        out?: boolean;
-        id: import("telegram").Api.int;
-        pts: import("telegram").Api.int;
-        ptsCount: import("telegram").Api.int;
-        date: import("telegram").Api.int;
-        media?: import("telegram").Api.TypeMessageMedia;
-        entities?: import("telegram").Api.TypeMessageEntity[];
-        ttlPeriod?: import("telegram").Api.int;
-        originalArgs: {
-            out?: boolean;
-            id: import("telegram").Api.int;
-            pts: import("telegram").Api.int;
-            ptsCount: import("telegram").Api.int;
-            date: import("telegram").Api.int;
-            media?: import("telegram").Api.TypeMessageMedia;
-            entities?: import("telegram").Api.TypeMessageEntity[];
-            ttlPeriod?: import("telegram").Api.int;
-        };
-    }>;
-    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<{
-        groups: {
-            type: "document" | "video" | "photo" | "voice";
-            count: number;
-            items: {
-                messageId: number;
-                chatId: string;
-                type: "document" | "video" | "photo";
-                date: number;
-                caption: string;
-                fileSize: number;
-                mimeType: string;
-                filename: string;
-                width: number;
-                height: number;
-                duration: number;
-                mediaDetails: any;
-            }[];
-            pagination: {
-                page: number;
-                limit: number;
-                total: number;
-                totalPages: number;
-                hasMore: boolean;
-                nextMaxId: number;
-                firstMessageId: number;
-                lastMessageId: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: string[];
-            startDate: string;
-            endDate: string;
-        };
-        data?: undefined;
-    } | {
-        data: {
-            messageId: number;
-            chatId: string;
-            type: "document" | "video" | "photo";
-            date: number;
-            caption: string;
-            fileSize: number;
-            mimeType: string;
-            filename: string;
-            width: number;
-            height: number;
-            duration: number;
-            mediaDetails: any;
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: ("document" | "video" | "photo" | "voice")[];
-            startDate: string;
-            endDate: string;
-        };
-        groups?: undefined;
-    }>;
-    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<{
-        groups: {
-            type: "document" | "video" | "photo" | "voice";
-            count: number;
-            items: {
-                messageId: number;
-                chatId: string;
-                type: "document" | "video" | "photo";
-                date: number;
-                caption: string;
-                thumbnail: string;
-                fileSize: number;
-                mimeType: string;
-                filename: string;
-                width: number;
-                height: number;
-                duration: number;
-                mediaDetails: {
-                    size: bigInt.BigInteger;
-                    mimeType: string;
-                    fileName: string;
-                    duration: number;
-                    width: number;
-                    height: number;
-                };
-            }[];
-            pagination: {
-                page: number;
-                limit: number;
-                total: number;
-                totalPages: number;
-                hasMore: boolean;
-                nextMaxId: number;
-                firstMessageId: number;
-                lastMessageId: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: string[];
-            startDate: string;
-            endDate: string;
-        };
-        data?: undefined;
-    } | {
-        data: {
-            messageId: number;
-            chatId: string;
-            type: "document" | "video" | "photo";
-            date: number;
-            caption: string;
-            thumbnail: string;
-            fileSize: number;
-            mimeType: string;
-            filename: string;
-            width: number;
-            height: number;
-            duration: number;
-            mediaDetails: {
-                size: bigInt.BigInteger;
-                mimeType: string;
-                fileName: string;
-                duration: number;
-                width: number;
-                height: number;
-            };
-        }[];
-        pagination: {
-            page: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasMore: boolean;
-            nextMaxId: number;
-            prevMaxId: number;
-            firstMessageId: number;
-            lastMessageId: number;
-        };
-        filters: {
-            chatId: string;
-            types: ("document" | "video" | "photo" | "voice")[];
-            startDate: string;
-            endDate: string;
-        };
-        groups?: undefined;
-    }>;
-    getGroupMembers(mobile: string, groupId: string): Promise<any[]>;
+    sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("./manager").AlbumSendResult>;
+    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./manager").MediaListResponse>;
+    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./manager").FilteredMediaListResponse>;
+    getGroupMembers(mobile: string, groupId: string): Promise<import("./manager").GroupMember[]>;
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, deleteHistoryDto: DeleteHistoryDto): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
@@ -503,8 +103,8 @@ export declare class TelegramController {
         deletedCount: number;
     }>;
     getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
-    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message>;
-    getScheduledMessages(mobile: string, chatId: string): Promise<import("telegram").Api.TypeMessage[]>;
+    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message | import("telegram").Api.TypeUpdates>;
+    getScheduledMessages(mobile: string, chatId: string): Promise<import("./manager").ScheduledMessageItem[]>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
         url: string;
@@ -512,93 +112,29 @@ export declare class TelegramController {
         caption?: string;
     }): Promise<import("telegram").Api.TypeUpdates>;
     sendViewOnceMedia(mobile: string, file: Express.Multer.File, viewOnceDto: ViewOnceMediaDto): Promise<import("telegram").Api.TypeUpdates>;
-    getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<any>;
+    getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<import("./manager").MessageItem[]>;
     promoteToAdmin(mobile: string, adminOp: AdminOperationDto): Promise<void>;
     demoteAdmin(mobile: string, memberOp: GroupMemberOperationDto): Promise<void>;
     unblockGroupUser(mobile: string, data: {
         groupId: string;
         userId: string;
     }): Promise<void>;
-    getGroupAdmins(mobile: string, groupId: string): Promise<{
-        userId: string;
-        rank?: string;
-        permissions: {
-            changeInfo: boolean;
-            postMessages: boolean;
-            editMessages: boolean;
-            deleteMessages: boolean;
-            banUsers: boolean;
-            inviteUsers: boolean;
-            pinMessages: boolean;
-            addAdmins: boolean;
-            anonymous: boolean;
-            manageCall: boolean;
-        };
-    }[]>;
-    getGroupBannedUsers(mobile: string, groupId: string): Promise<{
-        userId: string;
-        bannedRights: {
-            viewMessages: boolean;
-            sendMessages: boolean;
-            sendMedia: boolean;
-            sendStickers: boolean;
-            sendGifs: boolean;
-            sendGames: boolean;
-            sendInline: boolean;
-            embedLinks: boolean;
-            untilDate: number;
-        };
-    }[]>;
+    getGroupAdmins(mobile: string, groupId: string): Promise<import("./manager").AdminInfo[]>;
+    getGroupBannedUsers(mobile: string, groupId: string): Promise<import("./manager").BannedUserInfo[]>;
     exportContacts(mobile: string, exportDto: ContactExportImportDto, res: Response): Promise<void>;
     importContacts(mobile: string, contacts: {
         firstName: string;
         lastName?: string;
         phone: string;
-    }[]): Promise<({
-        success: boolean;
-        phone: string;
-        error?: undefined;
-    } | {
-        success: boolean;
-        phone: string;
-        error: any;
-    })[]>;
-    manageBlockList(mobile: string, blockList: ContactBlockListDto): Promise<({
-        success: boolean;
-        userId: string;
-        error?: undefined;
-    } | {
-        success: boolean;
-        userId: string;
-        error: any;
-    })[]>;
-    getContactStatistics(mobile: string): Promise<{
-        total: any;
-        online: any;
-        withPhone: any;
-        mutual: any;
-        lastWeekActive: any;
-    }>;
+    }[]): Promise<import("./manager").ImportContactResult[]>;
+    manageBlockList(mobile: string, blockList: ContactBlockListDto): Promise<import("./manager").BlockListResult[]>;
+    getContactStatistics(mobile: string): Promise<import("./manager").ContactStats>;
     createChatFolder(mobile: string, folder: CreateChatFolderDto): Promise<{
         id: number;
         name: string;
-        options: {
-            includeContacts: boolean;
-            includeNonContacts: boolean;
-            includeGroups: boolean;
-            includeBroadcasts: boolean;
-            includeBots: boolean;
-            excludeMuted: boolean;
-            excludeRead: boolean;
-            excludeArchived: boolean;
-        };
+        options: Record<string, boolean>;
     }>;
-    getChatFolders(mobile: string): Promise<{
-        id: any;
-        title: any;
-        includedChatsCount: any;
-        excludedChatsCount: any;
-    }[]>;
+    getChatFolders(mobile: string): Promise<import("./manager").ChatFolder[]>;
     editMessage(mobile: string, options: {
         chatId: string;
         messageId: number;
@@ -630,37 +166,13 @@ export declare class TelegramController {
         scheduleDate?: number;
     }): Promise<import("telegram").Api.TypeUpdates>;
     hasPassword(mobile: string): Promise<boolean>;
-    getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number): Promise<{
-        id: any;
-        title: any;
-        username: any;
-        type: string;
-        unreadCount: any;
-        lastMessage: {
-            id: any;
-            text: any;
-            date: Date;
-        };
-    }[]>;
+    getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number, includePhotos?: boolean): Promise<import("./manager").ChatListItem[]>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
         chatId: string;
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
-    }): Promise<{
-        total: number;
-        withMedia: number;
-        withLinks: number;
-        withForwards: number;
-        byHour: any[];
-        byType: {
-            text: number;
-            photo: number;
-            video: number;
-            document: number;
-            other: number;
-        };
-    }>;
+    }): Promise<import("./manager").MessageStats>;
     getTopPrivateChats(mobile: string, limit?: number): Promise<{
         chatId: string;
         username?: string;
@@ -694,22 +206,9 @@ export declare class TelegramController {
             textMessages: number;
         };
     }[]>;
-    getSelfMsgsInfo(mobile: string, limit?: number): Promise<{
-        photoCount: number;
-        videoCount: number;
-        movieCount: number;
-        total: number;
-        ownPhotoCount: number;
-        otherPhotoCount: number;
-        ownVideoCount: number;
-        otherVideoCount: number;
-        analyzedMessages: number;
-    }>;
+    getSelfMsgsInfo(mobile: string, limit?: number): Promise<import("./manager").SelfMessagesInfo>;
     addBotsToChannel(mobile: string, body: {
         channelIds?: string[];
     }): Promise<void>;
-    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<{
-        botToken: string;
-        username: string;
-    }>;
+    createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<import("./manager").BotCreationResult>;
 }
