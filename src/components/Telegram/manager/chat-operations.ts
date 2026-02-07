@@ -867,29 +867,26 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
         sharedVideo: 12, sharedPhoto: 10, textMessage: 1, unreadMessages: 1,
     };
 
-    const [me, callLogResult, dialogs] = await Promise.all([
+    const [me, callLogResult] = await Promise.all([
         getMe(ctx).catch(() => null),
         getCallLog(ctx, 300).catch(() => ({ totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0, chats: [] })),
-        ctx.client.getDialogs({ limit: 350 }),
     ]);
 
     if (!me) throw new Error('Failed to fetch self userInfo');
     const selfChatId = me.id.toString();
 
-    // Only private user chats: skip channels and groups (explicit entity check)
-    const privateUserDialogs = Array.from(dialogs).filter(
-        (d): d is Dialog => !!d.isUser && d.entity instanceof Api.User
-    );
-    // Unique by chatId, exclude self and bots
+    // Iterate dialogs (limit 500), keep private user chats only, exclude self and bots, unique by chatId
+    const candidateChats: Dialog[] = [];
     const seenIds = new Set<string>();
-    const candidateChats = privateUserDialogs.filter((d) => {
+    for await (const d of ctx.client.iterDialogs({ limit: 500 })) {
+        if (!d.isUser || !(d.entity instanceof Api.User)) continue;
         const user = d.entity as Api.User;
-        if (user.bot) return false;
+        if (user.bot) continue;
         const id = user.id.toString();
-        if (id === selfChatId || seenIds.has(id)) return false;
+        if (id === selfChatId || seenIds.has(id)) continue;
         seenIds.add(id);
-        return true;
-    });
+        candidateChats.push(d);
+    }
 
     const callLogsByChat = Object.fromEntries((callLogResult.chats ?? []).map(c => [c.chatId, c.calls]));
 
