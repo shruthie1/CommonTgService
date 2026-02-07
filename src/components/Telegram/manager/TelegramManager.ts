@@ -4,8 +4,7 @@
     import { TotalList } from 'telegram/Helpers';
     import bigInt from 'big-integer';
     import { EntityLike } from 'telegram/define';
-    import { IterDialogsParams } from 'telegram/client/dialogs';
-    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListItem, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, PerChatCallStats, ForwardResult, MessageItem } from './types';
+    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListItem, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, PerChatCallStats, ForwardResult, MessageItem } from './types';
     import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
     import { SendTgMessageDto } from '../dto/send-message.dto';
     import { MediaAlbumOptions } from '../types/telegram-types';
@@ -113,10 +112,6 @@
             return chatOps.getMessages(this.ctx, entityLike, limit);
         }
 
-        async getDialogs(params: IterDialogsParams): Promise<import('telegram/tl/custom/dialog').Dialog[] & { total: number }> {
-            return chatOps.getDialogs(this.ctx, params);
-        }
-
         async getAllChats(): ReturnType<typeof chatOps.getAllChats> {
             return chatOps.getAllChats(this.ctx);
         }
@@ -145,7 +140,7 @@
             return chatOps.getMessageStats(this.ctx, options);
         }
 
-        async getChats(options: { limit?: number; offsetDate?: number; offsetId?: number; offsetPeer?: string; folderId?: number; includePhotos?: boolean }): Promise<ChatListItem[]> {
+        async getChats(options: { limit?: number; offsetDate?: number; folderId?: number; archived?: boolean; peerType?: 'all' | 'user' | 'group' | 'channel'; ignorePinned?: boolean; includePhotos?: boolean }): Promise<ChatListResult> {
             return chatOps.getChats(this.ctx, options);
         }
 

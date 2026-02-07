@@ -24,31 +24,11 @@ export class MediaMetadataDto {
     limit?: number = 50;
 }
 
-export class DialogsQueryDto {
-    @ApiPropertyOptional({ description: 'Number of dialogs to fetch', required: false, type: Number, minimum: 1, maximum: 1000 })
-    @IsOptional()
-    @Transform(({ value }) => parseInt(value))
-    @IsNumber()
-    @Min(1)
-    @Max(1000)
-    limit: number = 100;
-
-    @ApiPropertyOptional({ description: 'Dialog offset', required: false, type: Number, minimum: 0 })
-    @IsOptional()
-    @Transform(({ value }) => parseInt(value))
-    @IsNumber()
-    @Min(0)
-    offsetId?: number = 0;
-
-    @ApiPropertyOptional({ description: 'Include archived chats', required: false, type: Boolean })
-    @IsOptional()
-    @Transform(({ value }) => {
-        if (value === 'true') return true;
-        if (value === 'false') return false;
-        return value;
-    })
-    @IsBoolean()
-    archived?: boolean = false;
+export enum DialogsPeerType {
+    ALL = 'all',
+    USER = 'user',
+    GROUP = 'group',
+    CHANNEL = 'channel',
 }
 
 export class BulkMessageOperationDto {

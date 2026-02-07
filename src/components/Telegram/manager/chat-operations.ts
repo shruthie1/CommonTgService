@@ -1,10 +1,9 @@
 import { Api } from 'telegram';
 import { TotalList, sleep } from 'telegram/Helpers';
-import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
 import { contains } from '../../../utils';
 import {
-    TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat,
+    TgContext, ChatListItem, ChatListResult, ChatStatistics, MessageStats, TopPrivateChat,
     PerChatCallStats, CallLogEntry, CallLogChat, CallLogResult, EngagementWeights, SelfMessagesInfo, ChatSettingsUpdate,
     ChatFolderCreateOptions, ChatFolder, MessageItem, TopSenderInfo,
     MediaInfo,
@@ -72,23 +71,6 @@ export async function getEntity(ctx: TgContext, entity: EntityLike): Promise<Api
 
 export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike, limit: number = 8): Promise<TotalList<Api.Message>> {
     return await ctx.client.getMessages(entityLike, { limit });
-}
-
-export async function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<Dialog[] & { total: number }> {
-    if (!ctx.client) throw new Error('Client is not initialized');
-    try {
-        const chats: Dialog[] = [];
-        let total = 0;
-        for await (const dialog of ctx.client.iterDialogs(params)) {
-            chats.push(dialog);
-            total++;
-        }
-        ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
-        return Object.assign(chats, { total });
-    } catch (error) {
-        ctx.logger.error(ctx.phoneNumber, 'Error getting dialogs:', error);
-        throw error;
-    }
 }
 
 export async function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeChat['toJSON']>[]> {
@@ -277,7 +259,7 @@ export async function getCallLog(
                     (m instanceof Api.Message || m instanceof Api.MessageService) &&
                     m.action instanceof Api.MessageActionPhoneCall
             );
-            callLogs.push(...batch); 
+            callLogs.push(...batch);
             if (messages.length < chunkSize) break;
             const lastMessage = messages[messages.length - 1];
             if (lastMessage) offsetId = lastMessage.id;
@@ -609,22 +591,36 @@ export async function getMessageStats(ctx: TgContext, options: {
 // ---- Chat list ----
 
 export async function getChats(ctx: TgContext, options: {
-    limit?: number; offsetDate?: number; offsetId?: number; offsetPeer?: string; folderId?: number; includePhotos?: boolean;
-}): Promise<ChatListItem[]> {
+    limit?: number; offsetDate?: number; folderId?: number; archived?: boolean; peerType?: 'all' | 'user' | 'group' | 'channel'; ignorePinned?: boolean; includePhotos?: boolean;
+}): Promise<ChatListResult> {
     if (!ctx.client) throw new Error('Client not initialized');
 
     const dialogs: Dialog[] = [];
     const limit = options.limit || 100;
     const includePhotos = options.includePhotos || false;
-    let count = 0;
+    const peerType = options.peerType ?? 'all';
+    const folder = options.folderId !== undefined ? options.folderId : (options.archived ? 1 : 0);
+    const requestLimit = peerType === 'all' ? limit : Math.min(limit * 3, 100);
+    const params: Parameters<typeof ctx.client.iterDialogs>[0] = { limit: requestLimit, folder, ignorePinned: options.ignorePinned ?? false };
+    if (options.offsetDate != null && options.offsetDate > 0) params.offsetDate = options.offsetDate;
+    const me = await ctx.client.getMe();
 
-    for await (const dialog of ctx.client.iterDialogs({ ...options, limit })) {
-        dialogs.push(dialog);
-        count++;
-        if (count >= limit) break;
+    for await (const dialog of ctx.client.iterDialogs(params)) {
+        const entity = dialog.entity;
+        const match =
+            peerType === 'all' ||
+            (peerType === 'user' && entity instanceof Api.User) ||
+            (peerType === 'group' && entity instanceof Api.Chat) ||
+            (peerType === 'channel' && entity instanceof Api.Channel);
+        if (match) dialogs.push(dialog);
+        if (dialogs.length >= limit) break;
     }
 
-    return Promise.all(dialogs.map(async (dialog: Dialog) => {
+    const last = dialogs[dialogs.length - 1];
+    const hasMore = dialogs.length === limit;
+    const nextOffsetDate = hasMore && last?.message?.date != null ? last.message.date : undefined;
+
+    const items = await Promise.all(dialogs.map(async (dialog: Dialog) => {
         const entity = dialog.entity;
         const type: 'user' | 'group' | 'channel' | 'unknown' =
             entity instanceof Api.User ? 'user' :
@@ -635,13 +631,23 @@ export async function getChats(ctx: TgContext, options: {
         let senderName: string | null = null;
         if (dialog.message?.senderId) {
             try {
-                const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
-                if (senderEntity instanceof Api.User) {
-                    senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || null;
-                } else if (senderEntity instanceof Api.Channel) {
-                    senderName = senderEntity.title || null;
+                if (dialog.message.senderId.toString() === me.id.toString()) {
+                    senderName = `${me.firstName || ''} ${me.lastName || ''} (Self)`.trim();
+                } else {
+                    if (type === 'user') {
+                        const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
+                        if (senderEntity instanceof Api.User) {
+                            senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || senderEntity.username || null;
+                        } else {
+                            senderName = "Unknown";
+                        }
+                    } else {
+                        senderName = dialog.title || "Unknown Channel User";
+                    }
                 }
-            } catch { /* ignore */ }
+            } catch {
+                senderName = "Unknown";
+            }
         }
 
         // Online status & last seen (only for users)
@@ -678,7 +684,7 @@ export async function getChats(ctx: TgContext, options: {
 
         return {
             id: entity.id.toString(),
-            title: 'title' in entity ? entity.title : null,
+            title: entity.id.toString() === me.id.toString() ? `${dialog.title} (Self)` : dialog.title ? dialog.title : 'title' in entity ? entity.title : null,
             username: 'username' in entity ? entity.username : null,
             type,
             unreadCount: dialog.unreadCount,
@@ -695,6 +701,8 @@ export async function getChats(ctx: TgContext, options: {
             participantCount,
         };
     }));
+
+    return { items, hasMore, ...(nextOffsetDate != null && { nextOffsetDate }) };
 }
 
 export async function updateChatSettings(ctx: TgContext, settings: ChatSettingsUpdate): Promise<boolean> {

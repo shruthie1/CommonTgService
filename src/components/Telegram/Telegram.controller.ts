@@ -1070,16 +1070,51 @@ export class TelegramController {
     async sendMessageWithInlineButton(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('message') message: string, @Query('url') url: string) {
         return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
+    
 
     @Get('dialogs/:mobile')
-    @ApiOperation({ summary: 'Get all dialogs' })
+    @ApiOperation({
+        summary: 'Get dialogs (paginated dialog list)',
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
+    })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 })
-    @ApiQuery({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 })
-    @ApiQuery({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false })
-    @ApiResponse({ type: Object })
-    async getAllDialogs(@Param('mobile') mobile: string, @Query('limit') limit: number = 500, @Query('offsetId') offsetId: number = 0, @Query('archived') archived: boolean = false) {
-        return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' })
+    @ApiQuery({ name: 'offsetDate', required: false, type: Number, description: 'Cursor: Unix seconds from previous nextOffsetDate' })
+    @ApiQuery({ name: 'folderId', required: false, type: Number, enum: [0, 1], description: '0 = main, 1 = archived (overrides archived)' })
+    @ApiQuery({ name: 'archived', required: false, type: Boolean, description: 'Include archived folder (folder=1)' })
+    @ApiQuery({ name: 'peerType', required: false, enum: ['all', 'user', 'group', 'channel'], description: 'Filter by type' })
+    @ApiQuery({ name: 'ignorePinned', required: false, type: Boolean, description: 'Exclude pinned dialogs' })
+    @ApiQuery({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false)' })
+    @ApiResponse({
+        status: 200,
+        schema: {
+            type: 'object',
+            properties: {
+                items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
+                hasMore: { type: 'boolean' },
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
+            },
+        },
+    })
+    async getDialogs(
+        @Param('mobile') mobile: string,
+        @Query('limit') limit?: number,
+        @Query('offsetDate') offsetDate?: number,
+        @Query('folderId') folderId?: number,
+        @Query('archived') archived?: boolean,
+        @Query('peerType') peerType?: string,
+        @Query('ignorePinned') ignorePinned?: boolean,
+        @Query('includePhotos') includePhotos?: boolean,
+    ) {
+        return this.telegramService.getDialogs(mobile, {
+            limit,
+            offsetDate,
+            folderId,
+            archived: archived === true,
+            peerType: peerType as 'all' | 'user' | 'group' | 'channel' | undefined,
+            ignorePinned: ignorePinned === true,
+            includePhotos,
+        });
     }
 
     @Get('last-active/:mobile')
@@ -1424,20 +1459,6 @@ export class TelegramController {
     @ApiResponse({ type: Object })
     async hasPassword(@Param('mobile') mobile: string) {
         return this.telegramService.hasPassword(mobile);
-    }
-
-    @Get('chats/:mobile')
-    @ApiOperation({ summary: 'Get chats with advanced filtering' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
-    @ApiQuery({ name: 'offsetDate', required: false, type: Number })
-    @ApiQuery({ name: 'offsetId', required: false, type: Number })
-    @ApiQuery({ name: 'offsetPeer', required: false, type: String })
-    @ApiQuery({ name: 'folderId', required: false, type: Number })
-    @ApiQuery({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false, can be slow for large lists)' })
-    @ApiResponse({ type: Object })
-    async getChats(@Param('mobile') mobile: string, @Query('limit') limit?: number, @Query('offsetDate') offsetDate?: number, @Query('offsetId') offsetId?: number, @Query('offsetPeer') offsetPeer?: string, @Query('folderId') folderId?: number, @Query('includePhotos') includePhotos?: boolean) {
-        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos });
     }
 
     @Get('file/url/:mobile')

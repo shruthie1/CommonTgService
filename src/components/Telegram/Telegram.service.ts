@@ -11,7 +11,6 @@ import { parseError } from '../../utils/parseError';
 import { ChannelInfo } from './types/telegram-responses';
 import { connectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
-import { DialogsQueryDto } from './dto/metadata-operations.dto';
 import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
 import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
@@ -26,6 +25,7 @@ import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import isPermanentError from '../../utils/isPermanentError';
 import { SendTgMessageDto } from './dto/send-message.dto';
+import { getDialogs } from 'telegram/client/dialogs';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -482,20 +482,6 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.updateProfile(firstName, about);
     }
 
-    async getDialogs(mobile: string, query: DialogsQueryDto) {
-        const telegramClient = await connectionManager.getClient(mobile);
-        const { limit = 10, offsetId, archived = false } = query;
-        const chatData = [];
-        
-        // Use iterDialogs for memory-efficient iteration
-        for await (const chat of telegramClient.client.iterDialogs({ limit, offsetId, archived })) {
-            const chatEntity = await chat.entity.toJSON();
-            chatData.push(chatEntity);
-        }
-        
-        return chatData;
-    }
-
     async getConnectionStatus(): Promise<{
         activeConnections: number;
         rateLimited: number;
@@ -924,14 +910,15 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     // Extended Chat Functions
-    async getChats(
+    async getDialogs(
         mobile: string,
         options: {
             limit?: number;
             offsetDate?: number;
-            offsetId?: number;
-            offsetPeer?: string;
             folderId?: number;
+            archived?: boolean;
+            peerType?: 'all' | 'user' | 'group' | 'channel';
+            ignorePinned?: boolean;
             includePhotos?: boolean;
         }
     ) {

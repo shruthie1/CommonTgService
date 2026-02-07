@@ -2492,7 +2492,8 @@
     },
     "/telegram/dialogs/{mobile}": {
       "get": {
-        "operationId": "TelegramController_getAllDialogs",
+        "description": "Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.",
+        "operationId": "TelegramController_getDialogs",
         "parameters": [
           {
             "name": "mobile",
@@ -2507,19 +2508,30 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Number of dialogs to fetch",
+            "description": "Items per page (default 100)",
             "schema": {
-              "default": 500,
               "type": "number"
             }
           },
           {
-            "name": "offsetId",
+            "name": "offsetDate",
             "required": false,
             "in": "query",
-            "description": "Offset ID for pagination",
+            "description": "Cursor: Unix seconds from previous nextOffsetDate",
             "schema": {
-              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "folderId",
+            "required": false,
+            "in": "query",
+            "description": "0 = main, 1 = archived (overrides archived)",
+            "schema": {
+              "enum": [
+                0,
+                1
+              ],
               "type": "number"
             }
           },
@@ -2527,26 +2539,71 @@
             "name": "archived",
             "required": false,
             "in": "query",
-            "description": "Include archived chats",
+            "description": "Include archived folder (folder=1)",
             "schema": {
-              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "peerType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by type",
+            "schema": {
+              "enum": [
+                "all",
+                "user",
+                "group",
+                "channel"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "ignorePinned",
+            "required": false,
+            "in": "query",
+            "description": "Exclude pinned dialogs",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "includePhotos",
+            "required": false,
+            "in": "query",
+            "description": "Include base64 chat photos (default: false)",
+            "schema": {
               "type": "boolean"
             }
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "description": "Chat list (id, title, username, type, unreadCount, lastMessage, etc.)"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "nextOffsetDate": {
+                      "type": "number",
+                      "description": "Use as offsetDate for next page (Unix s)"
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "summary": "Get all dialogs",
+        "summary": "Get dialogs (paginated dialog list)",
         "tags": [
           "Telegram"
         ]
@@ -3773,87 +3830,6 @@
           }
         },
         "summary": "Check if 2FA password is set",
-        "tags": [
-          "Telegram"
-        ]
-      }
-    },
-    "/telegram/chats/{mobile}": {
-      "get": {
-        "operationId": "TelegramController_getChats",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "path",
-            "description": "Mobile number",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "offsetDate",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "offsetId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "offsetPeer",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "folderId",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "includePhotos",
-            "required": false,
-            "in": "query",
-            "description": "Include base64 chat photos (default: false, can be slow for large lists)",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "default": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get chats with advanced filtering",
         "tags": [
           "Telegram"
         ]
