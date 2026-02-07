@@ -106,7 +106,7 @@ async function getAllChats(ctx) {
     const chatData = [];
     let total = 0;
     for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
-        const chatEntity = await chat.entity.toJSON();
+        const chatEntity = chat.entity.toJSON();
         chatData.push(chatEntity);
         total++;
     }
@@ -543,7 +543,7 @@ async function getChats(ctx, options) {
             participantCount = entity.participantsCount ?? null;
         }
         let photoBase64 = null;
-        if (includePhotos && entity.photo && !(entity.photo instanceof telegram_1.Api.ChatPhotoEmpty)) {
+        if (includePhotos && 'photo' in entity && entity.photo && !(entity.photo instanceof telegram_1.Api.ChatPhotoEmpty)) {
             try {
                 const photoResult = await ctx.client.downloadProfilePhoto(entity, { isBig: false });
                 if (photoResult && Buffer.isBuffer(photoResult) && photoResult.length > 0) {

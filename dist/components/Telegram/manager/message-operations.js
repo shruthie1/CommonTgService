@@ -47,8 +47,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
     let forwardedCount = 0;
     let messages = [];
     do {
-        const fetched = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
-        messages = fetched;
+        const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
         const messageIds = messages.map((message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -56,7 +55,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
             }
             return undefined;
         }).filter((id) => id !== undefined);
-        ctx.logger.info(ctx.phoneNumber, messageIds);
+        ctx.logger.info(ctx.phoneNumber, `Message IDs: ${messageIds.join(', ')}`);
         if (messageIds.length > 0) {
             try {
                 await ctx.client.forwardMessages(toChatId, {
@@ -148,38 +147,42 @@ async function searchMessages(ctx, params) {
             ...(minId ? { minId } : {}),
         };
         ctx.logger.info(ctx.phoneNumber, type, queryFilter);
-        const searchQuery = {
-            q: query,
-            filter: filter,
-            ...queryFilter,
-            hash: (0, big_integer_1.default)(0),
-        };
         let messages = [];
         let count = 0;
-        ctx.logger.info(ctx.phoneNumber, 'Search Query: ', searchQuery);
         if (chatId) {
-            searchQuery['peer'] = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
+            const peer = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
             ctx.logger.info(ctx.phoneNumber, 'Performing search in chat: ', chatId);
-            const result = await ctx.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
+            const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
+                peer,
+                q: query,
+                filter,
+                ...queryFilter,
+                hash: (0, big_integer_1.default)(0),
+                minDate: 0,
+                maxDate: 0,
+                addOffset: 0,
+                offsetId: 0,
+            }));
             if (!('messages' in result))
                 return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result.count}`);
+            count = result.count || 0;
             messages = result.messages;
         }
         else {
             ctx.logger.info(ctx.phoneNumber, 'Performing global search');
             const result = await ctx.client.invoke(new telegram_1.Api.messages.SearchGlobal({
-                ...searchQuery,
+                q: query,
+                filter,
+                ...queryFilter,
                 offsetRate: 0,
                 offsetPeer: new telegram_1.Api.InputPeerEmpty(),
                 offsetId: 0,
-                usersOnly: true,
             }));
             if (!('messages' in result))
                 return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result.count}`);
+            count = result.count || 0;
             messages = result.messages;
         }
         if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {
