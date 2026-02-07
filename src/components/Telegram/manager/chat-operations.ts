@@ -880,10 +880,12 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
     const privateUserDialogs = Array.from(dialogs).filter(
         (d): d is Dialog => !!d.isUser && d.entity instanceof Api.User
     );
-    // Unique by chatId and exclude self (self is handled separately to avoid duplicate)
+    // Unique by chatId, exclude self and bots
     const seenIds = new Set<string>();
     const candidateChats = privateUserDialogs.filter((d) => {
-        const id = (d.entity as Api.User).id.toString();
+        const user = d.entity as Api.User;
+        if (user.bot) return false;
+        const id = user.id.toString();
         if (id === selfChatId || seenIds.has(id)) return false;
         seenIds.add(id);
         return true;
