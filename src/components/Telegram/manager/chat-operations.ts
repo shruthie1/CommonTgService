@@ -7,9 +7,10 @@ import {
     TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat,
     PerChatCallStats, CallLogEntry, CallLogChat, CallLogResult, EngagementWeights, SelfMessagesInfo, ChatSettingsUpdate,
     ChatFolderCreateOptions, ChatFolder, MessageItem, TopSenderInfo,
+    MediaInfo,
 } from './types';
 import {
-    downloadFileFromUrl, toISODate, resolveEntityToSenderInfo,
+    downloadFileFromUrl, toISODate, toTimeString, resolveEntityToSenderInfo,
     extractMediaInfo, getUserOnlineStatus, bufferToBase64DataUrl,
     getMediaType,
 } from './helpers';
@@ -105,10 +106,20 @@ export async function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeCh
     return chatData;
 }
 
+function formatReactions(reactions: Api.MessageReactions): { reaction: string; count: number }[] {
+    if (!reactions?.results?.length) return [];
+    return reactions.results.map((r: { reaction?: Api.TypeReaction; count?: number }) => {
+        let reaction = '';
+        if (r.reaction instanceof Api.ReactionEmoji) reaction = r.reaction.emoticon ?? '';
+        else if (r.reaction instanceof Api.ReactionCustomEmoji) reaction = `documentId:${(r.reaction as Api.ReactionCustomEmoji).documentId}`;
+        else if (r.reaction && typeof (r.reaction as any).emoticon === 'string') reaction = (r.reaction as any).emoticon;
+        return { reaction, count: r.count ?? 0 };
+    }).filter(x => (x.count ?? 0) > 0);
+}
+
 export async function getMessagesNew(ctx: TgContext, chatId: string, offset: number = 0, limit: number = 20): Promise<MessageItem[]> {
     const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit });
 
-    // Cache unique sender entities
     const senderIds = new Set<string>();
     for (const msg of messages) {
         const sid = msg.senderId?.toString();
@@ -124,18 +135,15 @@ export async function getMessagesNew(ctx: TgContext, chatId: string, offset: num
         }
     }));
 
-    return await Promise.all(messages.map(async (message: Api.Message) => {
+    const messageList = await Promise.all(messages.map(async (message: Api.Message) => {
         const senderId = message.senderId?.toString() || '';
-        const senderEntity = entityCache.get(senderId) || null;
 
-        // Extract media info with thumbnail
-        let media = null;
+        let media: MediaInfo | null = null;
         if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
             const thumbBuffer = await getThumbnailBuffer(ctx, message);
             media = extractMediaInfo(message, thumbBuffer);
         }
 
-        // Resolve forwarded-from info
         let forwardedFrom: string | null = null;
         if (message.fwdFrom) {
             const fwdId = message.fwdFrom.fromId;
@@ -153,21 +161,29 @@ export async function getMessagesNew(ctx: TgContext, chatId: string, offset: num
             }
         }
 
+        const msgDate = message.date ?? 0;
         return {
             id: message.id,
             text: message.message || '',
-            date: toISODate(message.date),
-            sender: resolveEntityToSenderInfo(senderEntity, senderId, message.out),
+            date: toISODate(msgDate),
+            time: toTimeString(msgDate),
+            dateUnix: msgDate,
+            senderId,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? toISODate(message.editDate) : null,
             isPinned: !!message.pinned,
             isForwarded: !!message.fwdFrom,
             forwardedFrom,
-            replyToMessageId: message.replyTo?.replyToMsgId || null,
+            replyToMessageId: message.replyTo?.replyToMsgId ?? null,
             groupedId: message.groupedId ? message.groupedId.toString() : null,
+            views: message.views ?? null,
+            forwards: message.forwards ?? null,
+            reactions: message.reactions ? formatReactions(message.reactions) : null,
         };
     }));
+
+    return messageList;
 }
 
 // ---- Self messages info ----

@@ -372,6 +372,14 @@ export function toISODate(timestamp: number): string {
     return new Date(timestamp * 1000).toISOString();
 }
 
+/** Time-only string for UI (e.g. "21:50") from Unix seconds */
+export function toTimeString(timestamp: number): string {
+    const d = new Date(timestamp * 1000);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export function bufferToBase64DataUrl(buffer: Buffer, mimeType: string = 'image/jpeg'): string {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
