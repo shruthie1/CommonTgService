@@ -146,11 +146,12 @@ __decorate([
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
         default: {
+            totalCalls: 0,
             outgoing: 0,
             incoming: 0,
             video: 0,
-            chatCallCounts: [],
-            totalCalls: 0,
+            audio: 0,
+            chats: [],
         },
     }),
     __metadata("design:type", Object)

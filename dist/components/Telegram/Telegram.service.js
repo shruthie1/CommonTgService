@@ -241,10 +241,10 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.joinChannel(channelId);
     }
-    async getCallLog(mobile, limit) {
+    async getCallLog(mobile, limit, includeCallLog) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
-            return await telegramClient.getCallLog(limit);
+            return await telegramClient.getCallLog(limit, { includeCallLog });
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting call log:', error);

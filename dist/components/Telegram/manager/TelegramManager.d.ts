@@ -4,7 +4,7 @@ import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
 import { IterDialogsParams } from 'telegram/client/dialogs';
-import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListItem, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, PerChatCallStats, ForwardResult } from './types';
+import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListItem, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult } from './types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
@@ -40,20 +40,9 @@ declare class TelegramManager {
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<import('./types').MessageItem[]>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
     getSelfMSgsInfo(limit?: number): Promise<SelfMessagesInfo>;
-    getCallLog(limit?: number): Promise<CallLogResult & {
-        chatCallCounts: Array<{
-            chatId: string;
-            phone?: string;
-            username?: string;
-            name: string;
-            count: number;
-            msgs?: number;
-            video?: number;
-            photo?: number;
-            peerType: 'user' | 'group' | 'channel';
-        }>;
-    }>;
-    getCallLogsInternal(maxCalls?: number): Promise<Record<string, PerChatCallStats>>;
+    getCallLog(limit?: number, options?: {
+        includeCallLog?: boolean;
+    }): Promise<CallLogResult>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
     getMessageStats(options: {
         chatId: string;

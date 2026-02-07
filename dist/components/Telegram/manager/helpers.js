@@ -50,7 +50,7 @@ function getSearchFilter(filter) {
         case 'chatPhoto': return new telegram_1.Api.InputMessagesFilterChatPhotos();
         case 'location': return new telegram_1.Api.InputMessagesFilterGeo();
         case 'contact': return new telegram_1.Api.InputMessagesFilterContacts();
-        case 'phoneCalls': return new telegram_1.Api.InputMessagesFilterPhoneCalls({ missed: false });
+        case 'phoneCalls': return new telegram_1.Api.InputMessagesFilterPhoneCalls({});
         default: return new telegram_1.Api.InputMessagesFilterEmpty();
     }
 }

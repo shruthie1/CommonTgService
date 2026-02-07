@@ -126,11 +126,8 @@ class TelegramManager {
     async getSelfMSgsInfo(limit = 500) {
         return chatOps.getSelfMSgsInfo(this.ctx, limit);
     }
-    async getCallLog(limit = 1000) {
-        return chatOps.getCallLog(this.ctx, limit);
-    }
-    async getCallLogsInternal(maxCalls = 300) {
-        return chatOps.getCallLogsInternal(this.ctx, maxCalls);
+    async getCallLog(limit = 1000, options) {
+        return chatOps.getCallLog(this.ctx, limit, options);
     }
     async getChatStatistics(chatId, period) {
         return chatOps.getChatStatistics(this.ctx, chatId, period);

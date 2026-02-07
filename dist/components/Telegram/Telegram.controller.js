@@ -178,11 +178,12 @@ let TelegramController = class TelegramController {
     async getConnectionStatus() {
         return { status: await this.telegramService.getConnectionStatus() };
     }
-    async getCallLogStats(mobile, limit) {
+    async getCallLogStats(mobile, limit, includeCallLog) {
         if (limit !== undefined && (limit < 1 || limit > 10000)) {
             throw new common_1.BadRequestException('Limit must be between 1 and 10000.');
         }
-        return this.telegramService.getCallLog(mobile, limit);
+        const includeCallLogBool = includeCallLog === 'true' || includeCallLog === '1';
+        return this.telegramService.getCallLog(mobile, limit, includeCallLogBool);
     }
     async addContactsBulk(mobile, contactsDto) {
         return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
@@ -925,19 +926,27 @@ __decorate([
         minimum: 1,
         maximum: 10000
     }),
+    (0, swagger_1.ApiQuery)({
+        name: 'includeCallLog',
+        required: false,
+        type: Boolean,
+        description: 'If true, each chat in the response includes a callLog array with per-call details (messageId, date, duration, video, outgoing). Default: false.',
+        example: false
+    }),
     (0, swagger_1.ApiResponse)({
         status: 200,
         description: 'Call log statistics retrieved successfully',
         schema: {
             type: 'object',
             properties: {
+                totalCalls: { type: 'number', description: 'Total number of calls' },
                 outgoing: { type: 'number', description: 'Total outgoing calls' },
                 incoming: { type: 'number', description: 'Total incoming calls' },
                 video: { type: 'number', description: 'Total video calls' },
                 audio: { type: 'number', description: 'Total audio calls' },
-                chatCallCounts: {
+                chats: {
                     type: 'array',
-                    description: 'Per-chat call statistics (only chats with >4 calls)',
+                    description: 'Per-chat call summary with identity, call stats, media counts, and call log',
                     items: {
                         type: 'object',
                         properties: {
@@ -945,16 +954,36 @@ __decorate([
                             phone: { type: 'string' },
                             username: { type: 'string' },
                             name: { type: 'string' },
-                            count: { type: 'number' },
-                            msgs: { type: 'number', description: 'Total messages in chat' },
-                            video: { type: 'number', description: 'Video messages count' },
-                            photo: { type: 'number', description: 'Photo messages count' },
-                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] }
+                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] },
+                            calls: {
+                                type: 'object',
+                                properties: {
+                                    total: { type: 'number' },
+                                    outgoing: { type: 'number' },
+                                    incoming: { type: 'number' },
+                                    video: { type: 'number' },
+                                    audio: { type: 'number' }
+                                }
+                            },
+                            totalMessages: { type: 'number' },
+                            photoCount: { type: 'number' },
+                            videoCount: { type: 'number' },
+                            callLog: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        messageId: { type: 'number' },
+                                        date: { type: 'number' },
+                                        durationSeconds: { type: 'number' },
+                                        video: { type: 'boolean' },
+                                        outgoing: { type: 'boolean' }
+                                    }
+                                }
+                            }
                         }
                     }
-                },
-                totalCalls: { type: 'number', description: 'Total number of calls analyzed' },
-                analyzedCalls: { type: 'number', description: 'Number of calls actually processed' }
+                }
             }
         }
     }),
@@ -962,8 +991,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('includeCallLog')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:paramtypes", [String, Number, String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getCallLogStats", null);
 __decorate([

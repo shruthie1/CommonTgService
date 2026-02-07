@@ -49,19 +49,7 @@ export declare class TelegramService implements OnModuleDestroy {
     forwardMediaToBot(mobile: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
-    getCallLog(mobile: string, limit?: number): Promise<import("./TelegramManager").CallLogResult & {
-        chatCallCounts: Array<{
-            chatId: string;
-            phone?: string;
-            username?: string;
-            name: string;
-            count: number;
-            msgs?: number;
-            video?: number;
-            photo?: number;
-            peerType: "user" | "group" | "channel";
-        }>;
-    }>;
+    getCallLog(mobile: string, limit?: number, includeCallLog?: boolean): Promise<import("./TelegramManager").CallLogResult>;
     getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
     getMe(mobile: string): Promise<Api.User>;

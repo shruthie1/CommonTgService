@@ -13,7 +13,6 @@ exports.getAllChats = getAllChats;
 exports.getMessagesNew = getMessagesNew;
 exports.getSelfMSgsInfo = getSelfMSgsInfo;
 exports.getCallLog = getCallLog;
-exports.getCallLogsInternal = getCallLogsInternal;
 exports.getChatStatistics = getChatStatistics;
 exports.getMessageStats = getMessageStats;
 exports.getChats = getChats;
@@ -23,11 +22,11 @@ exports.getChatFolders = getChatFolders;
 exports.getTopPrivateChats = getTopPrivateChats;
 exports.createBot = createBot;
 const telegram_1 = require("telegram");
-const big_integer_1 = __importDefault(require("big-integer"));
 const utils_1 = require("../../../utils");
 const helpers_1 = require("./helpers");
 const media_operations_1 = require("./media-operations");
 const uploads_1 = require("telegram/client/uploads");
+const big_integer_1 = __importDefault(require("big-integer"));
 async function safeGetEntityById(ctx, entityId) {
     if (!ctx.client)
         throw new Error('Client not initialized');
@@ -222,173 +221,253 @@ async function getSelfMSgsInfo(ctx, limit = 500) {
         throw error;
     }
 }
-async function getCallLog(ctx, limit = 1000) {
+async function getCallLog(ctx, limit = 1000, options) {
     if (!ctx.client)
         throw new Error('Client is not initialized');
+    const includeCallLog = options?.includeCallLog === true;
     try {
         const maxLimit = Math.min(Math.max(limit, 1), 10000);
-        const chunkSize = 100;
+        const chunkSize = 200;
         const callLogs = [];
         let offsetId = 0;
         while (callLogs.length < maxLimit) {
             const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
-                peer: new telegram_1.Api.InputPeerEmpty(), q: '',
-                filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({ missed: false }),
-                minDate: 0, maxDate: 0, offsetId, addOffset: 0,
-                limit: chunkSize, maxId: 0, minId: 0, hash: (0, big_integer_1.default)(0),
+                peer: new telegram_1.Api.InputPeerEmpty(),
+                q: '',
+                filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
+                minDate: 0,
+                maxDate: 0,
+                offsetId,
+                addOffset: 0,
+                limit: chunkSize,
+                maxId: 0,
+                minId: 0,
+                hash: (0, big_integer_1.default)(0),
             }));
             const messages = result.messages || [];
-            for (const m of messages) {
-                if (m instanceof telegram_1.Api.Message && m.action instanceof telegram_1.Api.MessageActionPhoneCall) {
-                    callLogs.push(m);
-                    if (callLogs.length >= maxLimit)
-                        break;
-                }
-            }
+            const batch = messages.filter((m) => (m instanceof telegram_1.Api.Message || m instanceof telegram_1.Api.MessageService) &&
+                m.action instanceof telegram_1.Api.MessageActionPhoneCall);
+            callLogs.push(...batch);
             if (messages.length < chunkSize)
                 break;
-            offsetId = messages[messages.length - 1]?.id ?? 0;
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage)
+                offsetId = lastMessage.id;
+            if (callLogs.length >= maxLimit)
+                break;
         }
-        const filteredResults = { outgoing: 0, incoming: 0, video: 0, audio: 0, totalCalls: 0 };
+        const stats = {
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            audio: 0,
+            totalCalls: 0,
+        };
         const rawChatStats = {};
-        for (const log of callLogs) {
-            const logAction = log.action;
-            filteredResults.totalCalls++;
-            if (log.out)
-                filteredResults.outgoing++;
+        for (const msg of callLogs) {
+            const action = msg.action;
+            if (!action)
+                continue;
+            stats.totalCalls++;
+            if (msg.out)
+                stats.outgoing++;
             else
-                filteredResults.incoming++;
-            if (logAction.video)
-                filteredResults.video++;
+                stats.incoming++;
+            if (action.video)
+                stats.video++;
             else
-                filteredResults.audio++;
+                stats.audio++;
             let chatId;
             let peerType = 'user';
-            if (log.peerId instanceof telegram_1.Api.PeerUser) {
-                chatId = log.peerId.userId.toString();
+            if (msg.peerId instanceof telegram_1.Api.PeerUser) {
+                chatId = msg.peerId.userId.toString();
                 peerType = 'user';
             }
-            else if (log.peerId instanceof telegram_1.Api.PeerChat) {
-                chatId = log.peerId.chatId.toString();
+            else if (msg.peerId instanceof telegram_1.Api.PeerChat) {
+                chatId = msg.peerId.chatId.toString();
                 peerType = 'group';
             }
-            else if (log.peerId instanceof telegram_1.Api.PeerChannel) {
-                chatId = log.peerId.channelId.toString();
+            else if (msg.peerId instanceof telegram_1.Api.PeerChannel) {
+                chatId = msg.peerId.channelId.toString();
                 peerType = 'channel';
             }
-            else
+            else {
                 continue;
-            if (!rawChatStats[chatId])
-                rawChatStats[chatId] = { count: 0, peerType };
-            rawChatStats[chatId].count++;
+            }
+            if (!rawChatStats[chatId]) {
+                rawChatStats[chatId] = { count: 0, outgoing: 0, incoming: 0, video: 0, peerType };
+            }
+            const r = rawChatStats[chatId];
+            r.count++;
+            if (msg.out)
+                r.outgoing++;
+            else
+                r.incoming++;
+            if (action.video)
+                r.video++;
+        }
+        let callLogByChat = {};
+        if (includeCallLog) {
+            for (const msg of callLogs) {
+                const action = msg.action;
+                if (!action)
+                    continue;
+                let chatId;
+                if (msg.peerId instanceof telegram_1.Api.PeerUser) {
+                    chatId = msg.peerId.userId.toString();
+                }
+                else if (msg.peerId instanceof telegram_1.Api.PeerChat) {
+                    chatId = msg.peerId.chatId.toString();
+                }
+                else if (msg.peerId instanceof telegram_1.Api.PeerChannel) {
+                    chatId = msg.peerId.channelId.toString();
+                }
+                else
+                    continue;
+                if (!callLogByChat[chatId])
+                    callLogByChat[chatId] = [];
+                callLogByChat[chatId].push({
+                    messageId: msg.id,
+                    date: msg.date ?? 0,
+                    durationSeconds: action.duration ?? 0,
+                    video: !!action.video,
+                    outgoing: !!msg.out,
+                });
+            }
+            for (const arr of Object.values(callLogByChat)) {
+                arr.sort((a, b) => b.date - a.date);
+            }
         }
         const uniqueChatIds = Object.keys(rawChatStats);
         const entityCache = new Map();
         await Promise.all(uniqueChatIds.map(async (chatId) => {
-            const peerType = rawChatStats[chatId].peerType;
             try {
-                const entity = await safeGetEntityById(ctx, chatId);
+                const entity = await ctx.client.getEntity(chatId);
                 if (entity instanceof telegram_1.Api.User) {
-                    entityCache.set(chatId, { phone: entity.phone, username: entity.username, name: `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || 'Unknown', peerType: 'user' });
+                    entityCache.set(chatId, {
+                        phone: entity.phone,
+                        username: entity.username ?? undefined,
+                        name: [entity.firstName, entity.lastName].filter(Boolean).join(' ').trim() || 'Deleted Account',
+                        peerType: 'user',
+                    });
                 }
                 else if (entity instanceof telegram_1.Api.Chat) {
-                    entityCache.set(chatId, { name: entity.title || 'Unknown Group', peerType: 'group' });
+                    entityCache.set(chatId, {
+                        name: entity.title || 'Unknown Group',
+                        peerType: 'group',
+                    });
                 }
                 else if (entity instanceof telegram_1.Api.Channel) {
-                    entityCache.set(chatId, { username: entity.username, name: entity.title || 'Unknown Channel', peerType: 'channel' });
+                    entityCache.set(chatId, {
+                        username: entity.username ?? undefined,
+                        name: entity.title || 'Unknown Channel',
+                        peerType: 'channel',
+                    });
                 }
                 else {
-                    entityCache.set(chatId, { name: 'Unknown', peerType });
+                    entityCache.set(chatId, { name: 'Unknown', peerType: 'user' });
                 }
             }
-            catch (e) {
-                ctx.logger.warn(ctx.phoneNumber, `Failed to get entity for chatId ${chatId}:`, e);
-                entityCache.set(chatId, { name: 'Unknown', peerType });
+            catch (err) {
+                ctx.logger?.warn?.(`Failed to get entity ${chatId}:`, err);
+                entityCache.set(chatId, { name: 'Unknown / Restricted', peerType: 'user' });
             }
         }));
-        const chatCallCountsWithDetails = {};
+        const chats = [];
         for (const chatId of uniqueChatIds) {
-            const cached = entityCache.get(chatId);
-            chatCallCountsWithDetails[chatId] = { ...cached, count: rawChatStats[chatId].count };
-        }
-        const filteredChatCallCounts = [];
-        const chatsWithManyCalls = uniqueChatIds.filter(id => rawChatStats[id].count > 4);
-        await Promise.all(chatsWithManyCalls.map(async (chatId) => {
-            const details = chatCallCountsWithDetails[chatId];
+            const base = entityCache.get(chatId);
+            const r = rawChatStats[chatId];
+            const callLog = includeCallLog ? (callLogByChat[chatId] ?? []) : undefined;
+            let totalMessages;
+            let photoCount = 0;
+            let videoCount = 0;
             try {
-                const [photosList, videosList, msgCount] = await Promise.all([
-                    ctx.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
-                    ctx.client.getMessages(chatId, { filter: new telegram_1.Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
-                    ctx.client.getMessages(chatId, { limit: 3 }).catch(() => ({ total: 0 })),
+                const inputPeer = await ctx.client.getInputEntity(chatId);
+                const [photosRes, videosRes, historyRes] = await Promise.all([
+                    ctx.client.invoke(new telegram_1.Api.messages.Search({
+                        peer: inputPeer,
+                        q: "",
+                        filter: new telegram_1.Api.InputMessagesFilterPhotos(),
+                        minDate: 0,
+                        maxDate: 0,
+                        offsetId: 0,
+                        addOffset: 0,
+                        limit: 1,
+                        maxId: 0,
+                        minId: 0,
+                    })).catch(() => ({ count: 0 })),
+                    ctx.client.invoke(new telegram_1.Api.messages.Search({
+                        peer: inputPeer,
+                        q: "",
+                        filter: new telegram_1.Api.InputMessagesFilterVideo(),
+                        minDate: 0,
+                        maxDate: 0,
+                        offsetId: 0,
+                        addOffset: 0,
+                        limit: 1,
+                        maxId: 0,
+                        minId: 0,
+                    })).catch(() => ({ count: 0 })),
+                    ctx.client.invoke(new telegram_1.Api.messages.GetHistory({
+                        peer: inputPeer,
+                        offsetId: 0,
+                        offsetDate: 0,
+                        addOffset: 0,
+                        limit: 1,
+                        maxId: 0,
+                        minId: 0,
+                        hash: (0, big_integer_1.default)(0),
+                    })).catch(() => ({ messages: [] })),
                 ]);
-                filteredChatCallCounts.push({
-                    chatId, ...details,
-                    msgs: msgCount.total,
-                    video: videosList?.total ?? 0,
-                    photo: photosList?.total ?? 0,
-                });
+                if (historyRes && 'count' in historyRes)
+                    totalMessages = historyRes.count;
+                photoCount = photosRes.count ?? 0;
+                videoCount = videosRes.count ?? 0;
             }
-            catch (msgError) {
-                ctx.logger.warn(ctx.phoneNumber, `Failed to get messages for chatId ${chatId}:`, msgError);
-                filteredChatCallCounts.push({ chatId, ...details });
+            catch (e) {
+                ctx.logger?.warn?.(`Failed to fetch media/total for ${chatId}:`, e);
             }
-        }));
-        for (const [chatId, details] of Object.entries(chatCallCountsWithDetails)) {
-            if (details.count <= 4)
-                filteredChatCallCounts.push({ chatId, ...details });
+            chats.push({
+                chatId,
+                phone: base.phone,
+                username: base.username,
+                name: base.name,
+                peerType: base.peerType,
+                calls: {
+                    total: r.count,
+                    outgoing: r.outgoing,
+                    incoming: r.incoming,
+                    video: r.video,
+                    audio: r.count - r.video,
+                },
+                totalMessages,
+                photoCount,
+                videoCount,
+                ...(includeCallLog && callLog !== undefined ? { callLog } : {}),
+            });
         }
-        filteredChatCallCounts.sort((a, b) => b.count - a.count);
-        ctx.logger.info(ctx.phoneNumber, 'CallLog completed:', {
-            totalCalls: filteredResults.totalCalls, analyzedCalls: filteredResults.totalCalls,
-            outgoing: filteredResults.outgoing, incoming: filteredResults.incoming,
-            video: filteredResults.video, audio: filteredResults.audio,
-            chatCount: filteredChatCallCounts.length,
+        chats.sort((a, b) => b.calls.total - a.calls.total);
+        ctx.logger?.info?.(ctx.phoneNumber, 'Call log summary', {
+            totalCalls: stats.totalCalls,
+            outgoing: stats.outgoing,
+            incoming: stats.incoming,
+            video: stats.video,
+            audio: stats.audio,
+            uniqueChats: chats.length,
         });
-        return { ...filteredResults, chatCallCounts: filteredChatCallCounts, analyzedCalls: filteredResults.totalCalls };
+        return {
+            totalCalls: stats.totalCalls,
+            outgoing: stats.outgoing,
+            incoming: stats.incoming,
+            video: stats.video,
+            audio: stats.audio,
+            chats,
+        };
     }
     catch (error) {
-        ctx.logger.error(ctx.phoneNumber, 'Error in getCallLog:', error);
+        ctx.logger?.error?.(ctx.phoneNumber, 'getCallLog failed:', error);
         throw error;
     }
-}
-async function getCallLogsInternal(ctx, maxCalls = 300) {
-    const finalResult = {};
-    const chunkSize = 100;
-    let offsetId = 0;
-    let totalFetched = 0;
-    while (totalFetched < maxCalls) {
-        const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
-            peer: new telegram_1.Api.InputPeerEmpty(), q: '',
-            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
-            minDate: 0, maxDate: 0, offsetId, addOffset: 0,
-            limit: chunkSize, maxId: 0, minId: 0, hash: (0, big_integer_1.default)(0),
-        }));
-        const messages = result.messages || [];
-        if (messages.length === 0)
-            break;
-        for (const log of messages) {
-            if (!(log instanceof telegram_1.Api.Message) || !(log.action instanceof telegram_1.Api.MessageActionPhoneCall))
-                continue;
-            if (!log.peerId || !(log.peerId instanceof telegram_1.Api.PeerUser))
-                continue;
-            const chatId = log.peerId.userId.toString();
-            if (!finalResult[chatId])
-                finalResult[chatId] = { outgoing: 0, incoming: 0, video: 0, total: 0 };
-            const stats = finalResult[chatId];
-            stats.total++;
-            if (log.out)
-                stats.outgoing++;
-            else
-                stats.incoming++;
-            if (log.action.video)
-                stats.video++;
-        }
-        totalFetched += messages.length;
-        if (messages.length < chunkSize)
-            break;
-        offsetId = messages[messages.length - 1].id ?? 0;
-    }
-    return finalResult;
 }
 async function getChatStatistics(ctx, chatId, period) {
     if (!ctx.client)
@@ -681,7 +760,7 @@ async function analyzeChatEngagement(ctx, chatId, user, weights, now, dialog, ca
         textMessages: lastMessage.total ?? 0,
     };
     return {
-        chatId: chatId === 'me' ? 'me' : user.id.toString(),
+        chatId: user.id.toString(),
         username: user.username,
         firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
         lastName: user.lastName,
@@ -702,33 +781,42 @@ async function getTopPrivateChats(ctx, limit = 10) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const clampedLimit = Math.max(1, Math.min(50, limit || 10));
-    ctx.logger.info(ctx.phoneNumber, `Starting optimized getTopPrivateChats analysis with limit=${clampedLimit}...`);
+    ctx.logger.info(ctx.phoneNumber, `Starting getTopPrivateChats (private + self only, unique), limit=${clampedLimit}...`);
     const startTime = Date.now();
     const now = Date.now();
     const weights = {
         videoCall: 2, incomingCall: 4, outgoingCall: 1,
         sharedVideo: 12, sharedPhoto: 10, textMessage: 1, unreadMessages: 1,
     };
-    const [me, callLogs, dialogs] = await Promise.all([
+    const [me, callLogResult, dialogs] = await Promise.all([
         getMe(ctx).catch(() => null),
-        getCallLogsInternal(ctx, 300).catch(() => ({})),
+        getCallLog(ctx, 300).catch(() => ({ totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0, chats: [] })),
         ctx.client.getDialogs({ limit: 350 }),
     ]);
     if (!me)
         throw new Error('Failed to fetch self userInfo');
-    const candidateChats = Array.from(dialogs).map(dialog => dialog.isUser ? dialog : null).filter(Boolean);
+    const selfChatId = me.id.toString();
+    const privateUserDialogs = Array.from(dialogs).filter((d) => !!d.isUser && d.entity instanceof telegram_1.Api.User);
+    const seenIds = new Set();
+    const candidateChats = privateUserDialogs.filter((d) => {
+        const id = d.entity.id.toString();
+        if (id === selfChatId || seenIds.has(id))
+            return false;
+        seenIds.add(id);
+        return true;
+    });
+    const callLogsByChat = Object.fromEntries((callLogResult.chats ?? []).map(c => [c.chatId, c.calls]));
     let selfChatData = null;
     try {
-        const selfChatId = me.id.toString();
-        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, now, undefined, callLogs[selfChatId]);
+        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, now, undefined, callLogsByChat[selfChatId]);
         if (selfChatData)
-            ctx.logger.info(ctx.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
+            ctx.logger.info(ctx.phoneNumber, `Self chat - Score: ${selfChatData.interactionScore}`);
     }
     catch (e) {
         ctx.logger.warn(ctx.phoneNumber, 'Error processing self chat:', e);
     }
     const topCandidates = candidateChats.slice(0, Math.min(clampedLimit * 4, 49));
-    ctx.logger.info(ctx.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
+    ctx.logger.info(ctx.phoneNumber, `Analyzing ${topCandidates.length} unique private chats...`);
     const chatStats = [];
     const batchSize = 10;
     for (let i = 0; i < topCandidates.length; i += batchSize) {
@@ -737,8 +825,7 @@ async function getTopPrivateChats(ctx, limit = 10) {
             const user = candidate.entity;
             const chatId = user.id.toString();
             try {
-                ctx.logger.info(ctx.phoneNumber, `Analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}...`);
-                return await analyzeChatEngagement(ctx, chatId, user, weights, now, candidate, callLogs[chatId]);
+                return await analyzeChatEngagement(ctx, chatId, user, weights, now, candidate, callLogsByChat[chatId]);
             }
             catch (error) {
                 ctx.logger.warn(ctx.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
@@ -747,14 +834,19 @@ async function getTopPrivateChats(ctx, limit = 10) {
         }));
         chatStats.push(...batchResults.filter((r) => r !== null));
     }
-    let topChats = chatStats.sort((a, b) => b.interactionScore - a.interactionScore).slice(0, clampedLimit);
-    if (selfChatData) {
-        topChats = topChats.filter(chat => chat.chatId !== 'me' && chat.chatId !== me.id.toString());
-        topChats.unshift(selfChatData);
-        if (topChats.length > clampedLimit)
-            topChats = topChats.slice(0, clampedLimit);
+    const allChats = [...(selfChatData ? [selfChatData] : []), ...chatStats];
+    const byScore = allChats.sort((a, b) => b.interactionScore - a.interactionScore);
+    const uniqueByChatId = [];
+    const resultIds = new Set();
+    for (const chat of byScore) {
+        const id = chat.chatId;
+        if (resultIds.has(id))
+            continue;
+        resultIds.add(id);
+        uniqueByChatId.push(chat);
     }
-    ctx.logger.info(ctx.phoneNumber, `getTopPrivateChats completed in ${Date.now() - startTime}ms. Found ${topChats.length} results.`);
+    const topChats = uniqueByChatId.slice(0, clampedLimit);
+    ctx.logger.info(ctx.phoneNumber, `getTopPrivateChats completed in ${Date.now() - startTime}ms. Returning ${topChats.length} unique chats (sorted by score).`);
     return topChats;
 }
 async function createBot(ctx, options) {

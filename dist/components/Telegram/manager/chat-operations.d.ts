@@ -2,7 +2,7 @@ import { Api } from 'telegram';
 import { TotalList } from 'telegram/Helpers';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
-import { TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat, PerChatCallStats, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem } from './types';
+import { TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat, CallLogResult, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem } from './types';
 import { Dialog } from 'telegram/tl/custom/dialog';
 export declare function safeGetEntityById(ctx: TgContext, entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
 export declare function getMe(ctx: TgContext): Promise<Api.User>;
@@ -15,26 +15,9 @@ export declare function getDialogs(ctx: TgContext, params: IterDialogsParams): P
 export declare function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeChat['toJSON']>[]>;
 export declare function getMessagesNew(ctx: TgContext, chatId: string, offset?: number, limit?: number): Promise<MessageItem[]>;
 export declare function getSelfMSgsInfo(ctx: TgContext, limit?: number): Promise<SelfMessagesInfo>;
-export declare function getCallLog(ctx: TgContext, limit?: number): Promise<{
-    outgoing: number;
-    incoming: number;
-    video: number;
-    audio: number;
-    chatCallCounts: Array<{
-        chatId: string;
-        phone?: string;
-        username?: string;
-        name: string;
-        count: number;
-        msgs?: number;
-        video?: number;
-        photo?: number;
-        peerType: 'user' | 'group' | 'channel';
-    }>;
-    totalCalls: number;
-    analyzedCalls: number;
-}>;
-export declare function getCallLogsInternal(ctx: TgContext, maxCalls?: number): Promise<Record<string, PerChatCallStats>>;
+export declare function getCallLog(ctx: TgContext, limit?: number, options?: {
+    includeCallLog?: boolean;
+}): Promise<CallLogResult>;
 export declare function getChatStatistics(ctx: TgContext, chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
 export declare function getMessageStats(ctx: TgContext, options: {
     chatId: string;

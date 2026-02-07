@@ -23,11 +23,12 @@ export declare class CreateUserDto {
     ownVideoCount: number;
     contacts: number;
     calls: {
+        totalCalls: number;
         outgoing: number;
         incoming: number;
         video: number;
-        chatCallCounts: any[];
-        totalCalls: number;
+        audio: number;
+        chats: any[];
     };
     recentUsers: any[];
 }
