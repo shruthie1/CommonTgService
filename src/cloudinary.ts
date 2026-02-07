@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import AdmZip from 'adm-zip';
 import { parseError } from './utils/parseError';
 import { fetchWithTimeout } from './utils/fetchWithTimeout';
+
 export class CloudinaryService {
     static instance;
     resources = new Map();
