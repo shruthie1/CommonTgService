@@ -427,8 +427,16 @@ let TelegramController = class TelegramController {
     async sendMessageWithInlineButton(mobile, chatId, message, url) {
         return this.telegramService.sendInlineMessage(mobile, chatId, message, url);
     }
-    async getAllDialogs(mobile, limit = 500, offsetId = 0, archived = false) {
-        return this.telegramService.getDialogs(mobile, { limit, archived, offsetId });
+    async getDialogs(mobile, limit, offsetDate, folderId, archived, peerType, ignorePinned, includePhotos) {
+        return this.telegramService.getDialogs(mobile, {
+            limit,
+            offsetDate,
+            folderId,
+            archived: archived === true,
+            peerType: peerType,
+            ignorePinned: ignorePinned === true,
+            includePhotos,
+        });
     }
     async getLastActiveTime(mobile) {
         return this.telegramService.getLastActiveTime(mobile);
@@ -564,9 +572,6 @@ let TelegramController = class TelegramController {
     }
     async hasPassword(mobile) {
         return this.telegramService.hasPassword(mobile);
-    }
-    async getChats(mobile, limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos) {
-        return this.telegramService.getChats(mobile, { limit, offsetDate, offsetId, offsetPeer, folderId, includePhotos });
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -1398,20 +1403,41 @@ __decorate([
 ], TelegramController.prototype, "sendMessageWithInlineButton", null);
 __decorate([
     (0, common_1.Get)('dialogs/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all dialogs' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get dialogs (paginated dialog list)',
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
+    }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of dialogs to fetch', default: 500 }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number, description: 'Offset ID for pagination', default: 0 }),
-    (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived chats', default: false }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number, description: 'Cursor: Unix seconds from previous nextOffsetDate' }),
+    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number, enum: [0, 1], description: '0 = main, 1 = archived (overrides archived)' }),
+    (0, swagger_1.ApiQuery)({ name: 'archived', required: false, type: Boolean, description: 'Include archived folder (folder=1)' }),
+    (0, swagger_1.ApiQuery)({ name: 'peerType', required: false, enum: ['all', 'user', 'group', 'channel'], description: 'Filter by type' }),
+    (0, swagger_1.ApiQuery)({ name: 'ignorePinned', required: false, type: Boolean, description: 'Exclude pinned dialogs' }),
+    (0, swagger_1.ApiQuery)({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false)' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        schema: {
+            type: 'object',
+            properties: {
+                items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
+                hasMore: { type: 'boolean' },
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
+            },
+        },
+    }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('offsetId')),
-    __param(3, (0, common_1.Query)('archived')),
+    __param(2, (0, common_1.Query)('offsetDate')),
+    __param(3, (0, common_1.Query)('folderId')),
+    __param(4, (0, common_1.Query)('archived')),
+    __param(5, (0, common_1.Query)('peerType')),
+    __param(6, (0, common_1.Query)('ignorePinned')),
+    __param(7, (0, common_1.Query)('includePhotos')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number, Boolean]),
+    __metadata("design:paramtypes", [String, Number, Number, Number, Boolean, String, Boolean, Boolean]),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getAllDialogs", null);
+], TelegramController.prototype, "getDialogs", null);
 __decorate([
     (0, common_1.Get)('last-active/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get last active time' }),
@@ -1785,28 +1811,6 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "hasPassword", null);
-__decorate([
-    (0, common_1.Get)('chats/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chats with advanced filtering' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetDate', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'offsetPeer', required: false, type: String }),
-    (0, swagger_1.ApiQuery)({ name: 'folderId', required: false, type: Number }),
-    (0, swagger_1.ApiQuery)({ name: 'includePhotos', required: false, type: Boolean, description: 'Include base64 chat photos (default: false, can be slow for large lists)' }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
-    __param(0, (0, common_1.Param)('mobile')),
-    __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('offsetDate')),
-    __param(3, (0, common_1.Query)('offsetId')),
-    __param(4, (0, common_1.Query)('offsetPeer')),
-    __param(5, (0, common_1.Query)('folderId')),
-    __param(6, (0, common_1.Query)('includePhotos')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, Number, Number, String, Number, Boolean]),
-    __metadata("design:returntype", Promise)
-], TelegramController.prototype, "getChats", null);
 __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),

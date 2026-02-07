@@ -80,7 +80,7 @@ export declare class TelegramController {
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, deleteHistoryDto: DeleteHistoryDto): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
-    getAllDialogs(mobile: string, limit?: number, offsetId?: number, archived?: boolean): Promise<any[]>;
+    getDialogs(mobile: string, limit?: number, offsetDate?: number, folderId?: number, archived?: boolean, peerType?: string, ignorePinned?: boolean, includePhotos?: boolean): Promise<import("./manager").ChatListResult>;
     getLastActiveTime(mobile: string): Promise<string>;
     createGroupWithOptions(mobile: string, options: createGroupDto): Promise<import("telegram").Api.TypeUpdates>;
     updateGroupSettings(mobile: string, settings: GroupSettingsDto): Promise<boolean>;
@@ -154,7 +154,6 @@ export declare class TelegramController {
         scheduleDate?: number;
     }): Promise<import("telegram").Api.TypeUpdates>;
     hasPassword(mobile: string): Promise<boolean>;
-    getChats(mobile: string, limit?: number, offsetDate?: number, offsetId?: number, offsetPeer?: string, folderId?: number, includePhotos?: boolean): Promise<import("./manager").ChatListItem[]>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
         chatId: string;

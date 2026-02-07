@@ -197,6 +197,11 @@ export interface ChatListItem {
     isMuted: boolean;
     participantCount: number | null;
 }
+export interface ChatListResult {
+    items: ChatListItem[];
+    hasMore: boolean;
+    nextOffsetDate?: number;
+}
 export interface GroupMember {
     tgId: bigInt.BigInteger;
     name: string;

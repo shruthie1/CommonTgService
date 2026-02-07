@@ -8,7 +8,6 @@ exports.getMe = getMe;
 exports.getchatId = getchatId;
 exports.getEntity = getEntity;
 exports.getMessages = getMessages;
-exports.getDialogs = getDialogs;
 exports.getAllChats = getAllChats;
 exports.getMessagesNew = getMessagesNew;
 exports.getSelfMSgsInfo = getSelfMSgsInfo;
@@ -80,24 +79,6 @@ async function getEntity(ctx, entity) {
 }
 async function getMessages(ctx, entityLike, limit = 8) {
     return await ctx.client.getMessages(entityLike, { limit });
-}
-async function getDialogs(ctx, params) {
-    if (!ctx.client)
-        throw new Error('Client is not initialized');
-    try {
-        const chats = [];
-        let total = 0;
-        for await (const dialog of ctx.client.iterDialogs(params)) {
-            chats.push(dialog);
-            total++;
-        }
-        ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
-        return Object.assign(chats, { total });
-    }
-    catch (error) {
-        ctx.logger.error(ctx.phoneNumber, 'Error getting dialogs:', error);
-        throw error;
-    }
 }
 async function getAllChats(ctx) {
     if (!ctx.client)
@@ -600,14 +581,28 @@ async function getChats(ctx, options) {
     const dialogs = [];
     const limit = options.limit || 100;
     const includePhotos = options.includePhotos || false;
-    let count = 0;
-    for await (const dialog of ctx.client.iterDialogs({ ...options, limit })) {
-        dialogs.push(dialog);
-        count++;
-        if (count >= limit)
+    const peerType = options.peerType ?? 'all';
+    const folder = options.folderId !== undefined ? options.folderId : (options.archived ? 1 : 0);
+    const requestLimit = peerType === 'all' ? limit : Math.min(limit * 3, 100);
+    const params = { limit: requestLimit, folder, ignorePinned: options.ignorePinned ?? false };
+    if (options.offsetDate != null && options.offsetDate > 0)
+        params.offsetDate = options.offsetDate;
+    const me = await ctx.client.getMe();
+    for await (const dialog of ctx.client.iterDialogs(params)) {
+        const entity = dialog.entity;
+        const match = peerType === 'all' ||
+            (peerType === 'user' && entity instanceof telegram_1.Api.User) ||
+            (peerType === 'group' && entity instanceof telegram_1.Api.Chat) ||
+            (peerType === 'channel' && entity instanceof telegram_1.Api.Channel);
+        if (match)
+            dialogs.push(dialog);
+        if (dialogs.length >= limit)
             break;
     }
-    return Promise.all(dialogs.map(async (dialog) => {
+    const last = dialogs[dialogs.length - 1];
+    const hasMore = dialogs.length === limit;
+    const nextOffsetDate = hasMore && last?.message?.date != null ? last.message.date : undefined;
+    const items = await Promise.all(dialogs.map(async (dialog) => {
         const entity = dialog.entity;
         const type = entity instanceof telegram_1.Api.User ? 'user' :
             entity instanceof telegram_1.Api.Chat ? 'group' :
@@ -615,15 +610,27 @@ async function getChats(ctx, options) {
         let senderName = null;
         if (dialog.message?.senderId) {
             try {
-                const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
-                if (senderEntity instanceof telegram_1.Api.User) {
-                    senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || null;
+                if (dialog.message.senderId.toString() === me.id.toString()) {
+                    senderName = `${me.firstName || ''} ${me.lastName || ''} (Self)`.trim();
                 }
-                else if (senderEntity instanceof telegram_1.Api.Channel) {
-                    senderName = senderEntity.title || null;
+                else {
+                    if (type === 'user') {
+                        const senderEntity = await safeGetEntityById(ctx, dialog.message.senderId.toString());
+                        if (senderEntity instanceof telegram_1.Api.User) {
+                            senderName = `${senderEntity.firstName || ''} ${senderEntity.lastName || ''}`.trim() || senderEntity.username || null;
+                        }
+                        else {
+                            senderName = "Unknown";
+                        }
+                    }
+                    else {
+                        senderName = dialog.title || "Unknown Channel User";
+                    }
                 }
             }
-            catch { }
+            catch {
+                senderName = "Unknown";
+            }
         }
         let onlineStatus = null;
         let lastSeen = null;
@@ -653,7 +660,7 @@ async function getChats(ctx, options) {
         }
         return {
             id: entity.id.toString(),
-            title: 'title' in entity ? entity.title : null,
+            title: entity.id.toString() === me.id.toString() ? `${dialog.title} (Self)` : dialog.title ? dialog.title : 'title' in entity ? entity.title : null,
             username: 'username' in entity ? entity.username : null,
             type,
             unreadCount: dialog.unreadCount,
@@ -670,6 +677,7 @@ async function getChats(ctx, options) {
             participantCount,
         };
     }));
+    return { items, hasMore, ...(nextOffsetDate != null && { nextOffsetDate }) };
 }
 async function updateChatSettings(ctx, settings) {
     if (!ctx.client)

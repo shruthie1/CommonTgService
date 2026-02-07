@@ -424,16 +424,6 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.updateProfile(firstName, about);
     }
-    async getDialogs(mobile, query) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        const { limit = 10, offsetId, archived = false } = query;
-        const chatData = [];
-        for await (const chat of telegramClient.client.iterDialogs({ limit, offsetId, archived })) {
-            const chatEntity = await chat.entity.toJSON();
-            chatData.push(chatEntity);
-        }
-        return chatData;
-    }
     async getConnectionStatus() {
         const status = {
             activeConnections: connection_manager_1.connectionManager.getActiveConnectionCount(),
@@ -661,7 +651,7 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Get contacts list');
         return await telegramClient.getContacts();
     }
-    async getChats(mobile, options) {
+    async getDialogs(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get chats', options);
         return await telegramClient.getChats(options);

@@ -111,9 +111,6 @@ class TelegramManager {
     async getMessages(entityLike, limit = 8) {
         return chatOps.getMessages(this.ctx, entityLike, limit);
     }
-    async getDialogs(params) {
-        return chatOps.getDialogs(this.ctx, params);
-    }
     async getAllChats() {
         return chatOps.getAllChats(this.ctx);
     }

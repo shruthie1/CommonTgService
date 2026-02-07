@@ -8,10 +8,11 @@ export declare class MediaMetadataDto {
     offset?: number;
     limit?: number;
 }
-export declare class DialogsQueryDto {
-    limit: number;
-    offsetId?: number;
-    archived?: boolean;
+export declare enum DialogsPeerType {
+    ALL = "all",
+    USER = "user",
+    GROUP = "group",
+    CHANNEL = "channel"
 }
 export declare class BulkMessageOperationDto {
     fromChatId: string;

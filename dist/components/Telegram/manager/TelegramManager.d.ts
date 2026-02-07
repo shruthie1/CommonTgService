@@ -3,8 +3,7 @@ import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
-import { IterDialogsParams } from 'telegram/client/dialogs';
-import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListItem, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem } from './types';
+import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem } from './types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
@@ -33,9 +32,6 @@ declare class TelegramManager {
     getchatId(username: string): Promise<Api.TypeInputPeer>;
     getEntity(entity: EntityLike): Promise<Api.User | Api.Chat | Api.Channel>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<import('telegram/tl/custom/dialog').Dialog[] & {
-        total: number;
-    }>;
     getAllChats(): ReturnType<typeof chatOps.getAllChats>;
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<MessageItem[]>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
@@ -52,11 +48,12 @@ declare class TelegramManager {
     getChats(options: {
         limit?: number;
         offsetDate?: number;
-        offsetId?: number;
-        offsetPeer?: string;
         folderId?: number;
+        archived?: boolean;
+        peerType?: 'all' | 'user' | 'group' | 'channel';
+        ignorePinned?: boolean;
         includePhotos?: boolean;
-    }): Promise<ChatListItem[]>;
+    }): Promise<ChatListResult>;
     updateChatSettings(settings: ChatSettingsUpdate): Promise<boolean>;
     getTopPrivateChats(limit?: number): Promise<TopPrivateChat[]>;
     createChatFolder(options: ChatFolderCreateOptions): Promise<{
