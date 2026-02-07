@@ -25,7 +25,7 @@ async function createClient(ctx, session, handler = true, handlerFn) {
         await (0, withTimeout_1.withTimeout)(async () => {
             client = new telegram_1.TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(Logger_1.LogLevel.ERROR);
-            client._errorHandler = (error) => { handleClientError(ctx, error); };
+            client._errorHandler = async (error) => { handleClientError(ctx, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {

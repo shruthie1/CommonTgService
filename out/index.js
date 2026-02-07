@@ -7460,7 +7460,7 @@ async function getAllChats(ctx) {
     const chatData = [];
     let total = 0;
     for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
-        const chatEntity = await chat.entity.toJSON();
+        const chatEntity = chat.entity.toJSON();
         chatData.push(chatEntity);
         total++;
     }
@@ -7897,7 +7897,7 @@ async function getChats(ctx, options) {
             participantCount = entity.participantsCount ?? null;
         }
         let photoBase64 = null;
-        if (includePhotos && entity.photo && !(entity.photo instanceof telegram_1.Api.ChatPhotoEmpty)) {
+        if (includePhotos && 'photo' in entity && entity.photo && !(entity.photo instanceof telegram_1.Api.ChatPhotoEmpty)) {
             try {
                 const photoResult = await ctx.client.downloadProfilePhoto(entity, { isBig: false });
                 if (photoResult && Buffer.isBuffer(photoResult) && photoResult.length > 0) {
@@ -8219,7 +8219,7 @@ async function createClient(ctx, session, handler = true, handlerFn) {
         await (0, withTimeout_1.withTimeout)(async () => {
             client = new telegram_1.TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(Logger_1.LogLevel.ERROR);
-            client._errorHandler = (error) => { handleClientError(ctx, error); };
+            client._errorHandler = async (error) => { handleClientError(ctx, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {
@@ -8450,7 +8450,7 @@ async function exportContacts(ctx, format, includeBlocked = false) {
             lastName: contact.lastName || '',
             phone: contact.phone || '',
             blocked: blockedContacts && 'peerBlocked' in blockedContacts
-                ? (blockedContacts.blocked || []).some((p) => ('peerId' in p && p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
+                ? (blockedContacts.blocked || []).some((p) => (p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
                 : false,
         }));
         return (0, helpers_1.generateCSV)(csvData);
@@ -9617,8 +9617,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
     let forwardedCount = 0;
     let messages = [];
     do {
-        const fetched = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
-        messages = fetched;
+        const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
         const messageIds = messages.map((message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -9626,7 +9625,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
             }
             return undefined;
         }).filter((id) => id !== undefined);
-        ctx.logger.info(ctx.phoneNumber, messageIds);
+        ctx.logger.info(ctx.phoneNumber, `Message IDs: ${messageIds.join(', ')}`);
         if (messageIds.length > 0) {
             try {
                 await ctx.client.forwardMessages(toChatId, {
@@ -9718,38 +9717,42 @@ async function searchMessages(ctx, params) {
             ...(minId ? { minId } : {}),
         };
         ctx.logger.info(ctx.phoneNumber, type, queryFilter);
-        const searchQuery = {
-            q: query,
-            filter: filter,
-            ...queryFilter,
-            hash: (0, big_integer_1.default)(0),
-        };
         let messages = [];
         let count = 0;
-        ctx.logger.info(ctx.phoneNumber, 'Search Query: ', searchQuery);
         if (chatId) {
-            searchQuery['peer'] = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
+            const peer = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
             ctx.logger.info(ctx.phoneNumber, 'Performing search in chat: ', chatId);
-            const result = await ctx.client.invoke(new telegram_1.Api.messages.Search(searchQuery));
+            const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
+                peer,
+                q: query,
+                filter,
+                ...queryFilter,
+                hash: (0, big_integer_1.default)(0),
+                minDate: 0,
+                maxDate: 0,
+                addOffset: 0,
+                offsetId: 0,
+            }));
             if (!('messages' in result))
                 return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result.count}`);
+            count = result.count || 0;
             messages = result.messages;
         }
         else {
             ctx.logger.info(ctx.phoneNumber, 'Performing global search');
             const result = await ctx.client.invoke(new telegram_1.Api.messages.SearchGlobal({
-                ...searchQuery,
+                q: query,
+                filter,
+                ...queryFilter,
                 offsetRate: 0,
                 offsetPeer: new telegram_1.Api.InputPeerEmpty(),
                 offsetId: 0,
-                usersOnly: true,
             }));
             if (!('messages' in result))
                 return finalResult;
-            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result['count']}`);
-            count = result['count'] || 0;
+            ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${result.count}`);
+            count = result.count || 0;
             messages = result.messages;
         }
         if (types.includes(message_search_dto_1.MessageMediaType.TEXT) && types.length === 1) {

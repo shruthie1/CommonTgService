@@ -3,15 +3,16 @@ import { TotalList } from 'telegram/Helpers';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
 import { TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat, PerChatCallStats, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem } from './types';
+import { Dialog } from 'telegram/tl/custom/dialog';
 export declare function safeGetEntityById(ctx: TgContext, entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
 export declare function getMe(ctx: TgContext): Promise<Api.User>;
 export declare function getchatId(ctx: TgContext, username: string): Promise<Api.TypeInputPeer>;
 export declare function getEntity(ctx: TgContext, entity: EntityLike): Promise<Api.User | Api.Chat | Api.Channel>;
 export declare function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-export declare function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<unknown[] & {
+export declare function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<Dialog[] & {
     total: number;
 }>;
-export declare function getAllChats(ctx: TgContext): Promise<Record<string, unknown>[]>;
+export declare function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeChat['toJSON']>[]>;
 export declare function getMessagesNew(ctx: TgContext, chatId: string, offset?: number, limit?: number): Promise<MessageItem[]>;
 export declare function getSelfMSgsInfo(ctx: TgContext, limit?: number): Promise<SelfMessagesInfo>;
 export declare function getCallLog(ctx: TgContext, limit?: number): Promise<{

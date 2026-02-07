@@ -128,7 +128,7 @@ async function exportContacts(ctx, format, includeBlocked = false) {
             lastName: contact.lastName || '',
             phone: contact.phone || '',
             blocked: blockedContacts && 'peerBlocked' in blockedContacts
-                ? (blockedContacts.blocked || []).some((p) => ('peerId' in p && p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
+                ? (blockedContacts.blocked || []).some((p) => (p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
                 : false,
         }));
         return (0, helpers_1.generateCSV)(csvData);

@@ -9,6 +9,7 @@ import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-sea
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
 import { GroupOptions } from '../../../interfaces/telegram';
+import * as chatOps from './chat-operations';
 declare class TelegramManager {
     private logger;
     private session;
@@ -32,10 +33,10 @@ declare class TelegramManager {
     getchatId(username: string): Promise<Api.TypeInputPeer>;
     getEntity(entity: EntityLike): Promise<Api.User | Api.Chat | Api.Channel>;
     getMessages(entityLike: Api.TypeEntityLike, limit?: number): Promise<TotalList<Api.Message>>;
-    getDialogs(params: IterDialogsParams): Promise<unknown[] & {
+    getDialogs(params: IterDialogsParams): Promise<import('telegram/tl/custom/dialog').Dialog[] & {
         total: number;
     }>;
-    getAllChats(): Promise<Record<string, unknown>[]>;
+    getAllChats(): ReturnType<typeof chatOps.getAllChats>;
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<import('./types').MessageItem[]>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
     getSelfMSgsInfo(limit?: number): Promise<SelfMessagesInfo>;
