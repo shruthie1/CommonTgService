@@ -5,7 +5,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery, UpdateQuery } from 'mongoose';
+import { Model, QueryFilter, UpdateQuery } from 'mongoose';
 import { UserData, UserDataDocument } from './schemas/user-data.schema';
 import { CreateUserDataDto } from './dto/create-user-data.dto';
 import { UpdateUserDataDto } from './dto/update-user-data.dto';
@@ -33,7 +33,7 @@ export class UserDataService {
         return this.userDataModel.find().limit(limit).lean().exec();
     }
 
-    async findOne(profile: string, chatId: string): Promise<UserDataDocument & { count?: number }> {
+    async findOne(profile: string, chatId: string): Promise<(UserData & { _id: import('mongoose').Types.ObjectId; count?: number })> {
         const user = await this.userDataModel.findOne({ profile, chatId }).lean().exec();
 
         if (!user) {
@@ -100,7 +100,7 @@ export class UserDataService {
     }
 
     async executeQuery(
-        query: FilterQuery<UserDataDocument>,
+        query: QueryFilter<UserDataDocument>,
         sort?: Record<string, 1 | -1>,
         limit?: number,
         skip?: number,
