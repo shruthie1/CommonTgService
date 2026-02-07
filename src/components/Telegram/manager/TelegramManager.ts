@@ -20,6 +20,8 @@
     import * as profileOps from './profile-operations';
     import * as authOps from './auth-operations';
     import * as chatOps from './chat-operations';
+import { IterDialogsParams } from 'telegram/client/dialogs';
+import { Dialog } from 'telegram/tl/custom/dialog';
 
     class TelegramManager {
         private logger = new TelegramLogger('TgManager');
@@ -138,6 +140,10 @@
 
         async getMessageStats(options: { chatId: string; period: 'day' | 'week' | 'month'; fromDate?: Date }): Promise<MessageStats> {
             return chatOps.getMessageStats(this.ctx, options);
+        }
+
+        async getDialogs(iterDialogsParams: IterDialogsParams): Promise<TotalList<Dialog>> {
+            return await this.ctx.client.getDialogs(iterDialogsParams);
         }
 
         async getChats(options: { limit?: number; offsetDate?: number; folderId?: number; archived?: boolean; peerType?: 'all' | 'user' | 'group' | 'channel'; ignorePinned?: boolean; includePhotos?: boolean }): Promise<ChatListResult> {
