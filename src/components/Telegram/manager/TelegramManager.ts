@@ -133,12 +133,8 @@ class TelegramManager {
         return chatOps.getSelfMSgsInfo(this.ctx, limit);
     }
 
-    async getCallLog(limit: number = 1000): Promise<CallLogResult & { chatCallCounts: Array<{ chatId: string; phone?: string; username?: string; name: string; count: number; msgs?: number; video?: number; photo?: number; peerType: 'user' | 'group' | 'channel' }> }> {
-        return chatOps.getCallLog(this.ctx, limit);
-    }
-
-    async getCallLogsInternal(maxCalls: number = 300): Promise<Record<string, PerChatCallStats>> {
-        return chatOps.getCallLogsInternal(this.ctx, maxCalls);
+    async getCallLog(limit: number = 1000, options?: { includeCallLog?: boolean }): Promise<CallLogResult> {
+        return chatOps.getCallLog(this.ctx, limit, options);
     }
 
     async getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics> {

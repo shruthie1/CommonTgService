@@ -257,10 +257,10 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.joinChannel(channelId);
     }
 
-    async getCallLog(mobile: string, limit?: number) {
+    async getCallLog(mobile: string, limit?: number, includeCallLog?: boolean) {
         const telegramClient = await connectionManager.getClient(mobile);
         try {
-            return await telegramClient.getCallLog(limit);
+            return await telegramClient.getCallLog(limit, { includeCallLog });
         } catch (error) {
             this.logger.error(mobile, 'Error getting call log:', error);
             throw error;

@@ -28,7 +28,7 @@ export function getSearchFilter(filter: string): Api.TypeMessagesFilter {
         case 'chatPhoto': return new Api.InputMessagesFilterChatPhotos();
         case 'location': return new Api.InputMessagesFilterGeo();
         case 'contact': return new Api.InputMessagesFilterContacts();
-        case 'phoneCalls': return new Api.InputMessagesFilterPhoneCalls({ missed: false });
+        case 'phoneCalls': return new Api.InputMessagesFilterPhoneCalls({});
         default: return new Api.InputMessagesFilterEmpty();
     }
 }

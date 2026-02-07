@@ -113,19 +113,21 @@ export class User {
   @Prop({
     type: mongoose.Schema.Types.Mixed,
     default: {
+      totalCalls: 0,
       outgoing: 0,
       incoming: 0,
       video: 0,
-      chatCallCounts: [],
-      totalCalls: 0,
+      audio: 0,
+      chats: [],
     },
   })
   calls: {
+    totalCalls: number;
     outgoing: number;
     incoming: number;
     video: number;
-    chatCallCounts: any[];
-    totalCalls: number;
+    audio: number;
+    chats: any[];
   };
 
   @ApiPropertyOptional()

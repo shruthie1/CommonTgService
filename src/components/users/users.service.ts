@@ -107,7 +107,7 @@ export class UsersService {
       if (!query) {
         throw new BadRequestException('Query is invalid.');
       }
-      const queryExec = this.userModel.find(query);
+      const queryExec = this.userModel.find(query).lean();
 
       if (sort) {
         queryExec.sort(sort);
@@ -203,9 +203,17 @@ export class UsersService {
       filter.gender = gender;
     }
 
-    // Minimum thresholds
+    // Minimum thresholds (backward compat: support both calls.totalCalls and calls.chatCallCounts length)
     if (minCalls > 0) {
-      filter['calls.totalCalls'] = { $gte: minCalls };
+      filter.$and = [
+        ...(filter.$and || []),
+        {
+          $or: [
+            { 'calls.totalCalls': { $gte: minCalls } },
+            { $expr: { $gte: [{ $size: { $ifNull: ['$calls.chatCallCounts', []] } }, minCalls] } },
+          ],
+        },
+      ];
     }
 
     if (minPhotos > 0) {
@@ -313,14 +321,19 @@ export class UsersService {
             }
           },
           
-          // Call score calculation - handle nested calls object
+          // Call score - backward compat: totalCalls from totalCalls or size(chatCallCounts)
           callScore: {
             $let: {
               vars: {
                 incomingVal: { $ifNull: ['$calls.incoming', 0] },
                 outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
                 videoVal: { $ifNull: ['$calls.video', 0] },
-                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] }
+                totalCallsVal: {
+                  $ifNull: [
+                    '$calls.totalCalls',
+                    { $size: { $ifNull: ['$calls.chatCallCounts', []] } },
+                  ],
+                },
               },
               in: {
                 $add: [
@@ -439,7 +452,19 @@ export class UsersService {
 
       const aggregationResult = result[0];
       const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
-      const users = aggregationResult.paginatedResults || [];
+      const rawUsers = aggregationResult.paginatedResults || [];
+
+      // Backward compat: expose calls.chatCallCounts for consumers expecting old shape (alias from calls.chats)
+      const users = rawUsers.map((u: any) => {
+        const calls = u?.calls ?? {};
+        const hasNew = Array.isArray(calls.chats);
+        const hasOld = Array.isArray(calls.chatCallCounts);
+        const normalizedCalls = {
+          ...calls,
+          ...(hasNew && !hasOld ? { chatCallCounts: calls.chats } : {}),
+        };
+        return { ...u, calls: normalizedCalls };
+      });
 
       const totalPages = Math.ceil(totalUsers / limitNum);
 

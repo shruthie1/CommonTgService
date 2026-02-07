@@ -329,28 +329,36 @@ export class TelegramController {
                      'Supports pagination via limit parameter (default: 1000, max: 10000).'
     })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiQuery({ 
-        name: 'limit', 
-        required: false, 
+    @ApiQuery({
+        name: 'limit',
+        required: false,
         type: Number,
         description: 'Maximum number of calls to analyze (default: 1000, max: 10000)',
         example: 1000,
         minimum: 1,
         maximum: 10000
     })
-    @ApiResponse({ 
+    @ApiQuery({
+        name: 'includeCallLog',
+        required: false,
+        type: Boolean,
+        description: 'If true, each chat in the response includes a callLog array with per-call details (messageId, date, duration, video, outgoing). Default: false.',
+        example: false
+    })
+    @ApiResponse({
         status: 200,
         description: 'Call log statistics retrieved successfully',
         schema: {
             type: 'object',
             properties: {
+                totalCalls: { type: 'number', description: 'Total number of calls' },
                 outgoing: { type: 'number', description: 'Total outgoing calls' },
                 incoming: { type: 'number', description: 'Total incoming calls' },
                 video: { type: 'number', description: 'Total video calls' },
                 audio: { type: 'number', description: 'Total audio calls' },
-                chatCallCounts: {
+                chats: {
                     type: 'array',
-                    description: 'Per-chat call statistics (only chats with >4 calls)',
+                    description: 'Per-chat call summary with identity, call stats, media counts, and call log',
                     items: {
                         type: 'object',
                         properties: {
@@ -358,16 +366,36 @@ export class TelegramController {
                             phone: { type: 'string' },
                             username: { type: 'string' },
                             name: { type: 'string' },
-                            count: { type: 'number' },
-                            msgs: { type: 'number', description: 'Total messages in chat' },
-                            video: { type: 'number', description: 'Video messages count' },
-                            photo: { type: 'number', description: 'Photo messages count' },
-                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] }
+                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] },
+                            calls: {
+                                type: 'object',
+                                properties: {
+                                    total: { type: 'number' },
+                                    outgoing: { type: 'number' },
+                                    incoming: { type: 'number' },
+                                    video: { type: 'number' },
+                                    audio: { type: 'number' }
+                                }
+                            },
+                            totalMessages: { type: 'number' },
+                            photoCount: { type: 'number' },
+                            videoCount: { type: 'number' },
+                            callLog: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        messageId: { type: 'number' },
+                                        date: { type: 'number' },
+                                        durationSeconds: { type: 'number' },
+                                        video: { type: 'boolean' },
+                                        outgoing: { type: 'boolean' }
+                                    }
+                                }
+                            }
                         }
                     }
-                },
-                totalCalls: { type: 'number', description: 'Total number of calls analyzed' },
-                analyzedCalls: { type: 'number', description: 'Number of calls actually processed' }
+                }
             }
         }
     })
@@ -375,12 +403,14 @@ export class TelegramController {
     @ApiResponse({ status: 500, description: 'Internal Server Error' })
     async getCallLogStats(
         @Param('mobile') mobile: string,
-        @Query('limit') limit?: number
+        @Query('limit') limit?: number,
+        @Query('includeCallLog') includeCallLog?: string
     ) {
         if (limit !== undefined && (limit < 1 || limit > 10000)) {
             throw new BadRequestException('Limit must be between 1 and 10000.');
         }
-        return this.telegramService.getCallLog(mobile, limit);
+        const includeCallLogBool = includeCallLog === 'true' || includeCallLog === '1';
+        return this.telegramService.getCallLog(mobile, limit, includeCallLogBool);
     }
 
     @Post('contacts/add-bulk/:mobile')

@@ -1,12 +1,11 @@
 import { Api } from 'telegram';
 import { TotalList, sleep } from 'telegram/Helpers';
-import bigInt from 'big-integer';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { EntityLike } from 'telegram/define';
 import { contains } from '../../../utils';
 import {
     TgContext, ChatListItem, ChatStatistics, MessageStats, TopPrivateChat,
-    PerChatCallStats, EngagementWeights, SelfMessagesInfo, ChatSettingsUpdate,
+    PerChatCallStats, CallLogEntry, CallLogChat, CallLogResult, EngagementWeights, SelfMessagesInfo, ChatSettingsUpdate,
     ChatFolderCreateOptions, ChatFolder, MessageItem, TopSenderInfo,
 } from './types';
 import {
@@ -17,6 +16,7 @@ import {
 import { getThumbnailBuffer } from './media-operations';
 import { CustomFile } from 'telegram/client/uploads';
 import { Dialog } from 'telegram/tl/custom/dialog';
+import bigInt from 'big-integer';
 
 // ---- Entity resolution ----
 
@@ -76,7 +76,7 @@ export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike
 export async function getDialogs(ctx: TgContext, params: IterDialogsParams): Promise<Dialog[] & { total: number }> {
     if (!ctx.client) throw new Error('Client is not initialized');
     try {
-        const chats :Dialog[] = [];
+        const chats: Dialog[] = [];
         let total = 0;
         for await (const dialog of ctx.client.iterDialogs(params)) {
             chats.push(dialog);
@@ -224,177 +224,265 @@ export async function getSelfMSgsInfo(ctx: TgContext, limit: number = 500): Prom
 }
 
 // ---- Call logs ----
-
-export async function getCallLog(ctx: TgContext, limit: number = 1000): Promise<{
-    outgoing: number; incoming: number; video: number; audio: number;
-    chatCallCounts: Array<{
-        chatId: string; phone?: string; username?: string; name: string;
-        count: number; msgs?: number; video?: number; photo?: number;
-        peerType: 'user' | 'group' | 'channel';
-    }>;
-    totalCalls: number; analyzedCalls: number;
-}> {
+export async function getCallLog(
+    ctx: TgContext,
+    limit: number = 1000,
+    options?: { includeCallLog?: boolean }
+): Promise<CallLogResult> {
     if (!ctx.client) throw new Error('Client is not initialized');
+    const includeCallLog = options?.includeCallLog === true;
 
     try {
         const maxLimit = Math.min(Math.max(limit, 1), 10000);
-        const chunkSize = 100;
-        const callLogs: Api.Message[] = [];
+        const chunkSize = 200;
+        const callLogs: (Api.Message | Api.MessageService)[] = [];
         let offsetId = 0;
 
         while (callLogs.length < maxLimit) {
             const result = <Api.messages.Messages>await ctx.client.invoke(
                 new Api.messages.Search({
-                    peer: new Api.InputPeerEmpty(), q: '',
-                    filter: new Api.InputMessagesFilterPhoneCalls({ missed: false }),
-                    minDate: 0, maxDate: 0, offsetId, addOffset: 0,
-                    limit: chunkSize, maxId: 0, minId: 0, hash: bigInt(0),
+                    peer: new Api.InputPeerEmpty(),
+                    q: '',
+                    filter: new Api.InputMessagesFilterPhoneCalls({}),
+                    minDate: 0,
+                    maxDate: 0,
+                    offsetId,
+                    addOffset: 0,
+                    limit: chunkSize,
+                    maxId: 0,
+                    minId: 0,
+                    hash: bigInt(0),
                 })
             );
+
             const messages = result.messages || [];
-            for (const m of messages) {
-                if (m instanceof Api.Message && m.action instanceof Api.MessageActionPhoneCall) {
-                    callLogs.push(m);
-                    if (callLogs.length >= maxLimit) break;
-                }
-            }
+            const batch = messages.filter(
+                (m): m is Api.Message | Api.MessageService =>
+                    (m instanceof Api.Message || m instanceof Api.MessageService) &&
+                    m.action instanceof Api.MessageActionPhoneCall
+            );
+            callLogs.push(...batch); 
             if (messages.length < chunkSize) break;
-            offsetId = messages[messages.length - 1]?.id ?? 0;
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage) offsetId = lastMessage.id;
+            if (callLogs.length >= maxLimit) break;
         }
 
-        const filteredResults = { outgoing: 0, incoming: 0, video: 0, audio: 0, totalCalls: 0 };
-        const rawChatStats: Record<string, { count: number; peerType: 'user' | 'group' | 'channel' }> = {};
-
-        for (const log of callLogs) {
-            const logAction = log.action as Api.MessageActionPhoneCall;
-            filteredResults.totalCalls++;
-            if (log.out) filteredResults.outgoing++; else filteredResults.incoming++;
-            if (logAction.video) filteredResults.video++; else filteredResults.audio++;
-
+        const stats = {
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            audio: 0,
+            totalCalls: 0,
+        };
+        const rawChatStats: Record<string, {
+            count: number;
+            outgoing: number;
+            incoming: number;
+            video: number;
+            peerType: 'user' | 'group' | 'channel';
+        }> = {};
+        for (const msg of callLogs) {
+            const action = msg.action as Api.MessageActionPhoneCall;
+            if (!action) continue;
+            stats.totalCalls++;
+            if (msg.out) stats.outgoing++;
+            else stats.incoming++;
+            if (action.video) stats.video++;
+            else stats.audio++;
             let chatId: string;
             let peerType: 'user' | 'group' | 'channel' = 'user';
-            if (log.peerId instanceof Api.PeerUser) { chatId = log.peerId.userId.toString(); peerType = 'user'; }
-            else if (log.peerId instanceof Api.PeerChat) { chatId = log.peerId.chatId.toString(); peerType = 'group'; }
-            else if (log.peerId instanceof Api.PeerChannel) { chatId = log.peerId.channelId.toString(); peerType = 'channel'; }
-            else continue;
 
-            if (!rawChatStats[chatId]) rawChatStats[chatId] = { count: 0, peerType };
-            rawChatStats[chatId].count++;
+            if (msg.peerId instanceof Api.PeerUser) {
+                chatId = msg.peerId.userId.toString();
+                peerType = 'user';
+            } else if (msg.peerId instanceof Api.PeerChat) {
+                chatId = msg.peerId.chatId.toString();
+                peerType = 'group';
+            } else if (msg.peerId instanceof Api.PeerChannel) {
+                chatId = msg.peerId.channelId.toString();
+                peerType = 'channel';
+            } else {
+                continue;
+            }
+
+            if (!rawChatStats[chatId]) {
+                rawChatStats[chatId] = { count: 0, outgoing: 0, incoming: 0, video: 0, peerType };
+            }
+            const r = rawChatStats[chatId];
+            r.count++;
+            if (msg.out) r.outgoing++;
+            else r.incoming++;
+            if (action.video) r.video++;
+        }
+
+        let callLogByChat: Record<string, CallLogEntry[]> = {};
+        if (includeCallLog) {
+            for (const msg of callLogs) {
+                const action = msg.action as Api.MessageActionPhoneCall;
+                if (!action) continue;
+                let chatId: string;
+                if (msg.peerId instanceof Api.PeerUser) {
+                    chatId = msg.peerId.userId.toString();
+                } else if (msg.peerId instanceof Api.PeerChat) {
+                    chatId = msg.peerId.chatId.toString();
+                } else if (msg.peerId instanceof Api.PeerChannel) {
+                    chatId = msg.peerId.channelId.toString();
+                } else continue;
+                if (!callLogByChat[chatId]) callLogByChat[chatId] = [];
+                callLogByChat[chatId].push({
+                    messageId: msg.id,
+                    date: msg.date ?? 0,
+                    durationSeconds: action.duration ?? 0,
+                    video: !!action.video,
+                    outgoing: !!msg.out,
+                });
+            }
+            for (const arr of Object.values(callLogByChat)) {
+                arr.sort((a, b) => b.date - a.date);
+            }
         }
 
         const uniqueChatIds = Object.keys(rawChatStats);
-        const entityCache = new Map<string, { name: string; phone?: string; username?: string; peerType: 'user' | 'group' | 'channel' }>();
-        await Promise.all(uniqueChatIds.map(async (chatId) => {
-            const peerType = rawChatStats[chatId].peerType;
-            try {
-                const entity = await safeGetEntityById(ctx, chatId);
-                if (entity instanceof Api.User) {
-                    entityCache.set(chatId, { phone: entity.phone, username: entity.username, name: `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || 'Unknown', peerType: 'user' });
-                } else if (entity instanceof Api.Chat) {
-                    entityCache.set(chatId, { name: entity.title || 'Unknown Group', peerType: 'group' });
-                } else if (entity instanceof Api.Channel) {
-                    entityCache.set(chatId, { username: entity.username, name: entity.title || 'Unknown Channel', peerType: 'channel' });
-                } else {
-                    entityCache.set(chatId, { name: 'Unknown', peerType });
-                }
-            } catch (e) {
-                ctx.logger.warn(ctx.phoneNumber, `Failed to get entity for chatId ${chatId}:`, e);
-                entityCache.set(chatId, { name: 'Unknown', peerType });
-            }
-        }));
-
-        const chatCallCountsWithDetails: Record<string, { phone?: string; username?: string; name: string; count: number; peerType: 'user' | 'group' | 'channel' }> = {};
-        for (const chatId of uniqueChatIds) {
-            const cached = entityCache.get(chatId)!;
-            chatCallCountsWithDetails[chatId] = { ...cached, count: rawChatStats[chatId].count };
-        }
-
-        const filteredChatCallCounts: Array<{
-            chatId: string; phone?: string; username?: string; name: string;
-            count: number; msgs?: number; video?: number; photo?: number;
+        const entityCache = new Map<string, {
+            name: string;
+            phone?: string;
+            username?: string;
             peerType: 'user' | 'group' | 'channel';
-        }> = [];
-
-        const chatsWithManyCalls = uniqueChatIds.filter(id => rawChatStats[id].count > 4);
-        await Promise.all(chatsWithManyCalls.map(async (chatId) => {
-            const details = chatCallCountsWithDetails[chatId];
-            try {
-                const [photosList, videosList, msgCount] = await Promise.all([
-                    ctx.client.getMessages(chatId, { filter: new Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
-                    ctx.client.getMessages(chatId, { filter: new Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
-                    ctx.client.getMessages(chatId, { limit: 3 }).catch(() => ({ total: 0 })),
-                ]);
-                filteredChatCallCounts.push({
-                    chatId, ...details,
-                    msgs: (msgCount as { total?: number }).total,
-                    video: (videosList as { total?: number })?.total ?? 0,
-                    photo: (photosList as { total?: number })?.total ?? 0,
-                });
-            } catch (msgError) {
-                ctx.logger.warn(ctx.phoneNumber, `Failed to get messages for chatId ${chatId}:`, msgError);
-                filteredChatCallCounts.push({ chatId, ...details });
-            }
-        }));
-
-        for (const [chatId, details] of Object.entries(chatCallCountsWithDetails)) {
-            if (details.count <= 4) filteredChatCallCounts.push({ chatId, ...details });
-        }
-
-        filteredChatCallCounts.sort((a, b) => b.count - a.count);
-
-        ctx.logger.info(ctx.phoneNumber, 'CallLog completed:', {
-            totalCalls: filteredResults.totalCalls, analyzedCalls: filteredResults.totalCalls,
-            outgoing: filteredResults.outgoing, incoming: filteredResults.incoming,
-            video: filteredResults.video, audio: filteredResults.audio,
-            chatCount: filteredChatCallCounts.length,
-        });
-
-        return { ...filteredResults, chatCallCounts: filteredChatCallCounts, analyzedCalls: filteredResults.totalCalls };
-    } catch (error) {
-        ctx.logger.error(ctx.phoneNumber, 'Error in getCallLog:', error);
-        throw error;
-    }
-}
-
-export async function getCallLogsInternal(ctx: TgContext, maxCalls: number = 300): Promise<Record<string, PerChatCallStats>> {
-    const finalResult: Record<string, PerChatCallStats> = {};
-    const chunkSize = 100;
-    let offsetId = 0;
-    let totalFetched = 0;
-
-    while (totalFetched < maxCalls) {
-        const result = <Api.messages.Messages>await ctx.client.invoke(
-            new Api.messages.Search({
-                peer: new Api.InputPeerEmpty(), q: '',
-                filter: new Api.InputMessagesFilterPhoneCalls({}),
-                minDate: 0, maxDate: 0, offsetId, addOffset: 0,
-                limit: chunkSize, maxId: 0, minId: 0, hash: bigInt(0),
+        }>();
+        await Promise.all(
+            uniqueChatIds.map(async (chatId) => {
+                try {
+                    const entity = await ctx.client.getEntity(chatId);
+                    if (entity instanceof Api.User) {
+                        entityCache.set(chatId, {
+                            phone: entity.phone,
+                            username: entity.username ?? undefined,
+                            name: [entity.firstName, entity.lastName].filter(Boolean).join(' ').trim() || 'Deleted Account',
+                            peerType: 'user',
+                        });
+                    } else if (entity instanceof Api.Chat) {
+                        entityCache.set(chatId, {
+                            name: entity.title || 'Unknown Group',
+                            peerType: 'group',
+                        });
+                    } else if (entity instanceof Api.Channel) {
+                        entityCache.set(chatId, {
+                            username: entity.username ?? undefined,
+                            name: entity.title || 'Unknown Channel',
+                            peerType: 'channel',
+                        });
+                    } else {
+                        entityCache.set(chatId, { name: 'Unknown', peerType: 'user' });
+                    }
+                } catch (err) {
+                    ctx.logger?.warn?.(`Failed to get entity ${chatId}:`, err);
+                    entityCache.set(chatId, { name: 'Unknown / Restricted', peerType: 'user' });
+                }
             })
         );
 
-        const messages = result.messages || [];
-        if (messages.length === 0) break;
-
-        for (const log of messages) {
-            if (!(log instanceof Api.Message) || !(log.action instanceof Api.MessageActionPhoneCall)) continue;
-            if (!log.peerId || !(log.peerId instanceof Api.PeerUser)) continue;
-
-            const chatId = log.peerId.userId.toString();
-            if (!finalResult[chatId]) finalResult[chatId] = { outgoing: 0, incoming: 0, video: 0, total: 0 };
-            const stats = finalResult[chatId];
-            stats.total++;
-            if (log.out) stats.outgoing++; else stats.incoming++;
-            if ((log.action as Api.MessageActionPhoneCall).video) stats.video++;
+        const chats: CallLogChat[] = [];
+        for (const chatId of uniqueChatIds) {
+            const base = entityCache.get(chatId)!;
+            const r = rawChatStats[chatId];
+            const callLog = includeCallLog ? (callLogByChat[chatId] ?? []) : undefined;
+            let totalMessages: number | undefined;
+            let photoCount = 0;
+            let videoCount = 0;
+            try {
+                const inputPeer = await ctx.client.getInputEntity(chatId);
+                const [photosRes, videosRes, historyRes] = await Promise.all([
+                    ctx.client.invoke(
+                        new Api.messages.Search({
+                            peer: inputPeer,
+                            q: "",
+                            filter: new Api.InputMessagesFilterPhotos(),
+                            minDate: 0,
+                            maxDate: 0,
+                            offsetId: 0,
+                            addOffset: 0,
+                            limit: 1,
+                            maxId: 0,
+                            minId: 0,
+                        })
+                    ).catch(() => ({ count: 0 })),
+                    ctx.client.invoke(
+                        new Api.messages.Search({
+                            peer: inputPeer,
+                            q: "",
+                            filter: new Api.InputMessagesFilterVideo(),
+                            minDate: 0,
+                            maxDate: 0,
+                            offsetId: 0,
+                            addOffset: 0,
+                            limit: 1,
+                            maxId: 0,
+                            minId: 0,
+                        })
+                    ).catch(() => ({ count: 0 })),
+                    ctx.client.invoke(
+                        new Api.messages.GetHistory({
+                            peer: inputPeer,
+                            offsetId: 0,
+                            offsetDate: 0,
+                            addOffset: 0,
+                            limit: 1,
+                            maxId: 0,
+                            minId: 0,
+                            hash: bigInt(0),
+                        })
+                    ).catch(() => ({ messages: [] })),
+                ]);
+                if (historyRes && 'count' in historyRes) totalMessages = historyRes.count;
+                photoCount = (photosRes as { count?: number }).count ?? 0;
+                videoCount = (videosRes as { count?: number }).count ?? 0;
+            } catch (e) {
+                ctx.logger?.warn?.(`Failed to fetch media/total for ${chatId}:`, e);
+            }
+            chats.push({
+                chatId,
+                phone: base.phone,
+                username: base.username,
+                name: base.name,
+                peerType: base.peerType,
+                calls: {
+                    total: r.count,
+                    outgoing: r.outgoing,
+                    incoming: r.incoming,
+                    video: r.video,
+                    audio: r.count - r.video,
+                },
+                totalMessages,
+                photoCount,
+                videoCount,
+                ...(includeCallLog && callLog !== undefined ? { callLog } : {}),
+            });
         }
+        chats.sort((a, b) => b.calls.total - a.calls.total);
 
-        totalFetched += messages.length;
-        if (messages.length < chunkSize) break;
-        offsetId = messages[messages.length - 1].id ?? 0;
+        ctx.logger?.info?.(ctx.phoneNumber, 'Call log summary', {
+            totalCalls: stats.totalCalls,
+            outgoing: stats.outgoing,
+            incoming: stats.incoming,
+            video: stats.video,
+            audio: stats.audio,
+            uniqueChats: chats.length,
+        });
+
+        return {
+            totalCalls: stats.totalCalls,
+            outgoing: stats.outgoing,
+            incoming: stats.incoming,
+            video: stats.video,
+            audio: stats.audio,
+            chats,
+        };
+    } catch (error) {
+        ctx.logger?.error?.(ctx.phoneNumber, 'getCallLog failed:', error);
+        throw error;
     }
-
-    return finalResult;
 }
-
 // ---- Chat stats ----
 
 export async function getChatStatistics(ctx: TgContext, chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics> {
@@ -524,8 +612,8 @@ export async function getChats(ctx: TgContext, options: {
         const entity = dialog.entity;
         const type: 'user' | 'group' | 'channel' | 'unknown' =
             entity instanceof Api.User ? 'user' :
-            entity instanceof Api.Chat ? 'group' :
-            entity instanceof Api.Channel ? 'channel' : 'unknown';
+                entity instanceof Api.Chat ? 'group' :
+                    entity instanceof Api.Channel ? 'channel' : 'unknown';
 
         // Resolve last message sender name
         let senderName: string | null = null;
@@ -723,7 +811,7 @@ async function analyzeChatEngagement(
     };
 
     return {
-        chatId: chatId === 'me' ? 'me' : user.id.toString(),
+        chatId: user.id.toString(),
         username: user.username,
         firstName: user.firstName || (chatId === 'me' ? 'Saved Messages' : ''),
         lastName: user.lastName,
@@ -745,7 +833,7 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
     if (!ctx.client) throw new Error('Client not initialized');
 
     const clampedLimit = Math.max(1, Math.min(50, limit || 10));
-    ctx.logger.info(ctx.phoneNumber, `Starting optimized getTopPrivateChats analysis with limit=${clampedLimit}...`);
+    ctx.logger.info(ctx.phoneNumber, `Starting getTopPrivateChats (private + self only, unique), limit=${clampedLimit}...`);
 
     const startTime = Date.now();
     const now = Date.now();
@@ -755,26 +843,41 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
         sharedVideo: 12, sharedPhoto: 10, textMessage: 1, unreadMessages: 1,
     };
 
-    const [me, callLogs, dialogs] = await Promise.all([
+    const [me, callLogResult, dialogs] = await Promise.all([
         getMe(ctx).catch(() => null),
-        getCallLogsInternal(ctx, 300).catch(() => ({})),
+        getCallLog(ctx, 300).catch(() => ({ totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0, chats: [] })),
         ctx.client.getDialogs({ limit: 350 }),
     ]);
 
     if (!me) throw new Error('Failed to fetch self userInfo');
-    const candidateChats = Array.from(dialogs).map(dialog => dialog.isUser ? dialog : null).filter(Boolean);
+    const selfChatId = me.id.toString();
 
+    // Only private user chats: skip channels and groups (explicit entity check)
+    const privateUserDialogs = Array.from(dialogs).filter(
+        (d): d is Dialog => !!d.isUser && d.entity instanceof Api.User
+    );
+    // Unique by chatId and exclude self (self is handled separately to avoid duplicate)
+    const seenIds = new Set<string>();
+    const candidateChats = privateUserDialogs.filter((d) => {
+        const id = (d.entity as Api.User).id.toString();
+        if (id === selfChatId || seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+    });
+
+    const callLogsByChat = Object.fromEntries((callLogResult.chats ?? []).map(c => [c.chatId, c.calls]));
+
+    // Self chat (Saved Messages) – fetch once, excluded from dialogs so no duplicate
     let selfChatData: TopPrivateChat | null = null;
     try {
-        const selfChatId = me.id.toString();
-        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, now, undefined, callLogs[selfChatId]);
-        if (selfChatData) ctx.logger.info(ctx.phoneNumber, `Self chat processed - Score: ${selfChatData.interactionScore}`);
+        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, now, undefined, callLogsByChat[selfChatId]);
+        if (selfChatData) ctx.logger.info(ctx.phoneNumber, `Self chat - Score: ${selfChatData.interactionScore}`);
     } catch (e) {
         ctx.logger.warn(ctx.phoneNumber, 'Error processing self chat:', e);
     }
 
     const topCandidates = candidateChats.slice(0, Math.min(clampedLimit * 4, 49));
-    ctx.logger.info(ctx.phoneNumber, `Analyzing top ${topCandidates.length} candidates in depth...`);
+    ctx.logger.info(ctx.phoneNumber, `Analyzing ${topCandidates.length} unique private chats...`);
 
     const chatStats: TopPrivateChat[] = [];
     const batchSize = 10;
@@ -785,25 +888,29 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
             const user = candidate.entity as Api.User;
             const chatId = user.id.toString();
             try {
-                ctx.logger.info(ctx.phoneNumber, `Analyzing (${i + 1} of ${topCandidates.length}) chat ${chatId}...`);
-                return await analyzeChatEngagement(ctx, chatId, user, weights, now, candidate, callLogs[chatId]);
+                return await analyzeChatEngagement(ctx, chatId, user, weights, now, candidate, callLogsByChat[chatId]);
             } catch (error) {
-                ctx.logger.warn(ctx.phoneNumber, `Error analyzing chat ${chatId}:`, error.message);
+                ctx.logger.warn(ctx.phoneNumber, `Error analyzing chat ${chatId}:`, (error as Error).message);
                 return null;
             }
         }));
         chatStats.push(...batchResults.filter((r): r is TopPrivateChat => r !== null));
     }
 
-    let topChats = chatStats.sort((a, b) => b.interactionScore - a.interactionScore).slice(0, clampedLimit);
-
-    if (selfChatData) {
-        topChats = topChats.filter(chat => chat.chatId !== 'me' && chat.chatId !== me.id.toString());
-        topChats.unshift(selfChatData);
-        if (topChats.length > clampedLimit) topChats = topChats.slice(0, clampedLimit);
+    // Combine self + others, sort by score desc, dedupe by chatId, then take limit
+    const allChats: TopPrivateChat[] = [...(selfChatData ? [selfChatData] : []), ...chatStats];
+    const byScore = allChats.sort((a, b) => b.interactionScore - a.interactionScore);
+    const uniqueByChatId: TopPrivateChat[] = [];
+    const resultIds = new Set<string>();
+    for (const chat of byScore) {
+        const id = chat.chatId;
+        if (resultIds.has(id)) continue;
+        resultIds.add(id);
+        uniqueByChatId.push(chat);
     }
+    const topChats = uniqueByChatId.slice(0, clampedLimit);
 
-    ctx.logger.info(ctx.phoneNumber, `getTopPrivateChats completed in ${Date.now() - startTime}ms. Found ${topChats.length} results.`);
+    ctx.logger.info(ctx.phoneNumber, `getTopPrivateChats completed in ${Date.now() - startTime}ms. Returning ${topChats.length} unique chats (sorted by score).`);
     return topChats;
 }
 

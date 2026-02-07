@@ -1469,6 +1469,16 @@
               "example": 1000,
               "type": "number"
             }
+          },
+          {
+            "name": "includeCallLog",
+            "required": false,
+            "in": "query",
+            "description": "If true, each chat in the response includes a callLog array with per-call details (messageId, date, duration, video, outgoing). Default: false.",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -1479,6 +1489,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "totalCalls": {
+                      "type": "number",
+                      "description": "Total number of calls"
+                    },
                     "outgoing": {
                       "type": "number",
                       "description": "Total outgoing calls"
@@ -1495,9 +1509,9 @@
                       "type": "number",
                       "description": "Total audio calls"
                     },
-                    "chatCallCounts": {
+                    "chats": {
                       "type": "array",
-                      "description": "Per-chat call statistics (only chats with >4 calls)",
+                      "description": "Per-chat call summary with identity, call stats, media counts, and call log",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -1513,21 +1527,6 @@
                           "name": {
                             "type": "string"
                           },
-                          "count": {
-                            "type": "number"
-                          },
-                          "msgs": {
-                            "type": "number",
-                            "description": "Total messages in chat"
-                          },
-                          "video": {
-                            "type": "number",
-                            "description": "Video messages count"
-                          },
-                          "photo": {
-                            "type": "number",
-                            "description": "Photo messages count"
-                          },
                           "peerType": {
                             "type": "string",
                             "enum": [
@@ -1535,17 +1534,61 @@
                               "group",
                               "channel"
                             ]
+                          },
+                          "calls": {
+                            "type": "object",
+                            "properties": {
+                              "total": {
+                                "type": "number"
+                              },
+                              "outgoing": {
+                                "type": "number"
+                              },
+                              "incoming": {
+                                "type": "number"
+                              },
+                              "video": {
+                                "type": "number"
+                              },
+                              "audio": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "totalMessages": {
+                            "type": "number"
+                          },
+                          "photoCount": {
+                            "type": "number"
+                          },
+                          "videoCount": {
+                            "type": "number"
+                          },
+                          "callLog": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "messageId": {
+                                  "type": "number"
+                                },
+                                "date": {
+                                  "type": "number"
+                                },
+                                "durationSeconds": {
+                                  "type": "number"
+                                },
+                                "video": {
+                                  "type": "boolean"
+                                },
+                                "outgoing": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
                           }
                         }
                       }
-                    },
-                    "totalCalls": {
-                      "type": "number",
-                      "description": "Total number of calls analyzed"
-                    },
-                    "analyzedCalls": {
-                      "type": "number",
-                      "description": "Number of calls actually processed"
                     }
                   }
                 }
@@ -13786,13 +13829,14 @@
           },
           "calls": {
             "type": "object",
-            "description": "Call details of the user",
+            "description": "Call log summary and per-chat details",
             "example": {
+              "totalCalls": 1,
               "outgoing": 1,
               "incoming": 0,
               "video": 1,
-              "chatCallCounts": [],
-              "totalCalls": 1
+              "audio": 0,
+              "chats": []
             }
           },
           "recentUsers": {

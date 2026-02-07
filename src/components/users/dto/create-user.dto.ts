@@ -71,21 +71,23 @@ export class CreateUserDto {
   contacts: number = 0;
 
   @ApiProperty({
-    description: 'Call details of the user',
+    description: 'Call log summary and per-chat details',
     example: {
+      totalCalls: 1,
       outgoing: 1,
       incoming: 0,
       video: 1,
-      chatCallCounts: [],
-      totalCalls: 1,
+      audio: 0,
+      chats: [],
     },
   })
   calls: {
+    totalCalls: number;
     outgoing: number;
     incoming: number;
     video: number;
-    chatCallCounts: any[];
-    totalCalls: number;
+    audio: number;
+    chats: any[];
   };
 
   @ApiPropertyOptional({
