@@ -791,12 +791,15 @@ export async function getChatFolders(ctx: TgContext): Promise<ChatFolder[]> {
 
 async function analyzeChatEngagement(
     ctx: TgContext, chatId: string, user: Api.User,
-    weights: EngagementWeights, now: number,
+    weights: EngagementWeights,
     dialog?: Dialog, callStats?: PerChatCallStats
 ): Promise<TopPrivateChat | null> {
     const lastMessage = await ctx.client.getMessages(chatId, { limit: 1 });
-    if ((lastMessage?.total ?? 0) < 10) return null;
-
+    if ((lastMessage?.total ?? 0) < 10){
+        ctx.logger.info(ctx.phoneNumber, `Chat ${chatId} has less than 10 messages, skipping analysis...`);
+        return null;
+    };
+    
     const [photosList, videosList, photosByUsList, videosByUsList] = await Promise.all([
         ctx.client.getMessages(chatId, { filter: new Api.InputMessagesFilterPhotos(), limit: 1 }).catch(() => []),
         ctx.client.getMessages(chatId, { filter: new Api.InputMessagesFilterVideo(), limit: 1 }).catch(() => []),
@@ -814,42 +817,37 @@ async function analyzeChatEngagement(
         videosByUs, videosByThem: Math.max(0, totalVideos - videosByUs),
     };
 
-    const lastMessageDate = dialog?.message?.date ? dialog.message.date * 1000 : now;
-    const daysSinceLastActivity = (now - lastMessageDate) / (1000 * 60 * 60 * 24);
     const cCalls = callStats ?? { outgoing: 0, incoming: 0, video: 0, total: 0 };
+    const totalMessages = lastMessage.total ?? 0;
     const baseScore = (
+        totalMessages * weights.textMessage +
         cCalls.incoming * weights.incomingCall +
         cCalls.outgoing * weights.outgoingCall +
         cCalls.video * weights.videoCall +
         mediaStats.videos * weights.sharedVideo +
         mediaStats.photos * weights.sharedPhoto
     );
-
-    const engagementLevel: 'recent' | 'active' | 'dormant' = baseScore > 0 ? 'active' : 'dormant';
-    const totalActivity = Math.max(1, baseScore);
-    const activityBreakdown = {
-        videoCalls: Math.round((cCalls.video * weights.videoCall / totalActivity) * 100),
-        audioCalls: Math.round(((cCalls.total - cCalls.video) * (weights.incomingCall || weights.outgoingCall) / totalActivity) * 100),
-        mediaSharing: Math.round(((mediaStats.videos * weights.sharedVideo + mediaStats.photos * weights.sharedPhoto) / totalActivity) * 100),
-        textMessages: lastMessage.total ?? 0,
-    };
-
+    ctx.logger.debug(ctx.phoneNumber, `Chat ${chatId} base score: ${baseScore} | Total Messages: ${totalMessages} | Calls: ${cCalls.total} | Media: ${mediaStats.photos} photos, ${mediaStats.videos} videos`);
     return {
         chatId: user.id.toString(),
         username: user.username,
         firstName: (chatId === 'me' ? 'Saved Messages' : user.firstName),
         lastName: (chatId === 'me' ? '(Self)' : user.lastName),
-        totalMessages: lastMessage.total ?? 0,
+        totalMessages,
         interactionScore: baseScore,
-        engagementLevel,
-        lastActivityDays: Math.round(daysSinceLastActivity * 10) / 10,
+        engagementLevel: baseScore > 0 ? 'active' : 'dormant',
         calls: {
             total: cCalls.total || 0,
-            incoming: { total: cCalls.incoming || 0, audio: Math.max(0, cCalls.incoming - cCalls.video) || 0, video: cCalls.video || 0 },
+            incoming: { total: cCalls.incoming || 0, audio: Math.max(0, (cCalls.incoming || 0) - (cCalls.video || 0)), video: cCalls.video || 0 },
             outgoing: { total: cCalls.outgoing || 0, audio: cCalls.outgoing || 0, video: 0 },
         },
         media: mediaStats,
-        activityBreakdown,
+        activityBreakdown: {
+            videoCalls: cCalls.video || 0,
+            audioCalls: Math.max(0, (cCalls.total || 0) - (cCalls.video || 0)),
+            mediaSharing: mediaStats.photos + mediaStats.videos,
+            textMessages: totalMessages,
+        },
     };
 }
 
@@ -860,11 +858,10 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
     ctx.logger.info(ctx.phoneNumber, `Starting getTopPrivateChats (private + self only, unique), limit=${clampedLimit}...`);
 
     const startTime = Date.now();
-    const now = Date.now();
 
     const weights: EngagementWeights = {
         videoCall: 2, incomingCall: 4, outgoingCall: 1,
-        sharedVideo: 12, sharedPhoto: 10, textMessage: 1, unreadMessages: 1,
+        sharedVideo: 12, sharedPhoto: 10, textMessage: 1,
     };
 
     const [me, callLogResult] = await Promise.all([
@@ -893,7 +890,7 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
     // Self chat (Saved Messages) – fetch once, excluded from dialogs so no duplicate
     let selfChatData: TopPrivateChat | null = null;
     try {
-        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, now, undefined, callLogsByChat[selfChatId]);
+        selfChatData = await analyzeChatEngagement(ctx, 'me', me, weights, undefined, callLogsByChat[selfChatId]);
         if (selfChatData) ctx.logger.info(ctx.phoneNumber, `Self chat - Score: ${selfChatData.interactionScore}`);
     } catch (e) {
         ctx.logger.warn(ctx.phoneNumber, 'Error processing self chat:', e);
@@ -906,17 +903,20 @@ export async function getTopPrivateChats(ctx: TgContext, limit: number = 10): Pr
     const batchSize = 10;
 
     for (let i = 0; i < topCandidates.length; i += batchSize) {
+        const batchStartTime = Date.now();
         const batch = topCandidates.slice(i, i + batchSize);
         const batchResults = await Promise.all(batch.map(async (candidate) => {
             const user = candidate.entity as Api.User;
             const chatId = user.id.toString();
+            ctx.logger.info(ctx.phoneNumber, `Analyzing chat (${i + 1}/${topCandidates.length}) ${chatId}...`);
             try {
-                return await analyzeChatEngagement(ctx, chatId, user, weights, now, candidate, callLogsByChat[chatId]);
+                return await analyzeChatEngagement(ctx, chatId, user, weights, candidate, callLogsByChat[chatId]);
             } catch (error) {
                 ctx.logger.warn(ctx.phoneNumber, `Error analyzing chat ${chatId}:`, (error as Error).message);
                 return null;
             }
         }));
+        ctx.logger.info(ctx.phoneNumber, `----> Batch ${i + 1}/${topCandidates.length} COMPLETED in ${Date.now() - batchStartTime}ms.`);
         chatStats.push(...batchResults.filter((r): r is TopPrivateChat => r !== null));
     }
 

@@ -1515,12 +1515,8 @@ export class TelegramController {
                     },
                     engagementLevel: { 
                         type: 'string', 
-                        enum: ['recent', 'active', 'dormant'],
-                        description: 'Activity classification: recent (≤7 days), active (7-30 days), dormant (30-90 days)'
-                    },
-                    lastActivityDays: { 
-                        type: 'number', 
-                        description: 'Days since last activity' 
+                        enum: ['active', 'dormant'],
+                        description: 'Active if engagement score > 0, else dormant'
                     },
                     calls: {
                         type: 'object',
