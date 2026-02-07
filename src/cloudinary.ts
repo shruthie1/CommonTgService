@@ -7,7 +7,6 @@ import { fetchWithTimeout } from './utils/fetchWithTimeout';
 export class CloudinaryService {
     static instance;
     resources = new Map();
-
     constructor() {
         cloudinary.v2.config({
             cloud_name: process.env.CL_NAME,
