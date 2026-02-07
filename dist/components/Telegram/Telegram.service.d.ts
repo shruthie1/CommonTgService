@@ -257,8 +257,7 @@ export declare class TelegramService implements OnModuleDestroy {
         lastName?: string;
         totalMessages: number;
         interactionScore: number;
-        engagementLevel: 'recent' | 'active' | 'dormant';
-        lastActivityDays: number;
+        engagementLevel: 'active' | 'dormant';
         calls: {
             total: number;
             incoming: {

@@ -167,8 +167,7 @@ export declare class TelegramController {
         lastName?: string;
         totalMessages: number;
         interactionScore: number;
-        engagementLevel: "recent" | "active" | "dormant";
-        lastActivityDays: number;
+        engagementLevel: "active" | "dormant";
         calls: {
             total: number;
             incoming: {
