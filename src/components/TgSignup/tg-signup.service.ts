@@ -352,7 +352,6 @@ export class TgSignupService implements OnModuleDestroy {
                 ownPhotoCount: 0,
                 ownVideoCount: 0,
                 otherVideoCount: 0,
-                recentUsers: [],
                 calls: {
                     totalCalls: 0,
                     outgoing: 0,

@@ -27,7 +27,7 @@ import {
 import { MediaMetadataDto } from './dto/metadata-operations.dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
 import { MediaAlbumOptions } from './types/telegram-types';
-import { ChatStatistics } from '../../interfaces/telegram';
+import { ChatStatistics } from './manager/types';
 import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-management.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';

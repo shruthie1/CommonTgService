@@ -4,11 +4,9 @@
     import { TotalList } from 'telegram/Helpers';
     import bigInt from 'big-integer';
     import { EntityLike } from 'telegram/define';
-    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChat, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats } from './types';
+    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChat, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats, MediaAlbumOptions, GroupOptions } from './types';
     import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
     import { SendTgMessageDto } from '../dto/send-message.dto';
-    import { MediaAlbumOptions } from '../types/telegram-types';
-    import { GroupOptions } from '../../../interfaces/telegram';
     import { TelegramLogger } from '../utils/telegram-logger';
 
     // Domain operation imports
@@ -150,7 +148,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return chatOps.getChatCallHistory(this.ctx, chatId, limit, includeCalls);
         }
 
-        async getCallLogStats(maxCalls: number = 10): Promise<(PerChatCallStats & { chatId: string })[]> {
+        async getCallLogStats(maxCalls: number = 10): Promise<{ totalCalls: number; outgoing: number; incoming: number; video: number; audio: number; chats: (PerChatCallStats & { chatId: string })[] }> {
             return chatOps.getCallLogStats(this.ctx, maxCalls);
         }
 

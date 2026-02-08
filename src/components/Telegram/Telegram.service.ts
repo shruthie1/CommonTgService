@@ -11,7 +11,7 @@ import { parseError } from '../../utils/parseError';
 import { ChannelInfo } from './types/telegram-responses';
 import { connectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
-import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from './manager/types';
 import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';

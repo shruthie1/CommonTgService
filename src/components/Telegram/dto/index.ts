@@ -1,5 +1,5 @@
 // Core Types and Interfaces
-export * from '../../../interfaces/telegram';
+export * from '../manager/types';
 
 // Base DTOs
 export * from './batch-operations.dto';

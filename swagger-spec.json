@@ -13925,22 +13925,14 @@
           },
           "calls": {
             "type": "object",
-            "description": "Call log summary and per-chat details",
+            "description": "Per-chat call statistics",
             "example": {
-              "totalCalls": 1,
-              "outgoing": 1,
+              "totalCalls": 0,
+              "outgoing": 0,
               "incoming": 0,
-              "video": 1,
+              "video": 0,
               "audio": 0,
               "chats": []
-            }
-          },
-          "recentUsers": {
-            "description": "Call details of the user",
-            "example": [],
-            "type": "array",
-            "items": {
-              "type": "string"
             }
           }
         },
@@ -13948,8 +13940,6 @@
           "mobile",
           "session",
           "firstName",
-          "lastName",
-          "username",
           "channels",
           "personalChats",
           "msgs",
@@ -13962,13 +13952,11 @@
           "movieCount",
           "photoCount",
           "videoCount",
-          "gender",
           "otherPhotoCount",
           "otherVideoCount",
           "ownPhotoCount",
           "ownVideoCount",
-          "contacts",
-          "calls"
+          "contacts"
         ]
       },
       "UpdateUserDto": {

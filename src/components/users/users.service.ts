@@ -1,14 +1,19 @@
 import { TelegramService } from './../Telegram/Telegram.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, NotFoundException, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { BotsService, ChannelCategory } from '../bots';
 
@@ -53,27 +58,32 @@ export class UsersService {
   }
 
   async findOne(tgId: string): Promise<User> {
-    const user = await (await this.userModel.findOne({ tgId }).exec())?.toJSON()
-    if (!user) {
+    const doc = await this.userModel.findOne({ tgId }).exec();
+    if (!doc) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
-    return user;
+    return doc.toJSON();
   }
 
-  async update(tgId: string, user: UpdateUserDto): Promise<number> {
-    delete user['_id']
-    const result = await this.userModel.updateMany({ tgId }, { $set: user }, { upsert: true }).exec();
+  async update(tgId: string, updateDto: UpdateUserDto): Promise<number> {
+    const result = await this.userModel
+      .updateMany({ tgId }, { $set: updateDto }, { upsert: true })
+      .exec();
     if (result.matchedCount === 0) {
       throw new NotFoundException(`Users with tgId ${tgId} not found`);
     }
     return result.modifiedCount;
   }
 
-  async updateByFilter(filter: any, user: UpdateUserDto): Promise<number> {
-    delete user['_id']
-    const result = await this.userModel.updateMany(filter, { $set: user }, { upsert: true }).exec();
+  async updateByFilter(
+    filter: QueryFilter<UserDocument>,
+    updateDto: UpdateUserDto,
+  ): Promise<number> {
+    const result = await this.userModel
+      .updateMany(filter, { $set: updateDto }, { upsert: true })
+      .exec();
     if (result.matchedCount === 0) {
-      throw new NotFoundException(`Users with tgId ${JSON.stringify(filter)} not found`);
+      throw new NotFoundException(`Users matching filter not found`);
     }
     return result.modifiedCount;
   }
@@ -93,33 +103,34 @@ export class UsersService {
   }
 
   async search(filter: SearchUserDto): Promise<User[]> {
-    if (filter.firstName) {
-      filter.firstName = { $regex: new RegExp(filter.firstName, 'i') } as any
+    const query: QueryFilter<UserDocument> = { ...filter };
+
+    if (query.firstName) {
+      query.firstName = { $regex: new RegExp(query.firstName as string, 'i') };
     }
-    if (filter.twoFA !== undefined) {
-      filter.twoFA = filter.twoFA as any === 'true' || filter.twoFA as any === '1' || filter.twoFA === true;
+    if (query.twoFA !== undefined) {
+      query.twoFA = String(query.twoFA) === 'true' || String(query.twoFA) === '1';
     }
-    return this.userModel.find(filter).sort({ updatedAt: -1 }).exec();
+
+    return this.userModel.find(query).sort({ updatedAt: -1 }).exec();
   }
 
-  async executeQuery(query: any, sort?: any, limit?: number, skip?: number) {
+  async executeQuery(
+    query: QueryFilter<UserDocument>,
+    sort?: Record<string, 1 | -1>,
+    limit?: number,
+    skip?: number,
+  ): Promise<User[]> {
+    if (!query) {
+      throw new BadRequestException('Query is invalid.');
+    }
+
     try {
-      if (!query) {
-        throw new BadRequestException('Query is invalid.');
-      }
       const queryExec = this.userModel.find(query).lean();
 
-      if (sort) {
-        queryExec.sort(sort);
-      }
-
-      if (limit) {
-        queryExec.limit(limit);
-      }
-
-      if (skip) {
-        queryExec.skip(skip);
-      }
+      if (sort) queryExec.sort(sort);
+      if (limit) queryExec.limit(limit);
+      if (skip) queryExec.skip(skip);
 
       return await queryExec.exec();
     } catch (error) {
@@ -203,17 +214,26 @@ export class UsersService {
       filter.gender = gender;
     }
 
-    // Minimum thresholds (backward compat: support both calls.totalCalls and calls.chatCallCounts length)
+    // calls is an object { totalCalls, ..., chats: PerChatCallStats[] }
+    // Also handle legacy array-only format via $isArray fallback
     if (minCalls > 0) {
-      filter.$and = [
-        ...(filter.$and || []),
-        {
-          $or: [
-            { 'calls.totalCalls': { $gte: minCalls } },
-            { $expr: { $gte: [{ $size: { $ifNull: ['$calls.chatCallCounts', []] } }, minCalls] } },
-          ],
-        },
-      ];
+      filter.$expr = {
+        $gte: [
+          {
+            $cond: {
+              if: { $isArray: '$calls' },
+              then: { $sum: '$calls.totalCalls' },
+              else: {
+                $max: [
+                  { $ifNull: ['$calls.totalCalls', 0] },
+                  { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
+                ],
+              },
+            },
+          },
+          minCalls,
+        ],
+      };
     }
 
     if (minPhotos > 0) {
@@ -321,59 +341,90 @@ export class UsersService {
             }
           },
           
-          // Call score - backward compat: totalCalls from totalCalls or size(chatCallCounts)
+          // Call score - calls is { totalCalls, incoming, outgoing, video, audio, chats: PerChatCallStats[] }
+          // Use top-level summary fields; fall back to summing calls.chats when summary is zero
+          // Also handles legacy array-only format via $isArray
           callScore: {
             $let: {
               vars: {
-                incomingVal: { $ifNull: ['$calls.incoming', 0] },
-                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
-                videoVal: { $ifNull: ['$calls.video', 0] },
-                totalCallsVal: {
-                  $ifNull: [
-                    '$calls.totalCalls',
-                    { $size: { $ifNull: ['$calls.chatCallCounts', []] } },
-                  ],
-                },
+                isArr: { $isArray: '$calls' },
               },
               in: {
-                $add: [
-                  {
-                    $cond: {
-                      if: { $gt: ['$$incomingVal', 0] },
-                      then: { $multiply: ['$$incomingVal', weights.incomingCall] },
-                      else: 0
-                    }
-                  },
-                  {
-                    $cond: {
-                      if: { $gt: ['$$outgoingVal', 0] },
-                      then: { $multiply: ['$$outgoingVal', weights.outgoingCall] },
-                      else: 0
-                    }
-                  },
-                  {
-                    $cond: {
-                      if: { $gt: ['$$videoVal', 0] },
-                      then: { $multiply: ['$$videoVal', weights.videoCall] },
-                      else: 0
-                    }
-                  },
-                  {
-                    $cond: {
-                      if: {
-                        $and: [
-                          { $eq: ['$$incomingVal', 0] },
-                          { $eq: ['$$outgoingVal', 0] },
-                          { $gt: ['$$totalCallsVal', 0] }
-                        ]
+                $let: {
+                  vars: {
+                    // For array-only legacy: sum across elements; for object: prefer top-level, fallback to chats sum
+                    incomingVal: {
+                      $cond: {
+                        if: '$$isArr',
+                        then: { $sum: '$calls.incoming' },
+                        else: {
+                          $max: [
+                            { $ifNull: ['$calls.incoming', 0] },
+                            { $sum: { $ifNull: ['$calls.chats.incoming', []] } },
+                          ],
+                        },
                       },
-                      then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
-                      else: 0
-                    }
-                  }
-                ]
-              }
-            }
+                    },
+                    outgoingVal: {
+                      $cond: {
+                        if: '$$isArr',
+                        then: { $sum: '$calls.outgoing' },
+                        else: {
+                          $max: [
+                            { $ifNull: ['$calls.outgoing', 0] },
+                            { $sum: { $ifNull: ['$calls.chats.outgoing', []] } },
+                          ],
+                        },
+                      },
+                    },
+                    videoVal: {
+                      $cond: {
+                        if: '$$isArr',
+                        then: { $sum: '$calls.videoCalls' },
+                        else: {
+                          $max: [
+                            { $ifNull: ['$calls.video', 0] },
+                            { $sum: { $ifNull: ['$calls.chats.videoCalls', []] } },
+                          ],
+                        },
+                      },
+                    },
+                    totalCallsVal: {
+                      $cond: {
+                        if: '$$isArr',
+                        then: { $sum: '$calls.totalCalls' },
+                        else: {
+                          $max: [
+                            { $ifNull: ['$calls.totalCalls', 0] },
+                            { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                  in: {
+                    $add: [
+                      { $multiply: ['$$incomingVal', weights.incomingCall] },
+                      { $multiply: ['$$outgoingVal', weights.outgoingCall] },
+                      { $multiply: ['$$videoVal', weights.videoCall] },
+                      {
+                        $cond: {
+                          if: {
+                            $and: [
+                              { $eq: ['$$incomingVal', 0] },
+                              { $eq: ['$$outgoingVal', 0] },
+                              { $gt: ['$$totalCallsVal', 0] },
+                            ],
+                          },
+                          then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
+                          else: 0,
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
           },
           
           // Movie count (negative weightage)
@@ -393,47 +444,35 @@ export class UsersService {
           interactionScore: {
             $round: [
               {
-                $divide: [
-                  {
-                    $add: [
-                      '$photoScore',
-                      '$videoScore',
-                      '$callScore',
-                      '$movieScore'
-                    ]
-                  },
-                  1
-                ]
+                $add: [
+                  '$photoScore',
+                  '$videoScore',
+                  '$callScore',
+                  '$movieScore',
+                ],
               },
-              2
-            ]
-          }
-        }
+              2,
+            ],
+          },
+        },
       },
-      
+
       // Filter by minimum score
-      {
-        $match: {
-          interactionScore: { $gte: minScore }
-        }
-      },
-      
-      // CRITICAL FIX: Limit dataset BEFORE sorting to avoid memory overflow
-      // Fetch enough for pagination but not the entire collection
-      { $limit: Math.max(10000, (pageNum * limitNum) + 1000) },
-       
-      // Sort by interaction score (descending)
+      { $match: { interactionScore: { $gte: minScore } } },
+
+      // Sort by interaction score (descending) — must sort BEFORE limit for correct results
       { $sort: { interactionScore: -1 } },
-      
+
       // Use $facet for count and pagination in parallel
       {
         $facet: {
           totalCount: [{ $count: 'count' }],
           paginatedResults: [
             { $skip: skip },
-            { $limit: limitNum }
-          ]
-        }
+            { $limit: limitNum },
+            { $project: { photoScore: 0, videoScore: 0, callScore: 0, movieScore: 0 } },
+          ],
+        },
       }
     ];
 
@@ -452,20 +491,7 @@ export class UsersService {
 
       const aggregationResult = result[0];
       const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
-      const rawUsers = aggregationResult.paginatedResults || [];
-
-      // Backward compat: expose calls.chatCallCounts for consumers expecting old shape (alias from calls.chats)
-      const users = rawUsers.map((u: any) => {
-        const calls = u?.calls ?? {};
-        const hasNew = Array.isArray(calls.chats);
-        const hasOld = Array.isArray(calls.chatCallCounts);
-        const normalizedCalls = {
-          ...calls,
-          ...(hasNew && !hasOld ? { chatCallCounts: calls.chats } : {}),
-        };
-        return { ...u, calls: normalizedCalls };
-      });
-
+      const users = aggregationResult.paginatedResults || [];
       const totalPages = Math.ceil(totalUsers / limitNum);
 
       return {

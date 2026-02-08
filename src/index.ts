@@ -19,7 +19,6 @@ export * from './interceptors';
 export * from './decorators';
 
 // Type definitions
-export * from './interfaces/telegram';
 export * from './IMap/IMap';
 
 // Feature exports

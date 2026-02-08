@@ -13,7 +13,8 @@
       "WebSearch",
       "WebFetch(domain:core.telegram.org)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:gram.js.org)"
+      "WebFetch(domain:gram.js.org)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

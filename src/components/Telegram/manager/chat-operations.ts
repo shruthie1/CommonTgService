@@ -4,7 +4,6 @@ import { EntityLike } from 'telegram/define';
 import { contains } from '../../../utils';
 import {
     TgContext, ChatListResult, ChatStatistics, MessageStats, TopPrivateChat, TopPrivateChatsResult,
-    TopPrivateChatMedia, TopPrivateChatCalls,
     PerChatCallStats, EngagementWeights, SelfMessagesInfo, ChatSettingsUpdate,
     ChatFolderCreateOptions, ChatFolder, MessageItem, TopSenderInfo,
     MediaInfo, ChatMediaCounts, ChatCallHistory, CallHistoryEntry,
@@ -399,22 +398,22 @@ export async function getChatMediaCounts(ctx: TgContext, chatId: string): Promis
     };
 }
 
-export async function getCallLogStats(ctx: TgContext, maxCalls: number = 10): Promise<(PerChatCallStats & { chatId: string })[]> {
-        if (!ctx.client) throw new Error('Client not initialized');
-    
-        const maxLimit = Math.min(Math.max(maxCalls, 1), 500);
-    
-        const allCallsByChat = await getCallLog(ctx, 2000);
+export async function getCallLogStats(ctx: TgContext, maxCalls: number = 10): Promise<{ totalCalls: number, outgoing: number, incoming: number, video: number, audio: number, chats: (PerChatCallStats & { chatId: string })[] }> {
+    if (!ctx.client) throw new Error('Client not initialized');
 
-        const callStats: (PerChatCallStats & { chatId: string })[] = [];
-        for (const chatId in allCallsByChat) {
-            callStats.push({ ...buildCallSummary(allCallsByChat[chatId]), chatId: chatId });
-        }
+    const maxLimit = Math.min(Math.max(maxCalls, 1), 500);
 
-        callStats.sort((a, b) => b.totalCalls - a.totalCalls);
-    
-        return callStats.slice(0, maxLimit);
+    const allCallsByChat = await getCallLog(ctx, 2000);
+
+    const callStats: (PerChatCallStats & { chatId: string })[] = [];
+    for (const chatId in allCallsByChat) {
+        callStats.push({ ...buildCallSummary(allCallsByChat[chatId]), chatId: chatId });
     }
+
+    callStats.sort((a, b) => b.totalCalls - a.totalCalls);
+
+    return { totalCalls: callStats.reduce((acc, curr) => acc + curr.totalCalls, 0), outgoing: callStats.reduce((acc, curr) => acc + curr.outgoing, 0), incoming: callStats.reduce((acc, curr) => acc + curr.incoming, 0), video: callStats.reduce((acc, curr) => acc + curr.videoCalls, 0), audio: callStats.reduce((acc, curr) => acc + curr.audioCalls, 0), chats: callStats.slice(0, maxLimit) };
+}
 
 /**
  * Fetch all call logs globally and group by chatId.
@@ -867,8 +866,8 @@ interface TopChatBuildStats {
     callStats: PerChatCallStats;
 }
 
-const nullCalls: TopPrivateChatCalls = {
-    totalCalls: 0, incomingCalls: 0, outgoingCalls: 0, missedCalls: 0,
+const nullCalls: PerChatCallStats = {
+    totalCalls: 0, incoming: 0, outgoing: 0, missed: 0,
     videoCalls: 0, audioCalls: 0, totalDuration: 0, averageDuration: 0,
     longestCall: 0, lastCallDate: null,
 };
@@ -895,23 +894,13 @@ function buildTopPrivateChat(
         ? 'Saved Messages'
         : [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Deleted Account';
 
-    const media: TopPrivateChatMedia | null = mediaCounts ? {
-        photo: mediaCounts.photo,
-        video: mediaCounts.video,
-        roundVideo: mediaCounts.roundVideo,
-        document: mediaCounts.document,
-        voice: mediaCounts.voice,
-        gif: mediaCounts.gif,
-        audio: mediaCounts.audio,
-        link: mediaCounts.link,
-        totalMedia: mediaCounts.totalMedia,
-    } : null;
+    const media: ChatMediaCounts | null = mediaCounts ?? null;
 
-    const calls: TopPrivateChatCalls = callSummary ? {
+    const calls: PerChatCallStats = callSummary ? {
         totalCalls: callSummary.totalCalls,
-        incomingCalls: callSummary.incoming,
-        outgoingCalls: callSummary.outgoing,
-        missedCalls: callSummary.missed,
+        incoming: callSummary.incoming,
+        outgoing: callSummary.outgoing,
+        missed: callSummary.missed,
         videoCalls: callSummary.videoCalls,
         audioCalls: callSummary.audioCalls,
         totalDuration: callSummary.totalDuration,
@@ -920,9 +909,9 @@ function buildTopPrivateChat(
         lastCallDate: callSummary.lastCallDate,
     } : cCalls.totalCalls > 0 ? {
         totalCalls: cCalls.totalCalls,
-        incomingCalls: cCalls.incoming,
-        outgoingCalls: cCalls.outgoing,
-        missedCalls: 0, videoCalls: cCalls.videoCalls,
+        incoming: cCalls.incoming,
+        outgoing: cCalls.outgoing,
+        missed: 0, videoCalls: cCalls.videoCalls,
         audioCalls: cCalls.totalCalls - cCalls.videoCalls,
         totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null,
     } : { ...nullCalls };

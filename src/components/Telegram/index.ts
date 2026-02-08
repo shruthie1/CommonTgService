@@ -1,6 +1,7 @@
 export * from './Telegram.controller';
 export * from './Telegram.service';
 export * from './Telegram.module';
+export * from './manager';
 export * from './dto/update-profile.dto';
 export * from './dto/channel-operation.dto';
 export * from './utils/connection-manager';

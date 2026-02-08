@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PerChatCallStats } from '../../Telegram/manager/types';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Mobile number of the user', example: '917330803480' })
@@ -10,10 +11,10 @@ export class CreateUserDto {
   @ApiProperty({ description: 'First name of the user', example: 'Praveen' })
   firstName: string;
 
-  @ApiProperty({ description: 'Last name of the user', example: null })
+  @ApiPropertyOptional({ description: 'Last name of the user', example: null })
   lastName?: string | null;
 
-  @ApiProperty({ description: 'Username of the user', example: null })
+  @ApiPropertyOptional({ description: 'Username of the user', example: null })
   username?: string | null;
 
   @ApiProperty({ description: 'Number of channels', example: 56 })
@@ -52,7 +53,7 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Number of videos', example: 0 })
   videoCount: number = 0;
 
-  @ApiProperty({ description: 'Gender of the user', example: null })
+  @ApiPropertyOptional({ description: 'Gender of the user', example: null })
   gender?: string | null;
 
   @ApiProperty({ description: 'Number of other photos', example: 0 })
@@ -70,13 +71,13 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Number of contacts', example: 105 })
   contacts: number = 0;
 
-  @ApiProperty({
-    description: 'Call log summary and per-chat details',
+  @ApiPropertyOptional({
+    description: 'Per-chat call statistics',
     example: {
-      totalCalls: 1,
-      outgoing: 1,
+      totalCalls: 0,
+      outgoing: 0,
       incoming: 0,
-      video: 1,
+      video: 0,
       audio: 0,
       chats: [],
     },
@@ -87,12 +88,13 @@ export class CreateUserDto {
     incoming: number;
     video: number;
     audio: number;
-    chats: any[];
+    chats: (PerChatCallStats & { chatId: string })[];
+  } = {
+    totalCalls: 0,
+    outgoing: 0,
+    incoming: 0,
+    video: 0,
+    audio: 0,
+    chats: [],
   };
-
-  @ApiPropertyOptional({
-    description: 'Call details of the user',
-    example: []
-  })
-  recentUsers: any[];
 }

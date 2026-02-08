@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Document } from 'mongoose';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
+import { PerChatCallStats } from '../../Telegram/manager/types';
 
 export type UserDocument = User & Document;
 
@@ -127,16 +128,9 @@ export class User {
     incoming: number;
     video: number;
     audio: number;
-    chats: any[];
+    chats: (PerChatCallStats & { chatId: string })[];
   };
 
-  @ApiPropertyOptional()
-  @Prop({
-    type: mongoose.Schema.Types.Mixed,
-    default: [],
-    required: false,
-  })
-  recentUsers: any[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -288,31 +288,6 @@ export interface MessageStats {
     byType: Record<string, number>;
 }
 
-export interface TopPrivateChatMedia {
-    photo: number;
-    video: number;
-    roundVideo: number;
-    document: number;
-    voice: number;
-    gif: number;
-    audio: number;
-    link: number;
-    totalMedia: number;
-}
-
-export interface TopPrivateChatCalls {
-    totalCalls: number;
-    incomingCalls: number;
-    outgoingCalls: number;
-    missedCalls: number;
-    videoCalls: number;
-    audioCalls: number;
-    totalDuration: number;
-    averageDuration: number;
-    longestCall: number;
-    lastCallDate: string | null;
-}
-
 export interface TopPrivateChat {
     chatId: string;
     name: string;
@@ -322,8 +297,8 @@ export interface TopPrivateChat {
     mediaCount: number;
     interactionScore: number;
     lastMessageDate: string | null;
-    media: TopPrivateChatMedia | null;
-    calls: TopPrivateChatCalls;
+    media: ChatMediaCounts | null;
+    calls: PerChatCallStats;
 }
 
 export interface TopPrivateChatsResult {
@@ -589,16 +564,101 @@ export interface CallHistoryEntry {
     reason: 'missed' | 'busy' | 'hangup' | 'disconnect' | 'unknown';
 }
 
-export interface ChatCallHistory {
-    totalCalls: number;
-    incoming: number;
-    outgoing: number;
-    missed: number;
-    videoCalls: number;
-    audioCalls: number;
-    totalDuration: number;
-    averageDuration: number;
-    longestCall: number;
-    lastCallDate: string | null;
+export interface ChatCallHistory extends PerChatCallStats {
     calls?: CallHistoryEntry[];
+}
+
+// ---- Merged from interfaces/telegram.ts ----
+
+export enum PrivacyLevelEnum {
+    everybody = 'everybody',
+    contacts = 'contacts',
+    nobody = 'nobody',
+}
+
+export interface ContentFilter {
+    chatId: string;
+    keywords?: string[];
+    mediaTypes?: ('photo' | 'video' | 'document')[];
+    actions: ('delete' | 'warn' | 'mute')[];
+}
+
+export interface GroupOptions {
+    title: string;
+    members?: string[];
+    photo?: string;
+    about?: string;
+    address?: string;
+    slowMode?: number;
+    megagroup?: boolean;
+    forImport?: boolean;
+    memberRestrictions?: {
+        sendMessages?: boolean;
+        sendMedia?: boolean;
+        sendStickers?: boolean;
+        sendGifs?: boolean;
+        sendGames?: boolean;
+        sendInline?: boolean;
+        embedLinks?: boolean;
+    };
+}
+
+export interface ChannelInfo {
+    chatsArrayLength: number;
+    canSendTrueCount: number;
+    canSendFalseCount: number;
+    ids: string[];
+    canSendFalseChats: string[];
+}
+
+// ---- Merged from types/telegram-types.ts ----
+
+export interface MediaAlbumOptions {
+    chatId: string;
+    media: Array<{
+        type: 'photo' | 'video';
+        url: string;
+        caption?: string;
+        filename?: string;
+    }>;
+}
+
+// ---- Merged from types/client-operations.ts ----
+
+export interface ClientOperation<T> {
+    execute: () => Promise<T>;
+    retryCount?: number;
+    timeoutMs?: number;
+}
+
+export interface DialogOptions {
+    limit?: number;
+    offsetId?: number;
+    offsetDate?: number;
+    offsetPeer?: Api.TypePeer;
+    ignorePinned?: boolean;
+    archived?: boolean;
+}
+
+export interface MessageOptions {
+    limit?: number;
+    offsetId?: number;
+    maxId?: number;
+    minId?: number;
+    fromUser?: string;
+}
+
+export interface BulkOperationOptions {
+    batchSize?: number;
+    delayMs?: number;
+    maxRetries?: number;
+}
+
+export interface ClientMetadata {
+    connectedAt: number;
+    lastOperation: string;
+    lastOperationTime: number;
+    totalOperations: number;
+    failedOperations: number;
+    reconnectCount: number;
 }

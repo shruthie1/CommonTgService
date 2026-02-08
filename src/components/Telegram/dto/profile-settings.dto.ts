@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { PrivacyLevel, PrivacyLevelEnum } from '../../../interfaces/telegram';
+import { PrivacyLevel, PrivacyLevelEnum } from '../manager/types';
 
 export class PrivacySettingsDto {
   @ApiProperty({ description: 'Phone number visibility', enum: PrivacyLevelEnum, required: false })
