@@ -784,7 +784,7 @@ async function getChatFolders(ctx) {
         excludedChatsCount: Array.isArray(filter.excludePeers) ? filter.excludePeers.length : 0,
     }));
 }
-async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false) {
+async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false, callData) {
     const result = {};
     let skipped = 0;
     ctx.logger.info(ctx.phoneNumber, `Processing ${chatIds.length} chats, skipMediaCount=${skipMediaCount}`);
@@ -795,6 +795,12 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false) {
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = msgResult?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
+            if (totalMessages < 10 && callData.callCountsByChat[chatId]?.totalCalls < 1) {
+                ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
+                result[chatId] = null;
+                skipped++;
+                continue;
+            }
             const lastMsg = msgResult?.[0];
             const lastMessageDate = lastMsg?.date ? (0, helpers_1.toISODate)(lastMsg.date) : null;
             let mediaCount = 0;
@@ -1013,7 +1019,7 @@ async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDa
         chatIdsForMedia.push(selfChatId);
     chatIdsForMedia.push(...candidateIds);
     ctx.logger.info(ctx.phoneNumber, `chatIdsForMedia=${chatIdsForMedia.length}, total chats=${candidateChats.length}`);
-    const messageMediaByChat = await fetchMessageMediaForChats(ctx, chatIdsForMedia, enrichMedia);
+    const messageMediaByChat = await fetchMessageMediaForChats(ctx, chatIdsForMedia, enrichMedia, callData);
     ctx.logger.info(ctx.phoneNumber, `Message Media=${Object.keys(messageMediaByChat).length}, Duration=${Date.now() - startTime}ms`);
     startTime = Date.now();
     const zeroCallStats = { outgoing: 0, incoming: 0, videoCalls: 0, audioCalls: 0, totalCalls: 0, missed: 0, totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null };
