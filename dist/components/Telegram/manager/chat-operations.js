@@ -81,40 +81,13 @@ async function getchatId(ctx, username) {
 async function getEntity(ctx, entity) {
     return await ctx.client?.getEntity(entity);
 }
-async function getMessages(ctx, entityLike, limit = 8) {
-    return await ctx.client.getMessages(entityLike, { limit });
-}
-async function getAllChats(ctx) {
-    if (!ctx.client)
-        throw new Error('Client is not initialized');
-    const chatData = [];
-    let total = 0;
-    for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
-        const chatEntity = chat.entity.toJSON();
-        chatData.push(chatEntity);
-        total++;
-    }
-    ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
-    return chatData;
-}
-function formatReactions(reactions) {
-    if (!reactions?.results?.length)
-        return [];
-    return reactions.results.map((r) => {
-        let reaction = '';
-        if (r.reaction instanceof telegram_1.Api.ReactionEmoji)
-            reaction = r.reaction.emoticon ?? '';
-        else if (r.reaction instanceof telegram_1.Api.ReactionCustomEmoji)
-            reaction = `documentId:${r.reaction.documentId}`;
-        else if (r.reaction && typeof r.reaction.emoticon === 'string')
-            reaction = r.reaction.emoticon;
-        return { reaction, count: r.count ?? 0 };
-    }).filter(x => (x.count ?? 0) > 0);
-}
-async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
-    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit });
+async function getMessages(ctx, entityLike, limit = 8, offsetId = 0) {
+    const fetchLimit = limit + 1;
+    const messages = await ctx.client.getMessages(entityLike, { limit: fetchLimit, offsetId });
+    const hasMore = messages.length > limit;
+    const slicedMessages = hasMore ? messages.slice(0, limit) : messages;
     const senderIds = new Set();
-    for (const msg of messages) {
+    for (const msg of slicedMessages) {
         const sid = msg.senderId?.toString();
         if (sid)
             senderIds.add(sid);
@@ -129,7 +102,7 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             entityCache.set(sid, null);
         }
     }));
-    const messageList = await Promise.all(messages.map(async (message) => {
+    const messageList = await Promise.all(slicedMessages.map(async (message) => {
         const senderId = message.senderId?.toString() || '';
         let media = null;
         if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
@@ -176,7 +149,122 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             reactions: message.reactions ? formatReactions(message.reactions) : null,
         };
     }));
-    return messageList;
+    const lastMessage = slicedMessages[slicedMessages.length - 1];
+    const nextOffsetId = lastMessage ? lastMessage.id : 0;
+    return {
+        messages: messageList,
+        pagination: {
+            hasMore,
+            nextOffsetId,
+            total: messageList.length,
+        },
+    };
+}
+async function getAllChats(ctx) {
+    if (!ctx.client)
+        throw new Error('Client is not initialized');
+    const chatData = [];
+    let total = 0;
+    for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
+        const chatEntity = chat.entity.toJSON();
+        chatData.push(chatEntity);
+        total++;
+    }
+    ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
+    return chatData;
+}
+function formatReactions(reactions) {
+    if (!reactions?.results?.length)
+        return [];
+    return reactions.results.map((r) => {
+        let reaction = '';
+        if (r.reaction instanceof telegram_1.Api.ReactionEmoji)
+            reaction = r.reaction.emoticon ?? '';
+        else if (r.reaction instanceof telegram_1.Api.ReactionCustomEmoji)
+            reaction = `documentId:${r.reaction.documentId}`;
+        else if (r.reaction && typeof r.reaction.emoticon === 'string')
+            reaction = r.reaction.emoticon;
+        return { reaction, count: r.count ?? 0 };
+    }).filter(x => (x.count ?? 0) > 0);
+}
+async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
+    const fetchLimit = limit + 1;
+    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit: fetchLimit });
+    const hasMore = messages.length > limit;
+    const slicedMessages = hasMore ? messages.slice(0, limit) : messages;
+    const senderIds = new Set();
+    for (const msg of slicedMessages) {
+        const sid = msg.senderId?.toString();
+        if (sid)
+            senderIds.add(sid);
+    }
+    const entityCache = new Map();
+    await Promise.all(Array.from(senderIds).map(async (sid) => {
+        try {
+            const entity = await safeGetEntityById(ctx, sid);
+            entityCache.set(sid, entity);
+        }
+        catch {
+            entityCache.set(sid, null);
+        }
+    }));
+    const messageList = await Promise.all(slicedMessages.map(async (message) => {
+        const senderId = message.senderId?.toString() || '';
+        let media = null;
+        if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
+            const thumbBuffer = await (0, media_operations_1.getThumbnailBuffer)(ctx, message);
+            media = (0, helpers_1.extractMediaInfo)(message, thumbBuffer);
+        }
+        let forwardedFrom = null;
+        if (message.fwdFrom) {
+            const fwdId = message.fwdFrom.fromId;
+            if (fwdId instanceof telegram_1.Api.PeerUser) {
+                const fwdEntity = entityCache.get(fwdId.userId.toString());
+                if (fwdEntity instanceof telegram_1.Api.User) {
+                    forwardedFrom = `${fwdEntity.firstName || ''} ${fwdEntity.lastName || ''}`.trim() || fwdId.userId.toString();
+                }
+                else {
+                    forwardedFrom = fwdId.userId.toString();
+                }
+            }
+            else if (fwdId instanceof telegram_1.Api.PeerChannel) {
+                forwardedFrom = fwdId.channelId.toString();
+            }
+            else if (message.fwdFrom.fromName) {
+                forwardedFrom = message.fwdFrom.fromName;
+            }
+        }
+        const msgDate = message.date ?? 0;
+        return {
+            id: message.id,
+            text: message.message || '',
+            date: (0, helpers_1.toISODate)(msgDate),
+            time: (0, helpers_1.toTimeString)(msgDate),
+            dateUnix: msgDate,
+            senderId,
+            media,
+            isEdited: !!message.editDate,
+            editDate: message.editDate ? (0, helpers_1.toISODate)(message.editDate) : null,
+            isPinned: !!message.pinned,
+            isForwarded: !!message.fwdFrom,
+            forwardedFrom,
+            replyToMessageId: message.replyTo?.replyToMsgId ?? null,
+            groupedId: message.groupedId ? message.groupedId.toString() : null,
+            views: message.views ?? null,
+            forwards: message.forwards ?? null,
+            reactions: message.reactions ? formatReactions(message.reactions) : null,
+        };
+    }));
+    const lastMessage = slicedMessages[slicedMessages.length - 1];
+    const nextOffsetId = lastMessage ? lastMessage.id : 0;
+    return {
+        messages: messageList,
+        pagination: {
+            hasMore,
+            nextOffsetId,
+            total: messageList.length,
+        },
+    };
 }
 async function getSelfMSgsInfo(ctx, limit = 500) {
     if (!ctx.client)
@@ -707,12 +795,6 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false) {
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = msgResult?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            if (totalMessages < 10) {
-                ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
-                result[chatId] = null;
-                skipped++;
-                continue;
-            }
             const lastMsg = msgResult?.[0];
             const lastMessageDate = lastMsg?.date ? (0, helpers_1.toISODate)(lastMsg.date) : null;
             let mediaCount = 0;

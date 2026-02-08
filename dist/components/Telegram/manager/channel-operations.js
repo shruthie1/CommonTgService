@@ -248,25 +248,27 @@ async function leaveChannels(ctx, chats) {
     }
     ctx.logger.info(ctx.phoneNumber, `Leaving Channels/Groups: Completed! Success: ${successCount}, Skipped: ${skipCount}, Total: ${chats.length}`);
 }
-async function getGrpMembers(ctx, entity) {
+async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
     try {
         const result = [];
         const chat = await ctx.client.getEntity(entity);
         if (!(chat instanceof telegram_1.Api.Chat || chat instanceof telegram_1.Api.Channel)) {
             ctx.logger.info(ctx.phoneNumber, 'Invalid group or channel!');
-            return [];
+            return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
         }
         ctx.logger.info(ctx.phoneNumber, `Fetching members of ${chat.title || chat.username}...`);
         const participants = await ctx.client.invoke(new telegram_1.Api.channels.GetParticipants({
             channel: chat,
             filter: new telegram_1.Api.ChannelParticipantsRecent(),
-            offset: 0,
-            limit: 200,
+            offset,
+            limit,
             hash: (0, big_integer_1.default)(0),
         }));
+        let totalCount = 0;
         if (participants instanceof telegram_1.Api.channels.ChannelParticipants) {
+            totalCount = participants.count;
             const users = participants.participants;
-            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}`);
+            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof telegram_1.Api.ChannelParticipant ? user.userId : null;
                 if (userInfo) {
@@ -276,9 +278,6 @@ async function getGrpMembers(ctx, entity) {
                         name: `${userDetails.firstName || ''} ${userDetails.lastName || ''}`,
                         username: `${userDetails.username || ''}`,
                     });
-                    if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
-                        ctx.logger.info(ctx.phoneNumber, JSON.stringify(userDetails.id));
-                    }
                 }
                 else {
                     ctx.logger.info(ctx.phoneNumber, JSON.stringify(user?.userId));
@@ -288,12 +287,21 @@ async function getGrpMembers(ctx, entity) {
         else {
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
-        ctx.logger.info(ctx.phoneNumber, `${result.length}`);
-        return result;
+        const nextOffset = offset + result.length;
+        const hasMore = nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+        return {
+            members: result,
+            pagination: {
+                hasMore,
+                nextOffset,
+                total: totalCount,
+            },
+        };
     }
     catch (err) {
         ctx.logger.error(ctx.phoneNumber, 'Error fetching group members:', err);
-        return [];
+        return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
     }
 }
 async function addGroupMembers(ctx, groupId, members) {

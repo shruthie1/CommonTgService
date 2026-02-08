@@ -1,1 +1,1 @@
-{"version":3,"file":"types.js","sourceRoot":"","sources":["../../../../src/components/Telegram/manager/types.ts"],"names":[],"mappings":";;;AA4jBA,IAAY,gBAIX;AAJD,WAAY,gBAAgB;IACxB,2CAAuB,CAAA;IACvB,yCAAqB,CAAA;IACrB,qCAAiB,CAAA;AACrB,CAAC,EAJW,gBAAgB,gCAAhB,gBAAgB,QAI3B"}
+{"version":3,"file":"types.js","sourceRoot":"","sources":["../../../../src/components/Telegram/manager/types.ts"],"names":[],"mappings":";;;AA8kBA,IAAY,gBAIX;AAJD,WAAY,gBAAgB;IACxB,2CAAuB,CAAA;IACvB,yCAAqB,CAAA;IACrB,qCAAiB,CAAA;AACrB,CAAC,EAJW,gBAAgB,gCAAhB,gBAAgB,QAI3B"}

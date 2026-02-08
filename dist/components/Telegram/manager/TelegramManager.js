@@ -108,8 +108,8 @@ class TelegramManager {
     async getEntity(entity) {
         return chatOps.getEntity(this.ctx, entity);
     }
-    async getMessages(entityLike, limit = 8) {
-        return chatOps.getMessages(this.ctx, entityLike, limit);
+    async getMessages(entityLike, limit = 8, offsetId = 0) {
+        return chatOps.getMessages(this.ctx, entityLike, limit, offsetId);
     }
     async getAllChats() {
         return chatOps.getAllChats(this.ctx);
@@ -255,8 +255,8 @@ class TelegramManager {
     async leaveChannels(chats) {
         return channelOps.leaveChannels(this.ctx, chats);
     }
-    async getGrpMembers(entity) {
-        return channelOps.getGrpMembers(this.ctx, entity);
+    async getGrpMembers(entity, offset = 0, limit = 200) {
+        return channelOps.getGrpMembers(this.ctx, entity, offset, limit);
     }
     async addGroupMembers(groupId, members) {
         return channelOps.addGroupMembers(this.ctx, groupId, members);
