@@ -106,8 +106,8 @@ let TelegramController = class TelegramController {
     async deleteProfilePhotos(mobile) {
         return this.telegramService.deleteProfilePhotos(mobile);
     }
-    async getMessages(mobile, chatId, limit) {
-        return this.telegramService.getMessages(mobile, chatId, limit);
+    async getMessages(mobile, chatId, limit, offset) {
+        return this.telegramService.getMessages(mobile, chatId, limit, offset);
     }
     async sendMessage(mobile, dto) {
         return this.telegramService.sendMessage(mobile, dto);
@@ -414,8 +414,8 @@ let TelegramController = class TelegramController {
             minId
         });
     }
-    async getGroupMembers(mobile, groupId) {
-        return this.telegramService.getGrpMembers(mobile, groupId);
+    async getGroupMembers(mobile, groupId, offset, limit) {
+        return this.telegramService.getGrpMembers(mobile, groupId, offset, limit);
     }
     async blockChat(mobile, chatId) {
         return this.telegramService.blockUser(mobile, chatId);
@@ -728,16 +728,18 @@ __decorate([
 ], TelegramController.prototype, "deleteProfilePhotos", null);
 __decorate([
     (0, common_1.Get)('messages/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chat messages' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chat messages with pagination' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of messages per page (default: 8)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Message ID offset for cursor-based pagination (use nextOffsetId from previous response)' }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('offset')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Number]),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMessages", null);
 __decorate([
@@ -1290,14 +1292,18 @@ __decorate([
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
     (0, common_1.Get)('group/members/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get group members' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get group members with pagination' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Offset for pagination (use nextOffset from previous response)' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of members per page (default: 200)' }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
+    __param(2, (0, common_1.Query)('offset')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getGroupMembers", null);
 __decorate([

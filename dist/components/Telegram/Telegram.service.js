@@ -82,9 +82,9 @@ let TelegramService = class TelegramService {
     setActiveClientSetup(data) {
         TelegramManager_1.default.setActiveClientSetup(data);
     }
-    async getMessages(mobile, username, limit = 8) {
+    async getMessages(mobile, username, limit = 8, offsetId = 0) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return telegramClient.getMessages(username, limit);
+        return telegramClient.getMessages(username, limit, offsetId);
     }
     async getMessagesNew(mobile, username, offset, limit) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -135,10 +135,10 @@ let TelegramService = class TelegramService {
             await this.activeChannelsService.update(channelId, { private: true });
         }
     }
-    async getGrpMembers(mobile, entity) {
+    async getGrpMembers(mobile, entity, offset = 0, limit = 200) {
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-            return await telegramClient.getGrpMembers(entity);
+            return await telegramClient.getGrpMembers(entity, offset, limit);
         }
         catch (err) {
             this.logger.error(mobile, "Error fetching group members:", err);

@@ -29,14 +29,14 @@ export declare class TelegramService implements OnModuleDestroy {
         existingMobile: string;
         clientId: string;
     } | undefined): void;
-    getMessages(mobile: string, username: string, limit?: number): Promise<import("telegram/Helpers").TotalList<Api.Message>>;
-    getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<import("./TelegramManager").MessageItem[]>;
+    getMessages(mobile: string, username: string, limit?: number, offsetId?: number): Promise<import("./TelegramManager").PaginatedMessages>;
+    getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<import("./TelegramManager").PaginatedMessages>;
     sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
     getChatId(mobile: string, username: string): Promise<Api.TypeInputPeer>;
     getLastActiveTime(mobile: string): Promise<string>;
     tryJoiningChannel(mobile: string, chatEntity: Channel | ActiveChannel): Promise<void>;
     removeChannels(error: any, channelId: string, username: string, mobile: string): Promise<void>;
-    getGrpMembers(mobile: string, entity: EntityLike): Promise<import("./TelegramManager").GroupMember[]>;
+    getGrpMembers(mobile: string, entity: EntityLike, offset?: number, limit?: number): Promise<import("./TelegramManager").PaginatedGroupMembers>;
     addContact(mobile: string, data: {
         mobile: string;
         tgId: string;

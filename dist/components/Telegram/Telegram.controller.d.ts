@@ -36,7 +36,7 @@ export declare class TelegramController {
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
-    getMessages(mobile: string, chatId: string, limit?: number): Promise<import("telegram/Helpers").TotalList<import("telegram").Api.Message>>;
+    getMessages(mobile: string, chatId: string, limit?: number, offset?: number): Promise<import("./dto").PaginatedMessages>;
     sendMessage(mobile: string, dto: SendTgMessageDto): Promise<import("telegram").Api.Message>;
     forwardMessage(mobile: string, forwardDto: ForwardBatchDto): Promise<number>;
     processBatchMessages(mobile: string, batchOp: BatchProcessDto): Promise<{
@@ -76,7 +76,7 @@ export declare class TelegramController {
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("./dto").AlbumSendResult>;
     getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").MediaListResponse>;
     getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").FilteredMediaListResponse>;
-    getGroupMembers(mobile: string, groupId: string): Promise<import("./dto").GroupMember[]>;
+    getGroupMembers(mobile: string, groupId: string, offset?: number, limit?: number): Promise<import("./dto").PaginatedGroupMembers>;
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, deleteHistoryDto: DeleteHistoryDto): Promise<void>;
     sendMessageWithInlineButton(mobile: string, chatId: string, message: string, url: string): Promise<import("telegram").Api.Message>;
@@ -102,7 +102,7 @@ export declare class TelegramController {
         caption?: string;
     }): Promise<import("telegram").Api.TypeUpdates>;
     sendViewOnceMedia(mobile: string, file: Express.Multer.File, viewOnceDto: ViewOnceMediaDto): Promise<import("telegram").Api.TypeUpdates>;
-    getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<import("./dto").MessageItem[]>;
+    getChatHistory(mobile: string, chatId: string, offset?: number, limit?: number): Promise<import("./dto").PaginatedMessages>;
     promoteToAdmin(mobile: string, adminOp: AdminOperationDto): Promise<void>;
     demoteAdmin(mobile: string, memberOp: GroupMemberOperationDto): Promise<void>;
     unblockGroupUser(mobile: string, data: {

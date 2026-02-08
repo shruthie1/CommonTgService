@@ -1379,8 +1379,8 @@ let TelegramController = class TelegramController {
     async deleteProfilePhotos(mobile) {
         return this.telegramService.deleteProfilePhotos(mobile);
     }
-    async getMessages(mobile, chatId, limit) {
-        return this.telegramService.getMessages(mobile, chatId, limit);
+    async getMessages(mobile, chatId, limit, offset) {
+        return this.telegramService.getMessages(mobile, chatId, limit, offset);
     }
     async sendMessage(mobile, dto) {
         return this.telegramService.sendMessage(mobile, dto);
@@ -1687,8 +1687,8 @@ let TelegramController = class TelegramController {
             minId
         });
     }
-    async getGroupMembers(mobile, groupId) {
-        return this.telegramService.getGrpMembers(mobile, groupId);
+    async getGroupMembers(mobile, groupId, offset, limit) {
+        return this.telegramService.getGrpMembers(mobile, groupId, offset, limit);
     }
     async blockChat(mobile, chatId) {
         return this.telegramService.blockUser(mobile, chatId);
@@ -2001,16 +2001,18 @@ __decorate([
 ], TelegramController.prototype, "deleteProfilePhotos", null);
 __decorate([
     (0, common_1.Get)('messages/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chat messages' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chat messages with pagination' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: true }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of messages per page (default: 8)' }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Message ID offset for cursor-based pagination (use nextOffsetId from previous response)' }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('offset')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Number]),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getMessages", null);
 __decorate([
@@ -2563,14 +2565,18 @@ __decorate([
 ], TelegramController.prototype, "getFilteredMedia", null);
 __decorate([
     (0, common_1.Get)('group/members/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get group members' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get group members with pagination' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'groupId', description: 'Group ID', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: Number, description: 'Offset for pagination (use nextOffset from previous response)' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of members per page (default: 200)' }),
     (0, swagger_1.ApiResponse)({ type: Object }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('groupId')),
+    __param(2, (0, common_1.Query)('offset')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, Number, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getGroupMembers", null);
 __decorate([
@@ -3454,9 +3460,9 @@ let TelegramService = class TelegramService {
     setActiveClientSetup(data) {
         TelegramManager_1.default.setActiveClientSetup(data);
     }
-    async getMessages(mobile, username, limit = 8) {
+    async getMessages(mobile, username, limit = 8, offsetId = 0) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        return telegramClient.getMessages(username, limit);
+        return telegramClient.getMessages(username, limit, offsetId);
     }
     async getMessagesNew(mobile, username, offset, limit) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -3507,10 +3513,10 @@ let TelegramService = class TelegramService {
             await this.activeChannelsService.update(channelId, { private: true });
         }
     }
-    async getGrpMembers(mobile, entity) {
+    async getGrpMembers(mobile, entity, offset = 0, limit = 200) {
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-            return await telegramClient.getGrpMembers(entity);
+            return await telegramClient.getGrpMembers(entity, offset, limit);
         }
         catch (err) {
             this.logger.error(mobile, "Error fetching group members:", err);
@@ -6315,8 +6321,8 @@ class TelegramManager {
     async getEntity(entity) {
         return chatOps.getEntity(this.ctx, entity);
     }
-    async getMessages(entityLike, limit = 8) {
-        return chatOps.getMessages(this.ctx, entityLike, limit);
+    async getMessages(entityLike, limit = 8, offsetId = 0) {
+        return chatOps.getMessages(this.ctx, entityLike, limit, offsetId);
     }
     async getAllChats() {
         return chatOps.getAllChats(this.ctx);
@@ -6462,8 +6468,8 @@ class TelegramManager {
     async leaveChannels(chats) {
         return channelOps.leaveChannels(this.ctx, chats);
     }
-    async getGrpMembers(entity) {
-        return channelOps.getGrpMembers(this.ctx, entity);
+    async getGrpMembers(entity, offset = 0, limit = 200) {
+        return channelOps.getGrpMembers(this.ctx, entity, offset, limit);
     }
     async addGroupMembers(groupId, members) {
         return channelOps.addGroupMembers(this.ctx, groupId, members);
@@ -7120,25 +7126,27 @@ async function leaveChannels(ctx, chats) {
     }
     ctx.logger.info(ctx.phoneNumber, `Leaving Channels/Groups: Completed! Success: ${successCount}, Skipped: ${skipCount}, Total: ${chats.length}`);
 }
-async function getGrpMembers(ctx, entity) {
+async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
     try {
         const result = [];
         const chat = await ctx.client.getEntity(entity);
         if (!(chat instanceof telegram_1.Api.Chat || chat instanceof telegram_1.Api.Channel)) {
             ctx.logger.info(ctx.phoneNumber, 'Invalid group or channel!');
-            return [];
+            return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
         }
         ctx.logger.info(ctx.phoneNumber, `Fetching members of ${chat.title || chat.username}...`);
         const participants = await ctx.client.invoke(new telegram_1.Api.channels.GetParticipants({
             channel: chat,
             filter: new telegram_1.Api.ChannelParticipantsRecent(),
-            offset: 0,
-            limit: 200,
+            offset,
+            limit,
             hash: (0, big_integer_1.default)(0),
         }));
+        let totalCount = 0;
         if (participants instanceof telegram_1.Api.channels.ChannelParticipants) {
+            totalCount = participants.count;
             const users = participants.participants;
-            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}`);
+            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof telegram_1.Api.ChannelParticipant ? user.userId : null;
                 if (userInfo) {
@@ -7148,9 +7156,6 @@ async function getGrpMembers(ctx, entity) {
                         name: `${userDetails.firstName || ''} ${userDetails.lastName || ''}`,
                         username: `${userDetails.username || ''}`,
                     });
-                    if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
-                        ctx.logger.info(ctx.phoneNumber, JSON.stringify(userDetails.id));
-                    }
                 }
                 else {
                     ctx.logger.info(ctx.phoneNumber, JSON.stringify(user?.userId));
@@ -7160,12 +7165,21 @@ async function getGrpMembers(ctx, entity) {
         else {
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
-        ctx.logger.info(ctx.phoneNumber, `${result.length}`);
-        return result;
+        const nextOffset = offset + result.length;
+        const hasMore = nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+        return {
+            members: result,
+            pagination: {
+                hasMore,
+                nextOffset,
+                total: totalCount,
+            },
+        };
     }
     catch (err) {
         ctx.logger.error(ctx.phoneNumber, 'Error fetching group members:', err);
-        return [];
+        return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
     }
 }
 async function addGroupMembers(ctx, groupId, members) {
@@ -7469,40 +7483,13 @@ async function getchatId(ctx, username) {
 async function getEntity(ctx, entity) {
     return await ctx.client?.getEntity(entity);
 }
-async function getMessages(ctx, entityLike, limit = 8) {
-    return await ctx.client.getMessages(entityLike, { limit });
-}
-async function getAllChats(ctx) {
-    if (!ctx.client)
-        throw new Error('Client is not initialized');
-    const chatData = [];
-    let total = 0;
-    for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
-        const chatEntity = chat.entity.toJSON();
-        chatData.push(chatEntity);
-        total++;
-    }
-    ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
-    return chatData;
-}
-function formatReactions(reactions) {
-    if (!reactions?.results?.length)
-        return [];
-    return reactions.results.map((r) => {
-        let reaction = '';
-        if (r.reaction instanceof telegram_1.Api.ReactionEmoji)
-            reaction = r.reaction.emoticon ?? '';
-        else if (r.reaction instanceof telegram_1.Api.ReactionCustomEmoji)
-            reaction = `documentId:${r.reaction.documentId}`;
-        else if (r.reaction && typeof r.reaction.emoticon === 'string')
-            reaction = r.reaction.emoticon;
-        return { reaction, count: r.count ?? 0 };
-    }).filter(x => (x.count ?? 0) > 0);
-}
-async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
-    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit });
+async function getMessages(ctx, entityLike, limit = 8, offsetId = 0) {
+    const fetchLimit = limit + 1;
+    const messages = await ctx.client.getMessages(entityLike, { limit: fetchLimit, offsetId });
+    const hasMore = messages.length > limit;
+    const slicedMessages = hasMore ? messages.slice(0, limit) : messages;
     const senderIds = new Set();
-    for (const msg of messages) {
+    for (const msg of slicedMessages) {
         const sid = msg.senderId?.toString();
         if (sid)
             senderIds.add(sid);
@@ -7517,7 +7504,7 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             entityCache.set(sid, null);
         }
     }));
-    const messageList = await Promise.all(messages.map(async (message) => {
+    const messageList = await Promise.all(slicedMessages.map(async (message) => {
         const senderId = message.senderId?.toString() || '';
         let media = null;
         if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
@@ -7564,7 +7551,122 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             reactions: message.reactions ? formatReactions(message.reactions) : null,
         };
     }));
-    return messageList;
+    const lastMessage = slicedMessages[slicedMessages.length - 1];
+    const nextOffsetId = lastMessage ? lastMessage.id : 0;
+    return {
+        messages: messageList,
+        pagination: {
+            hasMore,
+            nextOffsetId,
+            total: messageList.length,
+        },
+    };
+}
+async function getAllChats(ctx) {
+    if (!ctx.client)
+        throw new Error('Client is not initialized');
+    const chatData = [];
+    let total = 0;
+    for await (const chat of ctx.client.iterDialogs({ limit: 500 })) {
+        const chatEntity = chat.entity.toJSON();
+        chatData.push(chatEntity);
+        total++;
+    }
+    ctx.logger.info(ctx.phoneNumber, 'TotalChats:', total);
+    return chatData;
+}
+function formatReactions(reactions) {
+    if (!reactions?.results?.length)
+        return [];
+    return reactions.results.map((r) => {
+        let reaction = '';
+        if (r.reaction instanceof telegram_1.Api.ReactionEmoji)
+            reaction = r.reaction.emoticon ?? '';
+        else if (r.reaction instanceof telegram_1.Api.ReactionCustomEmoji)
+            reaction = `documentId:${r.reaction.documentId}`;
+        else if (r.reaction && typeof r.reaction.emoticon === 'string')
+            reaction = r.reaction.emoticon;
+        return { reaction, count: r.count ?? 0 };
+    }).filter(x => (x.count ?? 0) > 0);
+}
+async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
+    const fetchLimit = limit + 1;
+    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit: fetchLimit });
+    const hasMore = messages.length > limit;
+    const slicedMessages = hasMore ? messages.slice(0, limit) : messages;
+    const senderIds = new Set();
+    for (const msg of slicedMessages) {
+        const sid = msg.senderId?.toString();
+        if (sid)
+            senderIds.add(sid);
+    }
+    const entityCache = new Map();
+    await Promise.all(Array.from(senderIds).map(async (sid) => {
+        try {
+            const entity = await safeGetEntityById(ctx, sid);
+            entityCache.set(sid, entity);
+        }
+        catch {
+            entityCache.set(sid, null);
+        }
+    }));
+    const messageList = await Promise.all(slicedMessages.map(async (message) => {
+        const senderId = message.senderId?.toString() || '';
+        let media = null;
+        if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
+            const thumbBuffer = await (0, media_operations_1.getThumbnailBuffer)(ctx, message);
+            media = (0, helpers_1.extractMediaInfo)(message, thumbBuffer);
+        }
+        let forwardedFrom = null;
+        if (message.fwdFrom) {
+            const fwdId = message.fwdFrom.fromId;
+            if (fwdId instanceof telegram_1.Api.PeerUser) {
+                const fwdEntity = entityCache.get(fwdId.userId.toString());
+                if (fwdEntity instanceof telegram_1.Api.User) {
+                    forwardedFrom = `${fwdEntity.firstName || ''} ${fwdEntity.lastName || ''}`.trim() || fwdId.userId.toString();
+                }
+                else {
+                    forwardedFrom = fwdId.userId.toString();
+                }
+            }
+            else if (fwdId instanceof telegram_1.Api.PeerChannel) {
+                forwardedFrom = fwdId.channelId.toString();
+            }
+            else if (message.fwdFrom.fromName) {
+                forwardedFrom = message.fwdFrom.fromName;
+            }
+        }
+        const msgDate = message.date ?? 0;
+        return {
+            id: message.id,
+            text: message.message || '',
+            date: (0, helpers_1.toISODate)(msgDate),
+            time: (0, helpers_1.toTimeString)(msgDate),
+            dateUnix: msgDate,
+            senderId,
+            media,
+            isEdited: !!message.editDate,
+            editDate: message.editDate ? (0, helpers_1.toISODate)(message.editDate) : null,
+            isPinned: !!message.pinned,
+            isForwarded: !!message.fwdFrom,
+            forwardedFrom,
+            replyToMessageId: message.replyTo?.replyToMsgId ?? null,
+            groupedId: message.groupedId ? message.groupedId.toString() : null,
+            views: message.views ?? null,
+            forwards: message.forwards ?? null,
+            reactions: message.reactions ? formatReactions(message.reactions) : null,
+        };
+    }));
+    const lastMessage = slicedMessages[slicedMessages.length - 1];
+    const nextOffsetId = lastMessage ? lastMessage.id : 0;
+    return {
+        messages: messageList,
+        pagination: {
+            hasMore,
+            nextOffsetId,
+            total: messageList.length,
+        },
+    };
 }
 async function getSelfMSgsInfo(ctx, limit = 500) {
     if (!ctx.client)
@@ -8095,12 +8197,6 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false) {
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = msgResult?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            if (totalMessages < 10) {
-                ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
-                result[chatId] = null;
-                skipped++;
-                continue;
-            }
             const lastMsg = msgResult?.[0];
             const lastMessageDate = lastMsg?.date ? (0, helpers_1.toISODate)(lastMsg.date) : null;
             let mediaCount = 0;
