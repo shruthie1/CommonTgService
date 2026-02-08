@@ -257,10 +257,10 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.joinChannel(channelId);
     }
 
-    async getCallLog(mobile: string, limit?: number, includeCallLog?: boolean) {
+    async getCallLog(mobile: string, maxCalls?: number) {
         const telegramClient = await connectionManager.getClient(mobile);
         try {
-            return await telegramClient.getCallLog(limit, { includeCallLog });
+            return await telegramClient.getCallLog(maxCalls);
         } catch (error) {
             this.logger.error(mobile, 'Error getting call log:', error);
             throw error;
@@ -946,6 +946,16 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getMessageStats(options);
     }
 
+    async getChatMediaCounts(mobile: string, chatId: string) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.getChatMediaCounts(chatId);
+    }
+
+    async getChatCallHistory(mobile: string, chatId: string, limit?: number, includeCalls?: boolean) {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.getChatCallHistory(chatId, limit, includeCalls);
+    }
+
     async sendViewOnceMedia(
         mobile: string,
         options: {
@@ -1040,42 +1050,11 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getTopPrivateChats(mobile: string, limit?: number): Promise<{
-        chatId: string;
-        username?: string;
-        firstName?: string;
-        lastName?: string;
-        totalMessages: number;
-        interactionScore: number;
-        engagementLevel: 'active' | 'dormant';
-        calls: {
-            total: number;
-            incoming: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-            outgoing: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-        };
-        media: {
-            photos: number;
-            videos: number;
-        };
-        activityBreakdown: {
-            videoCalls: number;
-            audioCalls: number;
-            mediaSharing: number;
-            textMessages: number;
-        };
-    }[]> {
+    async getTopPrivateChats(mobile: string, limit?: number, enrichMedia?: boolean, offsetDate?: number) {
         const telegramClient = await connectionManager.getClient(mobile);
-        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}`);
+        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}, enrichMedia=${!!enrichMedia}, offsetDate=${offsetDate ?? 'none'}`);
         try {
-            return await telegramClient.getTopPrivateChats(limit);
+            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate);
         } catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);
             throw error;

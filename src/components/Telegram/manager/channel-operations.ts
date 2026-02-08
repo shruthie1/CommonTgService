@@ -92,7 +92,8 @@ export async function forwardMedia(ctx: TgContext, channel: string, fromChatId: 
             const { forwardSecretMsgs } = require('./message-operations');
             await forwardSecretMsgs(ctx, fromChatId, channelId?.toString());
         } else {
-            const chats = await getTopPrivateChats(ctx);
+            const result = await getTopPrivateChats(ctx);
+            const chats = result.items;
             const me = await ctx.client.getMe();
             if (chats.length > 0) {
                 const channelDetails = await createOrJoinChannel(ctx, channel);

@@ -32,42 +32,6 @@ export interface ForwardResult {
     forwardedCount: number;
 }
 
-export interface CallLogEntry {
-    messageId: number;
-    date: number;
-    durationSeconds: number;
-    video: boolean;
-    outgoing: boolean;
-}
-
-export interface CallLogChat {
-    chatId: string;
-    phone?: string;
-    username?: string;
-    name: string;
-    peerType: 'user' | 'group' | 'channel';
-    calls: {
-        total: number;
-        outgoing: number;
-        incoming: number;
-        video: number;
-        audio: number;
-    };
-    totalMessages?: number;
-    photoCount?: number;
-    videoCount?: number;
-    /** Present only when requested via includeCallLog option */
-    callLog?: CallLogEntry[];
-}
-
-export interface CallLogResult {
-    totalCalls: number;
-    outgoing: number;
-    incoming: number;
-    video: number;
-    audio: number;
-    chats: CallLogChat[];
-}
 
 export interface SelfMessagesInfo {
     photoCount: number;
@@ -324,47 +288,59 @@ export interface MessageStats {
     byType: Record<string, number>;
 }
 
-export interface TopPrivateChat {
-    chatId: string;
-    username?: string;
-    firstName?: string;
-    lastName?: string;
-    totalMessages: number;
-    interactionScore: number;
-    engagementLevel: 'active' | 'dormant';
-    calls: CallBreakdown;
-    media: MediaBreakdown;
-    activityBreakdown: ActivityBreakdown;
+export interface TopPrivateChatMedia {
+    photo: number;
+    video: number;
+    roundVideo: number;
+    document: number;
+    voice: number;
+    gif: number;
+    audio: number;
+    link: number;
+    totalMedia: number;
 }
 
-export interface CallBreakdown {
-    total: number;
-    incoming: { total: number; audio: number; video: number };
-    outgoing: { total: number; audio: number; video: number };
-}
-
-export interface MediaBreakdown {
-    photos: number;
-    videos: number;
-    photosByUs: number;
-    photosByThem: number;
-    videosByUs: number;
-    videosByThem: number;
-}
-
-export interface ActivityBreakdown {
+export interface TopPrivateChatCalls {
+    totalCalls: number;
+    incomingCalls: number;
+    outgoingCalls: number;
+    missedCalls: number;
     videoCalls: number;
     audioCalls: number;
-    mediaSharing: number;
-    textMessages: number;
+    totalDuration: number;
+    averageDuration: number;
+    longestCall: number;
+    lastCallDate: string | null;
+}
+
+export interface TopPrivateChat {
+    chatId: string;
+    name: string;
+    username: string | null;
+    phone: string | null;
+    totalMessages: number;
+    mediaCount: number;
+    interactionScore: number;
+    lastMessageDate: string | null;
+    media: TopPrivateChatMedia | null;
+    calls: TopPrivateChatCalls;
+}
+
+export interface TopPrivateChatsResult {
+    items: TopPrivateChat[];
+    pagination: {
+        count: number;
+        hasMore: boolean;
+        previousOffsetDate?: number;
+        nextOffsetDate?: number;
+    };
 }
 
 export interface EngagementWeights {
     videoCall: number;
     incomingCall: number;
     outgoingCall: number;
-    sharedVideo: number;
-    sharedPhoto: number;
+    sharedMedia: number;
     textMessage: number;
 }
 
@@ -583,4 +559,40 @@ export interface SearchMessageItem {
     chatId: string;
     senderName: string | null;
     mediaType: string | null;
+}
+
+export interface ChatMediaCounts {
+    totalMessages: number;
+    photo: number;
+    video: number;
+    roundVideo: number;
+    document: number;
+    voice: number;
+    gif: number;
+    audio: number;
+    link: number;
+    totalMedia: number;
+}
+
+export interface CallHistoryEntry {
+    messageId: number;
+    date: string;
+    durationSeconds: number;
+    video: boolean;
+    outgoing: boolean;
+    reason: 'missed' | 'busy' | 'hangup' | 'disconnect' | 'unknown';
+}
+
+export interface ChatCallHistory {
+    totalCalls: number;
+    incoming: number;
+    outgoing: number;
+    missed: number;
+    videoCalls: number;
+    audioCalls: number;
+    totalDuration: number;
+    averageDuration: number;
+    longestCall: number;
+    lastCallDate: string | null;
+    calls?: CallHistoryEntry[];
 }
