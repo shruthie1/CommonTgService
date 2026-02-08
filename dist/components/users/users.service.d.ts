@@ -28,8 +28,8 @@ export declare class UsersService {
         minCalls?: number;
         minPhotos?: number;
         minVideos?: number;
-        excludeExpired?: boolean;
         excludeTwoFA?: boolean;
+        excludeAudited?: boolean;
         gender?: string;
     }): Promise<{
         users: Array<User & {
