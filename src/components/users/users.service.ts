@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, QueryFilter } from 'mongoose';
+import { Model, QueryFilter, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
@@ -152,8 +152,8 @@ export class UsersService {
     minCalls?: number;
     minPhotos?: number;
     minVideos?: number;
-    excludeExpired?: boolean;
     excludeTwoFA?: boolean;
+    excludeAudited?: boolean;
     gender?: string;
   }): Promise<{
     users: Array<User & { interactionScore: number }>;
@@ -165,12 +165,12 @@ export class UsersService {
     const {
       page = 1,
       limit = 20,
-      minScore = 0,
+      minScore = 30,
       minCalls = 0,
       minPhotos = 0,
       minVideos = 0,
-      excludeExpired = true,
       excludeTwoFA = false,
+      excludeAudited = true,
       gender
     } = options;
 
@@ -193,16 +193,14 @@ export class UsersService {
       outgoingCall: 3,       // Outgoing calls (reduced from 8)
       videoCall: 8,          // Video calls (reduced from 20)
       totalCalls: 1,         // Total calls (fallback)
+      msgs: 0,              // Total messages
       movieCount: -5,       // NEGATIVE: Movie count indicates less genuine interaction
     };
 
     // Build filter query
-    const filter: any = {};
-
-    // Exclude expired users by default
-    if (excludeExpired) {
-      filter.expired = { $ne: true };
-    }
+    const filter: any = {
+      expired: { $ne: true },  // Always skip expired docs
+    };
 
     // Exclude 2FA users if requested
     if (excludeTwoFA) {
@@ -214,33 +212,20 @@ export class UsersService {
       filter.gender = gender;
     }
 
-    // calls is an object { totalCalls, ..., chats: PerChatCallStats[] }
-    // Also handle legacy array-only format via $isArray fallback
+    // Handle both old schema (calls.totalCalls top-level) and legacy array format
     if (minCalls > 0) {
-      filter.$expr = {
-        $gte: [
-          {
-            $cond: {
-              if: { $isArray: '$calls' },
-              then: { $sum: '$calls.totalCalls' },
-              else: {
-                $max: [
-                  { $ifNull: ['$calls.totalCalls', 0] },
-                  { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
-                ],
-              },
-            },
-          },
-          minCalls,
-        ],
-      };
+      filter.$or = [
+        ...(filter.$or || []),
+        { 'calls.totalCalls': { $gte: minCalls } },
+      ];
     }
 
     if (minPhotos > 0) {
       filter.$or = [
+        ...(filter.$or || []),
         { photoCount: { $gte: minPhotos } },
         { ownPhotoCount: { $gte: minPhotos } },
-        { otherPhotoCount: { $gte: minPhotos } }
+        { otherPhotoCount: { $gte: minPhotos } },
       ];
     }
 
@@ -249,258 +234,126 @@ export class UsersService {
         ...(filter.$or || []),
         { videoCount: { $gte: minVideos } },
         { ownVideoCount: { $gte: minVideos } },
-        { otherVideoCount: { $gte: minVideos } }
+        { otherVideoCount: { $gte: minVideos } },
       ];
     }
 
-    // Use MongoDB aggregation pipeline for efficient scoring and pagination
-    // This calculates scores in the database instead of loading all users into memory
-    const pipeline: any[] = [
-      // Match stage - apply filters
+    // Shared pipeline: match, optional session_audits, dedup, scoring, minScore filter
+    const scoringStages = [
       { $match: filter },
-      
-      // Lookup session_audits to exclude users whose mobile exists in session audits
-      {
-        $lookup: {
-          from: 'session_audits',
-          localField: 'mobile',
-          foreignField: 'mobile',
-          as: 'sessionAudits'
-        }
-      },
-      
-      // Exclude users whose mobile exists in session_audits collection
-      {
-        $match: {
-          sessionAudits: { $size: 0 } // Only include users with no matching session audits
-        }
-      },
-      
-      // Remove duplicates by mobile EARLY (before scoring to reduce data volume)
-      {
-        $group: {
-          _id: '$mobile',
-          doc: { $first: '$$ROOT' }
-        }
-      },
-      
-      // Replace root with the document
-      {
-        $replaceRoot: { newRoot: '$doc' }
-      },
-      
-      // Remove the sessionAudits field
-      {
-        $project: {
-          sessionAudits: 0
-        }
-      },
-      
-      // Add calculated fields for interaction score
+      ...(excludeAudited
+        ? [
+            { $lookup: { from: 'session_audits', localField: 'mobile', foreignField: 'mobile', as: 'sessionAudits' } },
+            { $match: { sessionAudits: { $size: 0 } } },
+            { $project: { sessionAudits: 0 } },
+          ]
+        : []),
+      // Dedup by mobile: keep one doc per mobile (no $sort here to avoid sort memory limit when disk use is disabled)
+      { $group: { _id: '$mobile', doc: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$doc' } },
       {
         $addFields: {
-          // Photo score (prefer own > other > total)
           photoScore: {
-            $cond: {
-              if: { $gt: ['$ownPhotoCount', 0] },
-              then: { $multiply: ['$ownPhotoCount', weights.ownPhoto] },
-              else: {
+            $add: [
+              { $multiply: [{ $ifNull: ['$ownPhotoCount', 0] }, weights.ownPhoto] },
+              { $multiply: [{ $ifNull: ['$otherPhotoCount', 0] }, weights.otherPhoto] },
+              {
                 $cond: {
-                  if: { $gt: ['$otherPhotoCount', 0] },
-                  then: { $multiply: ['$otherPhotoCount', weights.otherPhoto] },
-                  else: {
-                    $cond: {
-                      if: { $gt: ['$photoCount', 0] },
-                      then: { $multiply: ['$photoCount', weights.totalPhoto] },
-                      else: 0
-                    }
-                  }
-                }
-              }
-            }
+                  if: { $and: [{ $lte: [{ $ifNull: ['$ownPhotoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherPhotoCount', 0] }, 0] }] },
+                  then: { $multiply: [{ $ifNull: ['$photoCount', 0] }, weights.totalPhoto] },
+                  else: 0,
+                },
+              },
+            ],
           },
-          
-          // Video score (prefer own > other > total)
           videoScore: {
-            $cond: {
-              if: { $gt: ['$ownVideoCount', 0] },
-              then: { $multiply: ['$ownVideoCount', weights.ownVideo] },
-              else: {
+            $add: [
+              { $multiply: [{ $ifNull: ['$ownVideoCount', 0] }, weights.ownVideo] },
+              { $multiply: [{ $ifNull: ['$otherVideoCount', 0] }, weights.otherVideo] },
+              {
                 $cond: {
-                  if: { $gt: ['$otherVideoCount', 0] },
-                  then: { $multiply: ['$otherVideoCount', weights.otherVideo] },
-                  else: {
-                    $cond: {
-                      if: { $gt: ['$videoCount', 0] },
-                      then: { $multiply: ['$videoCount', weights.totalVideo] },
-                      else: 0
-                    }
-                  }
-                }
-              }
-            }
+                  if: { $and: [{ $lte: [{ $ifNull: ['$ownVideoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherVideoCount', 0] }, 0] }] },
+                  then: { $multiply: [{ $ifNull: ['$videoCount', 0] }, weights.totalVideo] },
+                  else: 0,
+                },
+              },
+            ],
           },
-          
-          // Call score - calls is { totalCalls, incoming, outgoing, video, audio, chats: PerChatCallStats[] }
-          // Use top-level summary fields; fall back to summing calls.chats when summary is zero
-          // Also handles legacy array-only format via $isArray
           callScore: {
             $let: {
               vars: {
-                isArr: { $isArray: '$calls' },
+                incomingVal: { $ifNull: ['$calls.incoming', 0] },
+                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
+                videoVal: { $ifNull: ['$calls.video', 0] },
+                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] },
               },
               in: {
-                $let: {
-                  vars: {
-                    // For array-only legacy: sum across elements; for object: prefer top-level, fallback to chats sum
-                    incomingVal: {
-                      $cond: {
-                        if: '$$isArr',
-                        then: { $sum: '$calls.incoming' },
-                        else: {
-                          $max: [
-                            { $ifNull: ['$calls.incoming', 0] },
-                            { $sum: { $ifNull: ['$calls.chats.incoming', []] } },
-                          ],
-                        },
-                      },
-                    },
-                    outgoingVal: {
-                      $cond: {
-                        if: '$$isArr',
-                        then: { $sum: '$calls.outgoing' },
-                        else: {
-                          $max: [
-                            { $ifNull: ['$calls.outgoing', 0] },
-                            { $sum: { $ifNull: ['$calls.chats.outgoing', []] } },
-                          ],
-                        },
-                      },
-                    },
-                    videoVal: {
-                      $cond: {
-                        if: '$$isArr',
-                        then: { $sum: '$calls.videoCalls' },
-                        else: {
-                          $max: [
-                            { $ifNull: ['$calls.video', 0] },
-                            { $sum: { $ifNull: ['$calls.chats.videoCalls', []] } },
-                          ],
-                        },
-                      },
-                    },
-                    totalCallsVal: {
-                      $cond: {
-                        if: '$$isArr',
-                        then: { $sum: '$calls.totalCalls' },
-                        else: {
-                          $max: [
-                            { $ifNull: ['$calls.totalCalls', 0] },
-                            { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
-                          ],
-                        },
-                      },
+                $add: [
+                  { $multiply: ['$$incomingVal', weights.incomingCall] },
+                  { $multiply: ['$$outgoingVal', weights.outgoingCall] },
+                  { $multiply: ['$$videoVal', weights.videoCall] },
+                  {
+                    $cond: {
+                      if: { $and: [{ $eq: ['$$incomingVal', 0] }, { $eq: ['$$outgoingVal', 0] }, { $gt: ['$$totalCallsVal', 0] }] },
+                      then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
+                      else: 0,
                     },
                   },
-                  in: {
-                    $add: [
-                      { $multiply: ['$$incomingVal', weights.incomingCall] },
-                      { $multiply: ['$$outgoingVal', weights.outgoingCall] },
-                      { $multiply: ['$$videoVal', weights.videoCall] },
-                      {
-                        $cond: {
-                          if: {
-                            $and: [
-                              { $eq: ['$$incomingVal', 0] },
-                              { $eq: ['$$outgoingVal', 0] },
-                              { $gt: ['$$totalCallsVal', 0] },
-                            ],
-                          },
-                          then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
-                          else: 0,
-                        },
-                      },
-                    ],
-                  },
-                },
+                ],
               },
             },
           },
-          
-          // Movie count (negative weightage)
-          movieScore: {
-            $cond: {
-              if: { $gt: ['$movieCount', 0] },
-              then: { $multiply: ['$movieCount', weights.movieCount] }, // Negative weight
-              else: 0
-            }
-          }
-        }
+          msgScore: { $multiply: [{ $ifNull: ['$msgs', 0] }, weights.msgs] },
+          movieScore: { $multiply: [{ $ifNull: ['$movieCount', 0] }, weights.movieCount] },
+        },
       },
-      
-      // Calculate total interaction score
       {
         $addFields: {
           interactionScore: {
-            $round: [
-              {
-                $add: [
-                  '$photoScore',
-                  '$videoScore',
-                  '$callScore',
-                  '$movieScore',
-                ],
-              },
-              2,
-            ],
+            $round: [{ $add: ['$photoScore', '$videoScore', '$callScore', '$msgScore', '$movieScore'] }, 2],
           },
         },
       },
-
-      // Filter by minimum score
       { $match: { interactionScore: { $gte: minScore } } },
-
-      // Sort by interaction score (descending) — must sort BEFORE limit for correct results
-      { $sort: { interactionScore: -1 } },
-
-      // Use $facet for count and pagination in parallel
-      {
-        $facet: {
-          totalCount: [{ $count: 'count' }],
-          paginatedResults: [
-            { $skip: skip },
-            { $limit: limitNum },
-            { $project: { photoScore: 0, videoScore: 0, callScore: 0, movieScore: 0 } },
-          ],
-        },
-      }
     ];
 
     try {
-      const result = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
-    
-      if (!result || result.length === 0) {
-        return {
-          users: [],
-          total: 0,
-          page: pageNum,
-          limit: limitNum,
-          totalPages: 0
-        };
+      // Phase 1: total count (no sort = no memory blow-up)
+      const countPipeline = [...scoringStages, { $count: 'count' }];
+      const countResult = await this.userModel.collection.aggregate(countPipeline, { allowDiskUse: true }).toArray();
+      const totalUsers = countResult[0]?.count ?? 0;
+
+      if (totalUsers === 0) {
+        return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
       }
 
-      const aggregationResult = result[0];
-      const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
-      const users = aggregationResult.paginatedResults || [];
-      const totalPages = Math.ceil(totalUsers / limitNum);
+      // Phase 2: sort only _id + interactionScore (tiny docs), skip/limit, then fetch full docs
+      const pagePipeline = [
+        ...scoringStages,
+        { $project: { _id: 1, interactionScore: 1 } },
+        { $sort: { interactionScore: -1 } },
+        { $skip: skip },
+        { $limit: limitNum },
+      ];
+      const pageResult = await this.userModel.collection.aggregate(pagePipeline, { allowDiskUse: true }).toArray() as { _id: unknown; interactionScore: number }[];
 
-      return {
-        users,
-        total: totalUsers,
-        page: pageNum,
-        limit: limitNum,
-        totalPages
-      };
+      if (pageResult.length === 0) {
+        return { users: [], total: totalUsers, page: pageNum, limit: limitNum, totalPages: Math.ceil(totalUsers / limitNum) };
+      }
+
+      const idOrder = pageResult.map((r) => r._id) as Types.ObjectId[];
+      const idToScore = new Map(pageResult.map((r) => [String(r._id), r.interactionScore]));
+      const docs = await this.userModel.find({ _id: { $in: idOrder } } as QueryFilter<UserDocument>).select('-session').lean().exec();
+      const docById = new Map(docs.map((d: any) => [String(d._id), d]));
+      const users = idOrder.map((id) => {
+        const doc = docById.get(String(id));
+        if (!doc) return null;
+        const { session, ...rest } = doc as Record<string, unknown>;
+        return { ...rest, interactionScore: idToScore.get(String(id)) ?? 0 };
+      }).filter(Boolean) as Array<User & { interactionScore: number }>;
+
+      const totalPages = Math.ceil(totalUsers / limitNum);
+      return { users, total: totalUsers, page: pageNum, limit: limitNum, totalPages };
     } catch (error) {
       console.error('Error in getTopInteractionUsers aggregation:', error);
       throw new InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);

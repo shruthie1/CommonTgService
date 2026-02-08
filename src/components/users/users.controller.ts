@@ -82,18 +82,18 @@ export class UsersController {
     example: 5,
     minimum: 0
   })
-  @ApiQuery({ 
-    name: 'excludeExpired', 
-    required: false, 
-    type: Boolean,
-    description: 'Exclude expired users (default: true)',
-    example: true
-  })
-  @ApiQuery({ 
+  @ApiQuery({
     name: 'excludeTwoFA', 
     required: false, 
     type: Boolean,
     description: 'Exclude users with 2FA enabled (default: false)',
+    example: false
+  })
+  @ApiQuery({
+    name: 'excludeAudited',
+    required: false,
+    type: Boolean,
+    description: 'Exclude users whose mobile is in session_audits (default: false). Set true to show only non-audited.',
     example: false
   })
   @ApiQuery({ 
@@ -160,8 +160,8 @@ export class UsersController {
     @Query('minCalls') minCalls?: string,
     @Query('minPhotos') minPhotos?: string,
     @Query('minVideos') minVideos?: string,
-    @Query('excludeExpired') excludeExpired?: string,
     @Query('excludeTwoFA') excludeTwoFA?: string,
+    @Query('excludeAudited') excludeAudited?: string,
     @Query('gender') gender?: string
   ) {
     // Parse and validate query parameters
@@ -192,9 +192,8 @@ export class UsersController {
       throw new BadRequestException('minVideos must be a non-negative integer');
     }
 
-    // Parse boolean parameters
-    const excludeExpiredBool = excludeExpired === 'false' ? false : (excludeExpired === 'true' ? true : undefined);
     const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
+    const excludeAuditedBool = excludeAudited === 'true';
 
     return this.usersService.getTopInteractionUsers({
       page: pageNum,
@@ -203,9 +202,9 @@ export class UsersController {
       minCalls: minCallsNum,
       minPhotos: minPhotosNum,
       minVideos: minVideosNum,
-      excludeExpired: excludeExpiredBool,
       excludeTwoFA: excludeTwoFABool,
-      gender
+      excludeAudited: excludeAuditedBool,
+      gender,
     });
   }
 

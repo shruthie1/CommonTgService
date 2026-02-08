@@ -7670,20 +7670,20 @@
             }
           },
           {
-            "name": "excludeExpired",
-            "required": false,
-            "in": "query",
-            "description": "Exclude expired users (default: true)",
-            "schema": {
-              "example": true,
-              "type": "boolean"
-            }
-          },
-          {
             "name": "excludeTwoFA",
             "required": false,
             "in": "query",
             "description": "Exclude users with 2FA enabled (default: false)",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "excludeAudited",
+            "required": false,
+            "in": "query",
+            "description": "Exclude users whose mobile is in session_audits (default: false). Set true to show only non-audited.",
             "schema": {
               "example": false,
               "type": "boolean"
