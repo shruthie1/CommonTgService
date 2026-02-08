@@ -67,7 +67,7 @@ export declare class TelegramController {
             totalOperations: number;
         };
     }>;
-    getCallLogStats(mobile: string, limit?: number, includeCallLog?: string): Promise<import("./manager").CallLogResult>;
+    getCallLogStats(mobile: string, limit?: number): Promise<Record<string, import("./manager").CallHistoryEntry[]>>;
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
@@ -90,6 +90,8 @@ export declare class TelegramController {
     cleanupChat(mobile: string, cleanup: ChatCleanupDto): Promise<{
         deletedCount: number;
     }>;
+    getChatMediaCounts(mobile: string, chatId: string): Promise<import("./manager").ChatMediaCounts>;
+    getChatCallHistory(mobile: string, chatId: string, limit?: number, includeCalls?: string): Promise<import("./manager").ChatCallHistory>;
     getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
     scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message | import("telegram").Api.TypeUpdates>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./manager").ScheduledMessageItem[]>;
@@ -160,38 +162,7 @@ export declare class TelegramController {
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
     }): Promise<import("./manager").MessageStats>;
-    getTopPrivateChats(mobile: string, limit?: number): Promise<{
-        chatId: string;
-        username?: string;
-        firstName?: string;
-        lastName?: string;
-        totalMessages: number;
-        interactionScore: number;
-        engagementLevel: "active" | "dormant";
-        calls: {
-            total: number;
-            incoming: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-            outgoing: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-        };
-        media: {
-            photos: number;
-            videos: number;
-        };
-        activityBreakdown: {
-            videoCalls: number;
-            audioCalls: number;
-            mediaSharing: number;
-            textMessages: number;
-        };
-    }[]>;
+    getTopPrivateChats(mobile: string, limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<import("./manager").TopPrivateChatsResult>;
     getSelfMsgsInfo(mobile: string, limit?: number): Promise<import("./manager").SelfMessagesInfo>;
     addBotsToChannel(mobile: string, body: {
         channelIds?: string[];

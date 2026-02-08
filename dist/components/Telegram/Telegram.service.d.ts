@@ -48,7 +48,7 @@ export declare class TelegramService implements OnModuleDestroy {
     forwardMediaToBot(mobile: string, fromChatId: string): Promise<string>;
     blockUser(mobile: string, chatId: string): Promise<void>;
     joinChannel(mobile: string, channelId: string): Promise<Api.TypeUpdates>;
-    getCallLog(mobile: string, limit?: number, includeCallLog?: boolean): Promise<import("./TelegramManager").CallLogResult>;
+    getCallLog(mobile: string, maxCalls?: number): Promise<Record<string, import("./TelegramManager").CallHistoryEntry[]>>;
     getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
     getMe(mobile: string): Promise<Api.User>;
@@ -241,6 +241,8 @@ export declare class TelegramService implements OnModuleDestroy {
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
     }): Promise<import("./TelegramManager").MessageStats>;
+    getChatMediaCounts(mobile: string, chatId: string): Promise<import("./TelegramManager").ChatMediaCounts>;
+    getChatCallHistory(mobile: string, chatId: string, limit?: number, includeCalls?: boolean): Promise<import("./TelegramManager").ChatCallHistory>;
     sendViewOnceMedia(mobile: string, options: {
         chatId: string;
         sourceType: 'path' | 'base64' | 'binary';
@@ -250,38 +252,7 @@ export declare class TelegramService implements OnModuleDestroy {
         caption?: string;
         filename?: string;
     }): Promise<Api.TypeUpdates>;
-    getTopPrivateChats(mobile: string, limit?: number): Promise<{
-        chatId: string;
-        username?: string;
-        firstName?: string;
-        lastName?: string;
-        totalMessages: number;
-        interactionScore: number;
-        engagementLevel: 'active' | 'dormant';
-        calls: {
-            total: number;
-            incoming: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-            outgoing: {
-                total: number;
-                audio: number;
-                video: number;
-            };
-        };
-        media: {
-            photos: number;
-            videos: number;
-        };
-        activityBreakdown: {
-            videoCalls: number;
-            audioCalls: number;
-            mediaSharing: number;
-            textMessages: number;
-        };
-    }[]>;
+    getTopPrivateChats(mobile: string, limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<import("./TelegramManager").TopPrivateChatsResult>;
     addBotsToChannel(mobile: string, channelIds?: string[]): Promise<void>;
     getBotInfo(token: string): Promise<any>;
     setupBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {

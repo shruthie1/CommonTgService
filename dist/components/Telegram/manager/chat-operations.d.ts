@@ -1,7 +1,7 @@
 import { Api } from 'telegram';
 import { TotalList } from 'telegram/Helpers';
 import { EntityLike } from 'telegram/define';
-import { TgContext, ChatListResult, ChatStatistics, MessageStats, TopPrivateChat, CallLogResult, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem } from './types';
+import { TgContext, ChatListResult, ChatStatistics, MessageStats, TopPrivateChatsResult, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry } from './types';
 export declare function safeGetEntityById(ctx: TgContext, entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
 export declare function getMe(ctx: TgContext): Promise<Api.User>;
 export declare function getchatId(ctx: TgContext, username: string): Promise<Api.TypeInputPeer>;
@@ -10,15 +10,15 @@ export declare function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLi
 export declare function getAllChats(ctx: TgContext): Promise<ReturnType<Api.TypeChat['toJSON']>[]>;
 export declare function getMessagesNew(ctx: TgContext, chatId: string, offset?: number, limit?: number): Promise<MessageItem[]>;
 export declare function getSelfMSgsInfo(ctx: TgContext, limit?: number): Promise<SelfMessagesInfo>;
-export declare function getCallLog(ctx: TgContext, limit?: number, options?: {
-    includeCallLog?: boolean;
-}): Promise<CallLogResult>;
 export declare function getChatStatistics(ctx: TgContext, chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
 export declare function getMessageStats(ctx: TgContext, options: {
     chatId: string;
     period: 'day' | 'week' | 'month';
     fromDate?: Date;
 }): Promise<MessageStats>;
+export declare function getChatMediaCounts(ctx: TgContext, chatId: string): Promise<ChatMediaCounts>;
+export declare function getCallLog(ctx: TgContext, maxCalls?: number): Promise<Record<string, CallHistoryEntry[]>>;
+export declare function getChatCallHistory(ctx: TgContext, chatId: string, limit?: number, includeCalls?: boolean): Promise<ChatCallHistory>;
 export declare function getChats(ctx: TgContext, options: {
     limit?: number;
     offsetDate?: number;
@@ -35,7 +35,7 @@ export declare function createChatFolder(ctx: TgContext, options: ChatFolderCrea
     options: Record<string, boolean>;
 }>;
 export declare function getChatFolders(ctx: TgContext): Promise<ChatFolder[]>;
-export declare function getTopPrivateChats(ctx: TgContext, limit?: number): Promise<TopPrivateChat[]>;
+export declare function getTopPrivateChats(ctx: TgContext, limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<TopPrivateChatsResult>;
 export declare function createBot(ctx: TgContext, options: {
     name: string;
     username: string;

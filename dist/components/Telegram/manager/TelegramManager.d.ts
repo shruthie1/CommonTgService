@@ -3,7 +3,7 @@ import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
-import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, CallLogResult, TopPrivateChat, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem } from './types';
+import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry } from './types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
@@ -38,15 +38,15 @@ declare class TelegramManager {
     getMessagesNew(chatId: string, offset?: number, limit?: number): Promise<MessageItem[]>;
     safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
     getSelfMSgsInfo(limit?: number): Promise<SelfMessagesInfo>;
-    getCallLog(limit?: number, options?: {
-        includeCallLog?: boolean;
-    }): Promise<CallLogResult>;
+    getCallLog(maxCalls?: number): Promise<Record<string, CallHistoryEntry[]>>;
     getChatStatistics(chatId: string, period: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
     getMessageStats(options: {
         chatId: string;
         period: 'day' | 'week' | 'month';
         fromDate?: Date;
     }): Promise<MessageStats>;
+    getChatMediaCounts(chatId: string): Promise<ChatMediaCounts>;
+    getChatCallHistory(chatId: string, limit?: number, includeCalls?: boolean): Promise<ChatCallHistory>;
     getDialogs(iterDialogsParams: IterDialogsParams): Promise<TotalList<Dialog>>;
     getChats(options: {
         limit?: number;
@@ -58,7 +58,7 @@ declare class TelegramManager {
         includePhotos?: boolean;
     }): Promise<ChatListResult>;
     updateChatSettings(settings: ChatSettingsUpdate): Promise<boolean>;
-    getTopPrivateChats(limit?: number): Promise<TopPrivateChat[]>;
+    getTopPrivateChats(limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<TopPrivateChatsResult>;
     createChatFolder(options: ChatFolderCreateOptions): Promise<{
         id: number;
         name: string;
