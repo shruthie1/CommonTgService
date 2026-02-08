@@ -1,3 +1,4 @@
+import { PerChatCallStats } from '../../Telegram/manager/types';
 export declare class CreateUserDto {
     mobile: string;
     session: string;
@@ -28,7 +29,8 @@ export declare class CreateUserDto {
         incoming: number;
         video: number;
         audio: number;
-        chats: any[];
+        chats: (PerChatCallStats & {
+            chatId: string;
+        })[];
     };
-    recentUsers: any[];
 }

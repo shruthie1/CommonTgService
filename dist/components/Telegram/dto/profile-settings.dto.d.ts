@@ -1,4 +1,4 @@
-import { PrivacyLevel } from '../../../interfaces/telegram';
+import { PrivacyLevel } from '../manager/types';
 export declare class PrivacySettingsDto {
     phoneNumber?: PrivacyLevel;
     lastSeen?: PrivacyLevel;

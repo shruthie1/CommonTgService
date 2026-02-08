@@ -1,5 +1,5 @@
 import { TelegramService } from './../Telegram/Telegram.service';
-import { Model } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
@@ -15,16 +15,12 @@ export declare class UsersService {
     create(user: CreateUserDto): Promise<User | undefined>;
     findAll(limit?: number, skip?: number): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
-    update(tgId: string, user: UpdateUserDto): Promise<number>;
-    updateByFilter(filter: any, user: UpdateUserDto): Promise<number>;
+    update(tgId: string, updateDto: UpdateUserDto): Promise<number>;
+    updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;
     delete(tgId: string): Promise<void>;
     deleteById(userId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
-    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<(User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
-        _id: import("mongoose").Types.ObjectId;
-    }> & {
-        __v: number;
-    })[]>;
+    executeQuery(query: QueryFilter<UserDocument>, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<User[]>;
     getTopInteractionUsers(options: {
         page?: number;
         limit?: number;

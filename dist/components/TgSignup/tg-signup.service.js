@@ -292,7 +292,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 ownPhotoCount: 0,
                 ownVideoCount: 0,
                 otherVideoCount: 0,
-                recentUsers: [],
                 calls: {
                     totalCalls: 0,
                     outgoing: 0,

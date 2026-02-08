@@ -17,9 +17,16 @@ export declare function getMessageStats(ctx: TgContext, options: {
     fromDate?: Date;
 }): Promise<MessageStats>;
 export declare function getChatMediaCounts(ctx: TgContext, chatId: string): Promise<ChatMediaCounts>;
-export declare function getCallLogStats(ctx: TgContext, maxCalls?: number): Promise<(PerChatCallStats & {
-    chatId: string;
-})[]>;
+export declare function getCallLogStats(ctx: TgContext, maxCalls?: number): Promise<{
+    totalCalls: number;
+    outgoing: number;
+    incoming: number;
+    video: number;
+    audio: number;
+    chats: (PerChatCallStats & {
+        chatId: string;
+    })[];
+}>;
 export declare function getCallLog(ctx: TgContext, maxCalls?: number): Promise<Record<string, CallHistoryEntry[]>>;
 export declare function getChatCallHistory(ctx: TgContext, chatId: string, limit?: number, includeCalls?: boolean): Promise<ChatCallHistory>;
 export declare function getChats(ctx: TgContext, options: {

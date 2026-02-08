@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./Telegram.controller"), exports);
 __exportStar(require("./Telegram.service"), exports);
 __exportStar(require("./Telegram.module"), exports);
+__exportStar(require("./manager"), exports);
 __exportStar(require("./dto/update-profile.dto"), exports);
 __exportStar(require("./dto/channel-operation.dto"), exports);
 __exportStar(require("./utils/connection-manager"), exports);

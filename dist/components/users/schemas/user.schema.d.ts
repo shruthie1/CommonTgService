@@ -1,4 +1,5 @@
 import mongoose, { Document } from 'mongoose';
+import { PerChatCallStats } from '../../Telegram/manager/types';
 export type UserDocument = User & Document;
 export declare class User {
     mobile: string;
@@ -31,9 +32,10 @@ export declare class User {
         incoming: number;
         video: number;
         audio: number;
-        chats: any[];
+        chats: (PerChatCallStats & {
+            chatId: string;
+        })[];
     };
-    recentUsers: any[];
 }
 export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any, any, any, (mongoose.Document<unknown, any, User, any, mongoose.DefaultSchemaOptions> & User & {
     _id: mongoose.Types.ObjectId;
@@ -276,17 +278,10 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         incoming: number;
         video: number;
         audio: number;
-        chats: any[];
+        chats: (PerChatCallStats & {
+            chatId: string;
+        })[];
     }, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    recentUsers?: mongoose.SchemaDefinitionProperty<any[], User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;

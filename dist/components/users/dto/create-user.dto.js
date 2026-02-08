@@ -24,6 +24,14 @@ class CreateUserDto {
         this.ownPhotoCount = 0;
         this.ownVideoCount = 0;
         this.contacts = 0;
+        this.calls = {
+            totalCalls: 0,
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            audio: 0,
+            chats: [],
+        };
     }
 }
 exports.CreateUserDto = CreateUserDto;
@@ -40,11 +48,11 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last name of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Username of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "username", void 0);
 __decorate([
@@ -96,7 +104,7 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "videoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Gender of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Gender of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "gender", void 0);
 __decorate([
@@ -120,24 +128,17 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Call log summary and per-chat details',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Per-chat call statistics',
         example: {
-            totalCalls: 1,
-            outgoing: 1,
+            totalCalls: 0,
+            outgoing: 0,
             incoming: 0,
-            video: 1,
+            video: 0,
             audio: 0,
             chats: [],
         },
     }),
     __metadata("design:type", Object)
 ], CreateUserDto.prototype, "calls", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Call details of the user',
-        example: []
-    }),
-    __metadata("design:type", Array)
-], CreateUserDto.prototype, "recentUsers", void 0);
 //# sourceMappingURL=create-user.dto.js.map

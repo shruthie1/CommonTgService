@@ -5,7 +5,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { ChannelInfo } from './types/telegram-responses';
-import { ChatStatistics, GroupOptions, MessageScheduleOptions } from '../../interfaces/telegram';
+import { ChatStatistics, GroupOptions, MessageScheduleOptions } from './manager/types';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateTgBotDto } from './dto/create-bot.dto';

@@ -1,4 +1,4 @@
-export * from '../../../interfaces/telegram';
+export * from '../manager/types';
 export * from './batch-operations.dto';
 export * from './media-operations.dto';
 export * from './schedule-operations.dto';

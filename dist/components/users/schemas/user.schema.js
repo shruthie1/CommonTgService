@@ -156,15 +156,6 @@ __decorate([
     }),
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    (0, mongoose_1.Prop)({
-        type: mongoose_2.default.Schema.Types.Mixed,
-        default: [],
-        required: false,
-    }),
-    __metadata("design:type", Array)
-], User.prototype, "recentUsers", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'users', versionKey: false, autoIndex: true, timestamps: true,

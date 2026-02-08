@@ -404,7 +404,7 @@ async function getCallLogStats(ctx, maxCalls = 10) {
         callStats.push({ ...buildCallSummary(allCallsByChat[chatId]), chatId: chatId });
     }
     callStats.sort((a, b) => b.totalCalls - a.totalCalls);
-    return callStats.slice(0, maxLimit);
+    return { totalCalls: callStats.reduce((acc, curr) => acc + curr.totalCalls, 0), outgoing: callStats.reduce((acc, curr) => acc + curr.outgoing, 0), incoming: callStats.reduce((acc, curr) => acc + curr.incoming, 0), video: callStats.reduce((acc, curr) => acc + curr.videoCalls, 0), audio: callStats.reduce((acc, curr) => acc + curr.audioCalls, 0), chats: callStats.slice(0, maxLimit) };
 }
 async function getCallLog(ctx, maxCalls = 1000) {
     const callsByChat = {};
@@ -820,7 +820,7 @@ async function fetchCallEntriesGlobal(ctx, maxCalls = 500) {
     return { callEntriesByChat, callCountsByChat };
 }
 const nullCalls = {
-    totalCalls: 0, incomingCalls: 0, outgoingCalls: 0, missedCalls: 0,
+    totalCalls: 0, incoming: 0, outgoing: 0, missed: 0,
     videoCalls: 0, audioCalls: 0, totalDuration: 0, averageDuration: 0,
     longestCall: 0, lastCallDate: null,
 };
@@ -836,22 +836,12 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
     const name = isSelf
         ? 'Saved Messages'
         : [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Deleted Account';
-    const media = mediaCounts ? {
-        photo: mediaCounts.photo,
-        video: mediaCounts.video,
-        roundVideo: mediaCounts.roundVideo,
-        document: mediaCounts.document,
-        voice: mediaCounts.voice,
-        gif: mediaCounts.gif,
-        audio: mediaCounts.audio,
-        link: mediaCounts.link,
-        totalMedia: mediaCounts.totalMedia,
-    } : null;
+    const media = mediaCounts ?? null;
     const calls = callSummary ? {
         totalCalls: callSummary.totalCalls,
-        incomingCalls: callSummary.incoming,
-        outgoingCalls: callSummary.outgoing,
-        missedCalls: callSummary.missed,
+        incoming: callSummary.incoming,
+        outgoing: callSummary.outgoing,
+        missed: callSummary.missed,
         videoCalls: callSummary.videoCalls,
         audioCalls: callSummary.audioCalls,
         totalDuration: callSummary.totalDuration,
@@ -860,9 +850,9 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
         lastCallDate: callSummary.lastCallDate,
     } : cCalls.totalCalls > 0 ? {
         totalCalls: cCalls.totalCalls,
-        incomingCalls: cCalls.incoming,
-        outgoingCalls: cCalls.outgoing,
-        missedCalls: 0, videoCalls: cCalls.videoCalls,
+        incoming: cCalls.incoming,
+        outgoing: cCalls.outgoing,
+        missed: 0, videoCalls: cCalls.videoCalls,
         audioCalls: cCalls.totalCalls - cCalls.videoCalls,
         totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null,
     } : { ...nullCalls };

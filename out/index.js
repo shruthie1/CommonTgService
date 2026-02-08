@@ -5212,7 +5212,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AdminPermission = exports.MediaType = exports.BatchOperationType = void 0;
-__exportStar(__webpack_require__(/*! ../../../interfaces/telegram */ "./src/interfaces/telegram.ts"), exports);
+__exportStar(__webpack_require__(/*! ../manager/types */ "./src/components/Telegram/manager/types.ts"), exports);
 __exportStar(__webpack_require__(/*! ./batch-operations.dto */ "./src/components/Telegram/dto/batch-operations.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./media-operations.dto */ "./src/components/Telegram/dto/media-operations.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./schedule-operations.dto */ "./src/components/Telegram/dto/schedule-operations.dto.ts"), exports);
@@ -5761,44 +5761,44 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = void 0;
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const telegram_1 = __webpack_require__(/*! ../../../interfaces/telegram */ "./src/interfaces/telegram.ts");
+const types_1 = __webpack_require__(/*! ../manager/types */ "./src/components/Telegram/manager/types.ts");
 class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "phoneNumber", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "lastSeen", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "profilePhotos", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "forwards", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "calls", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "groups", void 0);
 class SecuritySettingsDto {
@@ -6189,6 +6189,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./Telegram.controller */ "./src/components/Telegram/Telegram.controller.ts"), exports);
 __exportStar(__webpack_require__(/*! ./Telegram.service */ "./src/components/Telegram/Telegram.service.ts"), exports);
 __exportStar(__webpack_require__(/*! ./Telegram.module */ "./src/components/Telegram/Telegram.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./manager */ "./src/components/Telegram/manager/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./dto/update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./dto/channel-operation.dto */ "./src/components/Telegram/dto/channel-operation.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts"), exports);
@@ -7791,7 +7792,7 @@ async function getCallLogStats(ctx, maxCalls = 10) {
         callStats.push({ ...buildCallSummary(allCallsByChat[chatId]), chatId: chatId });
     }
     callStats.sort((a, b) => b.totalCalls - a.totalCalls);
-    return callStats.slice(0, maxLimit);
+    return { totalCalls: callStats.reduce((acc, curr) => acc + curr.totalCalls, 0), outgoing: callStats.reduce((acc, curr) => acc + curr.outgoing, 0), incoming: callStats.reduce((acc, curr) => acc + curr.incoming, 0), video: callStats.reduce((acc, curr) => acc + curr.videoCalls, 0), audio: callStats.reduce((acc, curr) => acc + curr.audioCalls, 0), chats: callStats.slice(0, maxLimit) };
 }
 async function getCallLog(ctx, maxCalls = 1000) {
     const callsByChat = {};
@@ -8207,7 +8208,7 @@ async function fetchCallEntriesGlobal(ctx, maxCalls = 500) {
     return { callEntriesByChat, callCountsByChat };
 }
 const nullCalls = {
-    totalCalls: 0, incomingCalls: 0, outgoingCalls: 0, missedCalls: 0,
+    totalCalls: 0, incoming: 0, outgoing: 0, missed: 0,
     videoCalls: 0, audioCalls: 0, totalDuration: 0, averageDuration: 0,
     longestCall: 0, lastCallDate: null,
 };
@@ -8223,22 +8224,12 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
     const name = isSelf
         ? 'Saved Messages'
         : [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Deleted Account';
-    const media = mediaCounts ? {
-        photo: mediaCounts.photo,
-        video: mediaCounts.video,
-        roundVideo: mediaCounts.roundVideo,
-        document: mediaCounts.document,
-        voice: mediaCounts.voice,
-        gif: mediaCounts.gif,
-        audio: mediaCounts.audio,
-        link: mediaCounts.link,
-        totalMedia: mediaCounts.totalMedia,
-    } : null;
+    const media = mediaCounts ?? null;
     const calls = callSummary ? {
         totalCalls: callSummary.totalCalls,
-        incomingCalls: callSummary.incoming,
-        outgoingCalls: callSummary.outgoing,
-        missedCalls: callSummary.missed,
+        incoming: callSummary.incoming,
+        outgoing: callSummary.outgoing,
+        missed: callSummary.missed,
         videoCalls: callSummary.videoCalls,
         audioCalls: callSummary.audioCalls,
         totalDuration: callSummary.totalDuration,
@@ -8247,9 +8238,9 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
         lastCallDate: callSummary.lastCallDate,
     } : cCalls.totalCalls > 0 ? {
         totalCalls: cCalls.totalCalls,
-        incomingCalls: cCalls.incoming,
-        outgoingCalls: cCalls.outgoing,
-        missedCalls: 0, videoCalls: cCalls.videoCalls,
+        incoming: cCalls.incoming,
+        outgoing: cCalls.outgoing,
+        missed: 0, videoCalls: cCalls.videoCalls,
         audioCalls: cCalls.totalCalls - cCalls.videoCalls,
         totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null,
     } : { ...nullCalls };
@@ -10659,6 +10650,13 @@ async function deleteProfilePhotos(ctx) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PrivacyLevelEnum = void 0;
+var PrivacyLevelEnum;
+(function (PrivacyLevelEnum) {
+    PrivacyLevelEnum["everybody"] = "everybody";
+    PrivacyLevelEnum["contacts"] = "contacts";
+    PrivacyLevelEnum["nobody"] = "nobody";
+})(PrivacyLevelEnum || (exports.PrivacyLevelEnum = PrivacyLevelEnum = {}));
 
 
 /***/ },
@@ -11845,7 +11843,6 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 ownPhotoCount: 0,
                 ownVideoCount: 0,
                 otherVideoCount: 0,
-                recentUsers: [],
                 calls: {
                     totalCalls: 0,
                     outgoing: 0,
@@ -31009,6 +31006,14 @@ class CreateUserDto {
         this.ownPhotoCount = 0;
         this.ownVideoCount = 0;
         this.contacts = 0;
+        this.calls = {
+            totalCalls: 0,
+            outgoing: 0,
+            incoming: 0,
+            video: 0,
+            audio: 0,
+            chats: [],
+        };
     }
 }
 exports.CreateUserDto = CreateUserDto;
@@ -31025,11 +31030,11 @@ __decorate([
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last name of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Username of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "username", void 0);
 __decorate([
@@ -31081,7 +31086,7 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "videoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Gender of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Gender of the user', example: null }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "gender", void 0);
 __decorate([
@@ -31105,26 +31110,19 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Call log summary and per-chat details',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Per-chat call statistics',
         example: {
-            totalCalls: 1,
-            outgoing: 1,
+            totalCalls: 0,
+            outgoing: 0,
             incoming: 0,
-            video: 1,
+            video: 0,
             audio: 0,
             chats: [],
         },
     }),
     __metadata("design:type", Object)
 ], CreateUserDto.prototype, "calls", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Call details of the user',
-        example: []
-    }),
-    __metadata("design:type", Array)
-], CreateUserDto.prototype, "recentUsers", void 0);
 
 
 /***/ },
@@ -31559,15 +31557,6 @@ __decorate([
     }),
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
-    (0, mongoose_1.Prop)({
-        type: mongoose_2.default.Schema.Types.Mixed,
-        default: [],
-        required: false,
-    }),
-    __metadata("design:type", Array)
-], User.prototype, "recentUsers", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'users', versionKey: false, autoIndex: true, timestamps: true,
@@ -32029,25 +32018,27 @@ let UsersService = class UsersService {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
     async findOne(tgId) {
-        const user = await (await this.userModel.findOne({ tgId }).exec())?.toJSON();
-        if (!user) {
+        const doc = await this.userModel.findOne({ tgId }).exec();
+        if (!doc) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
-        return user;
+        return doc.toJSON();
     }
-    async update(tgId, user) {
-        delete user['_id'];
-        const result = await this.userModel.updateMany({ tgId }, { $set: user }, { upsert: true }).exec();
+    async update(tgId, updateDto) {
+        const result = await this.userModel
+            .updateMany({ tgId }, { $set: updateDto }, { upsert: true })
+            .exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
         }
         return result.modifiedCount;
     }
-    async updateByFilter(filter, user) {
-        delete user['_id'];
-        const result = await this.userModel.updateMany(filter, { $set: user }, { upsert: true }).exec();
+    async updateByFilter(filter, updateDto) {
+        const result = await this.userModel
+            .updateMany(filter, { $set: updateDto }, { upsert: true })
+            .exec();
         if (result.matchedCount === 0) {
-            throw new common_1.NotFoundException(`Users with tgId ${JSON.stringify(filter)} not found`);
+            throw new common_1.NotFoundException(`Users matching filter not found`);
         }
         return result.modifiedCount;
     }
@@ -32064,29 +32055,27 @@ let UsersService = class UsersService {
         }
     }
     async search(filter) {
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
+        const query = { ...filter };
+        if (query.firstName) {
+            query.firstName = { $regex: new RegExp(query.firstName, 'i') };
         }
-        if (filter.twoFA !== undefined) {
-            filter.twoFA = filter.twoFA === 'true' || filter.twoFA === '1' || filter.twoFA === true;
+        if (query.twoFA !== undefined) {
+            query.twoFA = String(query.twoFA) === 'true' || String(query.twoFA) === '1';
         }
-        return this.userModel.find(filter).sort({ updatedAt: -1 }).exec();
+        return this.userModel.find(query).sort({ updatedAt: -1 }).exec();
     }
     async executeQuery(query, sort, limit, skip) {
+        if (!query) {
+            throw new common_1.BadRequestException('Query is invalid.');
+        }
         try {
-            if (!query) {
-                throw new common_1.BadRequestException('Query is invalid.');
-            }
             const queryExec = this.userModel.find(query).lean();
-            if (sort) {
+            if (sort)
                 queryExec.sort(sort);
-            }
-            if (limit) {
+            if (limit)
                 queryExec.limit(limit);
-            }
-            if (skip) {
+            if (skip)
                 queryExec.skip(skip);
-            }
             return await queryExec.exec();
         }
         catch (error) {
@@ -32122,15 +32111,23 @@ let UsersService = class UsersService {
             filter.gender = gender;
         }
         if (minCalls > 0) {
-            filter.$and = [
-                ...(filter.$and || []),
-                {
-                    $or: [
-                        { 'calls.totalCalls': { $gte: minCalls } },
-                        { $expr: { $gte: [{ $size: { $ifNull: ['$calls.chatCallCounts', []] } }, minCalls] } },
-                    ],
-                },
-            ];
+            filter.$expr = {
+                $gte: [
+                    {
+                        $cond: {
+                            if: { $isArray: '$calls' },
+                            then: { $sum: '$calls.totalCalls' },
+                            else: {
+                                $max: [
+                                    { $ifNull: ['$calls.totalCalls', 0] },
+                                    { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
+                                ],
+                            },
+                        },
+                    },
+                    minCalls,
+                ],
+            };
         }
         if (minPhotos > 0) {
             filter.$or = [
@@ -32219,55 +32216,83 @@ let UsersService = class UsersService {
                     callScore: {
                         $let: {
                             vars: {
-                                incomingVal: { $ifNull: ['$calls.incoming', 0] },
-                                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
-                                videoVal: { $ifNull: ['$calls.video', 0] },
-                                totalCallsVal: {
-                                    $ifNull: [
-                                        '$calls.totalCalls',
-                                        { $size: { $ifNull: ['$calls.chatCallCounts', []] } },
-                                    ],
-                                },
+                                isArr: { $isArray: '$calls' },
                             },
                             in: {
-                                $add: [
-                                    {
-                                        $cond: {
-                                            if: { $gt: ['$$incomingVal', 0] },
-                                            then: { $multiply: ['$$incomingVal', weights.incomingCall] },
-                                            else: 0
-                                        }
-                                    },
-                                    {
-                                        $cond: {
-                                            if: { $gt: ['$$outgoingVal', 0] },
-                                            then: { $multiply: ['$$outgoingVal', weights.outgoingCall] },
-                                            else: 0
-                                        }
-                                    },
-                                    {
-                                        $cond: {
-                                            if: { $gt: ['$$videoVal', 0] },
-                                            then: { $multiply: ['$$videoVal', weights.videoCall] },
-                                            else: 0
-                                        }
-                                    },
-                                    {
-                                        $cond: {
-                                            if: {
-                                                $and: [
-                                                    { $eq: ['$$incomingVal', 0] },
-                                                    { $eq: ['$$outgoingVal', 0] },
-                                                    { $gt: ['$$totalCallsVal', 0] }
-                                                ]
+                                $let: {
+                                    vars: {
+                                        incomingVal: {
+                                            $cond: {
+                                                if: '$$isArr',
+                                                then: { $sum: '$calls.incoming' },
+                                                else: {
+                                                    $max: [
+                                                        { $ifNull: ['$calls.incoming', 0] },
+                                                        { $sum: { $ifNull: ['$calls.chats.incoming', []] } },
+                                                    ],
+                                                },
                                             },
-                                            then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
-                                            else: 0
-                                        }
-                                    }
-                                ]
-                            }
-                        }
+                                        },
+                                        outgoingVal: {
+                                            $cond: {
+                                                if: '$$isArr',
+                                                then: { $sum: '$calls.outgoing' },
+                                                else: {
+                                                    $max: [
+                                                        { $ifNull: ['$calls.outgoing', 0] },
+                                                        { $sum: { $ifNull: ['$calls.chats.outgoing', []] } },
+                                                    ],
+                                                },
+                                            },
+                                        },
+                                        videoVal: {
+                                            $cond: {
+                                                if: '$$isArr',
+                                                then: { $sum: '$calls.videoCalls' },
+                                                else: {
+                                                    $max: [
+                                                        { $ifNull: ['$calls.video', 0] },
+                                                        { $sum: { $ifNull: ['$calls.chats.videoCalls', []] } },
+                                                    ],
+                                                },
+                                            },
+                                        },
+                                        totalCallsVal: {
+                                            $cond: {
+                                                if: '$$isArr',
+                                                then: { $sum: '$calls.totalCalls' },
+                                                else: {
+                                                    $max: [
+                                                        { $ifNull: ['$calls.totalCalls', 0] },
+                                                        { $sum: { $ifNull: ['$calls.chats.totalCalls', []] } },
+                                                    ],
+                                                },
+                                            },
+                                        },
+                                    },
+                                    in: {
+                                        $add: [
+                                            { $multiply: ['$$incomingVal', weights.incomingCall] },
+                                            { $multiply: ['$$outgoingVal', weights.outgoingCall] },
+                                            { $multiply: ['$$videoVal', weights.videoCall] },
+                                            {
+                                                $cond: {
+                                                    if: {
+                                                        $and: [
+                                                            { $eq: ['$$incomingVal', 0] },
+                                                            { $eq: ['$$outgoingVal', 0] },
+                                                            { $gt: ['$$totalCallsVal', 0] },
+                                                        ],
+                                                    },
+                                                    then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
+                                                    else: 0,
+                                                },
+                                            },
+                                        ],
+                                    },
+                                },
+                            },
+                        },
                     },
                     movieScore: {
                         $cond: {
@@ -32283,38 +32308,29 @@ let UsersService = class UsersService {
                     interactionScore: {
                         $round: [
                             {
-                                $divide: [
-                                    {
-                                        $add: [
-                                            '$photoScore',
-                                            '$videoScore',
-                                            '$callScore',
-                                            '$movieScore'
-                                        ]
-                                    },
-                                    1
-                                ]
+                                $add: [
+                                    '$photoScore',
+                                    '$videoScore',
+                                    '$callScore',
+                                    '$movieScore',
+                                ],
                             },
-                            2
-                        ]
-                    }
-                }
+                            2,
+                        ],
+                    },
+                },
             },
-            {
-                $match: {
-                    interactionScore: { $gte: minScore }
-                }
-            },
-            { $limit: Math.max(10000, (pageNum * limitNum) + 1000) },
+            { $match: { interactionScore: { $gte: minScore } } },
             { $sort: { interactionScore: -1 } },
             {
                 $facet: {
                     totalCount: [{ $count: 'count' }],
                     paginatedResults: [
                         { $skip: skip },
-                        { $limit: limitNum }
-                    ]
-                }
+                        { $limit: limitNum },
+                        { $project: { photoScore: 0, videoScore: 0, callScore: 0, movieScore: 0 } },
+                    ],
+                },
             }
         ];
         try {
@@ -32330,17 +32346,7 @@ let UsersService = class UsersService {
             }
             const aggregationResult = result[0];
             const totalUsers = aggregationResult.totalCount?.[0]?.count || 0;
-            const rawUsers = aggregationResult.paginatedResults || [];
-            const users = rawUsers.map((u) => {
-                const calls = u?.calls ?? {};
-                const hasNew = Array.isArray(calls.chats);
-                const hasOld = Array.isArray(calls.chatCallCounts);
-                const normalizedCalls = {
-                    ...calls,
-                    ...(hasNew && !hasOld ? { chatCallCounts: calls.chats } : {}),
-                };
-                return { ...u, calls: normalizedCalls };
-            });
+            const users = aggregationResult.paginatedResults || [];
             const totalPages = Math.ceil(totalUsers / limitNum);
             return {
                 users,
@@ -32847,25 +32853,6 @@ exports.TimeoutInterceptor = TimeoutInterceptor = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [Number])
 ], TimeoutInterceptor);
-
-
-/***/ },
-
-/***/ "./src/interfaces/telegram.ts"
-/*!************************************!*\
-  !*** ./src/interfaces/telegram.ts ***!
-  \************************************/
-(__unused_webpack_module, exports) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PrivacyLevelEnum = void 0;
-var PrivacyLevelEnum;
-(function (PrivacyLevelEnum) {
-    PrivacyLevelEnum["everybody"] = "everybody";
-    PrivacyLevelEnum["contacts"] = "contacts";
-    PrivacyLevelEnum["nobody"] = "nobody";
-})(PrivacyLevelEnum || (exports.PrivacyLevelEnum = PrivacyLevelEnum = {}));
 
 
 /***/ },

@@ -15,7 +15,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminPermission = exports.MediaType = exports.BatchOperationType = void 0;
-__exportStar(require("../../../interfaces/telegram"), exports);
+__exportStar(require("../manager/types"), exports);
 __exportStar(require("./batch-operations.dto"), exports);
 __exportStar(require("./media-operations.dto"), exports);
 __exportStar(require("./schedule-operations.dto"), exports);

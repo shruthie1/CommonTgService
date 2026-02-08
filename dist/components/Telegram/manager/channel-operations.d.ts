@@ -1,8 +1,7 @@
 import { Api } from 'telegram';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
-import { TgContext, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, GroupSettingsUpdate } from './types';
-import { GroupOptions } from '../../../interfaces/telegram';
+import { TgContext, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, GroupSettingsUpdate, GroupOptions } from './types';
 export declare function createGroup(ctx: TgContext): Promise<GroupCreationResult>;
 export declare function archiveChat(ctx: TgContext, id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
 export declare function forwardMedia(ctx: TgContext, channel: string, fromChatId: string): Promise<void>;

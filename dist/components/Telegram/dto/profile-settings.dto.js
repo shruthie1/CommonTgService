@@ -12,44 +12,44 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfilePhotoDto = exports.SecuritySettingsDto = exports.PrivacySettingsDto = void 0;
 const class_validator_1 = require("class-validator");
 const swagger_1 = require("@nestjs/swagger");
-const telegram_1 = require("../../../interfaces/telegram");
+const types_1 = require("../manager/types");
 class PrivacySettingsDto {
 }
 exports.PrivacySettingsDto = PrivacySettingsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Phone number visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "phoneNumber", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last seen visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "lastSeen", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile photos visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "profilePhotos", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Message forwards visibility', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "forwards", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Calls privacy', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "calls", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: telegram_1.PrivacyLevelEnum, required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Group chats privacy', enum: types_1.PrivacyLevelEnum, required: false }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(telegram_1.PrivacyLevelEnum),
+    (0, class_validator_1.IsEnum)(types_1.PrivacyLevelEnum),
     __metadata("design:type", String)
 ], PrivacySettingsDto.prototype, "groups", void 0);
 class SecuritySettingsDto {

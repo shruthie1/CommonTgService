@@ -1,7 +1,1 @@
-export interface ChannelInfo {
-    chatsArrayLength: number;
-    canSendTrueCount: number;
-    canSendFalseCount: number;
-    ids: string[];
-    canSendFalseChats: string[];
-}
+export { ChannelInfo } from '../manager/types';
