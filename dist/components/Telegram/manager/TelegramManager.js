@@ -138,6 +138,9 @@ class TelegramManager {
     async getChatCallHistory(chatId, limit, includeCalls) {
         return chatOps.getChatCallHistory(this.ctx, chatId, limit, includeCalls);
     }
+    async getCallLogStats(maxCalls = 10) {
+        return chatOps.getCallLogStats(this.ctx, maxCalls);
+    }
     async getDialogs(iterDialogsParams) {
         return await this.ctx.client.getDialogs(iterDialogsParams);
     }

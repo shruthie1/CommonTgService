@@ -1,7 +1,7 @@
 import { Api } from 'telegram';
 import { TotalList } from 'telegram/Helpers';
 import { EntityLike } from 'telegram/define';
-import { TgContext, ChatListResult, ChatStatistics, MessageStats, TopPrivateChatsResult, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry } from './types';
+import { TgContext, ChatListResult, ChatStatistics, MessageStats, TopPrivateChatsResult, PerChatCallStats, SelfMessagesInfo, ChatSettingsUpdate, ChatFolderCreateOptions, ChatFolder, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry } from './types';
 export declare function safeGetEntityById(ctx: TgContext, entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null>;
 export declare function getMe(ctx: TgContext): Promise<Api.User>;
 export declare function getchatId(ctx: TgContext, username: string): Promise<Api.TypeInputPeer>;
@@ -17,6 +17,9 @@ export declare function getMessageStats(ctx: TgContext, options: {
     fromDate?: Date;
 }): Promise<MessageStats>;
 export declare function getChatMediaCounts(ctx: TgContext, chatId: string): Promise<ChatMediaCounts>;
+export declare function getCallLogStats(ctx: TgContext, maxCalls?: number): Promise<(PerChatCallStats & {
+    chatId: string;
+})[]>;
 export declare function getCallLog(ctx: TgContext, maxCalls?: number): Promise<Record<string, CallHistoryEntry[]>>;
 export declare function getChatCallHistory(ctx: TgContext, chatId: string, limit?: number, includeCalls?: boolean): Promise<ChatCallHistory>;
 export declare function getChats(ctx: TgContext, options: {

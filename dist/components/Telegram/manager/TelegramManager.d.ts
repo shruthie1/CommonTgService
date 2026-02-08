@@ -3,7 +3,7 @@ import { NewMessageEvent } from 'telegram/events';
 import { TotalList } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
-import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry } from './types';
+import { ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats } from './types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
@@ -47,6 +47,9 @@ declare class TelegramManager {
     }): Promise<MessageStats>;
     getChatMediaCounts(chatId: string): Promise<ChatMediaCounts>;
     getChatCallHistory(chatId: string, limit?: number, includeCalls?: boolean): Promise<ChatCallHistory>;
+    getCallLogStats(maxCalls?: number): Promise<(PerChatCallStats & {
+        chatId: string;
+    })[]>;
     getDialogs(iterDialogsParams: IterDialogsParams): Promise<TotalList<Dialog>>;
     getChats(options: {
         limit?: number;

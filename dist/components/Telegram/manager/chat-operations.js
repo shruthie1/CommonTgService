@@ -14,6 +14,7 @@ exports.getSelfMSgsInfo = getSelfMSgsInfo;
 exports.getChatStatistics = getChatStatistics;
 exports.getMessageStats = getMessageStats;
 exports.getChatMediaCounts = getChatMediaCounts;
+exports.getCallLogStats = getCallLogStats;
 exports.getCallLog = getCallLog;
 exports.getChatCallHistory = getChatCallHistory;
 exports.getChats = getChats;
@@ -393,6 +394,18 @@ async function getChatMediaCounts(ctx, chatId) {
         totalMedia: photo + video + roundVideo + document + voice + gif + audio,
     };
 }
+async function getCallLogStats(ctx, maxCalls = 10) {
+    if (!ctx.client)
+        throw new Error('Client not initialized');
+    const maxLimit = Math.min(Math.max(maxCalls, 1), 500);
+    const allCallsByChat = await getCallLog(ctx, 2000);
+    const callStats = [];
+    for (const chatId in allCallsByChat) {
+        callStats.push({ ...buildCallSummary(allCallsByChat[chatId]), chatId: chatId });
+    }
+    callStats.sort((a, b) => b.totalCalls - a.totalCalls);
+    return callStats.slice(0, maxLimit);
+}
 async function getCallLog(ctx, maxCalls = 1000) {
     const callsByChat = {};
     const chunkSize = 200;
@@ -763,15 +776,15 @@ async function fetchCallEntriesGlobal(ctx, maxCalls = 500) {
                 continue;
             const action = m.action;
             if (!callCountsByChat[chatId])
-                callCountsByChat[chatId] = { outgoing: 0, incoming: 0, video: 0, total: 0 };
+                callCountsByChat[chatId] = { outgoing: 0, incoming: 0, videoCalls: 0, audioCalls: 0, totalCalls: 0, missed: 0, totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null };
             const stats = callCountsByChat[chatId];
-            stats.total++;
+            stats.totalCalls++;
             if (m.out)
                 stats.outgoing++;
             else
                 stats.incoming++;
             if (action.video)
-                stats.video++;
+                stats.videoCalls++;
             let reason = 'unknown';
             if (action.reason instanceof telegram_1.Api.PhoneCallDiscardReasonMissed)
                 reason = 'missed';
@@ -817,7 +830,7 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
     const baseScore = (stats.totalMessages * weights.textMessage +
         cCalls.incoming * weights.incomingCall +
         cCalls.outgoing * weights.outgoingCall +
-        cCalls.video * weights.videoCall +
+        cCalls.videoCalls * weights.videoCall +
         mediaTotal * weights.sharedMedia);
     const isSelf = chatId === 'me';
     const name = isSelf
@@ -845,12 +858,12 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
         averageDuration: callSummary.averageDuration,
         longestCall: callSummary.longestCall,
         lastCallDate: callSummary.lastCallDate,
-    } : cCalls.total > 0 ? {
-        totalCalls: cCalls.total,
+    } : cCalls.totalCalls > 0 ? {
+        totalCalls: cCalls.totalCalls,
         incomingCalls: cCalls.incoming,
         outgoingCalls: cCalls.outgoing,
-        missedCalls: 0, videoCalls: cCalls.video,
-        audioCalls: cCalls.total - cCalls.video,
+        missedCalls: 0, videoCalls: cCalls.videoCalls,
+        audioCalls: cCalls.totalCalls - cCalls.videoCalls,
         totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null,
     } : { ...nullCalls };
     return {
@@ -931,7 +944,7 @@ async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDa
     const messageMediaByChat = await fetchMessageMediaForChats(ctx, chatIdsForMedia, enrichMedia);
     ctx.logger.info(ctx.phoneNumber, `Message Media=${Object.keys(messageMediaByChat).length}, Duration=${Date.now() - startTime}ms`);
     startTime = Date.now();
-    const zeroCallStats = { outgoing: 0, incoming: 0, video: 0, total: 0 };
+    const zeroCallStats = { outgoing: 0, incoming: 0, videoCalls: 0, audioCalls: 0, totalCalls: 0, missed: 0, totalDuration: 0, averageDuration: 0, longestCall: 0, lastCallDate: null };
     const scored = [];
     for (const chatId of chatIdsForMedia) {
         const media = messageMediaByChat[chatId];
@@ -943,7 +956,7 @@ async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDa
         const callStats = callCountsByChat[chatId] ?? zeroCallStats;
         const stats = { ...media, callStats };
         const score = stats.totalMessages * weights.textMessage + callStats.incoming * weights.incomingCall +
-            callStats.outgoing * weights.outgoingCall + callStats.video * weights.videoCall + stats.mediaCount * weights.sharedMedia;
+            callStats.outgoing * weights.outgoingCall + callStats.videoCalls * weights.videoCall + stats.mediaCount * weights.sharedMedia;
         scored.push({ chatId, user, stats, score });
     }
     scored.sort((a, b) => b.score - a.score);
