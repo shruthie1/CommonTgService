@@ -345,10 +345,16 @@ export interface EngagementWeights {
 }
 
 export interface PerChatCallStats {
-    outgoing: number;
+    totalCalls: number;
     incoming: number;
-    video: number;
-    total: number;
+    outgoing: number;
+    missed: number;
+    videoCalls: number;
+    audioCalls: number;
+    totalDuration: number;
+    averageDuration: number;
+    longestCall: number;
+    lastCallDate: string | null;
 }
 
 export interface MessageScheduleOptions {
