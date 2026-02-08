@@ -123,14 +123,20 @@ class TelegramManager {
     async getSelfMSgsInfo(limit = 500) {
         return chatOps.getSelfMSgsInfo(this.ctx, limit);
     }
-    async getCallLog(limit = 1000, options) {
-        return chatOps.getCallLog(this.ctx, limit, options);
+    async getCallLog(maxCalls = 1000) {
+        return chatOps.getCallLog(this.ctx, maxCalls);
     }
     async getChatStatistics(chatId, period) {
         return chatOps.getChatStatistics(this.ctx, chatId, period);
     }
     async getMessageStats(options) {
         return chatOps.getMessageStats(this.ctx, options);
+    }
+    async getChatMediaCounts(chatId) {
+        return chatOps.getChatMediaCounts(this.ctx, chatId);
+    }
+    async getChatCallHistory(chatId, limit, includeCalls) {
+        return chatOps.getChatCallHistory(this.ctx, chatId, limit, includeCalls);
     }
     async getDialogs(iterDialogsParams) {
         return await this.ctx.client.getDialogs(iterDialogsParams);
@@ -141,8 +147,8 @@ class TelegramManager {
     async updateChatSettings(settings) {
         return chatOps.updateChatSettings(this.ctx, settings);
     }
-    async getTopPrivateChats(limit = 10) {
-        return chatOps.getTopPrivateChats(this.ctx, limit);
+    async getTopPrivateChats(limit, enrichMedia, offsetDate) {
+        return chatOps.getTopPrivateChats(this.ctx, limit, enrichMedia, offsetDate);
     }
     async createChatFolder(options) {
         return chatOps.createChatFolder(this.ctx, options);

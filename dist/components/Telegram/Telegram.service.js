@@ -241,10 +241,10 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         return await telegramClient.joinChannel(channelId);
     }
-    async getCallLog(mobile, limit, includeCallLog) {
+    async getCallLog(mobile, maxCalls) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
-            return await telegramClient.getCallLog(limit, { includeCallLog });
+            return await telegramClient.getCallLog(maxCalls);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting call log:', error);
@@ -666,6 +666,14 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Get message statistics', options);
         return await telegramClient.getMessageStats(options);
     }
+    async getChatMediaCounts(mobile, chatId) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        return await telegramClient.getChatMediaCounts(chatId);
+    }
+    async getChatCallHistory(mobile, chatId, limit, includeCalls) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        return await telegramClient.getChatCallHistory(chatId, limit, includeCalls);
+    }
     async sendViewOnceMedia(mobile, options) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Send view once media', { sourceType: options.sourceType, chatId: options.chatId });
@@ -741,11 +749,11 @@ let TelegramService = class TelegramService {
             throw error;
         }
     }
-    async getTopPrivateChats(mobile, limit) {
+    async getTopPrivateChats(mobile, limit, enrichMedia, offsetDate) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}`);
+        this.logger.info(mobile, `Get top private chats with limit=${limit || 10}, enrichMedia=${!!enrichMedia}, offsetDate=${offsetDate ?? 'none'}`);
         try {
-            return await telegramClient.getTopPrivateChats(limit);
+            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);

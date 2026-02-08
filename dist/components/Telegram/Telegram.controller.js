@@ -178,12 +178,11 @@ let TelegramController = class TelegramController {
     async getConnectionStatus() {
         return { status: await this.telegramService.getConnectionStatus() };
     }
-    async getCallLogStats(mobile, limit, includeCallLog) {
+    async getCallLogStats(mobile, limit) {
         if (limit !== undefined && (limit < 1 || limit > 10000)) {
             throw new common_1.BadRequestException('Limit must be between 1 and 10000.');
         }
-        const includeCallLogBool = includeCallLog === 'true' || includeCallLog === '1';
-        return this.telegramService.getCallLog(mobile, limit, includeCallLogBool);
+        return this.telegramService.getCallLog(mobile, limit);
     }
     async addContactsBulk(mobile, contactsDto) {
         return this.telegramService.addContacts(mobile, contactsDto.phoneNumbers, contactsDto.prefix);
@@ -469,6 +468,22 @@ let TelegramController = class TelegramController {
             excludePinned: cleanup.excludePinned
         });
     }
+    async getChatMediaCounts(mobile, chatId) {
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('chatId is required and cannot be empty');
+        }
+        return this.telegramService.getChatMediaCounts(mobile, chatId);
+    }
+    async getChatCallHistory(mobile, chatId, limit, includeCalls) {
+        if (!chatId || chatId.trim().length === 0) {
+            throw new common_1.BadRequestException('chatId is required and cannot be empty');
+        }
+        if (limit !== undefined && (limit < 1 || limit > 500)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 500');
+        }
+        const includeCallsBool = includeCalls === 'true' || includeCalls === '1';
+        return this.telegramService.getChatCallHistory(mobile, chatId, limit, includeCallsBool);
+    }
     async getChatStatistics(mobile, chatId, period = 'week') {
         return this.telegramService.getChatStatistics(mobile, chatId, period);
     }
@@ -579,8 +594,10 @@ let TelegramController = class TelegramController {
     async getMessageStats(mobile, options) {
         return this.telegramService.getMessageStats(mobile, options);
     }
-    async getTopPrivateChats(mobile, limit) {
-        return this.telegramService.getTopPrivateChats(mobile, limit);
+    async getTopPrivateChats(mobile, limit, enrichMedia, offsetDate) {
+        const enrich = enrichMedia === true || enrichMedia === 'true';
+        const offset = offsetDate ? Number(offsetDate) : undefined;
+        return this.telegramService.getTopPrivateChats(mobile, limit, enrich, offset);
     }
     async getSelfMsgsInfo(mobile, limit) {
         if (limit !== undefined && (limit < 1 || limit > 10000)) {
@@ -916,89 +933,16 @@ __decorate([
 __decorate([
     (0, common_1.Get)('monitoring/calllog/:mobile'),
     (0, swagger_1.ApiOperation)({
-        summary: 'Get call log statistics with enhanced filtering',
-        description: 'Retrieves comprehensive call statistics including incoming/outgoing calls, video/audio breakdown, ' +
-            'and per-chat call counts. Uses server-side filtering for optimal performance. ' +
-            'Supports pagination via limit parameter (default: 1000, max: 10000).'
+        summary: 'Get all call logs grouped by chat',
+        description: 'Returns all call logs as a Record<chatId, CallHistoryEntry[]>. Use chat/call-history for per-chat summary.'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiQuery)({
-        name: 'limit',
-        required: false,
-        type: Number,
-        description: 'Maximum number of calls to analyze (default: 1000, max: 10000)',
-        example: 1000,
-        minimum: 1,
-        maximum: 10000
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'includeCallLog',
-        required: false,
-        type: Boolean,
-        description: 'If true, each chat in the response includes a callLog array with per-call details (messageId, date, duration, video, outgoing). Default: false.',
-        example: false
-    }),
-    (0, swagger_1.ApiResponse)({
-        status: 200,
-        description: 'Call log statistics retrieved successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                totalCalls: { type: 'number', description: 'Total number of calls' },
-                outgoing: { type: 'number', description: 'Total outgoing calls' },
-                incoming: { type: 'number', description: 'Total incoming calls' },
-                video: { type: 'number', description: 'Total video calls' },
-                audio: { type: 'number', description: 'Total audio calls' },
-                chats: {
-                    type: 'array',
-                    description: 'Per-chat call summary with identity, call stats, media counts, and call log',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            chatId: { type: 'string' },
-                            phone: { type: 'string' },
-                            username: { type: 'string' },
-                            name: { type: 'string' },
-                            peerType: { type: 'string', enum: ['user', 'group', 'channel'] },
-                            calls: {
-                                type: 'object',
-                                properties: {
-                                    total: { type: 'number' },
-                                    outgoing: { type: 'number' },
-                                    incoming: { type: 'number' },
-                                    video: { type: 'number' },
-                                    audio: { type: 'number' }
-                                }
-                            },
-                            totalMessages: { type: 'number' },
-                            photoCount: { type: 'number' },
-                            videoCount: { type: 'number' },
-                            callLog: {
-                                type: 'array',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        messageId: { type: 'number' },
-                                        date: { type: 'number' },
-                                        durationSeconds: { type: 'number' },
-                                        video: { type: 'boolean' },
-                                        outgoing: { type: 'boolean' }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - invalid limit parameter' }),
-    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Max calls to scan (default: 1000, max: 10000)' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Call logs grouped by chatId' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('includeCallLog')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number, String]),
+    __metadata("design:paramtypes", [String, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getCallLogStats", null);
 __decorate([
@@ -1521,6 +1465,85 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "cleanupChat", null);
 __decorate([
+    (0, common_1.Get)('chat/media-counts/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get detailed media counts for a chat' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID or username', required: true }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Media counts retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                totalMessages: { type: 'number' },
+                photo: { type: 'number' },
+                video: { type: 'number' },
+                roundVideo: { type: 'number', description: 'Video notes (round videos)' },
+                document: { type: 'number' },
+                voice: { type: 'number' },
+                gif: { type: 'number' },
+                audio: { type: 'number', description: 'Music files' },
+                link: { type: 'number', description: 'Shared URLs' },
+                totalMedia: { type: 'number', description: 'Total media count (excludes links)' },
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getChatMediaCounts", null);
+__decorate([
+    (0, common_1.Get)('chat/call-history/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get call history with a specific chat' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID or username', required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', description: 'Maximum number of calls to return (1-500, default 100)', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'includeCalls', description: 'Include individual call entries in response (default: false)', required: false, type: Boolean }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Call history retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                totalCalls: { type: 'number' },
+                incoming: { type: 'number' },
+                outgoing: { type: 'number' },
+                missed: { type: 'number' },
+                videoCalls: { type: 'number' },
+                audioCalls: { type: 'number' },
+                totalDuration: { type: 'number', description: 'Total duration in seconds' },
+                averageDuration: { type: 'number', description: 'Average duration in seconds' },
+                longestCall: { type: 'number', description: 'Longest call duration in seconds' },
+                lastCallDate: { type: 'string', nullable: true, description: 'ISO 8601 date of most recent call' },
+                calls: {
+                    type: 'array',
+                    description: 'Only present when includeCalls=true',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            messageId: { type: 'number' },
+                            date: { type: 'string', description: 'ISO 8601 date' },
+                            durationSeconds: { type: 'number' },
+                            video: { type: 'boolean' },
+                            outgoing: { type: 'boolean' },
+                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] },
+                        }
+                    }
+                }
+            }
+        }
+    }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('includeCalls')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Number, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "getChatCallHistory", null);
+__decorate([
     (0, common_1.Get)('chat/statistics/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get chat statistics' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
@@ -1852,68 +1875,72 @@ __decorate([
         required: false,
         type: Number,
         description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
-        example: 10
+        example: 45
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'enrichMedia',
+        required: false,
+        type: Boolean,
+        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.',
+        example: false
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'offsetDate',
+        required: false,
+        type: Number,
+        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.',
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
         description: 'Top private chats retrieved successfully',
         schema: {
-            type: 'array',
-            items: {
-                type: 'object',
-                properties: {
-                    chatId: { type: 'string', description: 'Chat/user ID' },
-                    username: { type: 'string', description: 'Username (if available)' },
-                    firstName: { type: 'string', description: 'First name' },
-                    lastName: { type: 'string', description: 'Last name' },
-                    totalMessages: { type: 'number', description: 'Total messages in conversation' },
-                    interactionScore: {
-                        type: 'number',
-                        description: 'Calculated engagement score (higher = more active)'
-                    },
-                    engagementLevel: {
-                        type: 'string',
-                        enum: ['active', 'dormant'],
-                        description: 'Active if engagement score > 0, else dormant'
-                    },
-                    calls: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    items: {
                         type: 'object',
                         properties: {
-                            total: { type: 'number' },
-                            incoming: {
-                                type: 'object',
+                            chatId: { type: 'string' },
+                            name: { type: 'string', description: 'Display name' },
+                            username: { type: 'string', nullable: true },
+                            phone: { type: 'string', nullable: true },
+                            totalMessages: { type: 'number' },
+                            mediaCount: { type: 'number', description: 'Photo + video count (always present)' },
+                            interactionScore: { type: 'number', description: 'Engagement score (higher = more active)' },
+                            lastMessageDate: { type: 'string', nullable: true, description: 'ISO 8601 date of last message' },
+                            media: {
+                                type: 'object', nullable: true,
+                                description: 'Detailed media breakdown (null when enrichMedia=false)',
                                 properties: {
-                                    total: { type: 'number' },
-                                    audio: { type: 'number' },
-                                    video: { type: 'number' }
+                                    photo: { type: 'number' }, video: { type: 'number' }, roundVideo: { type: 'number' },
+                                    document: { type: 'number' }, voice: { type: 'number' }, gif: { type: 'number' },
+                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' },
                                 }
                             },
-                            outgoing: {
+                            calls: {
                                 type: 'object',
+                                description: 'Call summary',
                                 properties: {
-                                    total: { type: 'number' },
-                                    audio: { type: 'number' },
-                                    video: { type: 'number' }
+                                    totalCalls: { type: 'number' }, incomingCalls: { type: 'number' },
+                                    outgoingCalls: { type: 'number' }, missedCalls: { type: 'number' },
+                                    videoCalls: { type: 'number' }, audioCalls: { type: 'number' },
+                                    totalDuration: { type: 'number', description: 'Seconds' },
+                                    averageDuration: { type: 'number', description: 'Seconds' },
+                                    longestCall: { type: 'number', description: 'Seconds' },
+                                    lastCallDate: { type: 'string', nullable: true },
                                 }
-                            }
+                            },
                         }
-                    },
-                    media: {
-                        type: 'object',
-                        properties: {
-                            photos: { type: 'number', description: 'Total photos shared' },
-                            videos: { type: 'number', description: 'Total videos shared' }
-                        }
-                    },
-                    activityBreakdown: {
-                        type: 'object',
-                        description: 'Percentage breakdown of interaction types',
-                        properties: {
-                            videoCalls: { type: 'number', description: 'Percentage from video calls' },
-                            audioCalls: { type: 'number', description: 'Percentage from audio calls' },
-                            mediaSharing: { type: 'number', description: 'Percentage from media sharing' },
-                            textMessages: { type: 'number', description: 'Percentage from text messages' }
-                        }
+                    }
+                },
+                pagination: {
+                    type: 'object',
+                    properties: {
+                        count: { type: 'number', description: 'Number of items returned' },
+                        hasMore: { type: 'boolean' },
+                        previousOffsetDate: { type: 'number', description: 'The offsetDate that was passed in (for prev button)' },
+                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' },
                     }
                 }
             }
@@ -1922,8 +1949,10 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('enrichMedia')),
+    __param(3, (0, common_1.Query)('offsetDate')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:paramtypes", [String, Number, Boolean, Number]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getTopPrivateChats", null);
 __decorate([
