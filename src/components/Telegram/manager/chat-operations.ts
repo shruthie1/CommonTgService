@@ -832,6 +832,10 @@ async function fetchMessageMediaForChats(
     ctx: TgContext,
     chatIds: string[],
     skipMediaCount: boolean = false,
+    callData: {
+        callCountsByChat: Record<string, PerChatCallStats>;
+        callEntriesByChat: Record<string, CallHistoryEntry[]>;
+    }
 ): Promise<Record<string, MessageMediaInfo | null>> {
     const result: Record<string, MessageMediaInfo | null> = {};
     let skipped = 0;
@@ -843,12 +847,12 @@ async function fetchMessageMediaForChats(
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = (msgResult as { total?: number })?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            // if (totalMessages < 10) {
-            //     ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
-            //     result[chatId] = null;
-            //     skipped++;
-            //     continue;
-            // }
+            if (totalMessages < 10 && callData.callCountsByChat[chatId]?.totalCalls < 1) {
+                ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
+                result[chatId] = null;
+                skipped++;
+                continue;
+            }
             const lastMsg = msgResult?.[0];
             const lastMessageDate = lastMsg?.date ? toISODate(lastMsg.date) : null;
             let mediaCount = 0;
@@ -1097,7 +1101,7 @@ export async function getTopPrivateChats(
     if (isFirstPage) chatIdsForMedia.push(selfChatId);
     chatIdsForMedia.push(...candidateIds);
     ctx.logger.info(ctx.phoneNumber, `chatIdsForMedia=${chatIdsForMedia.length}, total chats=${candidateChats.length}`);
-    const messageMediaByChat = await fetchMessageMediaForChats(ctx, chatIdsForMedia, enrichMedia);
+    const messageMediaByChat = await fetchMessageMediaForChats(ctx, chatIdsForMedia, enrichMedia, callData);
     ctx.logger.info(ctx.phoneNumber, `Message Media=${Object.keys(messageMediaByChat).length}, Duration=${Date.now() - startTime}ms`);
     startTime = Date.now();
 
