@@ -30,7 +30,7 @@ let UsersController = class UsersController {
     async search(queryParams) {
         return this.usersService.search(queryParams);
     }
-    async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeExpired, excludeTwoFA, gender) {
+    async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeTwoFA, excludeAudited, gender) {
         const pageNum = page ? parseInt(page, 10) : undefined;
         const limitNum = limit ? parseInt(limit, 10) : undefined;
         const minScoreNum = minScore ? parseFloat(minScore) : undefined;
@@ -55,8 +55,8 @@ let UsersController = class UsersController {
         if (minVideosNum !== undefined && (isNaN(minVideosNum) || minVideosNum < 0)) {
             throw new common_1.BadRequestException('minVideos must be a non-negative integer');
         }
-        const excludeExpiredBool = excludeExpired === 'false' ? false : (excludeExpired === 'true' ? true : undefined);
         const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
+        const excludeAuditedBool = excludeAudited === 'true';
         return this.usersService.getTopInteractionUsers({
             page: pageNum,
             limit: limitNum,
@@ -64,9 +64,9 @@ let UsersController = class UsersController {
             minCalls: minCallsNum,
             minPhotos: minPhotosNum,
             minVideos: minVideosNum,
-            excludeExpired: excludeExpiredBool,
             excludeTwoFA: excludeTwoFABool,
-            gender
+            excludeAudited: excludeAuditedBool,
+            gender,
         });
     }
     async findAll(limit, skip) {
@@ -175,17 +175,17 @@ __decorate([
         minimum: 0
     }),
     (0, swagger_1.ApiQuery)({
-        name: 'excludeExpired',
-        required: false,
-        type: Boolean,
-        description: 'Exclude expired users (default: true)',
-        example: true
-    }),
-    (0, swagger_1.ApiQuery)({
         name: 'excludeTwoFA',
         required: false,
         type: Boolean,
         description: 'Exclude users with 2FA enabled (default: false)',
+        example: false
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'excludeAudited',
+        required: false,
+        type: Boolean,
+        description: 'Exclude users whose mobile is in session_audits (default: false). Set true to show only non-audited.',
         example: false
     }),
     (0, swagger_1.ApiQuery)({
@@ -251,8 +251,8 @@ __decorate([
     __param(3, (0, common_1.Query)('minCalls')),
     __param(4, (0, common_1.Query)('minPhotos')),
     __param(5, (0, common_1.Query)('minVideos')),
-    __param(6, (0, common_1.Query)('excludeExpired')),
-    __param(7, (0, common_1.Query)('excludeTwoFA')),
+    __param(6, (0, common_1.Query)('excludeTwoFA')),
+    __param(7, (0, common_1.Query)('excludeAudited')),
     __param(8, (0, common_1.Query)('gender')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String]),
