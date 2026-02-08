@@ -54,9 +54,9 @@ export class TelegramService implements OnModuleDestroy {
         TelegramManager.setActiveClientSetup(data);
     }
 
-    async getMessages(mobile: string, username: string, limit: number = 8) {
+    async getMessages(mobile: string, username: string, limit: number = 8, offsetId: number = 0) {
         const telegramClient = await connectionManager.getClient(mobile)
-        return telegramClient.getMessages(username, limit);
+        return telegramClient.getMessages(username, limit, offsetId);
     }
 
 
@@ -141,10 +141,10 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
-    async getGrpMembers(mobile: string, entity: EntityLike) {
+    async getGrpMembers(mobile: string, entity: EntityLike, offset: number = 0, limit: number = 200) {
         try {
             const telegramClient = await connectionManager.getClient(mobile);
-            return await telegramClient.getGrpMembers(entity)
+            return await telegramClient.getGrpMembers(entity, offset, limit)
         } catch (err) {
             this.logger.error(mobile, "Error fetching group members:", err);
         }

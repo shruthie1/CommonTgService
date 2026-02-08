@@ -4,7 +4,7 @@ import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
 import { CustomFile } from 'telegram/client/uploads';
 import { Dialog } from 'telegram/tl/custom/dialog';
-import { TgContext, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, GroupSettingsUpdate, GroupOptions } from './types';
+import { TgContext, GroupCreationResult, GroupMember, PaginatedGroupMembers, AdminInfo, BannedUserInfo, GroupSettingsUpdate, GroupOptions } from './types';
 import { parseError } from '../../../utils/parseError';
 import isPermanentError from '../../../utils/isPermanentError';
 import { downloadFileFromUrl } from './helpers';
@@ -247,14 +247,14 @@ export async function leaveChannels(ctx: TgContext, chats: string[]): Promise<vo
     ctx.logger.info(ctx.phoneNumber, `Leaving Channels/Groups: Completed! Success: ${successCount}, Skipped: ${skipCount}, Total: ${chats.length}`);
 }
 
-export async function getGrpMembers(ctx: TgContext, entity: EntityLike): Promise<GroupMember[]> {
+export async function getGrpMembers(ctx: TgContext, entity: EntityLike, offset: number = 0, limit: number = 200): Promise<PaginatedGroupMembers> {
     try {
         const result: GroupMember[] = [];
         const chat = await ctx.client.getEntity(entity);
 
         if (!(chat instanceof Api.Chat || chat instanceof Api.Channel)) {
             ctx.logger.info(ctx.phoneNumber, 'Invalid group or channel!');
-            return [];
+            return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
         }
 
         ctx.logger.info(ctx.phoneNumber, `Fetching members of ${chat.title || (chat as Api.Channel).username}...`);
@@ -263,15 +263,17 @@ export async function getGrpMembers(ctx: TgContext, entity: EntityLike): Promise
             new Api.channels.GetParticipants({
                 channel: chat,
                 filter: new Api.ChannelParticipantsRecent(),
-                offset: 0,
-                limit: 200,
+                offset,
+                limit,
                 hash: bigInt(0),
             })
         );
 
+        let totalCount = 0;
         if (participants instanceof Api.channels.ChannelParticipants) {
+            totalCount = participants.count;
             const users = participants.participants;
-            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}`);
+            ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof Api.ChannelParticipant ? user.userId : null;
                 if (userInfo) {
@@ -281,9 +283,6 @@ export async function getGrpMembers(ctx: TgContext, entity: EntityLike): Promise
                         name: `${userDetails.firstName || ''} ${userDetails.lastName || ''}`,
                         username: `${userDetails.username || ''}`,
                     });
-                    if (userDetails.firstName == 'Deleted Account' && !userDetails.username) {
-                        ctx.logger.info(ctx.phoneNumber, JSON.stringify(userDetails.id));
-                    }
                 } else {
                     ctx.logger.info(ctx.phoneNumber, JSON.stringify((user as Api.ChannelParticipant)?.userId));
                 }
@@ -291,11 +290,22 @@ export async function getGrpMembers(ctx: TgContext, entity: EntityLike): Promise
         } else {
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
-        ctx.logger.info(ctx.phoneNumber, `${result.length}`);
-        return result;
+
+        const nextOffset = offset + result.length;
+        const hasMore = nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+
+        return {
+            members: result,
+            pagination: {
+                hasMore,
+                nextOffset,
+                total: totalCount,
+            },
+        };
     } catch (err) {
         ctx.logger.error(ctx.phoneNumber, 'Error fetching group members:', err);
-        return [];
+        return { members: [], pagination: { hasMore: false, nextOffset: 0, total: 0 } };
     }
 }
 

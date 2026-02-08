@@ -449,6 +449,16 @@
             "name": "limit",
             "required": false,
             "in": "query",
+            "description": "Number of messages per page (default: 8)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Message ID offset for cursor-based pagination (use nextOffsetId from previous response)",
             "schema": {
               "type": "number"
             }
@@ -466,7 +476,7 @@
             }
           }
         },
-        "summary": "Get chat messages",
+        "summary": "Get chat messages with pagination",
         "tags": [
           "Telegram"
         ]
@@ -2076,6 +2086,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Offset for pagination (use nextOffset from previous response)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of members per page (default: 200)",
+            "schema": {
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -2090,7 +2118,7 @@
             }
           }
         },
-        "summary": "Get group members",
+        "summary": "Get group members with pagination",
         "tags": [
           "Telegram"
         ]

@@ -143,13 +143,14 @@ export class TelegramController {
     }
 
     @Get('messages/:mobile')
-    @ApiOperation({ summary: 'Get chat messages' })
+    @ApiOperation({ summary: 'Get chat messages with pagination' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of messages per page (default: 8)' })
+    @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Message ID offset for cursor-based pagination (use nextOffsetId from previous response)' })
     @ApiResponse({ type: Object })
-    async getMessages(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('limit') limit?: number) {
-        return this.telegramService.getMessages(mobile, chatId, limit);
+    async getMessages(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('limit') limit?: number, @Query('offset') offset?: number) {
+        return this.telegramService.getMessages(mobile, chatId, limit, offset);
     }
 
     @Post('message/:mobile')
@@ -955,12 +956,14 @@ export class TelegramController {
     }
 
     @Get('group/members/:mobile')
-    @ApiOperation({ summary: 'Get group members' })
+    @ApiOperation({ summary: 'Get group members with pagination' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'groupId', description: 'Group ID', required: true })
+    @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Offset for pagination (use nextOffset from previous response)' })
+    @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of members per page (default: 200)' })
     @ApiResponse({ type: Object })
-    async getGroupMembers(@Param('mobile') mobile: string, @Query('groupId') groupId: string) {
-        return this.telegramService.getGrpMembers(mobile, groupId);
+    async getGroupMembers(@Param('mobile') mobile: string, @Query('groupId') groupId: string, @Query('offset') offset?: number, @Query('limit') limit?: number) {
+        return this.telegramService.getGrpMembers(mobile, groupId, offset, limit);
     }
 
     @Post('chat/block/:mobile')

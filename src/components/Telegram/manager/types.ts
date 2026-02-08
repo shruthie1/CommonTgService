@@ -199,6 +199,15 @@ export interface GroupMember {
     username: string;
 }
 
+export interface PaginatedGroupMembers {
+    members: GroupMember[];
+    pagination: {
+        hasMore: boolean;
+        nextOffset: number;
+        total: number;
+    };
+}
+
 export interface AdminInfo {
     userId: string;
     rank?: string;
@@ -516,6 +525,15 @@ export interface MessageItem {
     views: number | null;
     forwards: number | null;
     reactions: MessageReactionItem[] | null;
+}
+
+export interface PaginatedMessages {
+    messages: MessageItem[];
+    pagination: {
+        hasMore: boolean;
+        nextOffsetId: number;
+        total: number;
+    };
 }
 
 export interface ScheduledMessageItem {

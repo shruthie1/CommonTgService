@@ -4,7 +4,7 @@
     import { TotalList } from 'telegram/Helpers';
     import bigInt from 'big-integer';
     import { EntityLike } from 'telegram/define';
-    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChat, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats, MediaAlbumOptions, GroupOptions } from './types';
+    import { TgContext, ActiveClientSetup, GroupCreationResult, GroupMember, PaginatedGroupMembers, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChat, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, MessageItem, PaginatedMessages, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats, MediaAlbumOptions, GroupOptions } from './types';
     import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
     import { SendTgMessageDto } from '../dto/send-message.dto';
     import { TelegramLogger } from '../utils/telegram-logger';
@@ -108,15 +108,15 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return chatOps.getEntity(this.ctx, entity);
         }
 
-        async getMessages(entityLike: Api.TypeEntityLike, limit: number = 8): Promise<TotalList<Api.Message>> {
-            return chatOps.getMessages(this.ctx, entityLike, limit);
+        async getMessages(entityLike: Api.TypeEntityLike, limit: number = 8, offsetId: number = 0): Promise<PaginatedMessages> {
+            return chatOps.getMessages(this.ctx, entityLike, limit, offsetId);
         }
 
         async getAllChats(): ReturnType<typeof chatOps.getAllChats> {
             return chatOps.getAllChats(this.ctx);
         }
 
-        async getMessagesNew(chatId: string, offset: number = 0, limit: number = 20): Promise<MessageItem[]> {
+        async getMessagesNew(chatId: string, offset: number = 0, limit: number = 20): Promise<PaginatedMessages> {
             return chatOps.getMessagesNew(this.ctx, chatId, offset, limit);
         }
 
@@ -315,8 +315,8 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return channelOps.leaveChannels(this.ctx, chats);
         }
 
-        async getGrpMembers(entity: EntityLike): Promise<GroupMember[]> {
-            return channelOps.getGrpMembers(this.ctx, entity);
+        async getGrpMembers(entity: EntityLike, offset: number = 0, limit: number = 200): Promise<PaginatedGroupMembers> {
+            return channelOps.getGrpMembers(this.ctx, entity, offset, limit);
         }
 
         async addGroupMembers(groupId: string, members: string[]): Promise<void> {
