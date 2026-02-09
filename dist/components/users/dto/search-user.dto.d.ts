@@ -21,4 +21,6 @@ export declare class SearchUserDto {
     otherVideoCount?: number;
     ownPhotoCount?: number;
     ownVideoCount?: number;
+    starred?: boolean;
+    score?: number;
 }
