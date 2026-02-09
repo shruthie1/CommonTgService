@@ -526,7 +526,7 @@ export async function getCallLog(ctx: TgContext, maxCalls: number = 1000): Promi
             new Api.messages.Search({
                 peer: new Api.InputPeerEmpty(),
                 q: '',
-                filter: new Api.InputMessagesFilterPhoneCalls({}),
+                filter: new Api.InputMessagesFilterPhoneCalls({ missed: false }),
                 minDate: 0,
                 maxDate: 0,
                 offsetId,
@@ -900,7 +900,7 @@ async function fetchCallEntriesGlobal(
             new Api.messages.Search({
                 peer: new Api.InputPeerEmpty(),
                 q: '',
-                filter: new Api.InputMessagesFilterPhoneCalls({}),
+                filter: new Api.InputMessagesFilterPhoneCalls({ missed: false }),
                 minDate: 0,
                 maxDate: 0,
                 offsetId,
