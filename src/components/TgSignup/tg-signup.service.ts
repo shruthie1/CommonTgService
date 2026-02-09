@@ -362,6 +362,8 @@ export class TgSignupService implements OnModuleDestroy {
                 },
                 contacts: 0,
                 movieCount: 0,
+                score: 0,
+                starred: false,
                 msgs: 0,
                 photoCount: 0,
                 videoCount: 0,

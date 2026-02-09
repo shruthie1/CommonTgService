@@ -7612,6 +7612,24 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "starred",
+            "required": false,
+            "in": "query",
+            "description": "Filter by starred status",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "score",
+            "required": false,
+            "in": "query",
+            "description": "Filter by score",
+            "schema": {
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -13951,6 +13969,16 @@
             "description": "Number of contacts",
             "example": 105
           },
+          "starred": {
+            "type": "boolean",
+            "description": "Starred status",
+            "example": false
+          },
+          "score": {
+            "type": "number",
+            "description": "User score",
+            "example": 0
+          },
           "calls": {
             "type": "object",
             "description": "Per-chat call statistics",
@@ -13984,7 +14012,9 @@
           "otherVideoCount",
           "ownPhotoCount",
           "ownVideoCount",
-          "contacts"
+          "contacts",
+          "starred",
+          "score"
         ]
       },
       "UpdateUserDto": {
