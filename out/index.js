@@ -12240,27 +12240,33 @@ let ActiveChannelsService = class ActiveChannelsService {
                     setFields.username = dto.username;
                 if (dto.participantsCount != null)
                     setFields.participantsCount = dto.participantsCount;
+                if (dto.megagroup !== undefined)
+                    setFields.megagroup = dto.megagroup;
+                const defaults = {
+                    channelId: dto.channelId,
+                    broadcast: false,
+                    canSendMsgs: true,
+                    participantsCount: 0,
+                    restricted: false,
+                    sendMessages: true,
+                    reactRestricted: false,
+                    wordRestriction: 0,
+                    dMRestriction: 0,
+                    availableMsgs: [],
+                    banned: false,
+                    megagroup: true,
+                    private: false,
+                    createdAt: new Date(),
+                };
+                for (const key of Object.keys(setFields)) {
+                    delete defaults[key];
+                }
                 return {
                     updateOne: {
                         filter: { channelId: dto.channelId },
                         update: {
                             $set: setFields,
-                            $setOnInsert: {
-                                channelId: dto.channelId,
-                                broadcast: false,
-                                canSendMsgs: true,
-                                participantsCount: dto.participantsCount ?? 0,
-                                restricted: false,
-                                sendMessages: true,
-                                reactRestricted: false,
-                                wordRestriction: 0,
-                                dMRestriction: 0,
-                                availableMsgs: [],
-                                banned: false,
-                                megagroup: dto.megagroup ?? true,
-                                private: false,
-                                createdAt: new Date(),
-                            },
+                            $setOnInsert: defaults,
                         },
                         upsert: true,
                     },
@@ -12561,6 +12567,8 @@ class CreateActiveChannelDto {
         this.dMRestriction = 0;
         this.banned = false;
         this.private = false;
+        this.starred = false;
+        this.score = 0;
     }
 }
 exports.CreateActiveChannelDto = CreateActiveChannelDto;
@@ -12632,6 +12640,14 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "score", void 0);
 
 
 /***/ },
@@ -12846,6 +12862,16 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "deletedCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "score", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'activeChannels',
@@ -18141,29 +18167,35 @@ let ChannelsService = class ChannelsService {
                 setFields.username = dto.username;
             if (dto.participantsCount != null)
                 setFields.participantsCount = dto.participantsCount;
+            if (dto.megagroup !== undefined)
+                setFields.megagroup = dto.megagroup;
+            const defaults = {
+                channelId: dto.channelId,
+                broadcast: false,
+                canSendMsgs: true,
+                participantsCount: 0,
+                restricted: false,
+                sendMessages: true,
+                reactRestricted: false,
+                wordRestriction: 0,
+                dMRestriction: 0,
+                availableMsgs: [],
+                banned: false,
+                megagroup: true,
+                private: false,
+            };
+            for (const key of Object.keys(setFields)) {
+                delete defaults[key];
+            }
             return {
                 updateOne: {
                     filter: { channelId: dto.channelId },
                     update: {
                         $set: setFields,
-                        $setOnInsert: {
-                            channelId: dto.channelId,
-                            broadcast: false,
-                            canSendMsgs: true,
-                            participantsCount: dto.participantsCount ?? 0,
-                            restricted: false,
-                            sendMessages: true,
-                            reactRestricted: false,
-                            wordRestriction: 0,
-                            dMRestriction: 0,
-                            availableMsgs: [],
-                            banned: false,
-                            megagroup: dto.megagroup !== undefined ? dto.megagroup : true,
-                            private: false,
-                        }
+                        $setOnInsert: defaults,
                     },
-                    upsert: true
-                }
+                    upsert: true,
+                },
             };
         });
         await this.ChannelModel.bulkWrite(bulkOps, { ordered: false });
@@ -18332,6 +18364,12 @@ class CreateChannelDto {
     constructor() {
         this.private = false;
         this.forbidden = false;
+        this.reactRestricted = false;
+        this.wordRestriction = 0;
+        this.dMRestriction = 0;
+        this.banned = false;
+        this.starred = false;
+        this.score = 0;
     }
 }
 exports.CreateChannelDto = CreateChannelDto;
@@ -18357,14 +18395,6 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "canSendMsgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Whether the channel is a megagroup',
-        example: null,
-        required: false,
-    }),
-    __metadata("design:type", Boolean)
-], CreateChannelDto.prototype, "megagroup", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Number of participants in the channel',
@@ -18418,6 +18448,46 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "forbidden", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether the channel is a megagroup',
+        default: true,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether react is restricted',
+        default: false,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "reactRestricted", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Word restriction count', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "wordRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'DM restriction count', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "dMRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Available messages', type: [String], required: false }),
+    __metadata("design:type", Array)
+], CreateChannelDto.prototype, "availableMsgs", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether the channel is banned', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "score", void 0);
 
 
 /***/ },
@@ -18628,55 +18698,106 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ChannelSchema = exports.Channel = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose = __importStar(__webpack_require__(/*! mongoose */ "mongoose"));
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 let Channel = class Channel {
 };
 exports.Channel = Channel;
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Channel.prototype, "channelId", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "broadcast", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: true }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "canSendMsgs", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
     __metadata("design:type", Number)
 ], Channel.prototype, "participantsCount", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "restricted", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Channel.prototype, "title", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: false, default: null }),
     (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Channel.prototype, "username", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ required: true, default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "private", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false, required: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "forbidden", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "reactRestricted", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "wordRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "dMRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: [String], default: [] }),
+    (0, mongoose_1.Prop)({ type: [mongoose.Schema.Types.Mixed], default: [] }),
+    __metadata("design:type", Array)
+], Channel.prototype, "availableMsgs", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "score", void 0);
 exports.Channel = Channel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
             virtuals: true,
-            transform: (doc, ret) => {
+            transform: (_doc, ret) => {
                 delete ret._id;
             },
         },

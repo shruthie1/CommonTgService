@@ -64,27 +64,33 @@ let ActiveChannelsService = class ActiveChannelsService {
                     setFields.username = dto.username;
                 if (dto.participantsCount != null)
                     setFields.participantsCount = dto.participantsCount;
+                if (dto.megagroup !== undefined)
+                    setFields.megagroup = dto.megagroup;
+                const defaults = {
+                    channelId: dto.channelId,
+                    broadcast: false,
+                    canSendMsgs: true,
+                    participantsCount: 0,
+                    restricted: false,
+                    sendMessages: true,
+                    reactRestricted: false,
+                    wordRestriction: 0,
+                    dMRestriction: 0,
+                    availableMsgs: [],
+                    banned: false,
+                    megagroup: true,
+                    private: false,
+                    createdAt: new Date(),
+                };
+                for (const key of Object.keys(setFields)) {
+                    delete defaults[key];
+                }
                 return {
                     updateOne: {
                         filter: { channelId: dto.channelId },
                         update: {
                             $set: setFields,
-                            $setOnInsert: {
-                                channelId: dto.channelId,
-                                broadcast: false,
-                                canSendMsgs: true,
-                                participantsCount: dto.participantsCount ?? 0,
-                                restricted: false,
-                                sendMessages: true,
-                                reactRestricted: false,
-                                wordRestriction: 0,
-                                dMRestriction: 0,
-                                availableMsgs: [],
-                                banned: false,
-                                megagroup: dto.megagroup ?? true,
-                                private: false,
-                                createdAt: new Date(),
-                            },
+                            $setOnInsert: defaults,
                         },
                         upsert: true,
                     },

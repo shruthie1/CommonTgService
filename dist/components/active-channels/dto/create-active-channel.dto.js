@@ -18,6 +18,8 @@ class CreateActiveChannelDto {
         this.dMRestriction = 0;
         this.banned = false;
         this.private = false;
+        this.starred = false;
+        this.score = 0;
     }
 }
 exports.CreateActiveChannelDto = CreateActiveChannelDto;
@@ -89,4 +91,12 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "private", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "score", void 0);
 //# sourceMappingURL=create-active-channel.dto.js.map

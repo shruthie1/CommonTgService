@@ -15,6 +15,12 @@ class CreateChannelDto {
     constructor() {
         this.private = false;
         this.forbidden = false;
+        this.reactRestricted = false;
+        this.wordRestriction = 0;
+        this.dMRestriction = 0;
+        this.banned = false;
+        this.starred = false;
+        this.score = 0;
     }
 }
 exports.CreateChannelDto = CreateChannelDto;
@@ -40,14 +46,6 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "canSendMsgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Whether the channel is a megagroup',
-        example: null,
-        required: false,
-    }),
-    __metadata("design:type", Boolean)
-], CreateChannelDto.prototype, "megagroup", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Number of participants in the channel',
@@ -101,4 +99,44 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "forbidden", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether the channel is a megagroup',
+        default: true,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether react is restricted',
+        default: false,
+        required: false,
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "reactRestricted", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Word restriction count', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "wordRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'DM restriction count', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "dMRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Available messages', type: [String], required: false }),
+    __metadata("design:type", Array)
+], CreateChannelDto.prototype, "availableMsgs", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether the channel is banned', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "score", void 0);
 //# sourceMappingURL=create-channel.dto.js.map

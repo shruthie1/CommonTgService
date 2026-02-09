@@ -45,55 +45,106 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelSchema = exports.Channel = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose = __importStar(require("mongoose"));
+const swagger_1 = require("@nestjs/swagger");
 let Channel = class Channel {
 };
 exports.Channel = Channel;
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Channel.prototype, "channelId", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "broadcast", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: true }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "canSendMsgs", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
     (0, mongoose_1.Prop)({ type: mongoose.Schema.Types.Number, default: 0 }),
     __metadata("design:type", Number)
 ], Channel.prototype, "participantsCount", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "restricted", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Channel.prototype, "title", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ required: false, default: null }),
     (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Channel.prototype, "username", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ required: true, default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "private", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false, required: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "forbidden", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, mongoose_1.Prop)({ default: true }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "megagroup", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "reactRestricted", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "wordRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "dMRestriction", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: [String], default: [] }),
+    (0, mongoose_1.Prop)({ type: [mongoose.Schema.Types.Mixed], default: [] }),
+    __metadata("design:type", Array)
+], Channel.prototype, "availableMsgs", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], Channel.prototype, "score", void 0);
 exports.Channel = Channel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
             virtuals: true,
-            transform: (doc, ret) => {
+            transform: (_doc, ret) => {
                 delete ret._id;
             },
         },

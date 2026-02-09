@@ -22,6 +22,8 @@ export declare class ActiveChannel {
     messageId?: number;
     tempBan?: boolean;
     deletedCount?: number;
+    starred?: boolean;
+    score?: number;
 }
 export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChannel, import("mongoose").Model<ActiveChannel, any, any, any, (Document<unknown, any, ActiveChannel, any, import("mongoose").DefaultSchemaOptions> & ActiveChannel & {
     _id: import("mongoose").Types.ObjectId;
@@ -223,6 +225,24 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
         id: string;
     }>;
     deletedCount?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    starred?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    score?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
