@@ -503,7 +503,7 @@ async function getCallLog(ctx, maxCalls = 1000) {
         const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
             peer: new telegram_1.Api.InputPeerEmpty(),
             q: '',
-            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
+            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({ missed: false }),
             minDate: 0,
             maxDate: 0,
             offsetId,
@@ -840,7 +840,7 @@ async function fetchCallEntriesGlobal(ctx, maxCalls = 500) {
         const result = await ctx.client.invoke(new telegram_1.Api.messages.Search({
             peer: new telegram_1.Api.InputPeerEmpty(),
             q: '',
-            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({}),
+            filter: new telegram_1.Api.InputMessagesFilterPhoneCalls({ missed: false }),
             minDate: 0,
             maxDate: 0,
             offsetId,
