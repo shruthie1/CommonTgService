@@ -113,4 +113,15 @@ export class SearchUserDto {
   @IsOptional()
   @IsNumber()
   ownVideoCount?: number;
+
+  @ApiPropertyOptional({ description: 'Filter by starred status', type: Boolean })
+  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+  @IsOptional()
+  @IsBoolean()
+  starred?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by score' })
+  @IsOptional()
+  @IsNumber()
+  score?: number;
 }

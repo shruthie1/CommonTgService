@@ -71,6 +71,12 @@ export class CreateUserDto {
   @ApiProperty({ description: 'Number of contacts', example: 105 })
   contacts: number = 0;
 
+  @ApiProperty({ description: 'Starred status', example: false })
+  starred: boolean = false;
+
+  @ApiProperty({ description: 'User score', example: 0 })
+  score: number = 0;
+
   @ApiPropertyOptional({
     description: 'Per-chat call statistics',
     example: {

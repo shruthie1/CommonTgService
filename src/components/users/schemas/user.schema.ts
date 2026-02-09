@@ -111,6 +111,14 @@ export class User {
   contacts: number;
 
   @ApiProperty()
+  @Prop({ required: false, type: Boolean, default: false })
+  starred: boolean = false;
+
+  @ApiProperty()
+  @Prop({ required: false, type: Number, default: 0 })
+  score: number = 0;
+
+  @ApiProperty()
   @Prop({
     type: mongoose.Schema.Types.Mixed,
     default: {
