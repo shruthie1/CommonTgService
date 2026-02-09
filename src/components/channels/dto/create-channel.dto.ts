@@ -21,13 +21,6 @@ export class CreateChannelDto {
   canSendMsgs: boolean;
 
   @ApiProperty({
-    description: 'Whether the channel is a megagroup',
-    example: null,
-    required: false,
-  })
-  megagroup?: boolean;
-
-  @ApiProperty({
     description: 'Number of participants in the channel',
     example: 0,
   })
@@ -72,4 +65,36 @@ export class CreateChannelDto {
     required: false,
   })
   forbidden: boolean = false;
+
+  @ApiProperty({
+    description: 'Whether the channel is a megagroup',
+    default: true,
+    required: false,
+  })
+  megagroup?: boolean;
+
+  @ApiProperty({
+    description: 'Whether react is restricted',
+    default: false,
+    required: false,
+  })
+  reactRestricted?: boolean = false;
+
+  @ApiProperty({ description: 'Word restriction count', default: 0, required: false })
+  wordRestriction?: number = 0;
+
+  @ApiProperty({ description: 'DM restriction count', default: 0, required: false })
+  dMRestriction?: number = 0;
+
+  @ApiProperty({ description: 'Available messages', type: [String], required: false })
+  availableMsgs?: string[];
+
+  @ApiProperty({ description: 'Whether the channel is banned', default: false, required: false })
+  banned?: boolean = false;
+
+  @ApiProperty({ description: 'Starred status', default: false, required: false })
+  starred?: boolean = false;
+
+  @ApiProperty({ description: 'Channel score', default: 0, required: false })
+  score?: number = 0;
 }

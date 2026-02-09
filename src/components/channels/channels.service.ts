@@ -27,30 +27,38 @@ export class ChannelsService {
       if (dto.title != null) setFields.title = dto.title;
       if (dto.username != null) setFields.username = dto.username;
       if (dto.participantsCount != null) setFields.participantsCount = dto.participantsCount;
+      if (dto.megagroup !== undefined) setFields.megagroup = dto.megagroup;
+
+      const defaults: Record<string, unknown> = {
+        channelId: dto.channelId,
+        broadcast: false,
+        canSendMsgs: true,
+        participantsCount: 0,
+        restricted: false,
+        sendMessages: true,
+        reactRestricted: false,
+        wordRestriction: 0,
+        dMRestriction: 0,
+        availableMsgs: [],
+        banned: false,
+        megagroup: true,
+        private: false,
+      };
+
+      // Remove keys already in $set to avoid MongoDB path conflict
+      for (const key of Object.keys(setFields)) {
+        delete defaults[key];
+      }
 
       return {
         updateOne: {
           filter: { channelId: dto.channelId },
           update: {
             $set: setFields,
-            $setOnInsert: {
-              channelId: dto.channelId,
-              broadcast: false,
-              canSendMsgs: true,
-              participantsCount: dto.participantsCount ?? 0,
-              restricted: false,
-              sendMessages: true,
-              reactRestricted: false,
-              wordRestriction: 0,
-              dMRestriction: 0,
-              availableMsgs: [],
-              banned: false,
-              megagroup: dto.megagroup !== undefined ? dto.megagroup : true,
-              private: false,
-            }
+            $setOnInsert: defaults,
           },
-          upsert: true
-        }
+          upsert: true,
+        },
       };
     });
 

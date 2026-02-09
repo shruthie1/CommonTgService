@@ -101,6 +101,14 @@ export class ActiveChannel {
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ type: Number, default: 0 })
   deletedCount?: number;
+
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  starred?: boolean;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  score?: number;
 }
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);

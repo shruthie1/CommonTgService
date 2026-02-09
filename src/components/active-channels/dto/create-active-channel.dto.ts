@@ -52,4 +52,10 @@ export class CreateActiveChannelDto {
     required: false,
   })
   private: boolean = false;
+
+  @ApiProperty({ description: 'Starred status', default: false, required: false })
+  starred?: boolean = false;
+
+  @ApiProperty({ description: 'Channel score', default: 0, required: false })
+  score?: number = 0;
 }
