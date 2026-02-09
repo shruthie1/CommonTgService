@@ -24,6 +24,8 @@ class CreateUserDto {
         this.ownPhotoCount = 0;
         this.ownVideoCount = 0;
         this.contacts = 0;
+        this.starred = false;
+        this.score = 0;
         this.calls = {
             totalCalls: 0,
             outgoing: 0,
@@ -127,6 +129,14 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Number of contacts', example: 105 }),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Starred status', example: false }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'User score', example: 0 }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "score", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Per-chat call statistics',

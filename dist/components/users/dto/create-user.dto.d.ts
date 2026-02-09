@@ -23,6 +23,8 @@ export declare class CreateUserDto {
     ownPhotoCount: number;
     ownVideoCount: number;
     contacts: number;
+    starred: boolean;
+    score: number;
     calls: {
         totalCalls: number;
         outgoing: number;

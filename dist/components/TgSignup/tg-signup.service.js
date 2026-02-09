@@ -302,6 +302,8 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 },
                 contacts: 0,
                 movieCount: 0,
+                score: 0,
+                starred: false,
                 msgs: 0,
                 photoCount: 0,
                 videoCount: 0,

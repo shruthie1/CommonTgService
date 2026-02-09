@@ -149,4 +149,17 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchUserDto.prototype, "ownVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by starred status', type: Boolean }),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SearchUserDto.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by score' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], SearchUserDto.prototype, "score", void 0);
 //# sourceMappingURL=search-user.dto.js.map

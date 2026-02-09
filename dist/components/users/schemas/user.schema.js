@@ -21,6 +21,8 @@ let User = class User {
         this.twoFA = false;
         this.expired = false;
         this.password = null;
+        this.starred = false;
+        this.score = 0;
     }
 };
 exports.User = User;
@@ -141,6 +143,16 @@ __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Number)
 ], User.prototype, "contacts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], User.prototype, "score", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)({

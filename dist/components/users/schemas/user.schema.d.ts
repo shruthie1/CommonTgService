@@ -26,6 +26,8 @@ export declare class User {
     ownPhotoCount: number;
     ownVideoCount: number;
     contacts: number;
+    starred: boolean;
+    score: number;
     calls: {
         totalCalls: number;
         outgoing: number;
@@ -264,6 +266,24 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         id: string;
     }>;
     contacts?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    starred?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    score?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
