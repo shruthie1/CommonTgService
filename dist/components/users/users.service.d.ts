@@ -13,6 +13,23 @@ export declare class UsersService {
     private readonly botsService;
     constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService);
     create(user: CreateUserDto): Promise<User | undefined>;
+    top(options: {
+        page?: number;
+        limit?: number;
+        minScore?: number;
+        minCalls?: number;
+        minPhotos?: number;
+        minVideos?: number;
+        excludeTwoFA?: boolean;
+        excludeAudited?: boolean;
+        gender?: string;
+    }): Promise<{
+        users: User[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     findAll(limit?: number, skip?: number): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateDto: UpdateUserDto): Promise<number>;
