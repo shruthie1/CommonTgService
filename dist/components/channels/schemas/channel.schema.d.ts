@@ -12,6 +12,14 @@ export declare class Channel {
     username: string;
     private: boolean;
     forbidden: boolean;
+    megagroup: boolean;
+    reactRestricted: boolean;
+    wordRestriction: number;
+    dMRestriction: number;
+    availableMsgs: any[];
+    banned: boolean;
+    starred: boolean;
+    score: number;
 }
 export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Channel, any, any, any, (Document<unknown, any, Channel, any, mongoose.DefaultSchemaOptions> & Channel & {
     _id: mongoose.Types.ObjectId;
@@ -114,6 +122,78 @@ export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Chan
         id: string;
     }>;
     forbidden?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    megagroup?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    reactRestricted?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    wordRestriction?: mongoose.SchemaDefinitionProperty<number, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    dMRestriction?: mongoose.SchemaDefinitionProperty<number, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    availableMsgs?: mongoose.SchemaDefinitionProperty<any[], Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    banned?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    starred?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    score?: mongoose.SchemaDefinitionProperty<number, Channel, Document<unknown, {}, Channel, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
         _id: mongoose.Types.ObjectId;

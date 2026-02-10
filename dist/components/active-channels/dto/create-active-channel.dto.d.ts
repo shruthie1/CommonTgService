@@ -15,4 +15,6 @@ export declare class CreateActiveChannelDto {
     megagroup?: boolean;
     forbidden?: boolean;
     private: boolean;
+    starred?: boolean;
+    score?: number;
 }

@@ -121,6 +121,16 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "deletedCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "starred", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "score", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'activeChannels',
