@@ -24,7 +24,6 @@ export class UsersController {
     return this.usersService.search(queryParams);
   }
 
-
   @Get('top-interacted')
   @ApiOperation({ 
     summary: 'Get users with top interaction scores',
@@ -195,7 +194,7 @@ export class UsersController {
     const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
     const excludeAuditedBool = excludeAudited === 'true';
 
-    return this.usersService.getTopInteractionUsers({
+     return this.usersService.top({
       page: pageNum,
       limit: limitNum,
       minScore: minScoreNum,
@@ -206,6 +205,18 @@ export class UsersController {
       excludeAudited: excludeAuditedBool,
       gender,
     });
+
+    // return this.usersService.getTopInteractionUsers({
+    //   page: pageNum,
+    //   limit: limitNum,
+    //   minScore: minScoreNum,
+    //   minCalls: minCallsNum,
+    //   minPhotos: minPhotosNum,
+    //   minVideos: minVideosNum,
+    //   excludeTwoFA: excludeTwoFABool,
+    //   excludeAudited: excludeAuditedBool,
+    //   gender,
+    // });
   }
 
   @Get()

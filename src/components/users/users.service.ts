@@ -62,6 +62,75 @@ export class UsersService {
     }
   }
 
+  /**
+   * Get users with top interaction scores based on saved stats in DB
+   * Uses smart filtering with proper weightages for different interaction types
+   * Movie count has negative weightage as it indicates less genuine interaction
+   * @param options - Filtering and pagination options
+   * @returns Paginated list of users sorted by interaction score
+   */
+  async top(options: {
+    page?: number;
+    limit?: number;
+    minScore?: number;
+    minCalls?: number;
+    minPhotos?: number;
+    minVideos?: number;
+    excludeTwoFA?: boolean;
+    excludeAudited?: boolean;
+    gender?: string;
+  }): Promise<{
+    users: User[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const {
+      page = 1,
+      limit = 20,
+      minScore = 0,
+      minCalls = 0,
+      minPhotos = 0,
+      minVideos = 0,
+      excludeTwoFA = false,
+      gender,
+    } = options;
+
+    const pageNum = Math.max(1, Math.floor(page));
+    const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query: QueryFilter<UserDocument> = {
+      expired: { $ne: true },
+      score: { $gte: minScore },
+    };
+
+    if (excludeTwoFA) query.twoFA = { $ne: true };
+    if (gender) query.gender = gender;
+    if (minCalls > 0) query['calls.totalCalls'] = { $gte: minCalls };
+    if (minPhotos > 0) query.photoCount = { $gte: minPhotos };
+    if (minVideos > 0) query.videoCount = { $gte: minVideos };
+
+    const total = await this.userModel.countDocuments(query).exec();
+    const totalPages = Math.ceil(total / limitNum);
+
+    if (total === 0) {
+      return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+    }
+
+    const users = await this.userModel
+      .find(query)
+      .select('-session')
+      .sort({ score: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean()
+      .exec();
+
+    return { users: users as User[], total, page: pageNum, limit: limitNum, totalPages };
+  }
+
   async findAll(limit: number = 100, skip: number = 0): Promise<User[]> {
     return this.userModel.find().limit(limit).skip(skip).exec();
   }
