@@ -32271,9 +32271,6 @@ let UsersService = class UsersService {
                         await (0, Helpers_1.sleep)(1000);
                     }
                     this.updateByFilter({ mobile: user.mobile }, { score: score });
-                    const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
-                    await newUserBackup.save();
                 }
                 catch (error) {
                     console.log("Error in creating new session", error);
