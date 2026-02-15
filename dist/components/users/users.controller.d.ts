@@ -9,9 +9,7 @@ export declare class UsersController {
     create(createUserDto: CreateUserDto): Promise<User>;
     search(queryParams: SearchUserDto): Promise<User[]>;
     getTopInteractionUsers(page?: string, limit?: string, minScore?: string, minCalls?: string, minPhotos?: string, minVideos?: string, excludeTwoFA?: string, excludeAudited?: string, gender?: string): Promise<{
-        users: Array<User & {
-            interactionScore: number;
-        }>;
+        users: User[];
         total: number;
         page: number;
         limit: number;

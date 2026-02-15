@@ -31900,7 +31900,7 @@ let UsersController = class UsersController {
         }
         const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
         const excludeAuditedBool = excludeAudited === 'true';
-        return this.usersService.getTopInteractionUsers({
+        return this.usersService.top({
             page: pageNum,
             limit: limitNum,
             minScore: minScoreNum,
@@ -32282,6 +32282,40 @@ let UsersService = class UsersService {
             const newUser = new this.userModel(user);
             return newUser.save();
         }
+    }
+    async top(options) {
+        const { page = 1, limit = 20, minScore = 0, minCalls = 0, minPhotos = 0, minVideos = 0, excludeTwoFA = false, gender, } = options;
+        const pageNum = Math.max(1, Math.floor(page));
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+        const skip = (pageNum - 1) * limitNum;
+        const query = {
+            expired: { $ne: true },
+            score: { $gte: minScore },
+        };
+        if (excludeTwoFA)
+            query.twoFA = { $ne: true };
+        if (gender)
+            query.gender = gender;
+        if (minCalls > 0)
+            query['calls.totalCalls'] = { $gte: minCalls };
+        if (minPhotos > 0)
+            query.photoCount = { $gte: minPhotos };
+        if (minVideos > 0)
+            query.videoCount = { $gte: minVideos };
+        const total = await this.userModel.countDocuments(query).exec();
+        const totalPages = Math.ceil(total / limitNum);
+        if (total === 0) {
+            return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+        }
+        const users = await this.userModel
+            .find(query)
+            .select('-session')
+            .sort({ score: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean()
+            .exec();
+        return { users: users, total, page: pageNum, limit: limitNum, totalPages };
     }
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();

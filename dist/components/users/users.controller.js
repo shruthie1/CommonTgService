@@ -57,7 +57,7 @@ let UsersController = class UsersController {
         }
         const excludeTwoFABool = excludeTwoFA === 'true' ? true : (excludeTwoFA === 'false' ? false : undefined);
         const excludeAuditedBool = excludeAudited === 'true';
-        return this.usersService.getTopInteractionUsers({
+        return this.usersService.top({
             page: pageNum,
             limit: limitNum,
             minScore: minScoreNum,
