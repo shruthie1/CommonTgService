@@ -50,9 +50,9 @@ export class UsersService {
           }
           this.updateByFilter({ mobile: user.mobile }, { score: score });
           // this.telegramService.forwardMediaToBot(user.mobile, null);
-          const newSession = await this.telegramService.createNewSession(user.mobile);
-          const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" , score: score});
-          await newUserBackup.save();
+          // const newSession = await this.telegramService.createNewSession(user.mobile);
+          // const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" , score: score});
+          // await newUserBackup.save();
         } catch (error) {
           console.log("Error in creating new session", error);
         }
