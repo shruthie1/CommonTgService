@@ -173,7 +173,8 @@ async function createNewSession(ctx) {
     const sessionPromise = (async () => {
         const me = await ctx.client.getMe();
         ctx.logger.info(ctx.phoneNumber, 'Creating new session for: ', me.phone);
-        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber));
+        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
+        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), apiId, apiHash, tgParams);
         ctx.logger.info(ctx.phoneNumber, 'Starting Session Creation...');
         await newClient.start({
             phoneNumber: me.phone,
