@@ -21,22 +21,26 @@ const parseError_1 = require("../../../utils/parseError");
 const fetchWithTimeout_1 = require("../../../utils/fetchWithTimeout");
 const logbots_1 = require("../../../utils/logbots");
 const generateTGConfig_1 = require("../utils/generateTGConfig");
+const tg_config_1 = require("../utils/tg-config");
 const IMap_1 = require("../../../IMap/IMap");
-function isOwnAuth(auth) {
-    const authCriteria = [
-        { field: 'country', value: 'singapore' },
-        { field: 'deviceModel', values: ['oneplus 11', 'cli', 'linux', 'windows'] },
-        { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] },
-    ];
-    return authCriteria.some(criterion => {
-        const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
-        if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk'))
-            return true;
-        if ('values' in criterion) {
-            return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+const _ownDeviceModels = (() => {
+    const models = [];
+    for (const name of (0, tg_config_1.getAvailablePlatforms)()) {
+        const platform = (0, tg_config_1.getPlatformConfig)(name);
+        if (platform) {
+            for (const device of platform.devices) {
+                models.push(device.deviceModel.toLowerCase());
+            }
         }
-        return fieldValue.includes(criterion.value.toLowerCase());
-    });
+    }
+    return models;
+})();
+function isOwnAuth(auth) {
+    const deviceModel = (auth.deviceModel || '').toLowerCase();
+    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
+        return true;
+    }
+    return false;
 }
 async function removeOtherAuths(ctx) {
     if (!ctx.client)
