@@ -65,7 +65,7 @@ export class WebshareProxyService implements OnModuleInit {
             try {
                 const response = await this.client.get<WebsharePaginatedResponse<WebshareProxy>>(
                     '/proxy/list/',
-                    { params: { page, page_size: pageSize } }
+                    { params: { page, page_size: pageSize, mode: 'direct' } }
                 );
 
                 const { results, next, count } = response.data;
@@ -243,7 +243,7 @@ export class WebshareProxyService implements OnModuleInit {
         try {
             const response = await this.client.get<WebsharePaginatedResponse<WebshareProxy>>(
                 '/proxy/list/',
-                { params: { page: 1, page_size: 1 } }
+                { params: { page: 1, page_size: 1, mode: 'direct' } }
             );
             apiKeyValid = true;
             totalProxiesInWebshare = response.data.count;
