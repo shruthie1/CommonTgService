@@ -29,6 +29,11 @@ function isProxyEnabled(): boolean {
   return ["true", "1", "yes", "on"].includes(val);
 }
 
+function isHealthCheckEnabled(): boolean {
+  const val = (process.env.PROXY_HEALTH_CHECK_ENABLED || "false").toLowerCase();
+  return ["true", "1", "yes", "on"].includes(val);
+}
+
 function envInt(key: string, fallback: number): number {
   const v = process.env[key];
   if (v === undefined || v === "") return fallback;
@@ -374,8 +379,8 @@ function _registerMobile(mobile: string, proxy: ProxyInterface) {
 
   logger.debug("Mobile registered for health monitoring", { mobile, ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
 
-  // Auto-start monitor on first registration
-  if (!_healthInterval && isProxyEnabled()) {
+  // Auto-start monitor on first registration (requires explicit opt-in)
+  if (!_healthInterval && isProxyEnabled() && isHealthCheckEnabled()) {
     const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
     if (interval > 0) {
       _startHealthMonitor(interval);
@@ -400,7 +405,7 @@ function _startHealthMonitor(intervalMs: number) {
   _healthInterval = setInterval(async () => {
     if (_activeMap.size === 0) return;
     if (_isHandlingDeath) return; // Skip if rotation in progress
-    if (!isProxyEnabled()) { stopHealthMonitor(); return; } // Respect runtime disable
+    if (!isProxyEnabled() || !isHealthCheckEnabled()) { stopHealthMonitor(); return; } // Respect runtime disable
 
     // Deduplicate by proxy — check each unique proxy once
     const proxyToMobiles = new Map<string, TrackedMobile[]>();
@@ -499,7 +504,7 @@ async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: Tra
     _isHandlingDeath = false;
     // Restart monitoring so the system can recover
     const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
-    if (interval > 0 && isProxyEnabled()) {
+    if (interval > 0 && isProxyEnabled() && isHealthCheckEnabled()) {
       _startHealthMonitor(interval);
     }
   }
